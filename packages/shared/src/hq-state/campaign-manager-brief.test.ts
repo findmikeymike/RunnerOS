@@ -138,3 +138,29 @@ function campaign(): ManagerCampaignSnapshot {
     sourceHealth: [],
   };
 }
+
+
+test('campaign inventory survives serialization and budget pressure with explicit omitted counts', () => {
+  const snapshot = campaign();
+  snapshot.releaseReadiness = {
+    kit: { status: 'available', categories: ['Audio', 'Single art / artwork', 'Content video', 'Content images', 'Plans'].map(label => ({ label, ready: 0, needsReview: 0, missing: 0, restricted: 0 })) },
+    essentials: { status: 'available', done: 40, total: 40, omitted: 0, items: Array.from({ length: 40 }, (_, index) => ({ label: `${index} ${'long approved checklist item '.repeat(10)}`, status: 'done' })) },
+  };
+  snapshot.mission = { ...snapshot.mission!, goal: 'goal '.repeat(100), theme: 'theme '.repeat(100), mood: 'mood '.repeat(100), visualWorld: 'world '.repeat(100), targetListener: 'listener '.repeat(100) };
+  const bridge = artistBrief();
+  bridge.identity.mission = 'artist '.repeat(100);
+  bridge.trajectory = Array.from({ length: 4 }, (_, i) => ({ month: `2026-0${i + 1}`, title: 'artist horizon '.repeat(20), event: 'release', source: { workspaceId: 'hq' } }));
+  const brief = buildCampaignManagerBrief({ artistWorkspaceId: 'hq', artistBrief: bridge, campaign: snapshot });
+  const rendered = renderCampaignManagerBriefPromptSection(brief);
+  expect(rendered.length).toBeLessThanOrEqual(CAMPAIGN_MANAGER_BRIEF_MAX_CHARS);
+  expect(brief.budget.actualChars).toBe(rendered.length);
+  expect(brief.campaign.releaseReadiness!.kit.categories).toHaveLength(5);
+  expect(rendered).toContain('Content video: 0 ready');
+  expect(rendered).toContain('Plans: 0 ready');
+  expect(rendered).toContain('40/40 marked done');
+  expect(rendered).not.toContain('Master ready');
+  const essentials = brief.campaign.releaseReadiness!.essentials;
+  expect(essentials.items.length + essentials.omitted).toBe(40);
+  if (essentials.omitted) expect(rendered).toContain(`${essentials.omitted} additional checklist items omitted`);
+  expect(parseCampaignManagerBrief(serializeCampaignManagerBrief(brief))?.campaign.releaseReadiness).toEqual(brief.campaign.releaseReadiness);
+});

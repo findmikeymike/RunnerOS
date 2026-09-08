@@ -34,6 +34,7 @@ import {
 import { loadAuthorizedContextDocsForAgent, loadContextDoc } from '@craft-agent/shared/workspace-context';
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions';
 import { buildHqOperationalSnapshot } from './operational';
+import { loadCampaignReleaseReadiness, nextMissingReleaseEssentials } from './release-readiness';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CAMPAIGN_SOURCE_STALE_DAYS = {
@@ -42,6 +43,7 @@ const CAMPAIGN_SOURCE_STALE_DAYS = {
   'campaign-calendar': 14,
   'scheduled-work': 7,
   'mission-assets': 30,
+  'release-kit': 30,
   outputs: 30,
 } as const;
 
@@ -101,12 +103,10 @@ export function buildManagerCampaignSnapshot(
   const assetsPresent = existsSync(assetPath);
   const assets = loadMissionAssetManifest(workspace.rootPath, workspace.id);
   const outputs = listOutputManifests(workspace.rootPath);
-  const totals = board.ok ? getBoardTotals(board.board) : undefined;
-  const nextMissing = board.ok
-    ? board.board.categories.flatMap((category) => category.items)
-      .filter((item) => item.status === 'needed')
-      .map((item) => item.label)
-      .slice(0, 5)
+  const releaseReadiness = loadCampaignReleaseReadiness(workspace.rootPath, workspace.id, board, Boolean(boardDoc));
+  const totals = board.ok && releaseReadiness.essentials.status === 'available' ? getBoardTotals(board.board) : undefined;
+  const nextMissing = board.ok && releaseReadiness.essentials.status === 'available'
+    ? nextMissingReleaseEssentials(board.board)
     : [];
   const today = now.toISOString().slice(0, 10);
   const calendarCandidates = calendar.ok
@@ -141,6 +141,11 @@ export function buildManagerCampaignSnapshot(
       ? parseHealth(`${workspace.id}:outputs`, true, true, outputs.map((output) => output.updatedAt).sort().at(-1), CAMPAIGN_SOURCE_STALE_DAYS.outputs, now)
       : { source: `${workspace.id}:outputs`, status: 'fresh' },
   ];
+  sourceHealth.push(releaseReadiness.kit.status === 'available'
+    ? releaseReadiness.kit.updatedAt
+      ? parseHealth(`${workspace.id}:release-kit`, true, true, releaseReadiness.kit.updatedAt, CAMPAIGN_SOURCE_STALE_DAYS['release-kit'], now)
+      : { source: `${workspace.id}:release-kit`, status: 'fresh' }
+    : { source: `${workspace.id}:release-kit`, status: releaseReadiness.kit.status, message: 'Release Kit readiness could not be read for this campaign.' });
   const campaignWindow = mission.ok ? missionCampaignWindow(mission.brief) : undefined;
   const staleSources = sourceHealth
     .filter((source) => source.status === 'stale')
@@ -177,6 +182,7 @@ export function buildManagerCampaignSnapshot(
     primary,
     mission: mission.ok ? mission.brief : undefined,
     readiness: totals ? { ...totals, nextMissing } : undefined,
+    releaseReadiness,
     calendar: collectionSummary(
       calendar.ok ? calendar.calendar.items.filter((item) => !item.deletedAt) : [],
       calendarDoc && calendar.ok ? calendar.calendar.updatedAt : undefined,

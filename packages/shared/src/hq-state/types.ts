@@ -153,12 +153,28 @@ export interface ManagerCollectionSummary {
   updatedAt?: string;
 }
 
+export interface ManagerReleaseReadiness {
+  kit: {
+    status: 'available' | 'unavailable' | 'malformed';
+    updatedAt?: string;
+    categories: Array<{ label: string; ready: number; needsReview: number; missing: number; restricted: number }>;
+  };
+  essentials: {
+    status: 'available' | 'unavailable' | 'malformed';
+    done: number;
+    total: number;
+    items: Array<{ label: string; status: string }>;
+    omitted: number;
+  };
+}
+
 export interface ManagerCampaignSnapshot {
   workspaceId: string;
   name: string;
   primary: boolean;
   mission?: MissionBrief;
   readiness?: { done: number; total: number; nextMissing: string[] };
+  releaseReadiness?: ManagerReleaseReadiness;
   calendar?: ManagerCollectionSummary;
   work?: ManagerCollectionSummary;
   assets?: ManagerCollectionSummary;
@@ -193,6 +209,7 @@ export interface CampaignManagerBriefV1 {
     name: string;
     mission?: MissionBrief;
     readiness?: ManagerCampaignSnapshot['readiness'];
+    releaseReadiness?: ManagerReleaseReadiness;
     calendar?: ManagerCollectionSummary;
     work?: ManagerCollectionSummary;
     assets?: ManagerCollectionSummary;
@@ -284,6 +301,7 @@ export interface ManagerBriefV1 {
     dateStatuses?: { start?: 'target' | 'locked'; release?: 'target' | 'locked'; finish?: 'target' | 'locked' };
     goal?: string;
     readiness?: { done: number; total: number };
+    releaseReadiness?: ManagerReleaseReadiness;
     nextMissing?: string[];
     source: ManagerSourceRef;
   };

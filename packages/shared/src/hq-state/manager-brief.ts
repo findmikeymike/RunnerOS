@@ -31,6 +31,7 @@ import type {
   ManagerBriefV1,
   ManagerCampaignSnapshot,
   ManagerGrowthSignal,
+  ManagerReleaseReadiness,
   ManagerSourceHealth,
   ManagerSourceRef,
 } from './types.ts';
@@ -219,6 +220,7 @@ export function resolveHqCampaignFocus(
       finishDate: campaignWindow?.finishDate,
       dateStatuses: campaignWindow?.statuses,
       goal: cap(campaign.mission?.goal, 500),
+      releaseReadiness: normalizeManagerReleaseReadiness(campaign.releaseReadiness),
       readiness: campaign.readiness ? { done: campaign.readiness.done, total: campaign.readiness.total } : undefined,
       nextMissing: campaign.readiness?.nextMissing.map((item) => cap(item, 120)).filter(isString).slice(0, 5),
       source: sourceRef(campaign.workspaceId, 'mission-brief', missionUpdatedAt),
@@ -370,7 +372,7 @@ function earliestDate(left?: string, right?: string): { nextDate?: string } {
   return nextDate ? { nextDate } : {};
 }
 
-export function renderManagerBriefPromptSection(brief: ManagerBriefV1): string {
+export function renderManagerBriefPromptSection(brief: ManagerBriefV1, options: { includeRecommendations?: boolean } = {}): string {
   const lines: string[] = [
     '## Manager Brief',
     '',
@@ -390,20 +392,21 @@ export function renderManagerBriefPromptSection(brief: ManagerBriefV1): string {
     if (campaign.releaseDate) lines.push(`Release date: ${campaign.releaseDate} (${campaign.dateStatuses?.release ?? 'target'})`);
     if (campaign.finishDate) lines.push(`Campaign finish: ${campaign.finishDate} (${campaign.dateStatuses?.finish ?? 'target'})`);
     if (campaign.goal) lines.push(`Goal: ${campaign.goal}`);
-    if (campaign.readiness) lines.push(`Readiness: ${campaign.readiness.done}/${campaign.readiness.total}`);
-    if (campaign.nextMissing?.length) lines.push(`Next missing: ${campaign.nextMissing.join(', ')}`);
+    if (!campaign.releaseReadiness && campaign.readiness) lines.push(`Essentials marked done: ${campaign.readiness.done}/${campaign.readiness.total} (not approved Release Kit evidence)`);
+    if (!campaign.releaseReadiness && campaign.nextMissing?.length) lines.push(`Essentials marked needed: ${campaign.nextMissing.join(', ')}`);
+    lines.push(...renderManagerReleaseReadiness(campaign.releaseReadiness));
     lines.push(`Source: ${formatSource(campaign.source)}`);
   }
 
   const operating = brief.operatingState;
   if (operating.nextMove || operating.blockers.length || operating.attention.length || operating.activeWork.length) {
-    lines.push('', '### Operating State');
-    if (operating.nextMove) {
+    lines.push('', '### HQ / Career Operating State', 'HQ profile, Vault and career gaps are not campaign release blockers.');
+    if (operating.nextMove && options.includeRecommendations !== false) {
       lines.push(`Next move: ${operating.nextMove.title}`);
       lines.push(`Why: ${operating.nextMove.why}`);
       if (operating.nextMove.worker) lines.push(`Worker: @${operating.nextMove.worker}`);
     }
-    if (operating.blockers.length) lines.push(`Blockers: ${operating.blockers.join(' | ')}`);
+    if (operating.blockers.length) lines.push(`HQ context gaps: ${operating.blockers.join(' | ')}`);
     if (operating.attention.length) lines.push(`Attention: ${operating.attention.join(' | ')}`);
     if (operating.activeWork.length) lines.push(`Active work: ${operating.activeWork.join(' | ')}`);
   }
@@ -436,7 +439,7 @@ export function renderManagerBriefPromptSection(brief: ManagerBriefV1): string {
   }
 
   if (brief.growth.spotify || brief.growth.instagram) {
-    lines.push('', '### Growth');
+    lines.push('', '### Growth', 'Catalog and audience performance; not evidence that this campaign is release-ready.');
     if (brief.growth.spotify) lines.push(renderGrowth('Spotify', brief.growth.spotify));
     if (brief.growth.instagram) lines.push(renderGrowth('Instagram', brief.growth.instagram));
   }
@@ -470,6 +473,11 @@ function finalizeBudget(source: ManagerBriefV1): ManagerBriefV1 {
       return true;
     }
     if (brief.trajectory.length) return Boolean(brief.trajectory.pop());
+    if (brief.growth.instagram) { brief.growth.instagram = undefined; return true; }
+    if (brief.growth.spotify) { brief.growth.spotify = undefined; return true; }
+    if (brief.operatingState.blockers.length) return Boolean(brief.operatingState.blockers.pop());
+    if (brief.operatingState.nextMove) { brief.operatingState.nextMove = undefined; return true; }
+    if (omitLastReleaseEssential(brief.campaignFocus?.releaseReadiness)) return true;
     return false;
   };
 
@@ -678,4 +686,80 @@ function formatNumber(value: number): string {
 
 function isString(value: string | undefined): value is string {
   return Boolean(value);
+}
+
+/** Optional for cached v1 briefs; invalid sections remain unknown, never zero-ready claims. */
+export function normalizeManagerReleaseReadiness(value: unknown): ManagerReleaseReadiness | undefined {
+  if (value === undefined) return undefined;
+  const record = (item: unknown): item is Record<string, unknown> => typeof item === 'object' && item !== null && !Array.isArray(item);
+  const count = (item: unknown): item is number => typeof item === 'number' && Number.isSafeInteger(item) && item >= 0;
+  const status = (item: unknown) => item === 'available' || item === 'unavailable' || item === 'malformed';
+  const unknown: ManagerReleaseReadiness = {
+    kit: { status: 'malformed', categories: [] },
+    essentials: { status: 'malformed', done: 0, total: 0, items: [], omitted: 0 },
+  };
+  if (!record(value)) return unknown;
+  const kit = value.kit;
+  if (record(kit) && status(kit.status)) {
+    if (kit.status !== 'available') unknown.kit.status = kit.status as 'unavailable' | 'malformed';
+    else if (Array.isArray(kit.categories) && kit.categories.length <= 5 && kit.categories.every((item) => record(item)
+      && Boolean(cap(item.label, 80)) && ['ready', 'needsReview', 'missing', 'restricted'].every((key) => count(item[key])))) {
+      unknown.kit = {
+        status: 'available', updatedAt: cap(kit.updatedAt, 40),
+        categories: kit.categories.map((item) => ({ label: cap(item.label, 80)!, ready: item.ready, needsReview: item.needsReview, missing: item.missing, restricted: item.restricted })),
+      };
+    }
+  }
+  const essentials = value.essentials;
+  if (record(essentials) && status(essentials.status)) {
+    if (essentials.status !== 'available') unknown.essentials.status = essentials.status as 'unavailable' | 'malformed';
+    else if (count(essentials.done) && count(essentials.total) && essentials.done <= essentials.total && count(essentials.omitted)
+      && Array.isArray(essentials.items) && essentials.items.length <= essentials.total
+      && essentials.items.every((item) => record(item) && Boolean(cap(item.label, 80)) && Boolean(cap(item.status, 40)))) {
+      const items = essentials.items.slice(0, 40).map((item) => ({ label: cap(item.label, 80)!, status: cap(item.status, 40)! }));
+      unknown.essentials = { status: 'available', done: essentials.done, total: essentials.total, items,
+        omitted: Math.max(essentials.total - items.length, essentials.omitted + essentials.items.length - items.length) };
+    }
+  }
+  return unknown;
+}
+
+export function renderManagerReleaseReadiness(value: ManagerReleaseReadiness | undefined): string[] {
+  const readiness = normalizeManagerReleaseReadiness(value);
+  if (!readiness) return [];
+  const { kit, essentials } = readiness;
+  const lines = ['', '### Campaign Release Kit'];
+  if (kit.status !== 'available') lines.push(`Kit inventory ${kit.status}; approved assets unknown.`);
+  else {
+    lines.push('Recorded approved-file inventory, not category completeness or verification of files on disk.');
+    if (kit.updatedAt) lines.push(`Kit updated: ${kit.updatedAt}`);
+    const empty = kit.categories.filter((item) => item.ready === 0).map((item) => item.label);
+    if (empty.length) lines.push(`No usable approved files recorded for: ${empty.join('; ')}.`);
+    for (const item of kit.categories) {
+      const warnings = [item.needsReview ? `${item.needsReview} need review` : '', item.missing ? `${item.missing} snapshot files missing` : '', item.restricted ? `${item.restricted} restricted` : ''].filter(Boolean);
+      lines.push(`- ${item.label}: ${item.ready} ready approved snapshots${warnings.length ? `; ${warnings.join('; ')}` : ''}`);
+    }
+    if (!kit.categories.length) lines.push('No category inventory supplied; approved assets unknown.');
+    lines.push('A video need not be Spotify Canvas; a plan need not be the rollout plan. Use the named Essentials below.');
+  }
+  lines.push('', '### Campaign Essentials');
+  if (essentials.status !== 'available') lines.push(`Essentials ${essentials.status}; completion unknown.`);
+  else {
+    lines.push(`${essentials.done}/${essentials.total} marked done on the checklist; this does not prove approved files are in the Kit.`);
+    const labels: Record<string, string> = { done: 'Marked done', 'in-progress': 'In progress', review: 'In review', ready: 'Ready for review', needed: 'Needed' };
+    const groups = new Map<string, string[]>();
+    for (const item of essentials.items) groups.set(item.status, [...(groups.get(item.status) ?? []), item.label]);
+    for (const [status, items] of groups) lines.push(`${labels[status] ?? `Status ${status}`}: ${items.join('; ')}`);
+    if (essentials.omitted) lines.push(`${essentials.omitted} additional checklist items omitted; their individual status is not shown.`);
+    if (!essentials.total) lines.push('No included checklist items recorded; release completeness is unknown.');
+  }
+  return lines;
+}
+
+/** Last resort after lower-priority context: retain totals and disclose each omitted item. */
+export function omitLastReleaseEssential(value: ManagerReleaseReadiness | undefined): boolean {
+  if (!value?.essentials.items.length) return false;
+  value.essentials.items.pop();
+  value.essentials.omitted += 1;
+  return true;
 }

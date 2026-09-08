@@ -306,13 +306,13 @@ export function buildWorkspaceContextSection(docs: PromptContextDoc[]): string {
 }
 
 /** Converts the one derived HQ document into one bounded HNIC-only prompt section. */
-export function buildManagerBriefPromptSectionFromDocs(docs: PromptContextDoc[]): string {
+export function buildManagerBriefPromptSectionFromDocs(docs: PromptContextDoc[], options: { includeRecommendations?: boolean } = {}): string {
   const stateDoc = docs.find((doc) => doc.slug === HQ_STATE_CONTEXT_SLUG && doc.metadata.enabled !== false);
   if (stateDoc) {
     const state = parseHqStateOfPlay(stateDoc.body);
     if (state?.version !== 2) return '';
     try {
-      const rendered = renderManagerBriefPromptSection(state.managerBrief);
+      const rendered = renderManagerBriefPromptSection(state.managerBrief, options);
       return rendered.length <= MANAGER_BRIEF_MAX_CHARS ? rendered : '';
     } catch {
       return '';
@@ -323,7 +323,7 @@ export function buildManagerBriefPromptSectionFromDocs(docs: PromptContextDoc[])
   const brief = parseCampaignManagerBrief(campaignDoc.body);
   if (!brief) return '';
   try {
-    const rendered = renderCampaignManagerBriefPromptSection(brief);
+    const rendered = renderCampaignManagerBriefPromptSection(brief, options);
     return rendered.length <= CAMPAIGN_MANAGER_BRIEF_MAX_CHARS ? rendered : '';
   } catch {
     return '';

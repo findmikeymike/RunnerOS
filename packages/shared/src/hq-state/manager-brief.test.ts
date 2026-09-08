@@ -5,8 +5,10 @@ import {
   MANAGER_BRIEF_MAX_CHARS,
   renderManagerBriefPromptSection,
   resolveHqCampaignFocus,
+  normalizeManagerReleaseReadiness,
+  renderManagerReleaseReadiness,
 } from './manager-brief.ts';
-import type { ManagerCampaignSnapshot } from './types.ts';
+import type { ManagerCampaignSnapshot, ManagerReleaseReadiness } from './types.ts';
 
 const now = new Date('2026-08-29T12:00:00.000Z');
 
@@ -163,6 +165,8 @@ describe('Manager Brief', () => {
   test('never exceeds the prompt budget under hostile source text', () => {
     const huge = 'A'.repeat(20_000);
     const campaignSnapshot = campaign('campaign-1', huge, '2026-09-12');
+    campaignSnapshot.releaseReadiness = releaseInventory();
+    campaignSnapshot.releaseReadiness.essentials = { status: 'available', done: 40, total: 40, omitted: 0, items: Array.from({ length: 40 }, (_, i) => ({ label: `${i} ${huge}`, status: 'done' })) };
     campaignSnapshot.sourceHealth = Array.from({ length: 60 }, (_, index) => ({
       source: `source-${index}-${huge}`,
       status: 'malformed' as const,
@@ -190,6 +194,11 @@ describe('Manager Brief', () => {
 
     expect(renderManagerBriefPromptSection(brief).length).toBeLessThanOrEqual(MANAGER_BRIEF_MAX_CHARS);
     expect(brief.budget.actualChars).toBe(renderManagerBriefPromptSection(brief).length);
+    expect(brief.campaignFocus?.releaseReadiness?.kit.categories).toHaveLength(5);
+    const essentials = brief.campaignFocus!.releaseReadiness!.essentials;
+    expect(essentials.items.length + essentials.omitted).toBe(40);
+    expect(renderManagerBriefPromptSection(brief)).toContain('Plans:');
+    if (essentials.omitted) expect(renderManagerBriefPromptSection(brief)).toContain(`${essentials.omitted} additional checklist items omitted`);
   });
 });
 
@@ -421,3 +430,64 @@ function jsonDoc(slug: string, payload: unknown): LoadedContextDoc {
     workspaceRootPath: '/tmp',
   };
 }
+
+
+function releaseInventory(): ManagerReleaseReadiness {
+  return {
+    kit: { status: 'available', categories: ['Audio', 'Single art / artwork', 'Content video', 'Content images', 'Plans'].map((label, index) => ({ label, ready: index === 2 ? 1 : 0, needsReview: index === 1 ? 1 : 0, missing: 0, restricted: index === 3 ? 1 : 0 })) },
+    essentials: { status: 'available', done: 2, total: 6, omitted: 0, items: [
+      { label: 'Master File', status: 'done' }, { label: 'Lyrics', status: 'done' },
+      { label: 'Single Art', status: 'review' }, { label: 'Content video', status: 'in-progress' },
+      { label: 'Spotify Canvas', status: 'needed' }, { label: 'Rollout plan', status: 'needed' },
+    ] },
+  };
+}
+
+describe('Campaign release inventory in HQ brief', () => {
+  test('preserves all five Kit categories and completed Essentials for the focused campaign', () => {
+    const focused = campaign('current', 'Current single', '2026-09-01');
+    focused.releaseReadiness = releaseInventory();
+    const other = campaign('other', 'Other release', '2027-05-01');
+    other.releaseReadiness = releaseInventory();
+    other.releaseReadiness.essentials.items[0]!.label = 'Other master';
+    const brief = buildManagerBrief({ workspaceId: 'hq', now, docs: [], relatedCampaigns: [other, focused], operatingState: { blockers: ['HQ press photo missing'] } });
+    expect(brief.campaignFocus?.releaseReadiness).toEqual(focused.releaseReadiness);
+    const rendered = renderManagerBriefPromptSection(brief);
+    expect(rendered).toContain('Marked done: Master File; Lyrics');
+    expect(rendered).toContain('Needed: Spotify Canvas; Rollout plan');
+    expect(rendered).toContain('In progress: Content video');
+    expect(rendered).toContain('In review: Single Art');
+    expect(rendered).toContain('Audio: 0 ready');
+    expect(rendered).toContain('Content video: 1 ready');
+    expect(rendered).toContain('Plans: 0 ready');
+    expect(rendered).not.toContain('Other master');
+    expect(rendered).toContain('HQ / Career Operating State');
+    expect(rendered).toContain('HQ profile, Vault and career gaps are not campaign release blockers.');
+    expect(rendered).toContain('does not prove approved files are in the Kit');
+    expect(rendered).toContain('A video need not be Spotify Canvas');
+  });
+
+  test('renders unavailable and malformed inputs as unknown instead of zero coverage', () => {
+    const inventory = releaseInventory();
+    inventory.kit.status = 'unavailable';
+    inventory.essentials.status = 'malformed';
+    const rendered = renderManagerReleaseReadiness(inventory).join('\n');
+    expect(rendered).toContain('approved assets unknown');
+    expect(rendered).toContain('completion unknown');
+    expect(rendered).not.toContain('0 ready');
+    expect(rendered).not.toContain('2/6');
+    expect(normalizeManagerReleaseReadiness({ kit: { status: 'available', categories: [{ label: 'Audio', ready: -1 }] }, essentials: {} })?.kit.status).toBe('malformed');
+    expect(normalizeManagerReleaseReadiness(undefined)).toBeUndefined();
+  });
+
+  test('bounds long inventory without losing totals or silently omitting items', () => {
+    const inventory = releaseInventory();
+    inventory.essentials = { status: 'available', done: 50, total: 50, omitted: 0, items: Array.from({ length: 50 }, (_, i) => ({ label: `${i} ${'asset '.repeat(100)}`, status: 'done' })) };
+    const normalized = normalizeManagerReleaseReadiness(inventory)!;
+    expect(normalized.essentials.items).toHaveLength(40);
+    expect(normalized.essentials.items.every(item => item.label.length <= 80)).toBe(true);
+    expect(normalized.essentials.omitted).toBe(10);
+    expect(normalized.essentials.done).toBe(50);
+    expect(renderManagerReleaseReadiness(normalized).join('\n')).toContain('10 additional checklist items omitted');
+  });
+});

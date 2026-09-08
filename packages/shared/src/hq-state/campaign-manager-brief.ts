@@ -1,3 +1,4 @@
+import { normalizeManagerReleaseReadiness, renderManagerReleaseReadiness, omitLastReleaseEssential } from './manager-brief.ts';
 import { CONCIERGE_SLUG } from '../agent-definitions/types.ts';
 import type { MissionBrief } from '../artist-context/mission-brief.ts';
 import type { ContextDocMetadata } from '../workspace-context/types.ts';
@@ -52,6 +53,7 @@ export function buildCampaignManagerBrief(input: BuildCampaignManagerBriefInput)
     campaign: {
       name: cap(mission?.title, 120) ?? cap(input.campaign.name, 120) ?? 'Campaign',
       mission: mission ? compactMission(mission) : undefined,
+      releaseReadiness: normalizeManagerReleaseReadiness(input.campaign.releaseReadiness),
       readiness: input.campaign.readiness ? {
         done: input.campaign.readiness.done,
         total: input.campaign.readiness.total,
@@ -78,7 +80,7 @@ export function buildCampaignManagerBrief(input: BuildCampaignManagerBriefInput)
   return finalizeBudget(brief);
 }
 
-export function renderCampaignManagerBriefPromptSection(brief: CampaignManagerBriefV1): string {
+export function renderCampaignManagerBriefPromptSection(brief: CampaignManagerBriefV1, options: { includeRecommendations?: boolean } = {}): string {
   const lines = [
     '## Campaign Manager Brief',
     '',
@@ -110,18 +112,19 @@ export function renderCampaignManagerBriefPromptSection(brief: CampaignManagerBr
     if (mission.channels?.length) lines.push(`Channels: ${mission.channels.join(', ')}`);
     lines.push(`Mission completeness: ${mission.completeness}%`);
   }
-  if (brief.campaign.readiness) {
-    lines.push(`Release readiness: ${brief.campaign.readiness.done}/${brief.campaign.readiness.total}`);
+  if (!brief.campaign.releaseReadiness && brief.campaign.readiness) {
+    lines.push(`Essentials marked done: ${brief.campaign.readiness.done}/${brief.campaign.readiness.total} (not approved Release Kit evidence)`);
     if (brief.campaign.readiness.nextMissing.length) lines.push(`Next missing: ${brief.campaign.readiness.nextMissing.join(', ')}`);
   }
-  if (brief.campaign.essentialAssets.length) {
+  lines.push(...renderManagerReleaseReadiness(brief.campaign.releaseReadiness));
+  if (!brief.campaign.releaseReadiness && brief.campaign.essentialAssets.length) {
     lines.push(`Essential assets: ${brief.campaign.essentialAssets.map((item) => `${item.label} ${item.available ? 'ready' : 'missing'}`).join('; ')}`);
   }
 
   const state = brief.operatingState;
   if (state.suggestedFocus || state.blockers.length || state.approvals.length || state.activeWork.length) {
     lines.push('', '### Operating State');
-    if (state.suggestedFocus) lines.push(`Suggested focus: ${state.suggestedFocus}`);
+    if (state.suggestedFocus && options.includeRecommendations !== false) lines.push(`Suggested focus: ${state.suggestedFocus}`);
     if (state.blockers.length) lines.push(`Blockers: ${state.blockers.join(' | ')}`);
     if (state.approvals.length) lines.push(`Awaiting approval: ${state.approvals.join(' | ')}`);
     if (state.activeWork.length) lines.push(`Active work: ${state.activeWork.join(' | ')}`);
@@ -392,6 +395,7 @@ function finalizeBudget(source: CampaignManagerBriefV1): CampaignManagerBriefV1 
     if (brief.campaign.mission?.visualWorld) { brief.campaign.mission.visualWorld = undefined; return true; }
     if (brief.campaign.mission?.mood) { brief.campaign.mission.mood = undefined; return true; }
     if (brief.campaign.mission?.targetListener) { brief.campaign.mission.targetListener = undefined; return true; }
+    if (omitLastReleaseEssential(brief.campaign.releaseReadiness)) return true;
     return false;
   };
   brief.revision = revision(brief);
