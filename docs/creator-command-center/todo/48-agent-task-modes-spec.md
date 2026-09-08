@@ -12,6 +12,34 @@ related:
 
 # Agent Task Modes And Focused Context Loading
 
+## Current Branding pilot decision — 2026-09-08
+
+The user has superseded the original immutable-mode UI below for deliberate
+Branding Agent focus changes. Cards remain visible inside the real chat, sharing one compact row with
+the agent identity. The first choice starts one hidden host turn; subsequent choices
+select the focus for the next user turn without generating another response.
+The selected card stays active and Full Brand System remains explicit.
+
+The current Branding choices are **Brand Audit**, **Artist World**, **Voice &
+Beliefs**, **Campaign Angles**, and **Full Brand System**. Artist World pairs
+`artist-narrative-universe` with `artist-visual-world-director`; Voice & Beliefs
+pairs `artist-belief-system` with `artist-brand-expression-strategist`. Each pair
+is a focused bundle (`kind: bundle`, not `fullMode`), with both primary skills
+selected and used toward one connected outcome. Other skills stay on demand.
+This supersedes the original one-primary-only rule and seven-choice recipe below.
+The app is in development; no compatibility migration is part of this change.
+
+
+An admitted response retains its original focus through initialization, provider
+fallback, and automatic authentication retry. A later selection is persisted by
+the host for the next turn. Hidden starters are execution input only, never artist
+memory, session-log summaries, title-generation input, or visible chat metadata.
+
+This decision overrides conflicting removal/immutable-primary instructions below
+for explicit same-agent card selections. It does not authorize provider,
+permission, spending, or approval changes. Capability expansion, Manager focus,
+and the remaining rollout slices still require their own implementation and gates.
+
 ## Decision
 
 Add a lightweight **What are we doing?** choice to agents that currently cover several materially different jobs.
