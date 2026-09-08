@@ -35,6 +35,7 @@ interface WorkspaceRailProps {
   onWorkspaceRemoved?: () => void
   workspaceUnreadMap?: Record<string, boolean>
   orientation?: 'horizontal' | 'vertical'
+  compact?: boolean
 }
 
 export function WorkspaceRail({
@@ -45,6 +46,7 @@ export function WorkspaceRail({
   onWorkspaceRemoved,
   workspaceUnreadMap,
   orientation = 'vertical',
+  compact = false,
 }: WorkspaceRailProps) {
   const { t } = useTranslation()
   const [showCreationScreen, setShowCreationScreen] = useState(false)
@@ -353,7 +355,10 @@ export function WorkspaceRail({
         >
           <div
             data-testid="artist-place-switcher"
-            className="artist-os-workspace-switcher flex h-7 shrink-0 items-center rounded-[10px] border border-white/[0.10] p-0.5"
+            className={cn(
+              "artist-os-workspace-switcher flex h-7 shrink-0 items-center rounded-[10px] border border-white/[0.10] p-0.5",
+              compact && "w-full justify-between [&>button]:gap-1 [&>button]:px-1.5 [&>button]:text-[10.5px]",
+            )}
           >
             {hqWorkspace ? (
               <button
@@ -367,7 +372,7 @@ export function WorkspaceRail({
                     : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
                 )}
               >
-                <Home className="h-3.5 w-3.5" strokeWidth={1.8} />
+                {!compact && <Home className="h-3.5 w-3.5" strokeWidth={1.8} />}
                 <span>HQ</span>
               </button>
             ) : null}
@@ -386,7 +391,7 @@ export function WorkspaceRail({
                       : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
                   )}
                 >
-                  <Disc3 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  {!compact && <Disc3 className="h-3.5 w-3.5" strokeWidth={1.8} />}
                   <span>Campaigns</span>
                   <ChevronDown className="h-3 w-3 text-white/40" strokeWidth={1.8} />
                   {campaignWorkspaces.some((workspace) => workspaceUnreadMap?.[workspace.id]) ? (
@@ -434,6 +439,8 @@ export function WorkspaceRail({
                 }
               }}
               disabled={isCreatingLab}
+              aria-busy={isCreatingLab}
+              aria-label={isCreatingLab ? 'Creating Creative Lab' : undefined}
               aria-current={labWorkspace?.id === activeWorkspaceId ? 'page' : undefined}
               className={cn(
                 'relative flex h-[22px] items-center gap-1.5 rounded-[7px] px-2 text-[11px] font-medium transition-colors disabled:opacity-45',
@@ -442,8 +449,8 @@ export function WorkspaceRail({
                   : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
               )}
             >
-              <FlaskConical className="h-3.5 w-3.5 text-[#fdba74]" strokeWidth={1.8} />
-              <span>{isCreatingLab ? 'Creating…' : 'Lab'}</span>
+              {!compact && <FlaskConical className="h-3.5 w-3.5 text-[#fdba74]" strokeWidth={1.8} />}
+              <span>{isCreatingLab && !compact ? 'Creating…' : 'Lab'}</span>
               {labWorkspace && workspaceUnreadMap?.[labWorkspace.id] ? (
                 <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#fb923c]" />
               ) : null}

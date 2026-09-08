@@ -23,7 +23,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(shell).toContain('data-testid="sidebar-toggle-close"')
     expect(shell).toContain('pointer-events-auto absolute bottom-3 right-2 z-[80]')
     expect(shell).toContain('pointer-events-auto fixed bottom-3 left-2 z-[100]')
-    expect(shell).toContain('usesWorkspaceHeader ? "px-3 pb-10 pt-10"')
+    expect(shell).toContain('usesWorkspaceHeader ? "px-3 pb-10 pt-2"')
     expect(shell).toContain('usesWorkspaceHeader && "artist-os-sidebar-glass"')
     expect(styles).toContain('.artist-os-sidebar-glass {')
     expect(styles).toContain('backdrop-filter: blur(28px) saturate(145%);')
@@ -47,13 +47,16 @@ describe('Artist OS persistent shell chrome', () => {
     expect(windowManager).toContain('managed.window.setWindowButtonVisibility(visible)')
   })
 
-  test('groups HQ, Campaigns, and Lab beside the sidebar divider', () => {
+  test('groups HQ, Campaigns, and Lab above sidebar navigation with a hidden-sidebar fallback', () => {
     const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
     const rail = readFileSync(join(import.meta.dir, '..', 'WorkspaceRail.tsx'), 'utf8')
     const topBar = readFileSync(join(import.meta.dir, '..', 'TopBar.tsx'), 'utf8')
     const styles = readFileSync(join(import.meta.dir, '..', '..', '..', 'index.css'), 'utf8')
 
-    expect(shell).toContain('effectiveSidebarWidth + 14')
+    expect(shell).toContain('usesWorkspaceHeader ? 180 : usesWorkspaceRail ? 150 : sidebarWidth')
+    expect(shell).toContain('data-testid="sidebar-workspace-navigation"')
+    expect(shell).toMatch(/data-testid="sidebar-workspace-navigation"[\s\S]*?onKeyDown=\{\(event\) => event.stopPropagation\(\)\}/)
+    expect(shell).toContain('workspaceNavigation={usesWorkspaceHeader && !showsWorkspaceSidebar && !isAutoCompact')
     expect(topBar).toContain('workspaceNavigationLeftInset - menuLeftPadding')
     expect(rail).toContain('data-testid="artist-place-switcher"')
     expect(rail).toContain('<span>HQ</span>')

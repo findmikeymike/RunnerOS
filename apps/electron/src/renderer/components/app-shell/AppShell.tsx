@@ -602,7 +602,8 @@ function AppShellContent({
   const effectiveSidebarAndNavigatorHidden = isSidebarAndNavigatorHidden || isAutoCompact
   const usesWorkspaceHeader = RENDERER_PRODUCT_VARIANT === 'artist-os'
   const usesWorkspaceRail = !usesWorkspaceHeader && !effectiveSidebarAndNavigatorHidden && !isAutoCompact
-  const effectiveSidebarWidth = usesWorkspaceHeader || usesWorkspaceRail ? 150 : sidebarWidth
+  const effectiveSidebarWidth = usesWorkspaceHeader ? 180 : usesWorkspaceRail ? 150 : sidebarWidth
+  const showsWorkspaceSidebar = usesWorkspaceHeader && !effectiveSidebarAndNavigatorHidden && isSidebarVisible
 
   // What's New overlay
   const [showWhatsNew, setShowWhatsNew] = React.useState(false)
@@ -3196,7 +3197,7 @@ function AppShellContent({
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
           onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
-          workspaceNavigation={usesWorkspaceHeader && !isAutoCompact ? (
+          workspaceNavigation={usesWorkspaceHeader && !showsWorkspaceSidebar && !isAutoCompact ? (
             <WorkspaceRail
               workspaces={workspaces}
               activeWorkspaceId={activeWorkspaceId}
@@ -3208,7 +3209,7 @@ function AppShellContent({
             />
           ) : undefined}
           workspaceNavigationLeftInset={usesWorkspaceHeader && !isAutoCompact
-            ? (isSidebarVisible ? effectiveSidebarWidth + 14 : 86)
+            ? 86
             : undefined}
           showSidebarButton={!usesWorkspaceHeader}
           showProductMenu={!usesWorkspaceHeader}
@@ -3300,6 +3301,25 @@ function AppShellContent({
               </button>
             )}
             <div className="flex h-full flex-col select-none">
+              {showsWorkspaceSidebar && (
+                <div
+                  data-testid="sidebar-workspace-navigation"
+                  className="shrink-0 px-2 pt-3 pb-2"
+                  // The selector and its portaled menus own their keyboard navigation.
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
+                  <WorkspaceRail
+                    workspaces={workspaces}
+                    activeWorkspaceId={activeWorkspaceId}
+                    onSelect={onSelectWorkspace}
+                    onWorkspaceCreated={() => onRefreshWorkspaces?.()}
+                    onWorkspaceRemoved={() => onRefreshWorkspaces?.()}
+                    workspaceUnreadMap={workspaceUnreadMap}
+                    orientation="horizontal"
+                    compact
+                  />
+                </div>
+              )}
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
                 {/* Primary Nav */}
@@ -3311,7 +3331,7 @@ function AppShellContent({
                   }}
                   className={cn(
                     "flex-1 w-full overflow-y-auto overflow-x-hidden min-h-0 mask-fade-bottom",
-                    usesWorkspaceHeader ? "px-3 pb-10 pt-10" : "pt-[18px] pb-4",
+                    usesWorkspaceHeader ? "px-3 pb-10 pt-2" : "pt-[18px] pb-4",
                   )}
                 >
                 <LeftSidebar
