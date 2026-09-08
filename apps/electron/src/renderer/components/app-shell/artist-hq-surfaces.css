@@ -1,0 +1,49 @@
+.hq-premium-panel,
+.hq-performance .hq-pulse-card {
+  border-radius: 14px;
+  border-color: #ffffff12;
+  background: linear-gradient(155deg, #ffffff06, transparent 52%), #0e0e0e;
+  box-shadow: inset 0 1px 0 #ffffff07, 0 3px 8px -4px #0006, 0 12px 22px -14px #0008;
+}
+.hq-performance .hq-pulse-card {
+  background: linear-gradient(145deg, #ffffff08, transparent 65%), #111;
+  transition: border-color 180ms, box-shadow 180ms;
+}
+.hq-performance .hq-pulse-card:focus-within,
+.hq-performance .hq-pulse-card:hover {
+  border-color: #ffffff1e;
+  box-shadow: inset 0 1px 0 #ffffff0c, 0 3px 8px -4px #0006, 0 12px 22px -14px #0008;
+}
+.hq-pulse-identity h3 { color: #eeeeee; }
+.hq-pulse-metrics > button > span:first-child { color: #ffffff80; }
+.hq-pulse-metrics > button > span:nth-child(2) { font-variant-numeric: tabular-nums; }
+.hq-pulse-metrics > :nth-child(2) { border-left-color: #ffffff08; }
+.hq-panel-heading {
+  position: relative;
+  background: linear-gradient(180deg, #ffffff02, transparent);
+}
+.hq-panel-heading::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #ffffff0c 18%, #ffffff0c 82%, transparent);
+  pointer-events: none;
+}
+#hq-home-operations > .hq-activity-panel { margin-top: 20px; }
+.hq-activity-panel [role='tab'][aria-selected='true'] {
+  background: linear-gradient(180deg, #ffffff0c, #ffffff05);
+  box-shadow: inset 0 1px 0 #ffffff10, inset 0 0 0 1px #ffffff06;
+}
+.hq-activity-panel [role='tab'][aria-selected='false'] { color: #ffffff80; }
+.hq-today-stem { background: linear-gradient(180deg, transparent, #ffffff48 22%, #f9731673 52%, #ffffff20 80%, transparent); }
+.hq-today-point { background: #f97316; box-shadow: 0 0 7px #f9731638; }
+/* MengTo's stepped blur, bounded to the ruler's trailing edge below all data. */
+.hq-horizon-blur { position: absolute; right: 0; top: 52px; width: 56px; height: 24px; z-index: 1; pointer-events: none; }
+.hq-horizon-blur > span { position: absolute; inset: 0; }
+.hq-horizon-blur > span:nth-child(1) { backdrop-filter: blur(0.5px); mask-image: linear-gradient(90deg, transparent, #000 35%, #000 55%, transparent 75%); }
+.hq-horizon-blur > span:nth-child(2) { backdrop-filter: blur(1.5px); mask-image: linear-gradient(90deg, transparent 30%, #000 65%, #000 80%, transparent); }
+.hq-horizon-blur > span:nth-child(3) { backdrop-filter: blur(3px); mask-image: linear-gradient(90deg, transparent 60%, #000); }
+@media (prefers-reduced-motion: reduce) {
+  .hq-performance .hq-pulse-card { transition: none; }
+}

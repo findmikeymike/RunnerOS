@@ -3299,7 +3299,7 @@ function AppShellContent({
               {showsWorkspaceSidebar && (
                 <div
                   data-testid="sidebar-workspace-navigation"
-                  className="shrink-0 px-3 pt-4 pb-2"
+                  className="shrink-0 px-3 pt-4 pb-2 xl:pt-5"
                   // The selector and its portaled menus own their keyboard navigation.
                   onKeyDown={(event) => event.stopPropagation()}
                 >

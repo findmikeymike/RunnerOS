@@ -348,8 +348,8 @@ export function WorkspaceRail({
           <div
             data-testid="artist-place-switcher"
             className={cn(
-              "artist-os-workspace-switcher flex h-7 shrink-0 items-center rounded-[10px] border border-white/[0.10] p-0.5",
-              compact && "w-full justify-between [&>button]:gap-1 [&>button]:px-1.5 [&>button]:text-[10.5px]",
+              "artist-os-workspace-switcher flex h-[30px] shrink-0 items-center rounded-[9px] border border-white/[0.08] p-[3px]",
+              compact && "[&>button]:gap-1 [&>button]:px-1.5 [&>button]:text-[10.5px]",
             )}
           >
             {hqWorkspace ? (
@@ -359,10 +359,10 @@ export function WorkspaceRail({
                 title={compact ? 'HQ' : undefined}
                 aria-current={hqWorkspace.id === activeWorkspaceId ? 'page' : undefined}
                 className={cn(
-                  'flex h-[22px] items-center gap-1.5 rounded-[7px] px-2 text-[11px] font-medium transition-colors',
+                  'artist-os-place-button flex h-[22px] items-center gap-1.5 rounded-[6px] px-2 text-[11px] font-medium transition-colors',
                   hqWorkspace.id === activeWorkspaceId
-                    ? 'bg-white/[0.12] text-white'
-                    : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
+                    ? 'text-white'
+                    : 'text-white/60',
                 )}
               >
                 <Home className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -370,18 +370,16 @@ export function WorkspaceRail({
               </button>
             ) : null}
 
-            <span className="mx-0.5 h-4 w-px bg-white/[0.09]" aria-hidden="true" />
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
                   aria-current={campaignWorkspaces.some((workspace) => workspace.id === activeWorkspaceId) ? 'page' : undefined}
                   className={cn(
-                    'relative flex h-[22px] items-center gap-1.5 rounded-[7px] px-2 text-[11px] font-medium transition-colors',
+                    'relative artist-os-place-button flex h-[22px] items-center gap-1.5 rounded-[6px] px-2 text-[11px] font-medium transition-colors',
                     campaignWorkspaces.some((workspace) => workspace.id === activeWorkspaceId)
-                      ? 'bg-white/[0.12] text-white'
-                      : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
+                      ? 'text-white'
+                      : 'text-white/60',
                   )}
                 >
                   {!compact && <Disc3 className="h-3.5 w-3.5" strokeWidth={1.8} />}
@@ -420,8 +418,6 @@ export function WorkspaceRail({
               </StyledDropdownMenuContent>
             </DropdownMenu>
 
-            <span className="mx-0.5 h-4 w-px bg-white/[0.09]" aria-hidden="true" />
-
             <button
               type="button"
               onClick={(event) => {
@@ -437,13 +433,13 @@ export function WorkspaceRail({
               aria-label={isCreatingLab ? 'Creating Creative Lab' : undefined}
               aria-current={labWorkspace?.id === activeWorkspaceId ? 'page' : undefined}
               className={cn(
-                'relative flex h-[22px] items-center gap-1.5 rounded-[7px] px-2 text-[11px] font-medium transition-colors disabled:opacity-45',
+                'relative artist-os-place-button flex h-[22px] items-center gap-1.5 rounded-[6px] px-2 text-[11px] font-medium transition-colors disabled:opacity-45',
                 labWorkspace?.id === activeWorkspaceId
-                  ? 'bg-white/[0.12] text-white'
-                  : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
+                  ? 'text-white'
+                  : 'text-white/60',
               )}
             >
-              <FlaskConical className="h-3.5 w-3.5 text-[#fdba74]" strokeWidth={1.8} />
+              <FlaskConical className="h-3.5 w-3.5 text-[#f97316]" strokeWidth={1.8} />
               <span className={compact ? 'sr-only' : undefined}>{isCreatingLab && !compact ? 'Creating…' : 'Lab'}</span>
               {labWorkspace && workspaceUnreadMap?.[labWorkspace.id] ? (
                 <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#fb923c]" />
