@@ -223,6 +223,7 @@ import {
   normalizeWorkflowTriggerInputs,
   readActivatedWorkflows,
   readRun as readWorkflowRun,
+  listRuns as listWorkflowRuns,
   setWorkflowActive,
   WEEKLY_SIGNAL_SCAN_SLUG,
   writeGlobalWorkflow,
@@ -2422,6 +2423,9 @@ export class SessionManager implements ISessionManager {
       this.configWatchers.delete(workspace.rootPath)
 
       const automationSystem = this.automationSystems.get(workspace.rootPath)
+      if (automationSystem?.hasPendingExecutions()) {
+        throw new Error('Wait for active automations to finish before changing this workspace.')
+      }
       this.automationSystems.delete(workspace.rootPath)
       if (automationSystem) await automationSystem.dispose()
 
@@ -2432,6 +2436,75 @@ export class SessionManager implements ISessionManager {
       this.setupConfigWatcher(workspace.rootPath, workspaceId)
       throw error
     }
+  }
+
+  /** Freeze a campaign only when there is no work left executing against its files. */
+  async quiesceCampaignForDeletion(workspaceId: string): Promise<WorkspaceMigrationRuntimeLease> {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Campaign not found.')
+    const campaignAutomations = this.automationSystems.get(workspace.rootPath)
+    const assertIdle = () => {
+      const activeRun = this.workflowRunner?.getActiveRuns(workspaceId).some((run) =>
+        !['succeeded', 'failed', 'cancelled', 'interrupted'].includes(run.state))
+      const persistedActiveRun = listWorkflowRuns(workspace.rootPath).some((run) =>
+        ['created', 'queued', 'running', 'paused'].includes(run.state))
+      const work = parseScheduledWorkDocResult(loadContextDoc(workspace.rootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspaceId)
+      if (!work.ok) throw new Error('The campaign schedule could not be read safely. Repair it before deleting this campaign.')
+      const researchRunning = listDeepResearchRuns(workspace.rootPath).some((run) => run.state === 'running')
+      if (activeRun || persistedActiveRun || researchRunning || campaignAutomations?.hasPendingExecutions() || this.scheduledWorkRunner?.isWorkspaceScanInFlight(workspace.rootPath)
+        || work.work.items.some((item) => !item.deletedAt && item.status === 'running')) {
+        throw new Error('Stop active campaign workflows, research, and scheduled work before deleting this campaign.')
+      }
+    }
+    assertIdle()
+    const lease = await this.quiesceWorkspaceForMigration(workspaceId)
+    try {
+      assertIdle()
+      return lease
+    } catch (error) {
+      await this.resumeWorkspaceAfterMigration(lease)
+      throw error
+    }
+  }
+
+  /** Called after preservation, while the campaign deletion lease still blocks new work. */
+  async disposeCampaignSessions(lease: WorkspaceMigrationRuntimeLease): Promise<void> {
+    if (lease.released || !this.workspaceMigrationLocks.has(lease.workspaceId)) {
+      throw new Error('Campaign cleanup is no longer locked.')
+    }
+    for (const managed of [...this.sessions.values()]) {
+      if (managed.workspace.id !== lease.workspaceId) continue
+      this.chatGoalDriver.invalidate(managed.id)
+      const timer = this.deltaFlushTimers.get(managed.id)
+      if (timer) clearTimeout(timer)
+      this.deltaFlushTimers.delete(managed.id)
+      this.pendingDeltas.delete(managed.id)
+      this.clearAdminRememberApprovalsForSession(managed.id)
+      this.clearPendingPermissionRequestsForSession(managed.id)
+      sessionPersistenceQueue.cancel(managed.id)
+      unregisterSessionScopedToolCallbacks(managed.id)
+      this.browserPaneManager?.destroyForSession(managed.id)
+      managed.agent?.dispose()
+      managed.agent = null
+      if (managed.mcpPool) await managed.mcpPool.disconnectAll()
+      managed.mcpPool = undefined
+      if (managed.poolServer) await managed.poolServer.stop()
+      managed.poolServer = undefined
+    }
+  }
+
+  finishCampaignDeletion(lease: WorkspaceMigrationRuntimeLease): void {
+    for (const managed of [...this.sessions.values()]) {
+      if (managed.workspace.id !== lease.workspaceId) continue
+      this.sessions.delete(managed.id)
+      this.sendEvent({ type: 'session_deleted', sessionId: managed.id }, lease.workspaceId)
+    }
+    this.emitUnreadSummaryChanged()
+    lease.released = true
+    this.workspaceMigrationLocks.delete(lease.workspaceId)
+    // Keep the retired root fenced for the remainder of this process. Already queued
+    // callbacks must never recreate files after the campaign has been removed.
+    MIGRATING_WORKSPACE_ROOTS.add(lease.sourceRootPath)
   }
 
   async rebindWorkspaceAfterMigration(lease: WorkspaceMigrationRuntimeLease, newRootPath: string): Promise<void> {
@@ -2461,6 +2534,7 @@ export class SessionManager implements ISessionManager {
       managed.workspace = workspace
     }
 
+    MIGRATING_WORKSPACE_ROOTS.delete(newRootPath)
     this.setupConfigWatcher(newRootPath, lease.workspaceId)
     lease.released = true
     this.workspaceMigrationLocks.delete(lease.workspaceId)
@@ -2472,6 +2546,7 @@ export class SessionManager implements ISessionManager {
     if (lease.released) return
     const workspace = getWorkspaceByNameOrId(lease.workspaceId)
     if (workspace?.rootPath === lease.sourceRootPath) {
+      MIGRATING_WORKSPACE_ROOTS.delete(lease.sourceRootPath)
       this.setupConfigWatcher(lease.sourceRootPath, lease.workspaceId)
     }
     lease.released = true
@@ -2480,6 +2555,7 @@ export class SessionManager implements ISessionManager {
   }
 
   setupConfigWatcher(workspaceRootPath: string, workspaceId: string): void {
+    if (MIGRATING_WORKSPACE_ROOTS.has(workspaceRootPath)) return
     // Check if already watching this workspace
     if (this.configWatchers.has(workspaceRootPath)) {
       return // Already watching this workspace
@@ -6588,6 +6664,7 @@ user a clickable link to where the thing now lives.`
 
   // Persist a session to disk (async with debouncing)
   private persistSession(managed: ManagedSession): void {
+    if (MIGRATING_WORKSPACE_ROOTS.has(managed.workspace.rootPath)) return
     try {
       // Filter out transient status messages (progress indicators like "Compacting...")
       // Error messages are now persisted with rich fields for diagnostics
@@ -11686,6 +11763,7 @@ user a clickable link to where the thing now lives.`
    * inconvenience; a turn that errors because of one is a bug.
    */
   private recordSessionLogEntry(managed: ManagedSession): void {
+    if (MIGRATING_WORKSPACE_ROOTS.has(managed.workspace.rootPath)) return
     const agentSlug = managed.spawnedFromAgent?.agentSlug
     // The log is per agent. A plain chat session has no agent to file it under.
     if (!agentSlug) return

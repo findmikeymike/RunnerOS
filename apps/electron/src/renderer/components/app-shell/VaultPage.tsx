@@ -128,6 +128,8 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   const [loading, setLoading] = React.useState(true)
   const [busy, setBusy] = React.useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = React.useState<VaultCategory>('music')
+  const [pastReleases, setPastReleases] = React.useState(false)
+  const [pastReleaseId, setPastReleaseId] = React.useState('all')
   const [selectedKind, setSelectedKind] = React.useState<VaultAssetKind | 'all'>('all')
   const [selectedAssetId, setSelectedAssetId] = React.useState<string | null>(null)
   const [query, setQuery] = React.useState('')
@@ -161,9 +163,20 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
     [assets, selectedAssetId],
   )
   const categoryAssets = React.useMemo(
-    () => assets.filter((asset) => asset.category === selectedCategory),
-    [assets, selectedCategory],
+    () => assets.filter((asset) => pastReleases
+      ? asset.tags?.includes('past-release') && (pastReleaseId === 'all' || asset.campaigns?.includes(pastReleaseId))
+      : asset.category === selectedCategory),
+    [assets, selectedCategory, pastReleases, pastReleaseId],
   )
+  const pastReleaseOptions = React.useMemo(() => {
+    const releases = new Map<string, string>()
+    for (const asset of assets) {
+      if (!asset.tags?.includes('past-release')) continue
+      const name = asset.tags.find(tag => tag.startsWith('release:'))?.slice(8)
+      for (const id of asset.campaigns ?? []) releases.set(id, name || id)
+    }
+    return [...releases].sort((a, b) => a[1].localeCompare(b[1]))
+  }, [assets])
   const filteredAssets = React.useMemo(() => {
     const needle = query.trim().toLowerCase()
     return categoryAssets.filter((asset) => {
@@ -401,8 +414,8 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
           className="mb-4 shrink-0"
           actions={
             <>
-              <ToolbarButton disabled={busy !== null} onClick={() => void startImport('any')} icon={Upload} label="Import" active={busy === 'choose:any'} />
-              <ToolbarButton disabled={busy !== null} onClick={() => void linkFolder()} icon={FolderPlus} label="Link Folder" active={busy === 'link-folder'} />
+              {!pastReleases ? <ToolbarButton disabled={busy !== null} onClick={() => void startImport('any')} icon={Upload} label="Import" active={busy === 'choose:any'} /> : null}
+              {!pastReleases ? <ToolbarButton disabled={busy !== null} onClick={() => void linkFolder()} icon={FolderPlus} label="Link Folder" active={busy === 'link-folder'} /> : null}
               <ToolbarButton disabled={busy !== null} onClick={() => void scanFolder()} icon={RefreshCw} label="Scan" active={busy === 'scan'} />
               <ToolbarButton onClick={openFolder} icon={FolderOpen} label="Open Folder" />
             </>
@@ -441,13 +454,14 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
               <div className="mb-4 flex gap-2 overflow-x-auto pb-0.5">
                 {CATEGORIES.map((category) => {
                   const Icon = category.icon
-                  const active = selectedCategory === category.id
+                  const active = !pastReleases && selectedCategory === category.id
                   return (
                     <button
                       key={category.id}
                       type="button"
                       onClick={() => {
                         setSelectedCategory(category.id)
+                        setPastReleases(false)
                         setSelectedKind('all')
                         setSelectedAssetId(assets.find((asset) => asset.category === category.id)?.id ?? null)
                       }}
@@ -461,6 +475,14 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                     </button>
                   )
                 })}
+                <button type="button" onClick={() => {
+                  setPastReleases(true)
+                  setSelectedKind('all')
+                  setSelectedAssetId(null)
+                }} className={cn('inline-flex h-9 shrink-0 items-center gap-2 rounded-[10px] border px-3 text-xs font-medium transition-colors',
+                  pastReleases ? 'border-[#f97316]/45 bg-[#2a1206]/80 text-white' : 'border-transparent text-white/48 hover:text-white/82')}>
+                  <FileArchive className="h-3.5 w-3.5" />Past Releases
+                </button>
               </div>
               <div className="flex justify-end">
                 <label className="flex h-8 w-[220px] items-center gap-2 rounded-full border border-white/[0.025] bg-black/12 px-3">
@@ -474,7 +496,18 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                 </label>
               </div>
 
-              <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-0.5">
+              {pastReleases ? (
+                <div className="mt-3 flex items-center gap-3">
+                  <label htmlFor="past-release-filter" className="text-xs text-white/50">Release</label>
+                  <select id="past-release-filter" className={cn(INPUT_CLASS, 'max-w-xs')} value={pastReleaseId} onChange={event => {
+                    setPastReleaseId(event.target.value)
+                    setSelectedAssetId(null)
+                  }}>
+                    <option value="all">All past releases</option>
+                    {pastReleaseOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                  </select>
+                </div>
+              ) : <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-0.5">
                 <span className="shrink-0 text-[10px] font-medium uppercase tracking-[0.16em] text-white/28">Import as</span>
                 <KindChip active={selectedKind === 'all'} label="All" onClick={() => selectKind('all')} />
                 {CATEGORY_KIND_LABELS[selectedCategory].map((item) => (
@@ -485,11 +518,11 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                     onClick={() => selectKind(item.kind)}
                   />
                 ))}
-              </div>
+              </div>}
             </div>
 
             <div className="h-full min-h-0 overflow-y-auto bg-[#060606] p-4 pb-28">
-              <div className="mb-3 flex justify-end">
+              {!pastReleases ? <div className="mb-3 flex justify-end">
                 <button
                   type="button"
                   disabled={busy !== null}
@@ -499,9 +532,9 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                   <Plus className="h-3.5 w-3.5" />
                   Add
                 </button>
-              </div>
+              </div> : null}
               {filteredAssets.length === 0 ? (
-                <EmptyState kind={selectedKind} />
+                pastReleases ? <p className="py-12 text-center text-sm text-white/45">Files kept when you delete a campaign appear here.</p> : <EmptyState kind={selectedKind} />
               ) : (
                 <div className="overflow-hidden rounded-[12px] border border-white/[0.055]">
                   {filteredAssets.map((asset) => (

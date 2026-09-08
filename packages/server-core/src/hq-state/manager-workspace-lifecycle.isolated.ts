@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -32,6 +32,79 @@ afterAll(() => {
   if (previousConfigDir === undefined) delete process.env.CRAFT_CONFIG_DIR
   else process.env.CRAFT_CONFIG_DIR = previousConfigDir
   rmSync(testRoot, { recursive: true, force: true })
+})
+
+describe('Campaign deletion storage journey', () => {
+  test('saves verified media in HQ then removes the actual root and registration while keeping other work', async () => {
+    const { createCampaignCleanupController } = await import('../../../../apps/electron/src/main/campaign-cleanup.ts')
+    const { loadArtistVaultManifest } = await import('@craft-agent/shared/artist-vault')
+    const hq = config.addWorkspace({ name: 'Cleanup HQ', rootPath: join(testRoot, 'cleanup-hq'), artistWorkspaceScope: 'hq' })
+    const campaign = config.addWorkspace({ name: 'Finished Release', rootPath: join(testRoot, 'finished-release'), artistWorkspaceScope: 'campaign' })
+    const other = config.addWorkspace({ name: 'Next Release', rootPath: join(testRoot, 'next-release'), artistWorkspaceScope: 'campaign' })
+    const media = Buffer.from('original release master bytes')
+    writeFileSync(join(campaign.rootPath, 'master.wav'), media)
+    mkdirSync(join(campaign.rootPath, 'sessions', 'old-chat'), { recursive: true })
+    writeFileSync(join(campaign.rootPath, 'sessions', 'old-chat', 'chat.txt'), 'Disposable old chat text')
+    writeFileSync(join(other.rootPath, 'keep.txt'), 'Current campaign survives')
+    const memory = join(testRoot, 'global-memory.md')
+    writeFileSync(memory, 'Artist prefers intimate acoustic arrangements.')
+    const lease = { workspaceId: campaign.id, sourceRootPath: campaign.rootPath, released: false }
+    let notified = false
+    const controller = createCampaignCleanupController({
+      runtime: {
+        quiesceCampaignForDeletion: async () => lease,
+        resumeWorkspaceAfterMigration: async () => {},
+        disposeCampaignSessions: async () => {},
+        finishCampaignDeletion: () => { lease.released = true },
+      },
+      stopMessaging: async () => {}, resumeMessaging: async () => {},
+      clearPrivateState: async () => {},
+      onDeleted: () => { notified = true },
+    })
+    const preview = await controller.preview(campaign.id)
+    expect(preview.retainedFiles.map(file => file.relativePath)).toContain('master.wav')
+    const result = await controller.delete(campaign.id, preview.previewToken)
+    expect(result.hqWorkspaceId).toBe(hq.id)
+    expect(existsSync(campaign.rootPath)).toBe(false)
+    expect(config.getWorkspaces().some(workspace => workspace.id === campaign.id)).toBe(false)
+    const saved = loadArtistVaultManifest(hq.rootPath).assets.find(asset => asset.label === 'master.wav')
+    expect(saved).toBeDefined()
+    expect(readFileSync(join(hq.rootPath, saved!.relativePath!))).toEqual(media)
+    expect(readFileSync(join(other.rootPath, 'keep.txt'), 'utf-8')).toBe('Current campaign survives')
+    expect(readFileSync(memory, 'utf-8')).toBe('Artist prefers intimate acoustic arrangements.')
+    expect(notified).toBe(true)
+    await config.removeWorkspace(hq.id)
+    await config.removeWorkspace(other.id)
+  })
+})
+
+describe('Campaign deletion runtime', () => {
+  test('blocks active workflows, then freezes idle campaign runtime without deleting source data', async () => {
+    const { SessionManager } = await import('../sessions/SessionManager.ts')
+    const campaignRoot = join(testRoot, 'cleanup-runtime')
+    const campaign = config.addWorkspace({ name: 'Cleanup Runtime', rootPath: campaignRoot, artistWorkspaceScope: 'campaign' })
+    context.upsertContextDoc(campaignRoot, { slug: 'mission-brief', metadata: { name: 'Brief', enabled: true, routing: { mode: 'broadcast' } }, body: 'Keep source data until preservation succeeds.' })
+    const manager = new SessionManager()
+    const internals = manager as any
+    let active = true
+    let stopped = false
+    let disposed = false
+    internals.workflowRunner = { getActiveRuns: () => active ? [{ state: 'running' }] : [] }
+    internals.configWatchers.set(campaignRoot, { stop: () => { stopped = true } })
+    internals.automationSystems.set(campaignRoot, { hasPendingExecutions: () => false, dispose: async () => { disposed = true } })
+    await expect(manager.quiesceCampaignForDeletion(campaign.id)).rejects.toThrow('Stop active campaign')
+    expect(stopped).toBe(false)
+    active = false
+    const lease = await manager.quiesceCampaignForDeletion(campaign.id)
+    expect(stopped).toBe(true)
+    expect(disposed).toBe(true)
+    await expect(manager.createSession(campaign.id)).rejects.toThrow('migration')
+    await manager.disposeCampaignSessions(lease)
+    expect(context.loadContextDoc(campaignRoot, 'mission-brief')?.body).toContain('Keep source data')
+    manager.finishCampaignDeletion(lease)
+    expect(lease.released).toBe(true)
+    await config.removeWorkspace(campaign.id)
+  })
 })
 
 describe('Artist Manager workspace lifecycle', () => {

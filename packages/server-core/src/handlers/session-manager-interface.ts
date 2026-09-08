@@ -250,6 +250,9 @@ export interface ISessionManager {
   getWorkspacesInfo(): WorkspaceInfo[]
   setupConfigWatcher(workspaceRootPath: string, workspaceId: string): void
   quiesceWorkspaceForMigration?(workspaceId: string): Promise<WorkspaceMigrationRuntimeLease>
+  quiesceCampaignForDeletion?(workspaceId: string): Promise<WorkspaceMigrationRuntimeLease>
+  disposeCampaignSessions?(lease: WorkspaceMigrationRuntimeLease): Promise<void>
+  finishCampaignDeletion?(lease: WorkspaceMigrationRuntimeLease): void
   rebindWorkspaceAfterMigration?(lease: WorkspaceMigrationRuntimeLease, newRootPath: string): Promise<void>
   resumeWorkspaceAfterMigration?(lease: WorkspaceMigrationRuntimeLease): Promise<void>
   /**

@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { relative, resolve } from 'node:path'
 import {
   artistVaultContextMetadata,
+  withArtistVaultMutex as withWorkspaceMutex,
   artistVaultContextSlug,
   ensureArtistVaultFolders,
   getArtistVaultRoot,
@@ -59,15 +60,6 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.artistVault.SCAN,
   RPC_CHANNELS.artistVault.OPEN_FOLDER,
 ] as const
-
-const workspaceMutexes = new Map<string, Promise<void>>()
-
-function withWorkspaceMutex<T>(workspaceRootPath: string, fn: () => Promise<T>): Promise<T> {
-  const prev = workspaceMutexes.get(workspaceRootPath) ?? Promise.resolve()
-  const next = prev.then(fn, fn)
-  workspaceMutexes.set(workspaceRootPath, next.then(() => {}, () => {}))
-  return next
-}
 
 function resolveRootPath(workspaceId: string): string {
   const workspace = getWorkspaceByNameOrId(workspaceId)

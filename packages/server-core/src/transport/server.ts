@@ -129,6 +129,8 @@ export class WsRpcServer implements RpcServer {
   private clients = new Map<string, ClientConnection>()
   private handlers = new Map<string, HandlerFn>()
   private pendingInvokes = new Map<string, PendingInvoke>()
+  private activeRequestExecutions = 0
+  private campaignCleanupFenced = false
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private _port = 0
   private _protocol: 'ws' | 'wss' = 'ws'
@@ -181,6 +183,20 @@ export class WsRpcServer implements RpcServer {
   /** Number of currently connected (handshake-completed) clients. */
   getConnectedClientCount(): number {
     return this.clients.size
+  }
+
+  /** Native campaign deletion must not overlap an RPC that can still write files. */
+  acquireCampaignCleanupFence(): () => void {
+    if (this.campaignCleanupFenced || this.activeRequestExecutions > 0) {
+      throw new Error('Wait for pending app operations before deleting this campaign.')
+    }
+    this.campaignCleanupFenced = true
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.campaignCleanupFenced = false
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -665,14 +681,26 @@ export class WsRpcServer implements RpcServer {
       webContentsId: client.webContentsId,
     }
 
+    let timeout: ReturnType<typeof setTimeout> | undefined
     try {
-      await this.authorizeRequest?.(ctx, channel)
+      if (this.campaignCleanupFenced) throw new Error('Campaign cleanup is in progress. Try again when it finishes.')
+      // Count authorization too: a request awaiting it must not start writing after
+      // deletion acquires its fence. A response timeout does not cancel its handler.
+      this.activeRequestExecutions++
+      const execution = (async () => {
+        try {
+          await this.authorizeRequest?.(ctx, channel)
+          return await handler(ctx, ...(args ?? []))
+        } finally {
+          this.activeRequestExecutions--
+        }
+      })()
       const result = await Promise.race([
-        handler(ctx, ...(args ?? [])),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Handler timeout: ${channel} (${WsRpcServer.HANDLER_TIMEOUT_MS}ms)`)),
-            WsRpcServer.HANDLER_TIMEOUT_MS),
-        ),
+        execution,
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error(`Handler timeout: ${channel} (${WsRpcServer.HANDLER_TIMEOUT_MS}ms)`)),
+            WsRpcServer.HANDLER_TIMEOUT_MS)
+        }),
       ])
       const response: MessageEnvelope = {
         id,
@@ -685,6 +713,8 @@ export class WsRpcServer implements RpcServer {
       const message = err instanceof Error ? err.message : String(err)
       const code: ErrorCode = (err as any)?.code ?? 'HANDLER_ERROR'
       this.sendResponseError(client.ws, id, channel, code, message)
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout)
     }
   }
 
