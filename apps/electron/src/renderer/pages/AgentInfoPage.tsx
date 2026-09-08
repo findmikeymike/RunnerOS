@@ -17,7 +17,6 @@ import * as React from 'react'
 import { Bot, FileEdit, Play, Trash2, AlertTriangle, Pencil } from 'lucide-react'
 import { AgentEditDialog } from '@/components/app-shell/AgentEditDialog'
 import { AgentMemoryTab } from '@/components/agents/AgentMemoryTab'
-import { AgentTaskModePickerDialog } from '@/components/agents/AgentTaskModePickerDialog'
 import { useAtomValue } from 'jotai'
 import { toast } from 'sonner'
 import {
@@ -46,8 +45,7 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
   const [agent, setAgent] = React.useState<AgentDefinitionDTO | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [editOpen, setEditOpen] = React.useState(false)
-  const [taskModePickerOpen, setTaskModePickerOpen] = React.useState(false)
-  const [launchingTaskModeId, setLaunchingTaskModeId] = React.useState<string | null>(null)
+  const [isLaunching, setIsLaunching] = React.useState(false)
   const activeWorkspace = useActiveWorkspace()
   const { onCreateSession, onInputChange } = useAppShellContext()
   const canRevealLocally = !activeWorkspace?.remoteServer
@@ -136,16 +134,9 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
     }
   }
 
-  const handleRun = async (taskModeId?: string) => {
-    if (!taskModeId && (agent.metadata.taskModes?.length ?? 0) > 1) {
-      setTaskModePickerOpen(true)
-      return
-    }
-    setLaunchingTaskModeId(taskModeId ?? 'default')
+  const handleRun = async () => {
+    setIsLaunching(true)
     try {
-      const contextDocs = await window.electronAPI
-        .listWorkspaceContextDocsForAgent(workspaceId, agent.slug)
-        .catch(() => [])
       await openAgentSessionComposer({
         agent,
         workspaceId,
@@ -156,15 +147,13 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
         // to bind them at session start).
         skills,
         sources,
-        contextDocs,
-        taskModeId,
       })
     } catch (err) {
       toast.error('Failed to run worker', {
         description: err instanceof Error ? err.message : String(err),
       })
     } finally {
-      setLaunchingTaskModeId(null)
+      setIsLaunching(false)
     }
   }
 
@@ -225,7 +214,7 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
           <button
             type="button"
             onClick={() => void handleRun()}
-            disabled={Boolean(launchingTaskModeId)}
+            disabled={isLaunching}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border/50 hover:bg-foreground/5"
           >
             <Play className="h-3 w-3" />
@@ -389,16 +378,6 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
         onOpenChange={setEditOpen}
         agent={agent}
         workspaceId={workspaceId}
-      />
-      <AgentTaskModePickerDialog
-        open={taskModePickerOpen}
-        agentName={agent.metadata.name}
-        modes={agent.metadata.taskModes ?? []}
-        launchingModeId={launchingTaskModeId === 'default' ? null : launchingTaskModeId}
-        onSelect={(taskModeId) => void handleRun(taskModeId)}
-        onOpenChange={(open) => {
-          if (!open && !launchingTaskModeId) setTaskModePickerOpen(false)
-        }}
       />
     </Info_Page>
   )

@@ -99,6 +99,7 @@ function permissionForSessionCommand(command: SessionCommand): TeamPermissionAct
     case 'setThinkingLevel':
     case 'updateWorkingDirectory':
     case 'setSources':
+    case 'selectTaskMode':
     case 'setLabels':
     case 'setConnection':
     case 'setPendingPlanExecution':
@@ -393,6 +394,8 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         return sessionManager.updateWorkingDirectory(sessionId, command.dir)
       case 'setSources':
         return sessionManager.setSessionSources(sessionId, command.sourceSlugs)
+      case 'selectTaskMode':
+        return sessionManager.selectSessionTaskMode(sessionId, command.taskModeId)
       case 'setLabels':
         return sessionManager.setSessionLabels(sessionId, command.labels)
       case 'showInFinder': {

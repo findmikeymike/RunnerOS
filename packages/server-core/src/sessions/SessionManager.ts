@@ -815,6 +815,8 @@ function completeLaunchReceipt(
           name: fallback.spawnedFromAgent.agentName,
         }
       : undefined),
+    taskMode: receipt?.taskMode,
+    taskModeSelectionPending: receipt?.taskModeSelectionPending,
     workflow: receipt?.workflow,
     deepResearch: receipt?.deepResearch,
     automation: receipt?.automation,
@@ -2955,7 +2957,7 @@ export class SessionManager implements ISessionManager {
     options: {
       referenceMode?: 'strict' | 'lenient'
       taskModeId?: string
-      taskModeSelectionSource?: 'manager' | 'workflow' | 'automation' | 'handoff'
+      taskModeSelectionSource?: 'user' | 'manager' | 'workflow' | 'automation' | 'handoff'
     } = {},
   ): Promise<Partial<CreateSessionOptions>> {
     const strict = options.referenceMode !== 'lenient'
@@ -11505,6 +11507,75 @@ user a clickable link to where the thing now lives.`
     sessionLog.info(`Session ${sessionId} sources updated: ${sourceSlugs.length} sources`)
   }
 
+  /** Finalize an in-chat task-mode choice before the session's first turn. */
+  async selectSessionTaskMode(sessionId: string, taskModeId: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) throw new Error(`Session not found: ${sessionId}`)
+
+    await this.ensureMessagesLoaded(managed)
+    if (managed.isProcessing || managed.messages.length > 0 || managed.messageQueue.length > 0) {
+      throw new Error('Choose a worker focus before the conversation starts.')
+    }
+    if (managed.agent) {
+      throw new Error('This worker has already initialized. Start a new chat to change its focus.')
+    }
+
+    const agentSlug = managed.spawnedFromAgent?.agentSlug ?? managed.launchReceipt?.agent?.slug
+    if (!agentSlug) throw new Error('This chat is not linked to a saved worker.')
+
+    const resolved = await this.resolveAgentSessionOptions(managed.workspace.id, agentSlug, {
+      referenceMode: 'lenient',
+      taskModeId,
+      taskModeSelectionSource: 'user',
+    })
+    const resolvedReceipt = resolved.launchReceipt
+    if (!resolvedReceipt?.taskMode) {
+      throw new Error(`Focus "${taskModeId}" is not available for this worker.`)
+    }
+
+    managed.customSystemPrompt = resolved.customSystemPrompt
+    managed.agentSkillSlugs = resolved.agentSkillSlugs
+    managed.enabledSourceSlugs = resolved.enabledSourceSlugs ?? []
+    managed.trustedWorkerTools = resolved.trustedWorkerTools
+    managed.launchReceipt = completeLaunchReceipt({
+      ...resolvedReceipt,
+      createdAt: managed.launchReceipt?.createdAt ?? resolvedReceipt.createdAt,
+      summary: managed.launchReceipt?.summary ?? resolvedReceipt.summary,
+      taskModeSelectionPending: false,
+      config: {
+        ...resolvedReceipt.config,
+        ...managed.launchReceipt?.config,
+      },
+    }, {
+      origin: resolvedReceipt.origin,
+      model: managed.model,
+      llmConnection: managed.llmConnection,
+      permissionMode: managed.permissionMode,
+      thinkingLevel: managed.thinkingLevel,
+      workingDirectory: managed.workingDirectory,
+      customSystemPrompt: managed.customSystemPrompt,
+      agentSkillSlugs: managed.agentSkillSlugs,
+      enabledSourceSlugs: managed.enabledSourceSlugs,
+      spawnedFromAgent: managed.spawnedFromAgent,
+    })
+
+    this.persistSession(managed)
+    try {
+      await recordInjectedMemoryFromLaunchReceipt(managed.launchReceipt, managed.id)
+    } catch (error) {
+      sessionLog.warn(`[memory] Failed to record task-mode memory injection for session ${managed.id}:`, error)
+    }
+
+    this.sendEvent({
+      type: 'task_mode_selected',
+      sessionId: managed.id,
+      taskMode: resolvedReceipt.taskMode,
+      agentSkillSlugs: managed.agentSkillSlugs,
+      enabledSourceSlugs: managed.enabledSourceSlugs,
+      launchReceipt: managed.launchReceipt,
+    }, managed.workspace.id)
+  }
+
   /**
    * Get the enabled source slugs for a session
    */
@@ -12535,6 +12606,10 @@ user a clickable link to where the thing now lives.`
 
       // Ensure messages are loaded before we try to add new ones
       await this.ensureMessagesLoaded(managed)
+
+      if (managed.launchReceipt?.taskModeSelectionPending) {
+        throw new Error('Choose what this worker should focus on before sending your first message.')
+      }
 
       if (!goalAdmission) {
         managed.pendingChatGoalProposal = undefined

@@ -63,7 +63,11 @@ export interface ISessionManager {
   resolveAgentSessionOptions(
     workspaceId: string,
     agentSlug: string,
-    options?: { referenceMode?: 'strict' | 'lenient' },
+    options?: {
+      referenceMode?: 'strict' | 'lenient'
+      taskModeId?: string
+      taskModeSelectionSource?: 'user' | 'manager' | 'workflow' | 'automation' | 'handoff'
+    },
   ): Promise<Partial<CreateSessionOptions>>
   deleteSession(sessionId: string): Promise<void>
 
@@ -91,6 +95,7 @@ export interface ISessionManager {
   setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void
   updateWorkingDirectory(sessionId: string, path: string): void
   setSessionSources(sessionId: string, sourceSlugs: string[]): Promise<void>
+  selectSessionTaskMode(sessionId: string, taskModeId: string): Promise<void>
   setSessionLabels(sessionId: string, labels: string[]): void
   setSessionConnection(sessionId: string, connectionSlug: string): Promise<void>
   updateSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void>

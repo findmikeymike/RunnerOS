@@ -29,11 +29,10 @@ import { Button } from '@/components/ui/button'
 import { useAgentMemory } from '@/hooks/useAgentMemory'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import { MemoryEditDialog } from '@/components/agents/MemoryEditDialog'
-import { AgentTaskModePickerDialog } from '@/components/agents/AgentTaskModePickerDialog'
 import { skillsAtom } from '@/atoms/skills'
 import { sourcesAtom } from '@/atoms/sources'
 import { useAppShellContext } from '@/context/AppShellContext'
-import { openAgentSessionComposer } from '@/lib/run-agent'
+import { openAgentSessionComposer, shouldDeferAgentTaskModeSelection } from '@/lib/run-agent'
 import { cn } from '@/lib/utils'
 import { defaultWorkerSlugs, excludedWorkerSlugs, LAB_DEFAULT_WORKER_SLUGS } from '@/lib/worker-defaults'
 import { CompactPageHeader } from './CompactPageHeader'
@@ -83,8 +82,6 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
   const [favoriteSlugs, setFavoriteSlugs] = React.useState<string[]>([])
   const [recentSlugs, setRecentSlugs] = React.useState<string[]>([])
   const [launchingSlug, setLaunchingSlug] = React.useState<string | null>(null)
-  const [taskModeAgent, setTaskModeAgent] = React.useState<AgentDefinitionDTO | null>(null)
-  const [launchingTaskModeId, setLaunchingTaskModeId] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     let cancelled = false
@@ -98,14 +95,26 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
     }
   }, [workspaceId])
 
-  const handleStartChat = React.useCallback(async (agent: AgentDefinitionDTO, taskModeId?: string) => {
+  const handleStartChat = React.useCallback(async (agent: AgentDefinitionDTO) => {
     if (!workspaceId || launchingSlug) return
-    if (!taskModeId && (agent.metadata.taskModes?.length ?? 0) > 1) {
-      setTaskModeAgent(agent)
-      return
-    }
     setLaunchingSlug(agent.slug)
     try {
+      if (shouldDeferAgentTaskModeSelection(agent)) {
+        await openAgentSessionComposer({
+          agent,
+          workspaceId,
+          onCreateSession,
+          onInputChange,
+          skills,
+          sources,
+        })
+        setRecentSlugs((current) => {
+          const next = [agent.slug, ...current.filter((slug) => slug !== agent.slug)].slice(0, 12)
+          writeWorkerPreference(workspaceId, 'recent', next)
+          return next
+        })
+        return
+      }
       const sourceWorkspace = workspaces.find((workspace) => workspace.id === workspaceId)
       const hqWorkspace = findArtistHQWorkspace(workspaces)
       const campaignLaunch = agent.slug === 'x-editorial'
@@ -161,7 +170,6 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
         skills: launchSkills,
         sources: launchSources,
         contextDocs,
-        taskModeId,
       })
       setRecentSlugs((current) => {
         const next = [agent.slug, ...current.filter((slug) => slug !== agent.slug)].slice(0, 12)
@@ -176,18 +184,6 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
       setLaunchingSlug(null)
     }
   }, [launchingSlug, onCreateSession, onInputChange, onSelectWorkspace, skills, sources, workspaceId, workspaces])
-
-  const handleTaskModeSelect = React.useCallback(async (taskModeId: string) => {
-    const agent = taskModeAgent
-    if (!agent || launchingTaskModeId) return
-    setLaunchingTaskModeId(taskModeId)
-    try {
-      await handleStartChat(agent, taskModeId)
-      setTaskModeAgent(null)
-    } finally {
-      setLaunchingTaskModeId(null)
-    }
-  }, [handleStartChat, launchingTaskModeId, taskModeAgent])
 
   const toggleFavorite = React.useCallback((slug: string) => {
     setFavoriteSlugs((current) => {
@@ -461,16 +457,6 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
         }}
       />
 
-      <AgentTaskModePickerDialog
-        open={Boolean(taskModeAgent)}
-        agentName={taskModeAgent?.metadata.name ?? 'Worker'}
-        modes={taskModeAgent?.metadata.taskModes ?? []}
-        launchingModeId={launchingTaskModeId}
-        onSelect={(taskModeId) => void handleTaskModeSelect(taskModeId)}
-        onOpenChange={(open) => {
-          if (!open && !launchingTaskModeId) setTaskModeAgent(null)
-        }}
-      />
     </div>
   )
 }

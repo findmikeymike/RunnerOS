@@ -193,7 +193,7 @@ Validation rules:
 
 ## Resolved Launch Contract
 
-The host resolves the definition before session creation and stores the exact result. The model never resolves or invents its own active mode.
+For a direct interactive launch, the host may create a prompt-free pending chat shell first. It must resolve and persist the selected definition before accepting the first turn. Non-interactive launches resolve the definition before session creation. The model never resolves or invents its own active mode.
 
 ```ts
 export interface ResolvedAgentTaskMode {
@@ -388,11 +388,11 @@ Delegation preserves the caller's approval ceiling. It cannot widen permissions,
 
 For agents with two or more modes:
 
-1. The detail/launch view shows **What are we doing?** above the composer.
-2. Cards show a short job label and one-sentence outcome.
-3. Selecting a card reveals the normal composer and optional inputs.
-4. The app does not create a session until selection plus the first send/run action, preventing empty ghost sessions.
-5. Full modes are placed last and labeled `Comprehensive · slower`.
+1. Clicking the worker opens its actual chat immediately; no launch modal or separate setup card appears.
+2. Directly under the agent header, show one slim horizontal row labeled **What are we doing?** with compact focus cards.
+3. The composer remains visible, but Send is disabled until the user selects a card.
+4. The pending chat shell contains identity and model settings only. It loads no skills, sources, memory, or workspace context until selection.
+5. Selecting a card atomically composes and persists that exact mode before Send becomes active. Full mode appears last as the explicit `General / all` choice.
 6. Required unavailable dependencies disable only the affected card and explain the exact missing connection.
 7. Optional unavailable sources never disable a card; show `Works without X`.
 
@@ -400,7 +400,7 @@ If a launch path already supplies a valid mode, bypass the picker and show the s
 
 ### During a session
 
-Show a compact mode chip in the header/session info:
+After the first message, remove the choice row and show the immutable mode in session info:
 
 ```text
 Branding Agent · Visual World
@@ -412,7 +412,7 @@ Before the first user message, changing the chip simply rebuilds the unresolved 
 - a major change offers `Start focused session` and carries a bounded handoff
 - the original session's mode and receipt remain immutable
 
-Do not offer a vague **General** card that secretly loads everything. If a specialist needs ambiguity handling, use a lightweight **Help me choose** intake that recommends a real focused mode without starting deep work. **Full** always means the explicitly labeled comprehensive bundle.
+Do not silently treat an unselected chat as general mode. `General / all` is an explicit card and maps to the comprehensive bundle; its description must make that scope clear.
 
 ### Full mode
 
@@ -641,8 +641,8 @@ All paths use one shared `resolveAgentTaskMode()` implementation.
 
 | Launch path | Mode behavior |
 | --- | --- |
-| Agent detail / Run | Show picker when required; create session after selection and send. |
-| Existing agent session list | Resuming preserves the stored resolved mode; starting new opens the picker. |
+| Agent detail / Run | Open the chat immediately; select from the compact in-chat row before first send. |
+| Existing agent session list | Resuming preserves the stored resolved mode; starting new opens a pending chat with the in-chat row. |
 | Artist Manager text | Manager selects/recommends a specialist mode and includes `taskModeId` in the launch or delegation. |
 | `message_agent` | Accept and validate `taskModeId`; reject conflicting raw `skillSlugs`. |
 | Workflow | Store a deterministic mode id and resolved revision at workflow definition/run creation. No interactive picker at execution. |

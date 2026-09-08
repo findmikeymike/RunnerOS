@@ -20,6 +20,7 @@ import {
   handleError,
   handleTypedError,
   handleSourcesChanged,
+  handleTaskModeSelected,
   handleLabelsChanged,
   handleSessionStatusChanged,
   handleSessionFlagged,
@@ -164,6 +165,9 @@ export function processEvent(
 
     case 'sources_changed':
       return handleSourcesChanged(state, event)
+
+    case 'task_mode_selected':
+      return handleTaskModeSelected(state, event)
 
     case 'labels_changed':
       return handleLabelsChanged(state, event)

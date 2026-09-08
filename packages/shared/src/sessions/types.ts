@@ -129,6 +129,8 @@ export interface SessionLaunchReceipt {
     adjacentSkills: Array<{ slug: string; when: string; expansion: 'same-session' | 'new-session' | 'delegate' }>;
     fullMode: boolean;
   };
+  /** The chat must receive a user-selected task mode before its first turn. */
+  taskModeSelectionPending?: boolean;
   workflow?: {
     runId?: string;
     slug: string;
