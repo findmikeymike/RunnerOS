@@ -125,7 +125,7 @@ export function renderCampaignManagerBriefPromptSection(brief: CampaignManagerBr
   if (state.suggestedFocus || state.blockers.length || state.approvals.length || state.activeWork.length) {
     lines.push('', '### Operating State');
     if (state.suggestedFocus && options.includeRecommendations !== false) lines.push(`Suggested focus: ${state.suggestedFocus}`);
-    if (state.blockers.length) lines.push(`Blockers: ${state.blockers.join(' | ')}`);
+    if (state.blockers.length) lines.push(`${options.includeRecommendations === false ? 'Campaign operating gaps' : 'Blockers'}: ${state.blockers.join(' | ')}`);
     if (state.approvals.length) lines.push(`Awaiting approval: ${state.approvals.join(' | ')}`);
     if (state.activeWork.length) lines.push(`Active work: ${state.activeWork.join(' | ')}`);
   }

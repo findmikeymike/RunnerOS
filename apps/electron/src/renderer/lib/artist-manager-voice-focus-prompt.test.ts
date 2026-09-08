@@ -143,6 +143,8 @@ describe('focused voice prompt', () => {
     expect(prompt).not.toContain(brief.operatingState.suggestedFocus!)
     expect(prompt).toContain('Campaign: Upcoming Single')
     expect(prompt).toContain('Content video: 1 ready')
+    expect(prompt).not.toContain('Blockers:')
+    expect(prompt).toContain('Campaign operating gaps:')
     expect(prompt).toContain('Marked done: Master File')
     expect(prompt).toContain('Needed: Spotify Canvas')
     expect(prompt).toContain('Campaign mission is not defined.')
