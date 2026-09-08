@@ -67,12 +67,12 @@ OS to verify the checked-in runtime bytes.
   failure. The fixture uses synthetic visual input and never starts a microphone
   or provider. This is not evidence of a live call or audible alignment.
 - Renderer build passed and bundles the exact asset. Focused lint has no errors.
-- All 18 isolated test files passed (320 tests). The broad discovery run used a
-  60-second timeout because four unchanged tests exceeded the default five
-  seconds under local disk load. Its first extended run had 8,551 passes, one
-  skip and one TodoWrite failure; the latter passed separately (3/3). The final
-  post-update run against local main passed: 8,554 tests, one skip, zero failures
-  across 733 files (180.82 seconds).
+- All 18 isolated test files passed (320 tests). After incorporating main's
+  chat-history update `ad0cabed2`, the full discovery suite passed 8,555 tests,
+  one skip, zero failures across 733 files (208.75 seconds). The run used a
+  60-second per-test timeout and localhost access for its local test servers;
+  a sandboxed attempt could not start those servers. Typecheck and the renderer
+  build also passed after this update.
 - Full Electron typecheck passed after restoring the already-locked
   `@types/sax@1.2.7` installation with user permission. Its archive integrity
   matched `bun.lock`; no dependency manifest or lockfile change was needed.
