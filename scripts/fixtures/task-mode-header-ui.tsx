@@ -10,11 +10,11 @@ declare global {
   interface Window {
     focusModes: AgentTaskModeDefinition[]
     focusClicks: string[]
-    renderFocusHeader: (name?: string) => void
+    renderFocusHeader: (name?: string, busy?: boolean) => void
   }
 }
 window.focusClicks = []
-function Preview({ name }: { name: string }) {
+function Preview({ name, busy = false }: { name: string; busy?: boolean }) {
   const [selected, setSelected] = useState<string>()
   return (
     <TooltipProvider>
@@ -22,7 +22,7 @@ function Preview({ name }: { name: string }) {
         <ChatAgentHeader name={name} description="Shape a distinctive world around your music."
           menu={<DropdownMenuItem>Session details</DropdownMenuItem>}
           focusControls={<ChatAgentTaskModeBar modes={window.focusModes} selectedModeId={selected}
-            conversationStarted={Boolean(selected)} onSelect={id => { window.focusClicks.push(id); setSelected(id) }} />}
+            openingConversation={busy} conversationStarted={Boolean(selected)} onSelect={id => { window.focusClicks.push(id); setSelected(id) }} />}
         />
         <main style={{ maxWidth: 760, margin: '72px auto', padding: '0 24px', color: '#b9babd', fontSize: 13 }}>
           <p style={{ color: '#e6e6e8' }}>Your next chapter starts here.</p>
@@ -33,5 +33,5 @@ function Preview({ name }: { name: string }) {
   )
 }
 const root = createRoot(document.getElementById('root')!)
-window.renderFocusHeader = (name = 'Branding Agent') => root.render(<Preview key={name} name={name} />)
+window.renderFocusHeader = (name = 'Branding Agent', busy = false) => root.render(<Preview key={`${name}-${busy}`} name={name} busy={busy} />)
 window.renderFocusHeader()

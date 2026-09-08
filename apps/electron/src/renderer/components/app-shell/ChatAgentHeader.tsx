@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Diamond, MoreHorizontal } from 'lucide-react'
+import { MoreHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { StyledDropdownMenuContent } from '@/components/ui/styled-dropdown'
@@ -26,14 +26,12 @@ export function ChatAgentHeader({
 }: ChatAgentHeaderProps) {
   return (
     <div className={cn(
-      'relative z-panel flex min-h-[64px] shrink-0 items-center gap-3 border-b border-white/[0.07] bg-gradient-to-b from-[#16181c]/95 to-[#0c0e11]/95 px-3 py-2 shadow-hairline-top backdrop-blur-xl @md/panel:gap-5 @md/panel:px-5',
+      'relative z-panel flex min-h-[64px] shrink-0 items-center gap-3 px-3 py-2 @md/panel:gap-5 @md/panel:px-5',
+      focusControls && 'flex-col gap-1 pt-2 pb-0 @md/panel:gap-1',
       className,
     )}>
-      {leadingAction && <div className="titlebar-no-drag shrink-0">{leadingAction}</div>}
-      <div className="titlebar-no-drag flex max-w-[48%] shrink-0 items-center gap-2.5 @md/panel:max-w-[38%]">
-        <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-[#ff9b7d]/20 bg-gradient-to-br from-[#ff9b7d]/12 to-[#ff8063]/[0.025] text-[#ffac91] shadow-hairline-top">
-          <Diamond className="size-3.5" strokeWidth={1.5} />
-        </span>
+      {leadingAction && <div className={cn("titlebar-no-drag shrink-0", focusControls && "absolute left-3 top-1")}>{leadingAction}</div>}
+      <div className={cn("titlebar-no-drag flex shrink-0 items-center", focusControls ? "relative max-w-[calc(100%-80px)] gap-2" : "max-w-[48%] gap-2.5 @md/panel:max-w-[38%]")}>
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1">
             <Tooltip>
@@ -41,8 +39,8 @@ export function ChatAgentHeader({
                 <h2
                   tabIndex={description ? 0 : -1}
                   className={cn(
-                    'min-w-0 truncate rounded text-[10px] font-semibold uppercase leading-5 tracking-[0.1em] text-white/90 outline-none @md/panel:text-[11px]',
-                    description && 'cursor-help focus-visible:ring-1 focus-visible:ring-[#ffac91]/70',
+                    'min-w-0 truncate rounded text-[12px] font-semibold uppercase leading-5 tracking-[0.1em] text-white/90 outline-none @md/panel:text-[13px]',
+                    description && 'cursor-help focus-visible:ring-1 focus-visible:ring-[#fb923c]/70',
                   )}
                 >
                   {name}
@@ -56,7 +54,7 @@ export function ChatAgentHeader({
                   <button
                     type="button"
                     aria-label="Chat options"
-                    className="flex size-6 shrink-0 items-center justify-center rounded-md text-white/35 transition-colors hover:bg-white/[0.07] hover:text-white/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#ffac91]/70"
+                    className="flex size-6 shrink-0 items-center justify-center rounded-md text-white/35 transition-colors hover:bg-white/[0.07] hover:text-white/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#fb923c]/70"
                   >
                     <MoreHorizontal className="size-3.5" />
                   </button>
@@ -65,11 +63,10 @@ export function ChatAgentHeader({
               </DropdownMenu>
             )}
           </div>
-          {focusControls && <p className="whitespace-nowrap text-[10px] italic leading-4 text-white/45">What are we doing?</p>}
         </div>
       </div>
-      {focusControls && <div className="min-w-0 flex-1 border-l border-white/[0.07] pl-3 @md/panel:pl-5">{focusControls}</div>}
-      {rightSidebarButton && <div className="titlebar-no-drag ml-auto shrink-0">{rightSidebarButton}</div>}
+      {focusControls && <div className="w-full min-w-0">{focusControls}</div>}
+      {rightSidebarButton && <div className={cn("titlebar-no-drag shrink-0", focusControls ? "absolute right-3 top-1" : "ml-auto")}>{rightSidebarButton}</div>}
     </div>
   )
 }

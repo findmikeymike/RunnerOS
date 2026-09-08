@@ -40,6 +40,20 @@ for explicit same-agent card selections. It does not authorize provider,
 permission, spending, or approval changes. Capability expansion, Manager focus,
 and the remaining rollout slices still require their own implementation and gates.
 
+## Approved shared focus UI — 2026-09-08
+
+The final Branding UI is the visual reference for the wider rollout: a transparent
+76px header, centered 12–13px agent title without a leading icon or guide text,
+centered 28px focus buttons, neutral fills, and `#fb923c` selected outline/icon/check.
+A half-pixel orange divider spans only the button group, with roughly 8px clearance.
+No full/slower suffix on the button and no success toast for routine focus changes.
+Hover cards use opaque soot, specific artist-facing purpose and examples, local
+150ms timing, keyboard access, and independent pointer-grace state per button.
+The user has authorized rollout to the listed agents using this design and the
+pilot's first-selection hidden start / later next-turn switching behavior.
+This supersedes earlier visual instructions and immutable-mode restrictions for
+explicit user selections. The lightweight Manager voice experience stays separate.
+
 ## Decision
 
 Add a lightweight **What are we doing?** choice to agents that currently cover several materially different jobs.

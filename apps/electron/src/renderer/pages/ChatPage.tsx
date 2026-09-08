@@ -462,11 +462,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
         startConversation: shouldStartConversation,
       })
       setTaskModeState((state) => finishTaskModeSelection(state, session.id, request, true))
-      if (activeTaskModeState.current.sessionId === session.id
-        && activeTaskModeState.current.request === request && !shouldStartConversation) {
-        const label = taskModes.find((mode) => mode.id === taskModeId)?.label ?? 'New focus'
-        toast.success(`${label} will guide the next reply.`)
-      }
     } catch (error) {
       setTaskModeState((state) => finishTaskModeSelection(state, session.id, request, false))
       if (activeTaskModeState.current.sessionId === session.id
@@ -476,7 +471,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
         })
       }
     }
-  }, [applyingTaskModeId, conversationStarted, openingTaskModeConversation, selectedTaskModeId, session, taskModeSelectionRequired, taskModes])
+  }, [applyingTaskModeId, conversationStarted, openingTaskModeConversation, selectedTaskModeId, session, taskModeSelectionRequired])
   const hasUnreadMessages = sessionMeta
     ? !!(sessionMeta.lastFinalMessageId && sessionMeta.lastFinalMessageId !== sessionMeta.lastReadMessageId)
     : false

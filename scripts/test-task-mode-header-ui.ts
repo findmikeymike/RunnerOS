@@ -42,12 +42,46 @@ try {
     await page.setViewportSize({ width, height: 400 })
     const titleBox = (await title.boundingBox())!
     const rowBox = (await focus.boundingBox())!
-    assert.ok(titleBox.x < rowBox.x, `Identity must be left of focus buttons at ${width}px`)
-    assert.ok(rowBox.y < 64 && rowBox.y + rowBox.height <= 68, `Header must remain one compact row at ${width}px`)
+    assert.ok(titleBox.y + titleBox.height <= rowBox.y, `Title sits above focus buttons at ${width}px`)
+    assert.ok(rowBox.y + rowBox.height <= 76, `Two-row header stays within 76px at ${width}px`)
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `No page overflow at ${width}px`)
   }
   assert.equal(await focus.locator('button[aria-pressed]').count(), 5, 'Exactly five focus choices')
   await checkLayout(1280)
+  const firstButton = (await focus.locator('button[aria-pressed]').first().boundingBox())!
+  const lastButton = (await focus.locator('button[aria-pressed]').last().boundingBox())!
+  const divider = (await focus.locator('[data-focus-divider]').boundingBox())!
+  assert.ok(Math.abs(divider.x - firstButton.x) < 1, 'Divider starts at first button')
+  assert.ok(Math.abs(divider.x + divider.width - lastButton.x - lastButton.width) < 1, 'Divider ends at last button')
+  assert.equal(divider.height, 0.5)
+  assert.ok(divider.y - firstButton.y - firstButton.height >= 7, 'Divider has breathing room below buttons')
+
+  for (let index = 0; index < modes.length; index++) {
+    const button = focus.locator('button[aria-pressed]').nth(index)
+    await button.hover()
+    const tooltip = page.getByRole('tooltip')
+    await tooltip.waitFor({ timeout: 700 })
+    assert.ok((await tooltip.innerText()).length > 30, `Helpful description for ${modes[index]!.label}`)
+    assert.equal(await button.getAttribute('title'), null, 'No duplicate native tooltip')
+    await page.mouse.move(0, 300, { steps: 10 })
+    await tooltip.waitFor({ state: 'hidden' })
+  }
+  await focus.getByRole('button', { name: 'Brand Audit', exact: true }).focus()
+  await page.getByRole('tooltip').waitFor()
+  assert.ok((await page.getByRole('tooltip').innerText()).includes('what makes you distinct'))
+  assert.deepEqual(await page.evaluate(() => (window as any).focusClicks), [], 'Reading helpers never selects a focus')
+  await page.keyboard.press('Escape')
+
+  // Helpers remain readable during a pending selection, without admitting another click.
+  await page.evaluate(() => window.renderFocusHeader('Branding Agent', true))
+  const busyButton = focus.getByRole('button', { name: 'Artist World', exact: true })
+  await busyButton.hover()
+  await page.getByRole('tooltip').waitFor({ timeout: 700 })
+  await busyButton.focus()
+  await page.keyboard.press('Enter')
+  assert.deepEqual(await page.evaluate(() => (window as any).focusClicks), [])
+  await page.mouse.move(0, 300, { steps: 10 })
+  await page.evaluate(() => window.renderFocusHeader())
   await page.getByRole('button', { name: 'Voice & Beliefs', exact: true }).click()
   assert.equal(await page.getByRole('button', { name: 'Voice & Beliefs', exact: true }).getAttribute('aria-pressed'), 'true')
   await page.getByRole('button', { name: 'Artist World', exact: true }).click()
@@ -56,6 +90,28 @@ try {
   await page.getByRole('menuitem', { name: 'Session details' }).waitFor()
   await page.keyboard.press('Escape')
   await mkdir('/tmp/artist-focus-ui', { recursive: true })
+  for (let index = 0; index < modes.length; index++) {
+    const box = (await focus.locator('button[aria-pressed]').nth(index).boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 12 })
+    await page.getByRole('tooltip').filter({ hasText: modes[index]!.label }).waitFor({ timeout: 700 }).catch(async error => { await page.screenshot({ path: '/tmp/artist-focus-ui/helper-failure.png' }); throw error })
+  }
+  const worldBox = (await focus.getByRole('button', { name: 'Artist World', exact: true }).boundingBox())!
+  await page.mouse.move(worldBox.x + worldBox.width / 2, worldBox.y + worldBox.height / 2, { steps: 12 })
+  await page.getByRole('tooltip').filter({ hasText: 'Artist World' }).waitFor({ timeout: 700 }).catch(async error => { await page.screenshot({ path: '/tmp/artist-focus-ui/helper-failure.png' }); throw error })
+  const surface = await page.locator('[data-slot="tooltip-content"]').evaluate(el => {
+    const style = getComputedStyle(el)
+    return { background: style.backgroundColor, filter: style.backdropFilter }
+  })
+  assert.equal(surface.background, 'rgb(24, 24, 24)', 'Opaque neutral soot surface')
+  assert.equal(surface.filter, 'none', 'Underlying colors cannot tint the helper')
+  await page.locator('[data-slot="tooltip-content"]').hover()
+  await page.waitForTimeout(200)
+  assert.equal(await page.locator('[data-slot="tooltip-content"]').isVisible(), true, 'Helper stays open while reading it')
+  await page.screenshot({ path: '/tmp/artist-focus-ui/helper.png' })
+  await page.locator('[data-slot="tooltip-content"]').screenshot({ path: '/tmp/artist-focus-ui/helper-card.png' })
+  await page.mouse.move(0, 300, { steps: 10 })
+  await page.keyboard.press('Escape')
+
   await page.screenshot({ path: '/tmp/artist-focus-ui/desktop.png' })
   await page.locator('#root > div > div:first-child').screenshot({ path: '/tmp/artist-focus-ui/header.png' })
   await checkLayout(768)
@@ -75,11 +131,11 @@ try {
   await page.waitForFunction(() => {
     const selected = document.querySelector<HTMLButtonElement>('[aria-pressed="true"]')!
     const button = selected.getBoundingClientRect()
-    const row = selected.parentElement!.getBoundingClientRect()
+    const row = selected.closest('[data-focus-options]')!.parentElement!.getBoundingClientRect()
     return button.left >= row.left - 1 && button.right <= row.right + 1
   })
   await page.screenshot({ path: '/tmp/artist-focus-ui/narrow.png' })
   assert.deepEqual(await page.evaluate(() => (window as any).focusClicks), ['voice-beliefs', 'artist-world', 'full-brand-system'])
   assert.deepEqual(errors, [])
-  console.log('PASS: 1280/768/390/320px layouts, selection, menu, keyboard scrolling and Full access; no browser errors.')
+  console.log('PASS: hover under 700ms, rapid sweeps and re-entry, hoverable cards, busy-state helpers, keyboard, selection, and 1280/768/390/320px layouts; no browser errors.')
 } finally { await browser.close() }
