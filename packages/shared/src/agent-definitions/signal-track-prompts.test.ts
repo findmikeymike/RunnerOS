@@ -64,7 +64,8 @@ describe('Signals v2 prompt compatibility', () => {
     expect(loadGlobalAgent(slug, opts)?.systemPrompt).toBe(agent.systemPrompt);
     expect(agent.metadata.optionalSources).toEqual(['youtube-research', 'monid', 'zero']);
     expect(agent.metadata.skills).toContain('monid');
-    expect(youtubeProviderPromptPrefix(slug)).toContain('then Monid, then Zero');
+    expect(youtubeProviderPromptPrefix(slug)).toContain('then Monid.');
+    expect(youtubeProviderPromptPrefix(slug)).toContain('confirmed Monid capability absence');
     writeGlobalAgent({ ...agent, systemPrompt: `${previous}\nMy custom routing.` }, opts);
     ensureRequiredAgents([agent], opts);
     expect(loadGlobalAgent(slug, opts)?.systemPrompt).toBe(`${previous}\nMy custom routing.`);

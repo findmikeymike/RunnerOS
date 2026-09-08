@@ -146,3 +146,26 @@ test('successful canonical cache ignores attempt scope without another charge', 
   expect(f.calls).toEqual(['inspect', 'run']);
   expect(readdirSync(join(f.root, 'signals', 'monid-cache')).filter(name => name.endsWith('.attempt.json'))).toHaveLength(1);
 });
+
+
+test('preflight and completed paid failures block provider switching', async () => {
+  const disconnected = fixture();
+  const disconnectedError = await monidSignalTranscript(disconnected.root, id, undefined, {
+    ...disconnected.deps, createClient: async () => { throw new Error('No credential'); },
+  }).catch(error => error);
+  expect(isMonidSignalFallbackBlocked(disconnectedError)).toBe(true);
+  expect(disconnected.calls).toEqual([]);
+
+  const capped = fixture(); capped.budget.updateLimits(0.001, 1);
+  expect(isMonidSignalFallbackBlocked(await monidSignalTranscript(capped.root, id, undefined, capped.deps).catch(error => error))).toBe(true);
+  expect(capped.calls).toEqual(['inspect']);
+
+  const unhealthy = fixture(); unhealthy.inspection.metrics.status = 'unknown';
+  expect(isMonidSignalFallbackBlocked(await monidSignalTranscript(unhealthy.root, id, undefined, unhealthy.deps).catch(error => error))).toBe(true);
+  expect(unhealthy.calls).toEqual(['inspect']);
+
+  const failed = fixture(); failed.setRun(() => ({ ...failed.completed, status: 'FAILED' }));
+  expect(isMonidSignalFallbackBlocked(await monidSignalTranscript(failed.root, id, undefined, failed.deps).catch(error => error))).toBe(true);
+  expect(failed.calls).toEqual(['inspect', 'run']);
+  expect(failed.budget.getStatus().spentLast7DaysUsd).toBe(0.01);
+});

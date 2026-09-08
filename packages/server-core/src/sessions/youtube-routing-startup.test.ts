@@ -6,11 +6,13 @@ import { matter } from '../../../shared/src/config/frontmatter';
 import { STARTER_AGENTS } from '@craft-agent/shared/agent-definitions';
 import { ensureBuiltInAgentMetadataSlugs, ensureRequiredAgents, loadGlobalAgent, replaceBuiltInAgentPromptText, writeGlobalAgent } from '@craft-agent/shared/agent-definitions';
 import { signalTrackPromptPrefix, youtubeProviderPromptPrefix } from '../../../shared/src/agent-definitions/signal-track-prompts';
+import previousAgents from '../../../shared/src/agent-definitions/__fixtures__/monid-routing-v1/agents.json';
+import { migrateMonidRouting } from '../../../shared/src/agent-definitions/monid-routing-migration';
 import { migrateYouTubeRouting } from '../../../shared/src/agent-definitions/youtube-routing-migration';
 
 test('actual startup YouTube block upgrades both oldest known prompts on the first pass after normalization', () => {
   const source = readFileSync(new URL('./SessionManager.ts', import.meta.url), 'utf-8');
-  const start = source.indexOf('const youtubeResearchAgent = STARTER_AGENTS.find');
+  const start = source.indexOf('const youtubeResearchPromptUpdated');
   const end = source.indexOf('const rawVideoEditorDirectionSkillUpdated', start);
   expect(start).toBeGreaterThan(0);
   expect(end).toBeGreaterThan(start);
@@ -29,7 +31,8 @@ test('actual startup YouTube block upgrades both oldest known prompts on the fir
   const agents = STARTER_AGENTS.filter(agent => ['youtube-research-agent', 'youtube-intelligence-agent'].includes(agent.slug));
   try {
     for (const agent of agents) {
-      let oldest = agent.systemPrompt.slice(signalTrackPromptPrefix(agent.slug).length + youtubeProviderPromptPrefix(agent.slug).length);
+      const previous = previousAgents.find(item => item.slug === agent.slug)!.systemPrompt;
+      let oldest = previous.slice(previous.indexOf('You are YouTube'));
       for (const paragraph of oldParagraphs.filter(item => item.slug === agent.slug).reverse()) {
         expect(oldest).toContain(paragraph.newText);
         oldest = oldest.replace(paragraph.newText, paragraph.oldText);
@@ -39,10 +42,14 @@ test('actual startup YouTube block upgrades both oldest known prompts on the fir
     // The early required-agent pass cannot yet recognize these older bodies.
     ensureRequiredAgents(agents, options);
     for (const agent of agents) expect(loadGlobalAgent(agent.slug, options)!.systemPrompt).not.toBe(agent.systemPrompt);
-    const boot = () => run(STARTER_AGENTS,
+    const boot = () => {
+      migrateMonidRouting(options);
+      run(STARTER_AGENTS,
       (slug: string, required: Parameters<typeof ensureBuiltInAgentMetadataSlugs>[1]) => ensureBuiltInAgentMetadataSlugs(slug, required, options),
       (slug: string, oldText: string, newText: string) => replaceBuiltInAgentPromptText(slug, oldText, newText, options),
       () => migrateYouTubeRouting(options), { info: () => {} });
+      migrateMonidRouting(options);
+    };
     boot();
     for (const agent of agents) expect(loadGlobalAgent(agent.slug, options)!.systemPrompt).toBe(agent.systemPrompt);
     boot();
@@ -61,7 +68,7 @@ test('actual startup YouTube block upgrades both oldest known prompts on the fir
       for (const agent of agents) {
         const file = join(options.globalAgentsDir, agent.slug, 'AGENT.md');
         expect(matter(readFileSync(file, 'utf-8')).content).toBe(bodies.get(agent.slug)!);
-        expect(loadGlobalAgent(agent.slug, options)!.metadata.skills).toContain('monid');
+        expect((loadGlobalAgent(agent.slug, options)!.metadata.skills ?? [])).toEqual([]);
         expect(loadGlobalAgent(agent.slug, options)!.systemPrompt).not.toContain(youtubeProviderPromptPrefix(agent.slug).trim());
       }
     }

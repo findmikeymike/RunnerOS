@@ -569,7 +569,7 @@ describe('BUNDLED_STARTER_SKILLS', () => {
       expect(parsed.content).toContain('youtube-video-transcript-extractor-70f8ca14');
       expect(parsed.content).toContain('zero get youtube-video-transcript-extractor-70f8ca14');
       expect(parsed.content).toContain('--max-pay 0.02');
-      expect(parsed.content).toContain('native and Monid are unavailable');
+      expect(parsed.content).toContain('confirms the needed capability is absent');
       expect(parsed.content).toContain('it must be healthy');
       expect(parsed.content).toContain('Do not search for replacements during routine Signals runs');
       expect(parsed.content).toMatch(/unresolved|pending charge/);
@@ -581,7 +581,7 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     const { content } = matter(getSkillMd(skill));
     expect(content).toContain('/starvibe/youtube-video-transcript');
     expect(content).toContain('/streamers/youtube-scraper');
-    expect(content).toContain('Monid second');
+    expect(content).toContain('connected native source first, then these Monid pins');
     expect(content).toContain('Maximum price is `$0.02`');
     expect(content).toContain('Do not install the Monid CLI');
     expect(content).toContain('collector owns provider calls');

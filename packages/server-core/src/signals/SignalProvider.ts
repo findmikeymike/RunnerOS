@@ -130,17 +130,21 @@ export class LocalSignalProvider implements SignalProvider {
       signal?.throwIfAborted(); return transcript;
     } catch { signal?.throwIfAborted(); }
     // Each helper owns its allowance, durable paid-attempt receipts and cache.
+    // Zero requires affirmative capability absence; failure or lack of credit is not absence.
     let monidTranscript: SignalTranscript | undefined;
+    let monidCapabilityAbsent = false;
     try {
       monidTranscript = await (this.deps.monidTranscript ?? monidSignalTranscript)(root, videoId, signal, { attemptScope });
     } catch (error) {
       signal?.throwIfAborted();
       if (isMonidSignalFallbackBlocked(error)) throw error;
+      monidCapabilityAbsent = true;
     }
     if (monidTranscript) {
       await this.cacheTranscript(directory, monidTranscript);
       signal?.throwIfAborted(); return monidTranscript;
     }
+    if (!monidCapabilityAbsent) throw new Error('Monid returned no transcript; its capability availability could not be verified.');
     try {
       const transcript = await (this.deps.zeroTranscript ?? zeroSignalTranscript)(root, videoId, signal);
       await this.cacheTranscript(directory, transcript);

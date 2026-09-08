@@ -484,3 +484,23 @@ describe('buildAgentBundleFooter', () => {
     expect(buildAgentBundleFooter(agent(), [], [])).toBe('');
   });
 });
+
+
+test('marketplace skill awareness includes a concrete on-demand read route', () => {
+  const footer = buildAgentBundleFooter(
+    agent({ skills: ['monid', 'zero', 'domain'] }),
+    [
+      { ...skill('monid', 'Monid', 'Discover and run paid API tools.'), path: '/tmp/my skills/monid' },
+      skill('zero', 'Zero', 'Fallback API marketplace.'),
+      skill('domain', 'Domain', 'Primary workflow.'),
+    ],
+    [],
+  );
+  expect(footer).toContain('@monid');
+  expect(footer).toContain('Discover and run paid API tools.');
+  expect(footer).toContain('read "/tmp/my skills/monid/SKILL.md" using Read or cat via Bash');
+  expect(footer).toContain('invoke the zero skill using the Skill tool');
+  expect(footer).toContain('before using its marketplace tools');
+  expect(footer.match(/Available on demand:/g)).toHaveLength(2);
+  expect(footer).toContain('@domain');
+});

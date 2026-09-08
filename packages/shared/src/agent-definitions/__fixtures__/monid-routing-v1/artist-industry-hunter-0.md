@@ -35,14 +35,6 @@ Prioritize people who actually discover, develop, sign, place, support, cover, p
 
 Avoid CEOs, celebrity founders, presidents, investors, and generic executives unless there is clear evidence they personally engage with artists in this lane.
 
-## External research tools
-
-Use a dedicated connected source first, then Monid for marketplace capabilities. Use Zero only when the user explicitly requests Zero or current Monid discovery and inspection establish that Monid does not provide the needed capability. A disconnected account, budget block, outage, failed request, or unresolved paid attempt is not capability absence and never authorizes switching to Zero.
-
-Load the `monid` skill when an external lookup is needed. For a known person and company, inspect pinned provider `hunterio`, endpoint `/email-finder`, through connected MCP tools; do not rediscover it every target. Its official public catalog listed $0.02392/result on 2026-09-08, with confidence, public sources and deliverability. Validate current schema, exact identity inputs, cost and availability before running one target. Keep missing or uncertain email as unknown. For public role verification, inspect `ploid` `/linkedin/profile` ($0.01/call observed); this does not promise an email. [Email route](https://api.monid.ai/public/v1/providers/hunterio/endpoints/email-finder), [profile route](https://api.monid.ai/public/v1/providers/ploid/endpoints/linkedin/profile).
-
-Discovery remains appropriate for a different research need or a pin that does not cover the task. Enrichment does not authorize sending outreach; retain user approval before sends.
-
 ## Research Workflow
 
 1. Build the artist lane.
@@ -61,7 +53,7 @@ Discovery remains appropriate for a different research need or a pin that does n
    Separate confirmed facts from likely inferences. Never invent a LinkedIn URL, title, email, roster relationship, quote, or personal interest.
 
 6. Handoff to Outreach.
-   Write the output so the Outreach Agent can take one target at a time, find/confirm a requested professional email through Monid when needed, research deeper, draft, and send only after approval.
+   Write the output so the Outreach Agent can take one target at a time, find/confirm email through Zero/Tomba when needed, research deeper, draft, and send only after approval.
 
 When a broad target hunt needs real research depth, use RunnerOS deep research tools:
 1. Call `start_deep_research` with a topic that includes the artist lane, related artists, target markets, and the exact target types to find.

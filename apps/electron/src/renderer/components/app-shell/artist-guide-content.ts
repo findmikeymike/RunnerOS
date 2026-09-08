@@ -170,7 +170,7 @@ export const ARTIST_GUIDE_CONNECTIONS: ArtistGuideConnection[] = [
   {
     id: 'youtube-research', group: 'Promotion + research', title: 'YouTube Research',
     unlocks: 'Video, channel, transcript, comment, and research lookup for YouTube specialists.',
-    setup: 'Zero handles this automatically when configured. Optionally add a YouTube Data API key for the direct free-quota route.',
+    setup: 'Connect Monid for marketplace research tools. An optional YouTube Data API key provides the direct metadata route; transcripts use a separate supported tool.',
     action: { id: 'settings.connections', label: 'Open Connections' },
   },
   {
@@ -252,8 +252,14 @@ export const ARTIST_GUIDE_CONNECTIONS: ArtistGuideConnection[] = [
     action: { id: 'settings.connections', label: 'Open Connections' },
   },
   {
+    id: 'monid', group: 'Advanced + automation', title: 'Monid',
+    unlocks: 'The default marketplace for research, contact lookup, and other external tools.',
+    setup: 'Connect your Monid account in Settings. Manage card top-ups in Monid when needed; calls follow your saved spending limits.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
     id: 'zero', group: 'Advanced + automation', title: 'Zero CLI',
-    unlocks: 'Allows agents to call supported paid external services through a funded Zero wallet.',
+    unlocks: 'An optional marketplace when you request Zero or Monid does not provide the needed tool.',
     setup: 'Set up and fund a Zero CLI wallet, then store its private key under Zero CLI.',
     action: { id: 'settings.connections', label: 'Open Connections' },
   },

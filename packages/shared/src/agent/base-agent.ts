@@ -85,6 +85,9 @@ export function isRunnerOsSelfEditIntent(message: string): boolean {
 
 export function shouldActivateImplicitSkill(slug: string, message: string, parsedSkillSlugs: readonly string[]): boolean {
   if (parsedSkillSlugs.includes(slug)) return true;
+  // Marketplace instructions are read when the agent needs that provider, not for every chat.
+  // Explicit skill mentions above still register the normal read prerequisite.
+  if (slug === 'monid' || slug === 'zero') return false;
   const text = message.toLowerCase();
 
   if (slug === AGENT_CREATOR_SKILL_SLUG) {
@@ -993,7 +996,12 @@ ${formattedMessages}
 
     const activeImplicitSkillSlugs = implicitSkillSlugs.filter(slug => shouldActivateImplicitSkill(slug, message, parsed.skills));
     const requestedSkillSlugs = [...new Set([...parsed.skills, ...activeImplicitSkillSlugs])];
-    const missingImplicitSkills = activeImplicitSkillSlugs.filter(slug => !skillSlugs.includes(slug));
+    // Validate declared marketplace skills immediately even though their reads are deferred.
+    const validatedImplicitSlugs = [...new Set([...activeImplicitSkillSlugs, ...implicitSkillSlugs.filter(slug => slug === 'monid' || slug === 'zero')])];
+    const missingImplicitSkills = validatedImplicitSlugs.filter(slug => {
+      const skill = availableSkills.find(candidate => candidate.slug === slug);
+      return !skill || !existsSync(join(skill.path, 'SKILL.md'));
+    });
     if (missingImplicitSkills.length > 0) {
       this.debug(`[extractSkillPaths] Missing implicit agent skills: ${JSON.stringify(missingImplicitSkills)}`);
     }

@@ -1,0 +1,282 @@
+{
+  "agents": [
+    {
+      "slug": "anything-agent",
+      "bodySha256": "6d508687baa63721cd4ff6e8def28fd02b8800df332e25fee75baed864f71337",
+      "metadata": {
+        "description": "Connects to thousands of tools, apps, and services to help you do almost anything \u2014 a Swiss Army knife for workflows.",
+        "greeting": "Tell me what the current workers cannot do. I will find the safest, strongest, best-value route.",
+        "inputs": "A specific capability gap, desired result, constraints, sensitive-data limits, and any required external side effect.",
+        "outputs": "A native-path check, ranked provider choice, guarded result, spend receipt, and clear handoff or blocker.",
+        "tags": [
+          "command",
+          "zero",
+          "api",
+          "fallback",
+          "external-tools",
+          "paid"
+        ],
+        "skills": [
+          "zero"
+        ],
+        "sources": [
+          "zero"
+        ]
+      }
+    },
+    {
+      "slug": "concierge",
+      "bodySha256": "ded115b3b7c31a7bcb9194063ba7c9d4cc9f83caaa1eb88c5ef3549964d6fca3",
+      "metadata": {
+        "description": "Main work chat. Routes goals to the right workers, skills, automations, and workflows.",
+        "inputs": "Any goal, task, question, campaign need, automation idea, workflow idea, or worker-routing request.",
+        "outputs": "A direct answer, worker handoff, queued-work plan, automation/workflow draft, or approval-gated next action.",
+        "tags": [
+          "chat",
+          "guide",
+          "routing",
+          "workflows",
+          "automations"
+        ],
+        "skills": [
+          "agent-creator",
+          "automation-creator",
+          "workflow-creator",
+          "skill-scout",
+          "source-recipe",
+          "artist-manager-operating-system",
+          "artist-os-guide",
+          "runneros-self-edit"
+        ]
+      }
+    },
+    {
+      "slug": "setup-concierge",
+      "bodySha256": "0d2bc5bd321d5ac184eaa8984320cad8cd919eeeb04729fd2bdead503a7dc14c",
+      "metadata": {
+        "description": "Guides app setup, connections, keys, services, and \u201chow do I use this?\u201d questions.",
+        "greeting": "Tell me what you want to connect or understand. I will walk you through it step by step.",
+        "inputs": "A setup goal, pasted credential, app-feature question, broken connection, or \u201cwhat do I do next?\u201d request.",
+        "outputs": "A guided setup step, saved-setting plan, connection test path, app explanation, or follow-up checklist.",
+        "tags": [
+          "setup",
+          "connections",
+          "keys",
+          "help",
+          "guide",
+          "command"
+        ],
+        "skills": [
+          "artist-os-guide",
+          "source-recipe"
+        ]
+      }
+    },
+    {
+      "slug": "youtube-research-agent",
+      "bodySha256": "6637f4065444918ddf722b6b57591c2e0938e518ac482c60d44f49a0142e99ea",
+      "metadata": {
+        "description": "Find YouTube videos, comments, transcripts, and ideas for a campaign.",
+        "greeting": "Give me a topic, channel, handle, video ID, or mission brief and I will research YouTube without touching publishing.",
+        "inputs": "Campaign brief, song ethos, audience lane, YouTube topic, keyword list, channel handle, playlist URL, video ID, transcript request, comment research, or embed-candidate task.",
+        "outputs": "Ranked video candidates, transcript summaries, top comments, channel scans, related-video lists, campaign-adjacent cultural notes, and embed-ready recommendations.",
+        "tags": [
+          "youtube",
+          "research",
+          "video",
+          "transcripts",
+          "comments",
+          "channels",
+          "seo"
+        ],
+        "skills": [
+          "youtube-research",
+          "create-viral-content",
+          "monid",
+          "zero"
+        ],
+        "optionalSources": [
+          "youtube-research",
+          "monid",
+          "zero"
+        ]
+      },
+      "normalizedBodySha256": "c90232639aae6e845940f41670a558ecd88c8fbd1ae011edd033fd07d64575cd"
+    },
+    {
+      "slug": "youtube-intelligence-agent",
+      "bodySha256": "a211ca7211aae4e3028c78f2ebace97e4564dd8280a2166430678aff3a45fb40",
+      "metadata": {
+        "description": "Turns trusted YouTube channels and transcripts into weekly, evidence-backed artist intelligence.",
+        "greeting": "I turn YouTube transcripts into source-backed intelligence, reports, and reusable agent context.",
+        "inputs": "YouTube channels, videos, transcripts, or a weekly intelligence brief with configured trusted channels.",
+        "outputs": "A report Output with timestamped findings and categorized machine-readable intelligence nuggets.",
+        "tags": [
+          "youtube",
+          "intelligence",
+          "transcripts",
+          "research",
+          "reports",
+          "agents"
+        ],
+        "skills": [
+          "youtube-intelligence",
+          "youtube-research",
+          "customer-research",
+          "content-strategy",
+          "monid",
+          "zero"
+        ],
+        "sources": [
+          "youtube-intelligence"
+        ],
+        "optionalSources": [
+          "youtube-research",
+          "monid",
+          "zero"
+        ]
+      },
+      "normalizedBodySha256": "3cdbfc4b5bf534326b13fc51e46ec42281448d6232bc812664aba1a373b688fc"
+    },
+    {
+      "slug": "hypermotion-agent",
+      "bodySha256": "578bc97233291c4e45fc3774be50e18e2a544050e59e0f8ceafd646ad5910e28",
+      "metadata": {
+        "description": "Create polished motion graphics, Spotify Canvas loops, captions, and social promos.",
+        "greeting": "Tell me what motion or video you want, where it will be used, and whether you want a preview or final render.",
+        "inputs": "A motion/video brief, assets, target platform, duration, format, brand direction, or existing artifact to animate or render.",
+        "outputs": "Canvas-ready HTML previews, Spotify Canvas loops, MP4 renders, poster frames, asset folders, render receipts, and clear next actions.",
+        "tags": [
+          "creative",
+          "video",
+          "motion",
+          "spotify-canvas",
+          "hyperframes",
+          "remotion"
+        ],
+        "skills": [
+          "hyperframes",
+          "spotify-canvas-video"
+        ],
+        "sources": [
+          "hypermotion"
+        ],
+        "optionalSources": [
+          "media-generation"
+        ]
+      }
+    },
+    {
+      "slug": "art-director",
+      "bodySha256": "7f09c6225cf1a40103309b93173dd4a5f5b446199978a52e4667cbcfcb02a7b4",
+      "metadata": {
+        "description": "Create highly aesthetic single and album art, merch, posters, and campaign visuals.",
+        "greeting": "Tell me the song, release, merch idea, or visual you need. I will pull the artist context, choose the right mode, propose strong art directions first, then only queue generation after approval.",
+        "inputs": "Artist HQ Profile, Voice, Branding, themes, similar artists, music style, song/release notes, lyrics, references, approved artist photos and face references, cover/merch mode, format, and generation approval.",
+        "outputs": "Taste-led visual concepts, style-lane recommendations, album/single art prompts, merch graphic specs, reference-image requirements, typography/layout direction, SVG/PNG artwork composition exports, Canvas-visible artifacts, anti-slop checks, and approved image-generation/layout briefs.",
+        "tags": [
+          "creative",
+          "art-direction",
+          "album-art",
+          "merch",
+          "design",
+          "image-generation",
+          "visuals"
+        ],
+        "skills": [
+          "artist-art-direction",
+          "artist-typography-taste",
+          "artist-visual-world-director",
+          "ad-creative",
+          "zero"
+        ],
+        "optionalSources": [
+          "media-generation",
+          "zero"
+        ]
+      }
+    },
+    {
+      "slug": "outreach-agent",
+      "bodySha256": "d31612e8b4c24b128b8267a4cee55be420baec0884bd4d967d52e4c7900d0941",
+      "metadata": {
+        "description": "Use saved Artist Network contacts or find an email from a LinkedIn URL, research the person, and draft approval-gated high-rapport outreach.",
+        "greeting": "Choose someone from Artist Network or send me a name and LinkedIn URL. I will use the saved email or find one, research the fit, and work with you on the angle before any send.",
+        "inputs": "Saved Artist Network person/email or person name and LinkedIn profile URL, outreach goal, relationship context, offer/ask, sender identity, artist/team context, and approval to send.",
+        "outputs": "Confirmed email lookup result, prospect intel brief, hook/angle options, polished outreach draft, subject lines, copy-paste packet, approval checklist, and Gmail send receipt when connected and approved.",
+        "tags": [
+          "outreach",
+          "email",
+          "linkedin",
+          "prospecting",
+          "rapport",
+          "gmail",
+          "zero"
+        ],
+        "skills": [
+          "zero",
+          "artist-comms-strategist",
+          "magnetic-outreach"
+        ],
+        "sources": [
+          "zero"
+        ],
+        "optionalSources": [
+          "gmail"
+        ]
+      }
+    },
+    {
+      "slug": "industry-hunter",
+      "bodySha256": "0c8c44e22a5801dd01c6de3d9905681363a40feabbb9c3ee8c277585876ba38c",
+      "metadata": {
+        "description": "Find the right A&Rs, label operators, managers, publishers, sync people, and industry connectors, then output an Outreach-ready target list.",
+        "greeting": "Give me the artist, campaign, song, or lane. I will pull the Artist HQ context, research real industry targets, and return a list Outreach Agent can use.",
+        "inputs": "Artist HQ Profile, Voice, Branding, themes, music style, related artists, campaign/release goal, links, songs, lyrics, demos, and target market.",
+        "outputs": "A ranked Industry Hunter Target List with names, roles, likely LinkedIn/profile URLs, source links, fit rationale, outreach angles, confidence, missing info, and Outreach Agent handoff prompts.",
+        "tags": [
+          "industry",
+          "anr",
+          "outreach",
+          "labels",
+          "research",
+          "artist-development",
+          "zero"
+        ],
+        "skills": [
+          "artist-industry-hunter",
+          "zero"
+        ],
+        "sources": [
+          "zero"
+        ]
+      }
+    }
+  ],
+  "skills": {
+    "monid": [
+      "2ccc441ba7de87c10329e43bdb9c7f577def0749dd4f2c8e5b93d2768ed7e5c2",
+      "7dead1570fe44e2481b327380e19a6c8024d2c396eb121db0f92bebf3412f6ca"
+    ],
+    "zero": [
+      "1f686fb0f44ceaccda153ca65f9d65c70129f0087838c90f6dcc0609c4cde5d0",
+      "000f0248f0dd840bb20f826e6ac621229c0d1503b0f50355db42d3396c0a331a"
+    ],
+    "artist-art-direction": [
+      "c26d770696deeca3897f1d7d04aa05455bc8f42f7d582bb4f41c518cb1391e44"
+    ],
+    "artist-industry-hunter": [
+      "55d9d2a29de1c0be8d4cde609af712c0d1626345a115b7230e894e6f560de883"
+    ],
+    "youtube-research": [
+      "ba9faf07079332a3ebd766b767c50528d449c322e4c301ae531a8fa3958b47af",
+      "241ee3e6560a2f21c2aa3960ee4eb3a7141123d2f4b9a3eb3456c16a8663788e",
+      "5f8ddb7d8a9885ca86ec1098720795e83de80af9d5a5615c4905db997d8ba0c9"
+    ],
+    "youtube-intelligence": [
+      "115ebbf85c7925a4b958aa479bd2458976669e8b9c9f84a31b8211794cab0574",
+      "72ce640adfd02ee409950e3993e34d755bd2c2ea7ac8ed958f407d37c07fb9c8",
+      "deb9628d20b9a5e775acb2230ff7ffa3b439364721f2d7799490d26304879420"
+    ]
+  }
+}

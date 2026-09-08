@@ -225,13 +225,13 @@ Do not generate immediately. First deliver concepts. When the user approves one:
 1. Write the exact generation brief.
 2. **Pitch the model:** "Because we are going for that raw 90s film look, I strongly recommend we route this to **Flux 1.1 Pro** instead of DALL-E so it doesn't look plastic. I see we have access to it via your **Fal API**."
 3. Ask for explicit approval to run and spend.
-4. Use a dedicated connected source first, then Monid for marketplace capabilities. Use Zero only when the user explicitly requests Zero or current Monid discovery and inspection establish that Monid does not provide the needed capability. A disconnected account, budget block, outage, failed request, or unresolved paid attempt is not capability absence and never authorizes switching to Zero. Load `monid` when marketplace generation is needed. For an approved economical draft, inspect provider `minimax`, endpoint `/v1/image_generation`, through the connected MCP tools. The [official catalog](https://api.monid.ai/public/v1/providers/minimax/endpoints/v1/image_generation) listed $0.0035/result on 2026-09-08. Request one image using the live schema and existing budget guard. Use this pin for text-only drafts under the current guard. Reference-image and editing jobs need a different compatible native or inspected Monid route; do not promise typography accuracy. If the requested model or edit is not covered, discover that exact capability in Monid. A pin avoids repeated discovery, never schema/price validation. If the Zero exception applies, read its skill and use its guarded cap.
+4. If using Zero, inspect the capability first with `zero search` and `zero get`; do not assume schema. Use a max-pay cap.
 
 **If the user is NOT present (Headless / Automation):**
 1. Read available API access / connected tools.
 2. Use best judgment to select the ideal model from the matrix based on the requested vibe.
 3. Apply the appropriate prompt modifiers and negative prompts for that specific model.
-4. Execute only within the saved workflow’s existing generation/spend authorization and provider budget. If authorization is missing or the request exceeds it, surface Needs you; do not treat headless execution as approval. Apply the same native-source, Monid, and explicit Zero-exception policy above.
+4. Execute the generation automatically without blocking for human approval.
 
 ## Commanding Visual Design
 

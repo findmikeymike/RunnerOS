@@ -1,0 +1,74 @@
+{
+  "monid": [
+    {
+      "file": "monid-0.md",
+      "sha256": "2ccc441ba7de87c10329e43bdb9c7f577def0749dd4f2c8e5b93d2768ed7e5c2",
+      "commit": "bf82317c1439890f60994419cf2d615a385f5c01"
+    },
+    {
+      "file": "monid-1.md",
+      "sha256": "7dead1570fe44e2481b327380e19a6c8024d2c396eb121db0f92bebf3412f6ca",
+      "commit": "9e2d0635ea9efe0fa705ecd9da4bb94b7c9e493a"
+    }
+  ],
+  "zero": [
+    {
+      "file": "zero-0.md",
+      "sha256": "1f686fb0f44ceaccda153ca65f9d65c70129f0087838c90f6dcc0609c4cde5d0",
+      "commit": "bf82317c1439890f60994419cf2d615a385f5c01"
+    },
+    {
+      "file": "zero-1.md",
+      "sha256": "000f0248f0dd840bb20f826e6ac621229c0d1503b0f50355db42d3396c0a331a",
+      "commit": "60905b4d4a22eb108e489f947a7b48c903b90049"
+    }
+  ],
+  "artist-art-direction": [
+    {
+      "file": "artist-art-direction-0.md",
+      "sha256": "c26d770696deeca3897f1d7d04aa05455bc8f42f7d582bb4f41c518cb1391e44",
+      "commit": "bf82317c1439890f60994419cf2d615a385f5c01"
+    }
+  ],
+  "artist-industry-hunter": [
+    {
+      "file": "artist-industry-hunter-0.md",
+      "sha256": "55d9d2a29de1c0be8d4cde609af712c0d1626345a115b7230e894e6f560de883",
+      "commit": "bf82317c1439890f60994419cf2d615a385f5c01"
+    }
+  ],
+  "youtube-research": [
+    {
+      "file": "youtube-research-0.md",
+      "sha256": "ba9faf07079332a3ebd766b767c50528d449c322e4c301ae531a8fa3958b47af",
+      "commit": "bf82317c1439890f60994419cf2d615a385f5c01"
+    },
+    {
+      "file": "youtube-research-1.md",
+      "sha256": "241ee3e6560a2f21c2aa3960ee4eb3a7141123d2f4b9a3eb3456c16a8663788e",
+      "commit": "60905b4d4a22eb108e489f947a7b48c903b90049"
+    },
+    {
+      "file": "youtube-research-2.md",
+      "sha256": "5f8ddb7d8a9885ca86ec1098720795e83de80af9d5a5615c4905db997d8ba0c9",
+      "commit": "f7f42ee348df7d3cb5211b989d6280b5197cbee2"
+    }
+  ],
+  "youtube-intelligence": [
+    {
+      "file": "youtube-intelligence-0.md",
+      "sha256": "115ebbf85c7925a4b958aa479bd2458976669e8b9c9f84a31b8211794cab0574",
+      "commit": "bf82317c1439890f60994419cf2d615a385f5c01"
+    },
+    {
+      "file": "youtube-intelligence-1.md",
+      "sha256": "72ce640adfd02ee409950e3993e34d755bd2c2ea7ac8ed958f407d37c07fb9c8",
+      "commit": "60905b4d4a22eb108e489f947a7b48c903b90049"
+    },
+    {
+      "file": "youtube-intelligence-2.md",
+      "sha256": "deb9628d20b9a5e775acb2230ff7ffa3b439364721f2d7799490d26304879420",
+      "commit": "75d89dffb66b5b89573636b7e5fb69c6cff38ae1"
+    }
+  ]
+}

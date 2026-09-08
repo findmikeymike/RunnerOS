@@ -1,6 +1,6 @@
 ---
 name: Zero
-description: Guarded Zero capabilities only for explicit user choice or a verified capability gap in Monid.
+description: Discover and call external API capabilities through Zero when RunnerOS has no healthy native connector or dedicated specialist.
 requiredSources:
   - zero
 tags: [tools, api, marketplace, paid]
@@ -8,7 +8,7 @@ tags: [tools, api, marketplace, paid]
 
 # Zero
 
-Use a dedicated connected source first, then Monid for marketplace capabilities. Use Zero only when the user explicitly requests Zero or current Monid discovery and inspection establish that Monid does not provide the needed capability. A disconnected account, budget block, outage, failed request, or unresolved paid attempt is not capability absence and never authorizes switching to Zero. Do not use Zero for code edits, local files, shell work, math, or ordinary model answers.
+Use Zero as a gap closer, not the first choice. Prefer a healthy native connector, built-in tool, or dedicated worker when one fits. Do not use Zero for code edits, local files, shell work, math, or ordinary model answers.
 
 ## Discover
 
@@ -52,16 +52,6 @@ GET retrieval inside the remaining allowance does not need another approval:
 ```bash
 node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability <exact-slug> --max-pay <per-call-usd> --json
 ```
-
-For GET capabilities that require query input, pass an inline object using the exact live schema keys:
-
-```bash
-node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability <exact-slug> --query-json '{"v":"<video-id>"}' --max-pay <per-call-usd> --json
-```
-
-The guard validates `--query-json` against the inspected capability's `bodySchema.properties.input.properties.queryParams` before reserving any budget. Only declared string, number, integer, and boolean fields are accepted, with required fields, enums, and bounds enforced. Values are URL-encoded; existing provider URL query parameters cannot be overridden. Missing schemas, unknown keys, arrays/objects/null values, and query input on non-GET calls are rejected. This does not authorize a provider or price: complete the live health/schema/price preflight above first. A failed paid call is never automatically retried.
-
-To bind a GET call to that preflight, pass `--expected-read-contract <sha256>`. Compute SHA256 over `JSON.stringify({uid,slug,url,method,availabilityStatus,displayCostAmount,displayCostAsset,bodySchema})` using the exact inspected values and this key order (no schema sorting or value normalization). The guard re-inspects and rejects malformed digests or any mismatch before reservation or execution. This optional GET-only check does not change non-GET job authorization.
 
 For POST, PUT, PATCH, or DELETE, turn the whole user-requested job or saved workflow into one bounded authorization. This is one approval for the batch, not one approval per API call:
 

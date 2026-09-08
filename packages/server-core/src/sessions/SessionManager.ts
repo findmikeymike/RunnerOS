@@ -4166,12 +4166,22 @@ export class SessionManager implements ISessionManager {
           replaceBuiltInAgentMetadata,
           replaceBuiltInAgentPromptText,
         } = await import('@craft-agent/shared/agent-definitions')
+        // Inspect original stock routing before legacy migrations can change its
+        // metadata. Exact matches upgrade; custom/removed selections stay intact.
+        const { migrateMonidRouting } = await import('@craft-agent/shared/agent-definitions')
+        const initialMonidRoutingMigration = migrateMonidRouting()
+        if (initialMonidRoutingMigration.updatedAgents.length || initialMonidRoutingMigration.updatedSkills.length) {
+          sessionLog.info('[agent-definitions] Updated Monid-first routing', initialMonidRoutingMigration)
+        }
         const releaseManagerAgentDir = getGlobalAgentDir(RELEASE_MANAGER_AGENT_SLUG)
         const legacyReleaseManagerActivationMarker = join(releaseManagerAgentDir, '.initial-hq-campaign-activation-v1')
         const releaseManagerActivationState = join(dirname(releaseManagerAgentDir), '.migrations', 'release-manager-activation-v1.json')
         const anythingAgentDir = getGlobalAgentDir(ANYTHING_AGENT_SLUG)
         const anythingAgentActivationState = join(dirname(anythingAgentDir), '.migrations', 'anything-agent-activation-v1.json')
         const anythingAgentPreviouslyInstalled = Boolean(loadGlobalAgent(ANYTHING_AGENT_SLUG))
+        const marketplaceWorkersPreviouslyInstalled = new Set(
+          ['art-director', 'youtube-intelligence-agent'].filter(slug => Boolean(loadGlobalAgent(slug))),
+        )
         const artistDefaultAgentSlugs = [
           ...HQ_DEFAULT_ACTIVATED_AGENT_SLUGS,
           ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
@@ -4317,9 +4327,8 @@ export class SessionManager implements ISessionManager {
           }
           const anythingAgentStarter = STARTER_AGENTS.find(agent => agent.slug === ANYTHING_AGENT_SLUG)
           const anythingAgentSkillSlugs = anythingAgentStarter?.metadata.skills ?? ['zero']
-          if (ensureBuiltInAgentSkillsForSlug(ANYTHING_AGENT_SLUG, anythingAgentSkillSlugs).updated) {
-            sessionLog.info('[agent-definitions] Restored Anything Agent skill bundle')
-          }
+          // Existing routing selections belong to the user. The exact-stock
+          // migration above upgrades this bundle without restoring removed skills.
           const anythingAgent = loadGlobalAgent(ANYTHING_AGENT_SLUG)
           const missingAnythingAgentSkills = anythingAgentSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
           if (anythingAgent && missingAnythingAgentSkills.length === 0) {
@@ -4661,7 +4670,8 @@ export class SessionManager implements ISessionManager {
           const artDirectorAgent = STARTER_AGENTS.find(agent => agent.slug === 'art-director')
           const artDirectorSkillSlugs = artDirectorAgent?.metadata.skills ?? []
           const missingArtDirectorSkills = artDirectorSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
-          if (artDirectorAgent && missingArtDirectorSkills.length === 0) {
+          if (artDirectorAgent && loadGlobalAgent('art-director') && missingArtDirectorSkills.length === 0
+            && !marketplaceWorkersPreviouslyInstalled.has('art-director')) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             let updatedWorkspaces = 0
@@ -4690,6 +4700,10 @@ export class SessionManager implements ISessionManager {
             sessionLog.warn(`[agent-definitions] Art Director skill bundle incomplete: ${missingArtDirectorSkills.join(', ')}`)
           }
           for (const agentSlug of DEFAULT_ACTIVATED_AGENT_SLUGS) {
+            // Existing marketplace workers retain deliberate activation/skill
+            // choices; never re-enable Monid merely because a starter changed.
+            if (agentSlug === 'youtube-intelligence-agent'
+              && (marketplaceWorkersPreviouslyInstalled.has(agentSlug) || !loadGlobalAgent(agentSlug))) continue
             const agent = STARTER_AGENTS.find(candidate => candidate.slug === agentSlug)
             const skillSlugs = agent?.metadata.skills ?? []
             const missingSkills = skillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
@@ -4829,14 +4843,6 @@ export class SessionManager implements ISessionManager {
           if (ensureBuiltInAgentSkillsForSlug(CONCIERGE_SLUG, CONCIERGE_SYSTEM_SKILL_SLUGS).updated) {
             sessionLog.info('[agent-definitions] Ensured Concierge has self-edit system skill')
           }
-          const youtubeResearchAgent = STARTER_AGENTS.find(agent => agent.slug === 'youtube-research-agent')
-          const youtubeResearchMetadataUpdated = youtubeResearchAgent
-            ? ensureBuiltInAgentMetadataSlugs('youtube-research-agent', {
-                skills: youtubeResearchAgent.metadata.skills,
-                sources: youtubeResearchAgent.metadata.sources,
-                optionalSources: youtubeResearchAgent.metadata.optionalSources,
-              }).updated
-            : false
           const youtubeResearchPromptUpdated = replaceBuiltInAgentPromptText(
             'youtube-research-agent',
             `Auth rules:
@@ -4862,17 +4868,9 @@ export class SessionManager implements ISessionManager {
 - Run Zero GET calls only through its weekly budget guard. A saved allowance means do not ask before each small retrieval. If Zero is unavailable or no allowance exists, explain the two options once: configure Zero or add an optional YouTube Data API key.
 - Never claim Zero issued a YouTube API key. It is the fallback data route, not Google authentication.`,
           ).updated
-          if (youtubeResearchMetadataUpdated || youtubeResearchPromptUpdated || youtubeResearchPreferredTranscriptUpdated) {
+          if (youtubeResearchPromptUpdated || youtubeResearchPreferredTranscriptUpdated) {
             sessionLog.info('[agent-definitions] Added preferred guarded Zero transcript route to YouTube Research Agent')
           }
-          const youtubeIntelligenceAgent = STARTER_AGENTS.find(agent => agent.slug === 'youtube-intelligence-agent')
-          const youtubeIntelligenceMetadataUpdated = youtubeIntelligenceAgent
-            ? ensureBuiltInAgentMetadataSlugs('youtube-intelligence-agent', {
-                skills: youtubeIntelligenceAgent.metadata.skills,
-                sources: youtubeIntelligenceAgent.metadata.sources,
-                optionalSources: youtubeIntelligenceAgent.metadata.optionalSources,
-              }).updated
-            : false
           const youtubeIntelligencePromptUpdated = replaceBuiltInAgentPromptText(
             'youtube-intelligence-agent',
             `3. Use youtube-research for channel uploads, video metadata, comments, and transcript acquisition. Its saved YouTube Data API key is available to this source.
@@ -4911,7 +4909,7 @@ export class SessionManager implements ISessionManager {
 10. If the newest upload is new and inside the requested lookback window, ingest only that one transcript. The weekly maximum is one video per channel.
 11. Prefer source-backed specificity over volume. Exclude generic motivation, unsupported claims, and stories with no reusable mechanism.`,
           ).updated
-          if (youtubeIntelligenceMetadataUpdated || youtubeIntelligencePromptUpdated || youtubeIntelligencePreferredTranscriptUpdated) {
+          if (youtubeIntelligencePromptUpdated || youtubeIntelligencePreferredTranscriptUpdated) {
             sessionLog.info('[agent-definitions] Added preferred guarded Zero transcript route to YouTube Intelligence Agent')
           }
           // Older installed prompts reach the recognized shipped form only
@@ -6033,14 +6031,6 @@ Default report shape:`,
                   from: ['industry', 'anr', 'outreach', 'labels', 'research', 'artist-development'],
                   to: industryHunterAgent.metadata.tags,
                 },
-                skills: {
-                  from: ['artist-industry-hunter'],
-                  to: industryHunterAgent.metadata.skills,
-                },
-                sources: {
-                  from: undefined,
-                  to: industryHunterAgent.metadata.sources,
-                },
               }).updated
             : false
           if (industryHunterMetadataUpdated) {
@@ -6166,6 +6156,11 @@ user a clickable link to where the thing now lives.`
             : replaceBuiltInAgentPromptPattern(CONCIERGE_SLUG, staleCreatorGuidancePattern, newConciergeCreatorText).updated
           if (exactPromptUpdated || fuzzyPromptUpdated) {
             sessionLog.info('[agent-definitions] Updated Concierge creator-skill guidance')
+          }
+          // Run last: legacy normalizers must not restore old marketplace routing.
+          const monidRoutingMigration = migrateMonidRouting()
+          if (monidRoutingMigration.updatedAgents.length || monidRoutingMigration.updatedSkills.length) {
+            sessionLog.info('[agent-definitions] Updated Monid-first routing', monidRoutingMigration)
           }
         } catch (err) {
           const detail = err instanceof Error

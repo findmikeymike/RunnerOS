@@ -4095,13 +4095,13 @@ Do not generate immediately. First deliver concepts. When the user approves one:
 1. Write the exact generation brief.
 2. **Pitch the model:** "Because we are going for that raw 90s film look, I strongly recommend we route this to **Flux 1.1 Pro** instead of DALL-E so it doesn't look plastic. I see we have access to it via your **Fal API**."
 3. Ask for explicit approval to run and spend.
-4. If using Zero, inspect the capability first with \`zero search\` and \`zero get\`; do not assume schema. Use a max-pay cap.
+4. Use a dedicated connected source first, then Monid for marketplace capabilities. Use Zero only when the user explicitly requests Zero or current Monid discovery and inspection establish that Monid does not provide the needed capability. A disconnected account, budget block, outage, failed request, or unresolved paid attempt is not capability absence and never authorizes switching to Zero. Load \`monid\` when marketplace generation is needed. For an approved economical draft, inspect provider \`minimax\`, endpoint \`/v1/image_generation\`, through the connected MCP tools. The [official catalog](https://api.monid.ai/public/v1/providers/minimax/endpoints/v1/image_generation) listed $0.0035/result on 2026-09-08. Request one image using the live schema and existing budget guard. Use this pin for text-only drafts under the current guard. Reference-image and editing jobs need a different compatible native or inspected Monid route; do not promise typography accuracy. If the requested model or edit is not covered, discover that exact capability in Monid. A pin avoids repeated discovery, never schema/price validation. If the Zero exception applies, read its skill and use its guarded cap.
 
 **If the user is NOT present (Headless / Automation):**
 1. Read available API access / connected tools.
 2. Use best judgment to select the ideal model from the matrix based on the requested vibe.
 3. Apply the appropriate prompt modifiers and negative prompts for that specific model.
-4. Execute the generation automatically without blocking for human approval.
+4. Execute only within the saved workflow’s existing generation/spend authorization and provider budget. If authorization is missing or the request exceeds it, surface Needs you; do not treat headless execution as approval. Apply the same native-source, Monid, and explicit Zero-exception policy above.
 
 ## Commanding Visual Design
 
@@ -5231,6 +5231,14 @@ Prioritize people who actually discover, develop, sign, place, support, cover, p
 
 Avoid CEOs, celebrity founders, presidents, investors, and generic executives unless there is clear evidence they personally engage with artists in this lane.
 
+## External research tools
+
+Use a dedicated connected source first, then Monid for marketplace capabilities. Use Zero only when the user explicitly requests Zero or current Monid discovery and inspection establish that Monid does not provide the needed capability. A disconnected account, budget block, outage, failed request, or unresolved paid attempt is not capability absence and never authorizes switching to Zero.
+
+Load the \`monid\` skill when an external lookup is needed. For a known person and company, inspect pinned provider \`hunterio\`, endpoint \`/email-finder\`, through connected MCP tools; do not rediscover it every target. Its official public catalog listed $0.02392/result on 2026-09-08, with confidence, public sources and deliverability. Validate current schema, exact identity inputs, cost and availability before running one target. Keep missing or uncertain email as unknown. For public role verification, inspect \`ploid\` \`/linkedin/profile\` ($0.01/call observed); this does not promise an email. [Email route](https://api.monid.ai/public/v1/providers/hunterio/endpoints/email-finder), [profile route](https://api.monid.ai/public/v1/providers/ploid/endpoints/linkedin/profile).
+
+Discovery remains appropriate for a different research need or a pin that does not cover the task. Enrichment does not authorize sending outreach; retain user approval before sends.
+
 ## Research Workflow
 
 1. Build the artist lane.
@@ -5249,7 +5257,7 @@ Avoid CEOs, celebrity founders, presidents, investors, and generic executives un
    Separate confirmed facts from likely inferences. Never invent a LinkedIn URL, title, email, roster relationship, quote, or personal interest.
 
 6. Handoff to Outreach.
-   Write the output so the Outreach Agent can take one target at a time, find/confirm email through Zero/Tomba when needed, research deeper, draft, and send only after approval.
+   Write the output so the Outreach Agent can take one target at a time, find/confirm a requested professional email through Monid when needed, research deeper, draft, and send only after approval.
 
 When a broad target hunt needs real research depth, use RunnerOS deep research tools:
 1. Call \`start_deep_research\` with a topic that includes the artist lane, related artists, target markets, and the exact target types to find.
@@ -31077,6 +31085,12 @@ Do not use Monid for local files, code edits, shell work, math, or questions the
 
 This is the MCP-native RunnerOS adaptation of Monid's official agent guidance. Do not install the Monid CLI or ask the user for an API key; users connect their Monid account in RunnerOS Settings.
 
+## Marketplace preference
+
+Use a dedicated connected source first, then Monid for marketplace capabilities. Use Zero only when the user explicitly requests Zero or current Monid discovery and inspection establish that Monid does not provide the needed capability. A disconnected account, budget block, outage, failed request, or unresolved paid attempt is not capability absence and never authorizes switching to Zero.
+
+Use the connected Monid MCP tools exposed by the source for discovery, inspection, execution, and result retrieval. Read the actual tool schemas; tool names and request fields must come from the connection, not guessed CLI-to-MCP names. Load this skill when external tool work is needed; do not require a startup read for ordinary conversation.
+
 ## Tool order
 
 1. **Discover** the narrow capability needed for this task.
@@ -31100,14 +31114,29 @@ Always read response hints before choosing the next action. They may contain end
 
 ## Pinned YouTube Routes
 
-For YouTube, use the connected native source first, Monid second, and the pinned Zero transcript tool last. Do not search the marketplace on every run:
+For YouTube, use the connected native source first, then these Monid pins. The Zero exception below still applies; unavailable Monid is not an automatic fallback. Do not search the marketplace on every run:
 
 - Transcripts: provider \`apify\`, endpoint \`/starvibe/youtube-video-transcript\`. One canonical \`youtube_url\`, with \`language: "en"\`; never mix in a channel URL. Preserve timestamped segments and verify the returned video identity. Maximum price is \`$0.02\` per video, or the user's lower limit.
 - Channel/video metadata: provider \`apify\`, endpoint \`/streamers/youtube-scraper\`. Inspect the schema and use one \`startUrls\` entry with explicit result limits. This is separate from transcription; do not transcribe an entire channel just to resolve its name.
-- Inspect the pinned endpoint's current schema, price and availability before spending. A pin removes repeated discovery, not validation. If it no longer fits, report the unavailable route rather than shopping automatically.
+- Inspect the pinned endpoint's current schema, price and availability before spending. A pin removes repeated discovery, not validation. If the task no longer fits the pin, discover the missing capability within Monid. Report an unavailable pinned route; do not switch providers to repeat an unresolved paid attempt.
 - For host-managed Signals runs, the collector owns provider calls, caching and paid-attempt receipts. Analyze its packets; do not independently call these tools to repeat collection. An interrupted or uncertain paid attempt must be reconciled before another provider is charged.
 
 Pin references: [Monid transcript recipe](https://monid.ai/blog/every-youtube-transcript-ready-for-your-llm), [Monid metadata recipe](https://monid.ai/blog/guides/youtube-scraper-past-the-quota). Public documentation is not proof of a successful live run.
+
+## Other narrow routes
+
+These are economical candidates observed in the official public catalog on 2026-09-08, not claims of best reviews or proven live reliability. Inspect current schema, total price and availability before every paid run. Pins skip discovery only for the exact matching job. Dedicated connected tools remain first.
+
+| Job | Provider and endpoint | Observed price and scope |
+| --- | --- | --- |
+| Requested professional email from known person/company | \`hunterio\` \`/email-finder\` | $0.02392/result; inspect required identity inputs. Keep confidence, source URLs and deliverability; never invent an address. |
+| Known LinkedIn profile | \`ploid\` \`/linkedin/profile\` | $0.01/call; public role/history, not an email finder. |
+| Public Instagram profile | \`tikhub\` \`/api/v1/instagram/v1/fetch_user_info_by_username\` | $0.0015/call; one username. Preserve actual nested field meanings. |
+| Bounded web search | \`context.dev\` \`/web/search\` | $0.00009/result; summary states a 10-result minimum. Inspect bounds and start at the valid minimum. |
+| One URL as readable text | \`context.dev\` \`/web/scrape/markdown\` | $0.0009/call; one URL and inspected extraction options. |
+| Approved economical image draft | \`minimax\` \`/v1/image_generation\` | $0.0035/result; one image. Text-only draft under the current guard; use a different inspected route for reference images or edits. No typography-quality guarantee. |
+
+Official current-detail references: [email](https://api.monid.ai/public/v1/providers/hunterio/endpoints/email-finder), [LinkedIn](https://api.monid.ai/public/v1/providers/ploid/endpoints/linkedin/profile), [Instagram](https://api.monid.ai/public/v1/providers/tikhub/endpoints/api/v1/instagram/v1/fetch_user_info_by_username), [search](https://api.monid.ai/public/v1/providers/context.dev/endpoints/web/search), [page text](https://api.monid.ai/public/v1/providers/context.dev/endpoints/web/scrape/markdown), [image draft](https://api.monid.ai/public/v1/providers/minimax/endpoints/v1/image_generation). Public catalog prices and verification tags do not prove this app has run the endpoint successfully; current health/reviews may be unavailable.
 
 ## Cost controls
 
@@ -31116,6 +31145,7 @@ Pin references: [Monid transcript recipe](https://monid.ai/blog/every-youtube-tr
 - If a run is blocked by a limit, report the price and remaining budget; do not retry or ask repeatedly.
 - Start with one query and a limit of 5-10 results unless the request clearly needs more.
 - Remember that per-result limits may apply to every query in an array. Default to one array item.
+- Pricing may include tiers, units, variants and output-dependent fees; a zero base amount does not mean free. Stop when the existing guard cannot bound the complete price.
 - Never bypass an unclear or unbounded price. Use a bounded result field such as \`maxItems\` or \`limit\` for per-result endpoints.
 - Reconcile the projected charge against the actual \`cost.value\` returned by the completed run. Mention cost when it is material or the user is budget-conscious.
 
@@ -31130,14 +31160,14 @@ Pin references: [Monid transcript recipe](https://monid.ai/blog/every-youtube-tr
 ## Safety
 
 - External reads may run when they are clearly within the user's request and budget.
-- Ask before any mutation, message, post, purchase, upload, publish, delete, account change, or other consequential action.
+- Require approval covering any mutation, message, post, purchase, upload, publish, delete, account change, or other consequential action. Reuse an existing explicit bounded workflow authorization within its approved scope; do not ask again per item.
 - Never invent missing fields or silently broaden the requested scope.
 - A successful discovery result does not prove the provider works. Judge success from the actual run result.
-- If a provider fails, try one clearly better Monid candidate at most. Do not create an expensive retry loop.
+- Only after a confirmed terminal failure and reconciliation of its paid attempt may you try one clearly better Monid candidate within the approved scope and budget. Never repeat an uncertain or pending paid submission. Do not create an expensive retry loop.
 
 ## Zero fallback
 
-Use Zero only when it is already available and Monid has no suitable working endpoint. Preserve Zero's own inspect-first workflow and hard spend cap. Do not install its CLI, create a wallet, fund it, or spend through it without the user's approval.
+Use a dedicated connected source first, then Monid for marketplace capabilities. Use Zero only when the user explicitly requests Zero or current Monid discovery and inspection establish that Monid does not provide the needed capability. A disconnected account, budget block, outage, failed request, or unresolved paid attempt is not capability absence and never authorizes switching to Zero. Preserve Zero's own inspect-first workflow and hard spend cap. Do not install its CLI, create a wallet, or fund it without the user's approval. Eligible reads use the saved weekly allowance; other actions require the existing bounded job authorization.
 `,
       },
     ],
@@ -55987,9 +56017,9 @@ node bin/youtube-intelligence.mjs doctor
 node bin/youtube-intelligence.mjs prepare --video "<url-or-id>" --out "<workspace>/youtube-intel/<video-id>"
 \`\`\`
 
-Default provider order is cache first, then local \`youtube-research\`, then the pinned Monid route in the bundled \`monid\` skill, then the pinned Zero transcript route below. A YouTube Data API key enables metadata; it does not grant third-party caption download rights. Monid metadata and transcript calls are separate, bounded operations. Every paid call uses the existing provider budget guard. Supadata is only called when \`--allow-paid\` is passed.
+Default provider order is cache first, then local \`youtube-research\`, then the pinned Monid route in the bundled \`monid\` skill. Use a dedicated connected source first, then Monid for marketplace capabilities. Use Zero only when the user explicitly requests Zero or current Monid discovery and inspection establish that Monid does not provide the needed capability. A disconnected account, budget block, outage, failed request, or unresolved paid attempt is not capability absence and never authorizes switching to Zero. A YouTube Data API key enables metadata; it does not grant third-party caption download rights. Monid metadata and transcript calls are separate, bounded operations. Every paid call uses the existing provider budget guard. Supadata is only called when \`--allow-paid\` is passed.
 
-For transcript retrieval through Zero, use exact capability \`youtube-video-transcript-extractor-70f8ca14\` only after native and Monid are unavailable. Before every use, inspect it with \`zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted\`. Its live schema must accept the needed video URL or ID, it must be healthy, and its price must be at most \`$0.02\`. Run through \`zero-budget.mjs fetch\` with \`--max-pay 0.02\`, then provide the returned transcript through \`--transcript\`. Do not search for replacements during routine Signals runs. Never start a second paid provider while the first charge or run is unresolved; a confirmed terminal failure is different from a timeout.
+For transcript retrieval through Zero, use exact capability \`youtube-video-transcript-extractor-70f8ca14\` only when the user explicitly requests Zero or current Monid discovery/inspection confirms the needed capability is absent. Before every use, inspect it with \`zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted\`. Its live schema must accept the needed video URL or ID, it must be healthy, and its price must be at most \`$0.02\`. Run through \`zero-budget.mjs fetch\` with \`--max-pay 0.02\`, then provide the returned transcript through \`--transcript\`. Do not search for replacements during routine Signals runs. Never start a second paid provider while the first charge or run is unresolved; a confirmed terminal failure is different from a timeout.
 
 \`\`\`bash
 SUPADATA_API_KEY="..." node bin/youtube-intelligence.mjs prepare --video "<url-or-id>" --provider supadata --allow-paid --out "<workspace>/youtube-intel/<video-id>"
@@ -56155,9 +56185,9 @@ cd tools/youtube-research && node bin/youtube-research.mjs doctor
 cd tools/youtube-research && node bin/youtube-research.mjs which "search videos by keyword" --agent
 \`\`\`
 
-If the direct route is unavailable, use the pinned YouTube metadata or transcript endpoint in the bundled \`monid\` skill. Inspect its current schema and cost, then use the existing single-call and weekly allowance. Monid is the second route; Zero is the final transcript fallback. Do not repeatedly search the marketplace for these known capabilities. If no suitable connection is usable, direct the user to Connections once. Do not claim the transcript endpoint can perform channel discovery or comments retrieval.
+If the direct route is unavailable, use the pinned YouTube metadata or transcript endpoint in the bundled \`monid\` skill. Inspect its current schema and cost, then use the existing single-call and weekly allowance. Monid is the second route. Use a dedicated connected source first, then Monid for marketplace capabilities. Use Zero only when the user explicitly requests Zero or current Monid discovery and inspection establish that Monid does not provide the needed capability. A disconnected account, budget block, outage, failed request, or unresolved paid attempt is not capability absence and never authorizes switching to Zero. Do not repeatedly search the marketplace for these known capabilities. If no suitable connection is usable, direct the user to Connections once. Do not claim the transcript endpoint can perform channel discovery or comments retrieval.
 
-For transcript retrieval after native and Monid are unavailable, use exact Zero capability \`youtube-video-transcript-extractor-70f8ca14\`. Before every use, run \`zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted\`. Its live schema must accept the needed video URL or ID, it must be healthy, and its price must be at most \`$0.02\`. Then call it through \`zero-budget.mjs fetch\` with \`--max-pay 0.02\`. Do not search for replacements during routine Signals runs. Never duplicate an unresolved paid call or retry a pending charge through a different provider.
+For transcript retrieval only when the user explicitly requests Zero or current Monid discovery/inspection confirms the needed capability is absent, use exact Zero capability \`youtube-video-transcript-extractor-70f8ca14\`. Before every use, run \`zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted\`. Its live schema must accept the needed video URL or ID, it must be healthy, and its price must be at most \`$0.02\`. Then call it through \`zero-budget.mjs fetch\` with \`--max-pay 0.02\`. Do not search for replacements during routine Signals runs. Never duplicate an unresolved paid call or retry a pending charge through a different provider.
 
 Zero does not create or replace a Google API key. It is an alternate paid retrieval route.
 
@@ -56811,7 +56841,7 @@ try {
         path: "SKILL.md",
         content: `---
 name: Zero
-description: Discover and call external API capabilities through Zero when RunnerOS has no healthy native connector or dedicated specialist.
+description: Guarded Zero capabilities only for explicit user choice or a verified capability gap in Monid.
 requiredSources:
   - zero
 tags: [tools, api, marketplace, paid]
@@ -56819,7 +56849,7 @@ tags: [tools, api, marketplace, paid]
 
 # Zero
 
-Use Zero as a gap closer, not the first choice. Prefer a healthy native connector, built-in tool, or dedicated worker when one fits. Do not use Zero for code edits, local files, shell work, math, or ordinary model answers.
+Use a dedicated connected source first, then Monid for marketplace capabilities. Use Zero only when the user explicitly requests Zero or current Monid discovery and inspection establish that Monid does not provide the needed capability. A disconnected account, budget block, outage, failed request, or unresolved paid attempt is not capability absence and never authorizes switching to Zero. Do not use Zero for code edits, local files, shell work, math, or ordinary model answers.
 
 ## Discover
 

@@ -96,6 +96,8 @@ export interface PromptAgent {
 
 export interface PromptSkill {
   slug: string;
+  /** Resolved directory, supplied by skill storage for provider-independent reads. */
+  path?: string;
   metadata: { name: string; description?: string };
 }
 
@@ -426,6 +428,12 @@ function collectSkillBullets(declaredSlugs: string[], skills: PromptSkill[]): st
     const skill = bySlug.get(slug);
     if (!skill) continue;
     out.push(formatBullet(slug, skill.metadata.name, skill.metadata.description));
+    if (slug === 'monid' || slug === 'zero') {
+      const readRoute = skill.path
+        ? `read ${JSON.stringify(`${skill.path}/SKILL.md`)} using Read or cat via Bash`
+        : `invoke the ${slug} skill using the Skill tool, or resolve its SKILL.md from the available skill locations and read it`;
+      out.push(`    Available on demand: ${readRoute} before using its marketplace tools; do not load it merely to start a conversation.`);
+    }
   }
   return out;
 }

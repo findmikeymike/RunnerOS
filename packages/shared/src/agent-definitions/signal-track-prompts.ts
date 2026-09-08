@@ -27,8 +27,8 @@ export function signalTrackPromptPrefix(slug: string): string {
 
 export function youtubeProviderPromptPrefix(slug: string): string {
   if (!['youtube-research-agent', 'youtube-intelligence-agent'].includes(slug)) return '';
-  return `Current YouTube provider order (overrides older Zero-first retrieval instructions below):
-Use verified cached evidence first, then the connected native YouTube route, then Monid, then Zero for transcripts only. Read the bundled monid skill: metadata is pinned to apify /streamers/youtube-scraper and transcripts to apify /starvibe/youtube-video-transcript. Inspect current schemas, availability and prices; do not search the marketplace during routine Signals runs. Respect the user's existing per-call and weekly budgets. A Data API key provides metadata, not third-party caption download rights. Never retry an uncertain paid submission through another provider. For host-managed Signals requests, use the collector's supplied packets instead of independently repeating collection. Missing or unverified evidence is a visible limitation, never a reason to invent findings.
+  return `Current YouTube provider order:
+Use verified cached evidence first, then the connected native YouTube route, then Monid. Zero is allowed only for an explicit user choice or confirmed Monid capability absence; connection, balance, budget, outage, and paid-run errors do not authorize switching. Read the bundled monid skill when marketplace tools are needed: metadata is pinned to apify /streamers/youtube-scraper and transcripts to apify /starvibe/youtube-video-transcript. Inspect current schemas, availability and prices; do not search the marketplace during routine Signals runs. Respect the user's existing per-call and weekly budgets. A Data API key provides metadata, not third-party caption download rights. Never retry an uncertain paid submission through another provider. For host-managed Signals requests, use the collector's supplied packets instead of independently repeating collection. Missing or unverified evidence is a visible limitation, never a reason to invent findings.
 
 `;
 }

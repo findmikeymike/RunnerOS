@@ -203,6 +203,42 @@ describe('BaseAgent', () => {
       expect(agent.chatCalls[0]?.message).toBe('test message');
     });
 
+    it('defers marketplace reads while preserving domain and explicitly requested skill prerequisites', async () => {
+      const root = mkdtempSync(join(tmpdir(), 'runner-marketplace-skills-'));
+      try {
+        for (const slug of ['monid', 'zero', 'artist-industry-hunter']) {
+          const dir = join(root, 'skills', slug);
+          mkdirSync(dir, { recursive: true });
+          writeFileSync(join(dir, 'SKILL.md'), `---\nname: ${slug}\ndescription: Test instructions.\n---\nRead before using tools.\n`);
+        }
+        const skillAgent = new TestAgent(createMockBackendConfig({
+          workspace: createMockWorkspace({ rootPath: root }),
+          session: createMockSession({ workspaceRootPath: root }),
+          agentSkillSlugs: ['monid', 'zero', 'artist-industry-hunter'],
+        }));
+        const domainPath = join(root, 'skills', 'artist-industry-hunter', 'SKILL.md');
+        await collectEvents(skillAgent.chat('Hello, what can you do?'));
+        expect(skillAgent.chatCalls.at(-1)?.message).toContain(domainPath);
+        expect(skillAgent.chatCalls.at(-1)?.message).not.toContain(join(root, 'skills', 'monid', 'SKILL.md'));
+        expect(skillAgent.chatCalls.at(-1)?.message).not.toContain(join(root, 'skills', 'zero', 'SKILL.md'));
+        skillAgent.trackPrerequisiteRead({ file_path: domainPath });
+        await collectEvents(skillAgent.chat('Help me think through a release.'));
+        expect(skillAgent.chatCalls.at(-1)?.message).not.toContain('MUST read');
+        for (const slug of ['monid', 'zero']) {
+          await collectEvents(skillAgent.chat(`[skill:${slug}] Find a tool.`));
+          expect(skillAgent.chatCalls.at(-1)?.message).toContain(join(root, 'skills', slug, 'SKILL.md'));
+          expect(skillAgent.chatCalls.at(-1)?.message).toContain('MUST read');
+          skillAgent.trackPrerequisiteRead({ file_path: join(root, 'skills', slug, 'SKILL.md') });
+        }
+        // A cached catalog entry must not conceal a removed on-demand skill.
+        rmSync(join(root, 'skills', 'monid', 'SKILL.md'));
+        const events = await collectEvents(skillAgent.chat('Hello again.'));
+        expect(events).toContainEqual({ type: 'error', message: 'Skill(s) not found: monid' });
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
     it('does not inject a skill reread directive after that skill was read in the same session', async () => {
       const root = mkdtempSync(join(tmpdir(), 'runner-base-agent-skill-'));
       try {

@@ -87,7 +87,7 @@ for (const localWorks of [true, false]) test(`guarded Zero fallback is ${localWo
       return { ok: true, videoId };
     });
     const zeroTranscript = mock(async (hq: string, id: string) => { expect(hq).toBe(root); expect(id).toBe(videoId); sequence.push('zero'); return transcript; });
-    const provider = new LocalSignalProvider(undefined, { command, zeroTranscript, monidTranscript: async () => { sequence.push('monid'); throw new MonidSignalError('Monid unavailable', true); } });
+    const provider = new LocalSignalProvider(undefined, { command, zeroTranscript, monidTranscript: async () => { sequence.push('monid'); throw new MonidSignalError('Confirmed transcript capability absent', true); } });
     expect(await provider.transcript(root, videoId)).toEqual(transcript);
     expect(sequence).toEqual(localWorks ? ['youtube-intelligence'] : ['youtube-intelligence', 'monid', 'zero']);
     expect(zeroTranscript).toHaveBeenCalledTimes(localWorks ? 0 : 1);
@@ -111,7 +111,7 @@ test('fallback errors are not retried or hidden, and metadata never uses Zero', 
   const error = new Error('A previous paid transcript attempt needs review.');
   const zeroTranscript = mock(async () => { throw error; });
   try {
-    const provider = new LocalSignalProvider(undefined, { command: async () => { throw new Error('offline'); }, zeroTranscript, monidTranscript: async () => { throw new MonidSignalError('No connection', true); } });
+    const provider = new LocalSignalProvider(undefined, { command: async () => { throw new Error('offline'); }, zeroTranscript, monidTranscript: async () => { throw new MonidSignalError('Confirmed transcript capability absent', true); } });
     await expect(provider.transcript(root, 'abcdefghijk')).rejects.toBe(error);
     expect(zeroTranscript).toHaveBeenCalledTimes(1);
     await expect(provider.recent('UC' + 'a'.repeat(22))).rejects.toThrow('YouTube Data API');
@@ -175,4 +175,36 @@ test('cancelled native metadata work does not start Monid', async () => {
   await expect(provider.recent(channelId, controller.signal, '/fixture/hq')).rejects.toThrow();
   await expect(provider.video(videoId, controller.signal, '/fixture/hq')).rejects.toThrow();
   expect(fallback).toHaveBeenCalledTimes(0);
+});
+
+
+test('Monid operational failures and unknown responses never authorize Zero', async () => {
+  const failures = [
+    new MonidSignalError('Connect Monid in Connections > Services.', false),
+    new MonidSignalError('Monid weekly allowance is exhausted.', false),
+    new MonidSignalError('Monid endpoint health is not verified.', false),
+    new MonidSignalError('Monid run ended FAILED.', false, 'paid-run'),
+    new MonidSignalError('Claimed absence after paid work', true, 'paid-run'),
+    new Error('Network timeout'),
+    'unknown failure',
+    undefined,
+  ];
+  for (const failure of failures) {
+    const root = mkdtempSync(join(tmpdir(), 'signals-provider-policy-'));
+    const zeroTranscript = mock(async () => { throw new Error('Zero must not run'); });
+    try {
+      const provider = new LocalSignalProvider(undefined, {
+        command: async () => { throw new Error('native unavailable'); },
+        monidTranscript: async () => {
+          if (failure !== undefined) throw failure;
+          return undefined as never; // Defensive boundary for a malformed injected/provider result.
+        },
+        zeroTranscript,
+      });
+      let rejected = false;
+      try { await provider.transcript(root, videoId); } catch { rejected = true; }
+      expect(rejected).toBe(true);
+      expect(zeroTranscript).toHaveBeenCalledTimes(0);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }
 });

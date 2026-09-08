@@ -14,24 +14,25 @@ const MAX_BYTES = 3 * 1024 * 1024;
 const TERMINAL = new Set(['COMPLETED', 'FAILED', 'BLOCKED', 'STOPPED', 'TIMED_OUT']);
 type Json = Record<string, any>;
 
-/** False means another paid fallback must NOT be attempted for this operation. */
+/** True is reserved for affirmative evidence that Monid lacks the needed capability.
+ * Connection, allowance, contract, health, or paid-run failures are not that evidence. */
 export class MonidSignalError extends Error {
   constructor(message: string, readonly fallbackAllowed: boolean, readonly runId?: string) {
     super(message); this.name = 'MonidSignalError';
   }
 }
 export function isMonidSignalFallbackBlocked(error: unknown): boolean {
-  return error instanceof MonidSignalError ? !error.fallbackAllowed : error instanceof Error && error.name === 'AbortError';
+  return !(error instanceof MonidSignalError && error.fallbackAllowed && !error.runId);
 }
 
 export async function createMonidSignalClient(root: string): Promise<PoolClient> {
   const config = loadWorkspaceConfig(root);
-  if (!config) throw new MonidSignalError('Monid requires a valid Artist workspace.', true);
+  if (!config) throw new MonidSignalError('Monid requires a valid Artist workspace.', false);
   const source = getSourcesBySlugs(root, ['monid'])[0] ?? getMonidSource(config.id, root);
-  if (source.config.enabled === false) throw new MonidSignalError('Enable Monid in Connections > Services.', true);
+  if (source.config.enabled === false) throw new MonidSignalError('Enable Monid in Connections > Services.', false);
   const manager = getSourceCredentialManager();
   const token = await monidSignalToken(source, manager);
-  if (!token) throw new MonidSignalError('Connect Monid in Connections > Services.', true);
+  if (!token) throw new MonidSignalError('Connect Monid in Connections > Services.', false);
   return new CraftMcpClient({ transport: 'http', url: 'https://mcp.monid.ai/v1', headers: { Authorization: `Bearer ${token}` } });
 }
 
@@ -135,7 +136,7 @@ export async function runMonidSignalOperation<T>(root: string, operation: MonidS
   if (![TRANSCRIPT, METADATA].includes(operation.endpoint) || !operation.key || !Number.isFinite(operation.maxCostUsd)
     || operation.maxCostUsd < 0 || operation.maxCostUsd > (operation.endpoint === TRANSCRIPT ? 0.02 : 0.25)
     || !Number.isInteger(operation.maxOutputRows) || operation.maxOutputRows < 1 || operation.maxOutputRows > (operation.endpoint === TRANSCRIPT ? 1 : 50)
-    || operation.cacheTtlMs !== undefined && (!Number.isFinite(operation.cacheTtlMs) || operation.cacheTtlMs <= 0)) throw new MonidSignalError('Invalid bounded Monid operation.', true);
+    || operation.cacheTtlMs !== undefined && (!Number.isFinite(operation.cacheTtlMs) || operation.cacheTtlMs <= 0)) throw new MonidSignalError('Invalid bounded Monid operation.', false);
   signal?.throwIfAborted();
   const identity = JSON.stringify({ version: 1, key: operation.key, endpoint: operation.endpoint, input: operation.input });
   const hash = createHash('sha256').update(identity).digest('hex');
@@ -233,7 +234,7 @@ export async function runMonidSignalOperation<T>(root: string, operation: MonidS
         runId, reservation, projectedMaxUsd, actualCostUsd: charged, settled: charged !== undefined, attemptedAt: now() });
       reservation = undefined;
       signal?.throwIfAborted();
-      if (result.status !== 'COMPLETED') throw new MonidSignalError(`Monid transcript run ended ${result.status}.`, true, runId);
+      if (result.status !== 'COMPLETED') throw new MonidSignalError(`Monid transcript run ended ${result.status}.`, false, runId);
       if (result.providerResponse?.httpStatus !== undefined && (!Number.isInteger(result.providerResponse.httpStatus)
         || result.providerResponse.httpStatus < 200 || result.providerResponse.httpStatus >= 300)) throw new Error('Monid provider returned no usable data.');
       if (!Array.isArray(result.output) || result.output.length > operation.maxOutputRows) throw new Error('Monid output exceeded the single-operation result bound.');
@@ -250,9 +251,8 @@ export async function runMonidSignalOperation<T>(root: string, operation: MonidS
         if (started && !terminal && error.fallbackAllowed) throw new MonidSignalError('The saved Monid run could not be resumed. Retry after restoring the connection.', false, runId);
         throw error;
       }
-      const collision = (error as NodeJS.ErrnoException).code === 'EEXIST';
       throw new MonidSignalError(started && !terminal ? 'Monid run is pending or unverified. Retry to resume known work; no new paid run was started.'
-        : 'Monid data unavailable: connection, endpoint contract, allowance, or returned data could not be verified.', !collision && (!started || terminal), runId);
+        : 'Monid data unavailable: connection, endpoint contract, allowance, or returned data could not be verified.', false, runId);
     } finally {
       if (client) {
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -266,7 +266,7 @@ export async function runMonidSignalOperation<T>(root: string, operation: MonidS
 }
 
 export function monidSignalTranscript(root: string, videoId: string, signal?: AbortSignal, deps: MonidSignalDeps = {}): Promise<SignalTranscript> {
-  if (!SIGNAL_VIDEO_ID.test(videoId)) return Promise.reject(new MonidSignalError('Invalid video.', true));
+  if (!SIGNAL_VIDEO_ID.test(videoId)) return Promise.reject(new MonidSignalError('Invalid video.', false));
   return runMonidSignalOperation(root, {
     key: `transcript-en-v1:${videoId}`, endpoint: TRANSCRIPT,
     input: { youtube_url: `https://www.youtube.com/watch?v=${videoId}`, language: 'en' }, maxCostUsd: 0.02, maxOutputRows: 1,
