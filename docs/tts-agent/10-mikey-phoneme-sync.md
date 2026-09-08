@@ -78,12 +78,22 @@ Do not claim these device checks from unit tests or synthetic fixtures.
   interruption cleared immediately. No physical microphone or provider was used.
   These checks establish browser integration, not perceived device synchronization.
 - App bridge/pose/rig and readiness regression tests passed. Electron TypeScript
-  compilation passed with the updated vendored SDK.
+  compilation passed with the updated vendored SDK. After merging main through
+  `bb4be34b5`, full discovery passed 8,577 tests (one skip, zero failures across
+  737 files); all 20 isolated files passed 343 tests. Focused lint had no errors;
+  three existing hook warnings remain. The test run used localhost access and a
+  60-second per-test timeout.
+- The production renderer build passed and emitted both AudioWorklets as real
+  files. Its GLB hash matches the unchanged source asset; the 197-file SDK
+  snapshot and cumulative source-patch hash verify. The user's running app was
+  deliberately not rebuilt or relaunched.
 
 ## Reproduction
 
 The cumulative SDK source/test patch is `mikey-avatar-playback.patch`, applied
 at Voice Core revision `c348947065e3926b9f56f292fb9e086f23d04597`.
+The SDK implementation is also committed as `7467b9a` on
+`codex/phoneme-playback-sync` in the Conversation AI System repository.
 Compile `voice-core-rs/wrappers/web` with its existing matching WASM package;
 run the web contract tests, then verify `vendor/voice-core-snapshot.json` with
 `node scripts/check-voice-core-snapshot.mjs` in Artist OS. Do not hand-edit
