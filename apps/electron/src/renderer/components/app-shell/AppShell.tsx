@@ -3202,6 +3202,7 @@ function AppShellContent({
               activeWorkspaceId={activeWorkspaceId}
               onSelect={onSelectWorkspace}
               onWorkspaceCreated={() => onRefreshWorkspaces?.()}
+              onWorkspaceRemoved={() => onRefreshWorkspaces?.()}
               workspaceUnreadMap={workspaceUnreadMap}
               orientation="horizontal"
             />
@@ -3263,6 +3264,7 @@ function AppShellContent({
             activeWorkspaceId={activeWorkspaceId}
             onSelect={onSelectWorkspace}
             onWorkspaceCreated={() => onRefreshWorkspaces?.()}
+            onWorkspaceRemoved={() => onRefreshWorkspaces?.()}
             workspaceUnreadMap={workspaceUnreadMap}
           />
         )}

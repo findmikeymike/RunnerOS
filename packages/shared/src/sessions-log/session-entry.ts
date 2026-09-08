@@ -25,6 +25,8 @@ export interface SessionLogSourceMessage {
   timestamp?: number;
   /** Commentary between tool calls, not a real exchange. */
   isIntermediate?: boolean;
+  /** Internal host input is not an artist exchange. */
+  hidden?: boolean;
 }
 
 export interface SessionLogSource {
@@ -56,6 +58,7 @@ function toSingleLine(value: string): string {
 
 function isRealExchange(message: SessionLogSourceMessage): boolean {
   return (message.role === 'user' || message.role === 'assistant')
+    && message.hidden !== true
     && message.isIntermediate !== true
     && message.content.trim().length > 0;
 }

@@ -32,6 +32,7 @@
     "./docs": "./src/docs/index.ts",
     "./docs/doc-links": "./src/docs/doc-links.ts",
     "./config/types": "./src/config/types.ts",
+    "./campaign-cleanup": "./src/campaign-cleanup/index.ts",
     "./community": "./src/community/index.ts",
     "./community/list-export": "./src/community/list-export.ts",
     "./credentials": "./src/credentials/index.ts",

@@ -1727,6 +1727,15 @@ export default function App() {
     window.electronAPI.getWorkspaces().then(setWorkspaces)
   }, [])
 
+  useEffect(() => window.electronAPI.onCampaignDeleted?.(({ workspaceId, hqWorkspaceId }) => {
+    handleRefreshWorkspaces()
+    if (windowWorkspaceId === workspaceId) {
+      void handleSelectWorkspace(hqWorkspaceId).catch(error => {
+        console.error('Could not switch to HQ after campaign deletion:', error)
+      })
+    }
+  }), [handleRefreshWorkspaces, handleSelectWorkspace, windowWorkspaceId])
+
   // Handle cancel during onboarding
   const handleOnboardingCancel = useCallback(() => {
     onboarding.handleCancel()

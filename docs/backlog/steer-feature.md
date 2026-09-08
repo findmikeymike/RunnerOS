@@ -1,12 +1,60 @@
 ---
 status: partially-implemented
 owner: unassigned
-last_verified: 2026-09-07
+last_verified: 2026-09-08
 source_of_truth: true
 scope: chat steering UI surfacing
 ---
 
 # STEER FEATURE — Mid-Stream Chat Steering
+
+## Integration update — 2026-09-08
+
+The composer changes are implemented. The running app was not rebuilt,
+relaunched, or restarted during this work:
+
+- While processing, an explicit **Send update** action sits beside **Stop**.
+  The input hints that updates can be sent while the agent works.
+- Compact inputs stay mounted, with a smaller scrollable text area. Drafts and
+  focus survive processing transitions; height follows the measured content.
+- Claude retains successive pending updates in order. Blocked/non-injecting
+  hooks no longer discard pending text. Explicit stop/handoff behavior remains.
+- No new RPC or delivery-status claim was added. `accepted` is not proof that
+  the model received an update. Current renderer code clears `isQueued` on
+  `accepted`; the older description below is incorrect on that point.
+
+Verification on an isolated branch based on `main` at `25c636ba9`:
+7 real Chromium composer checks passed (button/Enter sends,
+compact sizing, draft/focus preservation, Stop, send guards, and keyboard
+preferences), plus 50 focused tests. All workspace typechecks, a main-process
+bundle, and a production Artist OS renderer build passed. The browser fixture uses the actual composer,
+input container, and built CSS; it stubs unrelated dialog/native APIs and makes
+no provider calls. The renderer was built under `/tmp`, preserving the running
+app's bundles. The final `bun run test` passed **8,938 tests**, with one skip
+and zero failures, including all 20 isolated test files. An earlier run had
+one video-render timeout during concurrent builds; the serial rerun passed
+without changing its timeout. The stale `run-agent.test.ts` wording assertion
+was updated to match the focus-control change already committed on main.
+Other agents' unfinished changes were excluded from this verification copy.
+
+Run the browser checks after building the renderer:
+
+```bash
+PLAYWRIGHT_CHANNEL=chrome bun run scripts/test-steer-ui.ts
+# For an isolated renderer build, also set STEER_UI_RENDERER_DIR=<build directory>.
+```
+
+Remaining acceptance: real Pi and Claude conversations in full-width, narrow,
+and EditPopover chats. Steering currently forwards **text only**; attachment
+and skill metadata are not forwarded by the mid-stream backend path.
+
+## Historical investigation — before the changes above
+
+The rest of this document records the original investigation and proposed
+options. It is not the current implementation status. In particular, Claude
+normally uses a pending tool-hook injection, not abort-and-queue; `accepted`
+does not prove injection, and the synchronous persistence flush precedes RPC
+completion rather than the renderer event.
 
 Chat steering lets the user send a message **while the agent is already
 working** and have it change the in-flight turn instead of waiting for the

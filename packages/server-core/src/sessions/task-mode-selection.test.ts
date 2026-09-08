@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import type { AgentBackend, AgentContextUpdate } from '@craft-agent/shared/agent/backend'
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol'
+import { createModelFallbackBackend } from '@craft-agent/shared/agent/backend/model-fallback-backend'
+import type { AgentEvent } from '@craft-agent/core/types'
 import { SessionManager, createManagedSession } from './SessionManager.ts'
 
 const focusedReceipt = {
@@ -100,10 +102,8 @@ describe('task-mode selection', () => {
     await manager.selectSessionTaskMode(managed.id, 'narrative-universe', { startConversation: true })
 
     expect(sendCount).toBe(0)
-    expect(appliedContexts).toEqual([{
-      customSystemPrompt: 'Focused branding prompt',
-      agentSkillSlugs: ['artist-narrative-universe'],
-    }])
+    expect(appliedContexts).toEqual([])
+    expect(managed.customSystemPrompt).toBe('Focused branding prompt')
     expect(managed.enabledSourceSlugs).toEqual(['manual-source', 'artist-profile'])
   })
 
@@ -121,5 +121,170 @@ describe('task-mode selection', () => {
     await expect(manager.selectSessionTaskMode(managed.id, 'narrative-universe')).rejects.toThrow(
       'The opening response is still starting.',
     )
+  })
+
+  test('two concurrent initial selections cannot rewrite focus before hidden-send admission', async () => {
+    let acknowledge!: () => void
+    let entered!: () => void
+    const sending = new Promise<void>(resolve => { entered = resolve })
+    const admitted = new Promise<void>(resolve => { acknowledge = resolve })
+    let sends = 0
+    manager.sendMessage = async (...args) => {
+      sends += 1
+      entered()
+      await admitted
+      args[7]?.('hidden-start')
+    }
+    const first = manager.selectSessionTaskMode(managed.id, 'narrative-universe', { startConversation: true })
+    await sending
+    // isProcessing is deliberately still false: this is the admission gap.
+    expect(managed.isProcessing).toBe(false)
+    try {
+      await expect(SessionManager.prototype.sendMessage.call(manager, managed.id, 'A fast Enter press'))
+        .rejects.toThrow('The opening response is still starting.')
+      expect(managed.messages).toEqual([])
+      await expect(manager.selectSessionTaskMode(managed.id, 'visual-world', { startConversation: true }))
+        .rejects.toThrow('The opening response is still starting.')
+      expect(managed.launchReceipt?.taskMode?.id).toBe('narrative-universe')
+      expect(sends).toBe(1)
+    } finally {
+      acknowledge()
+      await first
+    }
+  })
+
+  test('a real opening flush failure rolls back only its hidden message and permits another start', async () => {
+    const internals = manager as unknown as { flushSession: () => Promise<void> }
+    internals.flushSession = async () => { throw new Error('Disk unavailable') }
+    await expect(manager.selectSessionTaskMode(managed.id, 'narrative-universe', { startConversation: true }))
+      .rejects.toThrow('Disk unavailable')
+    expect(managed.messages).toEqual([])
+    expect(managed.launchReceipt?.taskModeSelectionPending).toBe(true)
+    let starts = 0
+    manager.sendMessage = async (...args) => { starts += 1; args[7]?.('accepted') }
+    await manager.selectSessionTaskMode(managed.id, 'narrative-universe', { startConversation: true })
+    expect(starts).toBe(1)
+  })
+
+  test('hidden turns never enter memory review or regenerate a title', async () => {
+    let reviews = 0
+    managed.agent = { runMiniCompletion: async () => { reviews += 1; return null } } as unknown as AgentBackend
+    managed.messages = [
+      { id: 'hidden', role: 'user', content: 'Remember INTERNAL START forever', timestamp: 1, hidden: true },
+      { id: 'answer', role: 'assistant', content: 'What inspires you?', timestamp: 2 },
+    ]
+    const internals = manager as unknown as {
+      scheduleMemorySidecarReview: (session: typeof managed, messageId: string) => void
+      buildMemorySidecarIndex: () => []
+    }
+    internals.buildMemorySidecarIndex = () => []
+    internals.scheduleMemorySidecarReview(managed, 'answer')
+    expect(reviews).toBe(0)
+    expect(await manager.refreshTitle(managed.id)).toEqual({ success: false, error: 'No user messages to generate title from' })
+    managed.messages.unshift({ id: 'earlier', role: 'user', content: 'I love blue', timestamp: 0 })
+    internals.scheduleMemorySidecarReview(managed, 'answer')
+    expect(reviews).toBe(0) // Never pair a hidden turn with an older human ask.
+  })
+
+  test('a rejected opening can be selected again without leaving the opening gate stuck', async () => {
+    manager.sendMessage = async () => { throw new Error('Admission failed') }
+    await expect(manager.selectSessionTaskMode(managed.id, 'narrative-universe', { startConversation: true }))
+      .rejects.toThrow('Admission failed')
+    expect(managed.launchReceipt?.taskModeSelectionPending).toBe(true)
+    manager.sendMessage = async (...args) => { args[7]?.('accepted') }
+    await manager.selectSessionTaskMode(managed.id, 'narrative-universe', { startConversation: true })
+    expect(managed.launchReceipt?.taskModeSelectionPending).toBe(false)
+  })
+
+  test('async backend initialization receives the admitted focus despite another selection', async () => {
+    managed.launchReceipt = { ...focusedReceipt, taskModeSelectionPending: false }
+    managed.messages = [{ id: 'real', role: 'user', content: 'Prior real request', timestamp: 1 }]
+    managed.customSystemPrompt = 'Original admitted focus'
+    managed.name = 'Branding'
+    const internals = manager as unknown as {
+      getOrCreateAgent: (session: typeof managed, context: AgentContextUpdate) => Promise<AgentBackend>
+    }
+    let captured: AgentContextUpdate | undefined
+    internals.getOrCreateAgent = async (_session, context) => {
+      await manager.selectSessionTaskMode(managed.id, 'narrative-universe')
+      captured = context
+      throw new Error('Stop before provider execution')
+    }
+    await expect(manager.sendMessage(managed.id, 'An admitted request')).rejects.toThrow('Stop before provider execution')
+    expect(captured?.customSystemPrompt).toBe('Original admitted focus')
+    expect(managed.customSystemPrompt).toBe('Focused branding prompt')
+    // Auth recovery is another attempt of the same response, not a new turn.
+    managed.isProcessing = false
+    await expect(manager.sendMessage(managed.id, 'An admitted request', undefined, undefined, undefined, undefined, true))
+      .rejects.toThrow('Stop before provider execution')
+    expect(captured?.customSystemPrompt).toBe('Original admitted focus')
+    managed.isProcessing = false
+    await expect(manager.sendMessage(managed.id, 'Now change focus')).rejects.toThrow('Stop before provider execution')
+    expect(captured?.customSystemPrompt).toBe('Focused branding prompt')
+  })
+
+  test('an in-flight fallback keeps the admitted focus and the next send receives the new focus', async () => {
+    const original = { customSystemPrompt: 'Original visual focus', agentSkillSlugs: ['artist-visual-world-director'] }
+    managed.customSystemPrompt = original.customSystemPrompt
+    managed.agentSkillSlugs = original.agentSkillSlugs
+    managed.launchReceipt = { ...focusedReceipt, taskModeSelectionPending: false }
+    managed.messages = [{ id: 'real', role: 'user', content: 'Make a visual direction', timestamp: 1 }]
+    managed.name = 'Branding'
+    managed.sdkSessionId = 'focus-race-sdk'
+    let releasePrimary!: () => void
+    let primaryStarted!: () => void
+    const gate = new Promise<void>(resolve => { releasePrimary = resolve })
+    const started = new Promise<void>(resolve => { primaryStarted = resolve })
+    const primaryContexts: AgentContextUpdate[] = []
+    const fallbackContexts: AgentContextUpdate[] = []
+    const primary = {
+      setAgentContext: (context: AgentContextUpdate) => { primaryContexts.push(context) },
+      setAllSources: () => {}, getModel: () => 'primary',
+      getSummarizeCallback: () => async () => null,
+      async *chat(): AsyncGenerator<AgentEvent> {
+        primaryStarted()
+        yield { type: 'text_delta', text: 'Starting visual work' }
+        await gate
+        yield { type: 'typed_error', error: { code: 'service_unavailable', title: 'Unavailable', message: 'Try fallback', actions: [], canRetry: true } }
+      },
+    } as unknown as AgentBackend
+    const fallback = {
+      setAgentContext: (context: AgentContextUpdate) => { fallbackContexts.push(context) },
+      setAllSources: () => {}, getModel: () => 'fallback',
+      getSummarizeCallback: () => async () => null,
+      postInit: async () => ({}), destroy: () => {},
+      async *chat(): AsyncGenerator<AgentEvent> {
+        yield { type: 'text_complete', text: 'Visual work completed' }
+        yield { type: 'complete' }
+      },
+    } as unknown as AgentBackend
+    managed.agent = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'focus-race-primary', primaryModel: 'focus-race-model',
+      resolveCandidates: async () => [{ connectionSlug: 'focus-race-backup', model: 'backup', chainIndex: 1, create: () => fallback }],
+    })
+    const internals = manager as unknown as {
+      getOrCreateAgent: (...args: unknown[]) => Promise<AgentBackend>
+      processEvent: () => void
+      onProcessingStopped: () => Promise<void>
+      resolveAgentSessionOptions: () => Promise<Partial<CreateSessionOptions>>
+    }
+    internals.getOrCreateAgent = async () => managed.agent!
+    internals.processEvent = () => {}
+    internals.onProcessingStopped = async () => { managed.isProcessing = false }
+    internals.resolveAgentSessionOptions = async () => ({ ...focusedOptions(), enabledSourceSlugs: [] })
+    const response = manager.sendMessage(managed.id, 'Start visual work')
+    await started
+    try {
+      await manager.selectSessionTaskMode(managed.id, 'narrative-universe')
+      expect(primaryContexts).toEqual([original])
+    } finally {
+      releasePrimary()
+      await response
+    }
+    expect(fallbackContexts).toEqual([original])
+    await manager.sendMessage(managed.id, 'Now develop the narrative')
+    expect(fallbackContexts.at(-1)).toEqual({
+      customSystemPrompt: 'Focused branding prompt', agentSkillSlugs: ['artist-narrative-universe'],
+    })
   })
 })

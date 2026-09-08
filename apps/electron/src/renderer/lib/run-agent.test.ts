@@ -1,3 +1,4 @@
+import { STARTER_AGENTS } from '@craft-agent/shared/agent-definitions/starter-templates'
 import { describe, expect, test } from 'bun:test'
 import { buildAgentCreateSessionOptions, buildPendingAgentTaskModeSessionOptions, ensureAgentDeclaredSkillsEnabled, resolveArtistWorkspaceScope, sendAgentDraft, shouldDeferAgentTaskModeSelection } from './run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
@@ -75,6 +76,24 @@ describe('pending in-chat task-mode selection', () => {
 })
 
 describe('buildAgentCreateSessionOptions memory receipts', () => {
+  test.each([
+    ['artist-world', ['artist-narrative-universe', 'artist-visual-world-director']],
+    ['voice-beliefs', ['artist-belief-system', 'artist-brand-expression-strategist']],
+  ] as const)('delivers both paired skills and matching receipt for %s', (modeId, expectedSkills) => {
+    const definition = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')!;
+    const agent = { ...makeAgent(), ...definition } as AgentDefinitionDTO;
+    const options = buildAgentCreateSessionOptions(agent, {
+      skills: definition.metadata.skills!.map(slug => ({ slug, metadata: { name: slug } })) as any,
+      sources: [],
+    }, modeId);
+    expect(options.agentSkillSlugs).toEqual([...expectedSkills]);
+    expect(options.launchReceipt?.taskMode?.primarySkills).toEqual([...expectedSkills]);
+    expect(options.launchReceipt?.taskMode?.fullMode).toBe(false);
+    expect(options.customSystemPrompt).toContain('Use every selected primary skill together');
+    expect(options.customSystemPrompt).toContain('one coherent result');
+    expect(options.permissionMode).toBe(agent.metadata.permissionMode);
+  });
+
   test('launches a focused mode with only its primary skill and selected context', () => {
     const agent = {
       ...makeAgent(),
@@ -126,7 +145,7 @@ describe('buildAgentCreateSessionOptions memory receipts', () => {
     ])
     expect(options.launchReceipt?.injected.agentCatalog).toBeUndefined()
     expect(options.customSystemPrompt).toContain('Task mode (host-selected):')
-    expect(options.customSystemPrompt).toContain('Related capability boundaries (awareness only')
+    expect(options.customSystemPrompt).toContain('Related capabilities (available on demand — not preloaded)')
     expect(options.customSystemPrompt).not.toContain('Network.')
   })
 

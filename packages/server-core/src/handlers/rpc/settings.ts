@@ -919,6 +919,11 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   // Set draft for a session (empty drafts are cleared)
   server.handle(RPC_CHANNELS.drafts.SET, async (_ctx, sessionId: string, draft: import('@craft-agent/shared/config').SessionDraft) => {
+    // A delayed renderer draft save must not bring back a deleted campaign's text.
+    if (!deps.sessionManager.getSessions().some((session) => session.id === sessionId)) {
+      deleteSessionDraft(sessionId)
+      return
+    }
     setSessionDraft(sessionId, draft)
   })
 

@@ -223,6 +223,7 @@ import {
   normalizeWorkflowTriggerInputs,
   readActivatedWorkflows,
   readRun as readWorkflowRun,
+  listRuns as listWorkflowRuns,
   setWorkflowActive,
   WEEKLY_SIGNAL_SCAN_SLUG,
   writeGlobalWorkflow,
@@ -770,7 +771,9 @@ function memoryEntryTitle(entry: WorkflowMemoryEntry): string {
 function findPreviousUserMessage(messages: Message[], beforeIndex: number): Message | undefined {
   for (let index = beforeIndex - 1; index >= 0; index--) {
     const message = messages[index]
-    if (message.role === 'user') return message
+    // A hidden input is a turn boundary, not permission to pair its response
+    // with an older real user request.
+    if (message.role === 'user') return message.hidden ? undefined : message
   }
   return undefined
 }
@@ -1616,6 +1619,7 @@ interface ManagedSession {
   lastSentAttachments?: FileAttachment[]
   lastSentStoredAttachments?: StoredAttachment[]
   lastSentOptions?: SendMessageOptions
+  lastSentTurnContext?: Pick<ManagedSession, 'customSystemPrompt' | 'agentSkillSlugs' | 'enabledSourceSlugs' | 'launchReceipt'>
   // Flag to prevent infinite retry loops (reset at start of each sendMessage)
   authRetryAttempted?: boolean
   // Flag indicating auth retry is in progress (to prevent complete handler from interfering)
@@ -2052,6 +2056,7 @@ function isCreativeLabWorkspaceInfo(workspace: { id?: string; name?: string; roo
 export class SessionManager implements ISessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
   private sendMessageAdmissionLocks: Map<string, Promise<void>> = new Map()
+  private taskModeOpenings = new Map<string, SendMessageOptions>()
   private canvasVisualReviewAttempts: Map<string, number> = new Map()
   private automationMessagingBinder?: (input: {
     workspaceId: string
@@ -2418,6 +2423,9 @@ export class SessionManager implements ISessionManager {
       this.configWatchers.delete(workspace.rootPath)
 
       const automationSystem = this.automationSystems.get(workspace.rootPath)
+      if (automationSystem?.hasPendingExecutions()) {
+        throw new Error('Wait for active automations to finish before changing this workspace.')
+      }
       this.automationSystems.delete(workspace.rootPath)
       if (automationSystem) await automationSystem.dispose()
 
@@ -2428,6 +2436,75 @@ export class SessionManager implements ISessionManager {
       this.setupConfigWatcher(workspace.rootPath, workspaceId)
       throw error
     }
+  }
+
+  /** Freeze a campaign only when there is no work left executing against its files. */
+  async quiesceCampaignForDeletion(workspaceId: string): Promise<WorkspaceMigrationRuntimeLease> {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Campaign not found.')
+    const campaignAutomations = this.automationSystems.get(workspace.rootPath)
+    const assertIdle = () => {
+      const activeRun = this.workflowRunner?.getActiveRuns(workspaceId).some((run) =>
+        !['succeeded', 'failed', 'cancelled', 'interrupted'].includes(run.state))
+      const persistedActiveRun = listWorkflowRuns(workspace.rootPath).some((run) =>
+        ['created', 'queued', 'running', 'paused'].includes(run.state))
+      const work = parseScheduledWorkDocResult(loadContextDoc(workspace.rootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspaceId)
+      if (!work.ok) throw new Error('The campaign schedule could not be read safely. Repair it before deleting this campaign.')
+      const researchRunning = listDeepResearchRuns(workspace.rootPath).some((run) => run.state === 'running')
+      if (activeRun || persistedActiveRun || researchRunning || campaignAutomations?.hasPendingExecutions() || this.scheduledWorkRunner?.isWorkspaceScanInFlight(workspace.rootPath)
+        || work.work.items.some((item) => !item.deletedAt && item.status === 'running')) {
+        throw new Error('Stop active campaign workflows, research, and scheduled work before deleting this campaign.')
+      }
+    }
+    assertIdle()
+    const lease = await this.quiesceWorkspaceForMigration(workspaceId)
+    try {
+      assertIdle()
+      return lease
+    } catch (error) {
+      await this.resumeWorkspaceAfterMigration(lease)
+      throw error
+    }
+  }
+
+  /** Called after preservation, while the campaign deletion lease still blocks new work. */
+  async disposeCampaignSessions(lease: WorkspaceMigrationRuntimeLease): Promise<void> {
+    if (lease.released || !this.workspaceMigrationLocks.has(lease.workspaceId)) {
+      throw new Error('Campaign cleanup is no longer locked.')
+    }
+    for (const managed of [...this.sessions.values()]) {
+      if (managed.workspace.id !== lease.workspaceId) continue
+      this.chatGoalDriver.invalidate(managed.id)
+      const timer = this.deltaFlushTimers.get(managed.id)
+      if (timer) clearTimeout(timer)
+      this.deltaFlushTimers.delete(managed.id)
+      this.pendingDeltas.delete(managed.id)
+      this.clearAdminRememberApprovalsForSession(managed.id)
+      this.clearPendingPermissionRequestsForSession(managed.id)
+      sessionPersistenceQueue.cancel(managed.id)
+      unregisterSessionScopedToolCallbacks(managed.id)
+      this.browserPaneManager?.destroyForSession(managed.id)
+      managed.agent?.dispose()
+      managed.agent = null
+      if (managed.mcpPool) await managed.mcpPool.disconnectAll()
+      managed.mcpPool = undefined
+      if (managed.poolServer) await managed.poolServer.stop()
+      managed.poolServer = undefined
+    }
+  }
+
+  finishCampaignDeletion(lease: WorkspaceMigrationRuntimeLease): void {
+    for (const managed of [...this.sessions.values()]) {
+      if (managed.workspace.id !== lease.workspaceId) continue
+      this.sessions.delete(managed.id)
+      this.sendEvent({ type: 'session_deleted', sessionId: managed.id }, lease.workspaceId)
+    }
+    this.emitUnreadSummaryChanged()
+    lease.released = true
+    this.workspaceMigrationLocks.delete(lease.workspaceId)
+    // Keep the retired root fenced for the remainder of this process. Already queued
+    // callbacks must never recreate files after the campaign has been removed.
+    MIGRATING_WORKSPACE_ROOTS.add(lease.sourceRootPath)
   }
 
   async rebindWorkspaceAfterMigration(lease: WorkspaceMigrationRuntimeLease, newRootPath: string): Promise<void> {
@@ -2457,6 +2534,7 @@ export class SessionManager implements ISessionManager {
       managed.workspace = workspace
     }
 
+    MIGRATING_WORKSPACE_ROOTS.delete(newRootPath)
     this.setupConfigWatcher(newRootPath, lease.workspaceId)
     lease.released = true
     this.workspaceMigrationLocks.delete(lease.workspaceId)
@@ -2468,6 +2546,7 @@ export class SessionManager implements ISessionManager {
     if (lease.released) return
     const workspace = getWorkspaceByNameOrId(lease.workspaceId)
     if (workspace?.rootPath === lease.sourceRootPath) {
+      MIGRATING_WORKSPACE_ROOTS.delete(lease.sourceRootPath)
       this.setupConfigWatcher(lease.sourceRootPath, lease.workspaceId)
     }
     lease.released = true
@@ -2476,6 +2555,7 @@ export class SessionManager implements ISessionManager {
   }
 
   setupConfigWatcher(workspaceRootPath: string, workspaceId: string): void {
+    if (MIGRATING_WORKSPACE_ROOTS.has(workspaceRootPath)) return
     // Check if already watching this workspace
     if (this.configWatchers.has(workspaceRootPath)) {
       return // Already watching this workspace
@@ -4158,7 +4238,8 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'update-system-agent'
             || a.slug === 'catalog-royalty-agent'
             || a.slug === 'legal-agent'
-            || a.slug === 'site-builder',
+            || a.slug === 'site-builder'
+            || a.slug === 'website-agent',
         )
         const { ensured } = ensureRequiredAgents(required)
         if (ensured > 0) {
@@ -6584,6 +6665,7 @@ user a clickable link to where the thing now lives.`
 
   // Persist a session to disk (async with debouncing)
   private persistSession(managed: ManagedSession): void {
+    if (MIGRATING_WORKSPACE_ROOTS.has(managed.workspace.rootPath)) return
     try {
       // Filter out transient status messages (progress indicators like "Compacting...")
       // Error messages are now persisted with rich fields for diagnostics
@@ -7804,7 +7886,10 @@ user a clickable link to where the thing now lives.`
    * 3. global defaultLlmConnection
    * 4. fallback: no connection configured
    */
-  private async getOrCreateAgent(managed: ManagedSession): Promise<AgentInstance> {
+  private async getOrCreateAgent(
+    managed: ManagedSession,
+    turnContext: Pick<ManagedSession, 'customSystemPrompt' | 'agentSkillSlugs' | 'enabledSourceSlugs' | 'launchReceipt'> = managed,
+  ): Promise<AgentInstance> {
     if (!managed.agent) {
       const end = perf.start('agent.create', { sessionId: managed.id })
       const agentSlug = managed.spawnedFromAgent?.agentSlug
@@ -7866,7 +7951,7 @@ user a clickable link to where the thing now lives.`
       // ============================================================
 
       const sessionPath = getSessionStoragePath(managed.workspace.rootPath, managed.id)
-      const enabledSlugs = managed.enabledSourceSlugs || []
+      const enabledSlugs = turnContext.enabledSourceSlugs || []
       const allSources = loadAllSources(managed.workspace.rootPath)
       const enabledSources = allSources.filter(s =>
         enabledSlugs.includes(s.config.slug) && isSourceUsable(s)
@@ -7908,7 +7993,7 @@ user a clickable link to where the thing now lives.`
         // it when forwarding server-spawned workflow, automation, and Pulse
         // sessions or HNIC loses its Manager and scheduling tools.
         ...backendAgentSessionFields(managed.spawnedFromAgent),
-        launchReceipt: managed.launchReceipt,
+        launchReceipt: turnContext.launchReceipt,
         sdkSessionId: managed.sdkSessionId,
         branchFromSdkSessionId: managed.branchContextStrategy === 'sdk-fork' ? managed.branchFromSdkSessionId : undefined,
         branchFromSessionPath: managed.branchContextStrategy === 'sdk-fork' ? managed.branchFromSessionPath : undefined,
@@ -8037,8 +8122,8 @@ user a clickable link to where the thing now lives.`
         skipConfigWatcher: true, // Server owns workspace-level ConfigWatcher — don't duplicate in agents
         automationSystem: this.automationSystems.get(managed.workspace.rootPath),
         systemPromptPreset: managed.systemPromptPreset,
-        customSystemPrompt: managed.customSystemPrompt,
-        agentSkillSlugs: managed.agentSkillSlugs,
+        customSystemPrompt: turnContext.customSystemPrompt,
+        agentSkillSlugs: turnContext.agentSkillSlugs,
         teamAutomationPolicy: {
           enabled: workspaceConfig?.team?.enabled === true,
           automatedAncestry: hasAutomatedSessionAncestry(managed.launchReceipt),
@@ -11524,7 +11609,7 @@ user a clickable link to where the thing now lives.`
       const hasVisibleConversation = managed.messages.some(message => (
         !message.hidden && (message.role === 'user' || message.role === 'assistant')
       ))
-      if (managed.isProcessing && !hasVisibleConversation) {
+      if (this.taskModeOpenings.has(sessionId) || (managed.isProcessing && !hasVisibleConversation)) {
         throw new Error('The opening response is still starting. Choose a new focus after it appears.')
       }
       const isInitialSelection = managed.launchReceipt?.taskModeSelectionPending === true
@@ -11551,10 +11636,14 @@ user a clickable link to where the thing now lives.`
         ? (resolved.enabledSourceSlugs ?? [])
         : (mergeUniqueStrings(managed.enabledSourceSlugs, resolved.enabledSourceSlugs) ?? [])
       managed.trustedWorkerTools = resolved.trustedWorkerTools
-      managed.agent?.setAgentContext({
-        customSystemPrompt: managed.customSystemPrompt,
-        agentSkillSlugs: managed.agentSkillSlugs,
-      })
+      // Persist the next-turn choice now; never mutate the active provider or
+      // fallback attempt. sendMessage applies its admission snapshot below.
+      if (!managed.isProcessing) {
+        managed.agent?.setAgentContext({
+          customSystemPrompt: managed.customSystemPrompt,
+          agentSkillSlugs: managed.agentSkillSlugs,
+        })
+      }
       managed.launchReceipt = completeLaunchReceipt({
         ...resolvedReceipt,
         createdAt: managed.launchReceipt?.createdAt ?? resolvedReceipt.createdAt,
@@ -11595,30 +11684,44 @@ user a clickable link to where the thing now lives.`
       starterPrompt = shouldStartConversation
         ? buildAgentTaskModeStarterPrompt(resolvedReceipt.taskMode)
         : undefined
+      if (starterPrompt) this.taskModeOpenings.set(sessionId, { hidden: true, inputOrigin: 'system' })
     } finally {
       releaseSelectionLock()
     }
 
     if (shouldStartConversation && starterPrompt) {
-      await new Promise<void>((resolve, reject) => {
-        let acknowledged = false
-        void this.sendMessage(
-          sessionId,
-          starterPrompt,
-          undefined,
-          undefined,
-          { hidden: true, inputOrigin: 'system' },
-          undefined,
-          undefined,
-          () => {
-            acknowledged = true
-            resolve()
-          },
-        ).catch((error) => {
-          sessionLog.error(`Failed to start focused conversation for session ${sessionId}:`, error)
-          if (!acknowledged) reject(error)
+      try {
+        await new Promise<void>((resolve, reject) => {
+          let acknowledged = false
+          void this.sendMessage(
+            sessionId,
+            starterPrompt,
+            undefined,
+            undefined,
+            this.taskModeOpenings.get(sessionId),
+            undefined,
+            undefined,
+            () => {
+              acknowledged = true
+              resolve()
+            },
+          ).then(() => {
+            if (!acknowledged) reject(new Error('The opening message was not accepted.'))
+          }).catch((error) => {
+            sessionLog.error(`Failed to start focused conversation for session ${sessionId}:`, error)
+            if (!acknowledged) reject(error)
+          })
         })
-      })
+      } catch (error) {
+        const managed = this.sessions.get(sessionId)
+        if (managed?.launchReceipt && !managed.messages.some(message => message.role === 'user')) {
+          managed.launchReceipt.taskModeSelectionPending = true
+          this.persistSession(managed)
+        }
+        throw error
+      } finally {
+        this.taskModeOpenings.delete(sessionId)
+      }
     }
   }
 
@@ -11661,6 +11764,7 @@ user a clickable link to where the thing now lives.`
    * inconvenience; a turn that errors because of one is a bug.
    */
   private recordSessionLogEntry(managed: ManagedSession): void {
+    if (MIGRATING_WORKSPACE_ROOTS.has(managed.workspace.rootPath)) return
     const agentSlug = managed.spawnedFromAgent?.agentSlug
     // The log is per agent. A plain chat session has no agent to file it under.
     if (!agentSlug) return
@@ -11695,6 +11799,7 @@ user a clickable link to where the thing now lives.`
     if (assistantIndex < 0) return
 
     const assistantMessage = managed.messages[assistantIndex]
+    if (assistantMessage.hidden) return
     const userMessage = findPreviousUserMessage(managed.messages, assistantIndex)
     if (!userMessage?.content.trim() || !assistantMessage.content.trim()) return
 
@@ -11917,7 +12022,7 @@ user a clickable link to where the thing now lives.`
 
     // Select a spread of user messages (first, middle, last) to capture the session's purpose
     const allUserContents = managed.messages
-      .filter((m) => m.role === 'user')
+      .filter((m) => m.role === 'user' && !m.hidden)
       .map((m) => m.content)
     const userMessages = selectSpreadMessages(allUserContents)
 
@@ -11930,7 +12035,7 @@ user a clickable link to where the thing now lives.`
 
     // Get the most recent assistant response
     const lastAssistantMsg = managed.messages
-      .filter((m) => m.role === 'assistant' && !m.isIntermediate)
+      .filter((m) => m.role === 'assistant' && !m.isIntermediate && !m.hidden)
       .slice(-1)[0]
 
     const assistantResponse = lastAssistantMsg?.content ?? ''
@@ -12641,6 +12746,18 @@ user a clickable link to where the thing now lives.`
     let signalAdmissionMessageId: string | undefined
     let signalAdmissionAccepted = false
     const previousLastMessageRole = managed.lastMessageRole
+    const isTaskModeOpening = this.taskModeOpenings.has(sessionId)
+      && this.taskModeOpenings.get(sessionId) === options
+    let openingMessageId: string | undefined
+    let openingMessageAccepted = false
+    // The admission lock makes this the focus for this entire response,
+    // including asynchronous initialization and every fallback attempt.
+    const turnContext = (_isAuthRetry && managed.lastSentTurnContext) || {
+      customSystemPrompt: managed.customSystemPrompt,
+      agentSkillSlugs: managed.agentSkillSlugs ? [...managed.agentSkillSlugs] : undefined,
+      enabledSourceSlugs: managed.enabledSourceSlugs ? [...managed.enabledSourceSlugs] : undefined,
+      launchReceipt: managed.launchReceipt,
+    }
 
     try {
       // Clear any pending plan execution state when a new user message is sent.
@@ -12652,6 +12769,10 @@ user a clickable link to where the thing now lives.`
 
       // Ensure messages are loaded before we try to add new ones
       await this.ensureMessagesLoaded(managed)
+
+      if (this.taskModeOpenings.has(sessionId) && !isTaskModeOpening) {
+        throw new Error('The opening response is still starting. Try again after it appears.')
+      }
 
       if (managed.launchReceipt?.taskModeSelectionPending) {
         throw new Error('Choose what this worker should focus on before sending your first message.')
@@ -12869,6 +12990,7 @@ user a clickable link to where the thing now lives.`
           ...(options?.hidden ? { hidden: true } : {}),
         }
         if (pendingSignalReference) signalAdmissionMessageId = userMessage.id
+        if (isTaskModeOpening) openingMessageId = userMessage.id
         managed.messages.push(userMessage)
 
         // Keep an invisible system nudge out of the session-list preview.
@@ -12892,6 +13014,7 @@ user a clickable link to where the thing now lives.`
           this.sendEvent({ type: 'goal_state_changed', sessionId, chatGoal: admittedGoalState }, managed.workspace.id)
           goalAdmissionRollback = undefined
         }
+        if (isTaskModeOpening) openingMessageAccepted = true
         onAck?.(userMessage.id)
 
         // Emit user_message event so UI can confirm the optimistic message
@@ -12979,6 +13102,13 @@ user a clickable link to where the thing now lives.`
       }
       releaseAdmissionLockOnce()
     } catch (err) {
+      if (openingMessageId && !openingMessageAccepted) {
+        sessionPersistenceQueue.cancel(managed.id)
+        managed.messages = managed.messages.filter(entry => entry.id !== openingMessageId)
+        if (managed.launchReceipt) managed.launchReceipt.taskModeSelectionPending = true
+        this.persistSession(managed)
+        try { await this.flushSession(managed.id) } catch { /* The next selection retries persistence. */ }
+      }
       if (pendingSignalReference && signalAdmissionMessageId && !signalAdmissionAccepted) {
         sessionPersistenceQueue.cancel(managed.id)
         managed.messages = managed.messages.filter(message => message.id !== signalAdmissionMessageId)
@@ -13013,6 +13143,7 @@ user a clickable link to where the thing now lives.`
     managed.lastSentAttachments = attachments
     managed.lastSentStoredAttachments = storedAttachments
     managed.lastSentOptions = options
+    managed.lastSentTurnContext = turnContext
 
     // Capture the generation to detect if a new request supersedes this one.
     // This prevents the finally block from clobbering state when a follow-up message arrives.
@@ -13062,6 +13193,7 @@ user a clickable link to where the thing now lives.`
 
           if (toEnable.length > 0) {
             managed.enabledSourceSlugs = [...(managed.enabledSourceSlugs || []), ...toEnable]
+            turnContext.enabledSourceSlugs = mergeUniqueStrings(turnContext.enabledSourceSlugs, toEnable)
             sessionLog.info(`Pre-enabled sources for skill invocation: ${toEnable.join(', ')}`)
             this.persistSession(managed)
             this.sendEvent({
@@ -13084,7 +13216,13 @@ user a clickable link to where the thing now lives.`
     // streaming try/catch below, so it needs its own cleanup boundary.
     let agent: AgentInstance
     try {
-      agent = await this.getOrCreateAgent(managed)
+      agent = await this.getOrCreateAgent(managed, turnContext)
+      if (turnContext.launchReceipt?.taskMode) {
+        agent.setAgentContext({
+          customSystemPrompt: turnContext.customSystemPrompt,
+          agentSkillSlugs: turnContext.agentSkillSlugs,
+        })
+      }
     } catch (error) {
       sendSpan.mark('agent.init_failed')
       sendSpan.setMetadata('error', error instanceof Error ? error.message : String(error))
@@ -13106,10 +13244,13 @@ user a clickable link to where the thing now lives.`
     agent.setAllSources(allSources)
     sendSpan.mark('sources.loaded')
 
+    const turnSourceSlugs = turnContext.launchReceipt?.taskMode
+      ? turnContext.enabledSourceSlugs
+      : managed.enabledSourceSlugs
     // Apply source servers if any are enabled
-    if (managed.enabledSourceSlugs?.length) {
+    if (turnSourceSlugs?.length) {
       // Always build server configs fresh (no caching - single source of truth)
-      const sources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs)
+      const sources = getSourcesBySlugs(workspaceRootPath, turnSourceSlugs)
       // Pass session path so large API responses can be saved to session folder
       const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
       const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback())
@@ -13170,7 +13311,7 @@ user a clickable link to where the thing now lives.`
       if (!tokensRefreshed) {
         const mcpCount = Object.keys(mcpServers).length
         const apiCount = Object.keys(apiServers).length
-        if (mcpCount > 0 || apiCount > 0 || managed.enabledSourceSlugs.length > 0) {
+        if (mcpCount > 0 || apiCount > 0 || turnSourceSlugs.length > 0) {
           const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
           const usableSources = sources.filter(isSourceUsable)
           await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
@@ -15498,7 +15639,7 @@ user a clickable link to where the thing now lives.`
 
     const messages = managed.messages
       .filter(isConversationContextMessage)
-      .filter(m => !m.isIntermediate)
+      .filter(m => !m.isIntermediate && !m.hidden)
       .map(m => ({
         type: m.role as 'user' | 'assistant',
         content: m.content,

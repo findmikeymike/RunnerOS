@@ -1000,6 +1000,11 @@ export class AutomationSystem implements AutomationsConfigProvider {
     return this.disposed;
   }
 
+  /** Disposal stops new events but cannot terminate an already executing hook. */
+  hasPendingExecutions(): boolean {
+    return this.eventBus.hasPendingExecutions();
+  }
+
   /**
    * Dispose the automation system, cleaning up all resources.
    */

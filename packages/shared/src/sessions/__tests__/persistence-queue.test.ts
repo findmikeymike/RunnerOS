@@ -25,6 +25,27 @@ function makeHeader(overrides: Partial<SessionHeader> = {}): SessionHeader {
   }
 }
 
+describe('session persistence cleanup barriers', () => {
+  for (const method of ['flush', 'flushAll'] as const) {
+    it(`${method} waits for a write that already left the pending queue`, async () => {
+      const queue = new SessionPersistenceQueue()
+      let finish!: () => void
+      const writing = new Promise<void>((resolve) => { finish = resolve })
+      const activeWrites = (queue as any).writeInProgress as Map<string, Promise<void>>
+      activeWrites.set('campaign-session', writing)
+      void writing.then(() => activeWrites.delete('campaign-session'))
+      let completed = false
+      const barrier = (method === 'flush' ? queue.flush('campaign-session') : queue.flushAll()).then(() => { completed = true })
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(completed).toBe(false)
+      finish()
+      await barrier
+      expect(completed).toBe(true)
+    })
+  }
+})
+
 describe('session persistence header conflict helpers', () => {
   it('metadata signature ignores non-metadata fields', () => {
     const a = makeHeader({ name: 'A', lastUsedAt: 100 })

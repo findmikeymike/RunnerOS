@@ -318,6 +318,12 @@ export class WorkspaceEventBus implements EventBus {
   private readonly anyHandlers: Set<AnyEventHandler> = new Set();
   private readonly rateCounts: Map<string, RateWindow> = new Map();
   private disposed = false;
+  private pendingExecutions = 0;
+
+  /** Includes handlers still finishing after the bus has been disposed. */
+  hasPendingExecutions(): boolean {
+    return this.pendingExecutions > 0;
+  }
 
   constructor(workspaceId: string) {
     this.workspaceId = workspaceId;
@@ -392,7 +398,13 @@ export class WorkspaceEventBus implements EventBus {
     const anyPromises = Array.from(anyHandlersCopy).map((handler) => Promise.resolve().then(() => handler(event, payload as BaseEventPayload)));
 
     // Wait for all handlers to complete
-    const settled = await Promise.allSettled([...eventPromises, ...anyPromises]);
+    this.pendingExecutions++;
+    let settled: PromiseSettledResult<void>[];
+    try {
+      settled = await Promise.allSettled([...eventPromises, ...anyPromises]);
+    } finally {
+      this.pendingExecutions--;
+    }
     const failures = settled.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
     for (const failure of failures) {
       log.error(`[EventBus] Handler error for ${event}:`, failure.reason);

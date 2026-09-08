@@ -1115,6 +1115,31 @@ app.whenReady().then(async () => {
 
       // IPC handlers — preload uses sendSync to get WS connection details
 
+      const { createCampaignCleanupController } = await import('./campaign-cleanup')
+      const campaignCleanup = createCampaignCleanupController({
+        runtime: instance.sessionManager,
+        acquireRequestFence: () => instance.wsServer.acquireCampaignCleanupFence(),
+        stopMessaging: async (workspaceId) => { await messagingHandle?.registry.removeWorkspace(workspaceId) },
+        resumeMessaging: async (workspaceId) => { await messagingHandle?.initializeWorkspaces([workspaceId]) },
+        onDeleted: (result) => {
+          const hq = getWorkspaces().find((workspace) => workspace.id === result.hqWorkspaceId)
+          if (hq) {
+            void import('@craft-agent/server-core').then(({ scheduleHqStateContextRefresh }) => scheduleHqStateContextRefresh(hq.rootPath))
+          }
+          for (const managed of windowManager?.getAllWindows() ?? []) {
+            if (!managed.window.isDestroyed()) managed.window.webContents.send('campaign:deleted', { workspaceId: result.workspaceId, hqWorkspaceId: result.hqWorkspaceId })
+          }
+        },
+      })
+      ipcMain.handle('campaign:cleanupPreview', async (_event, workspaceId: string) => {
+        assertProductLicensedChannel('campaign:cleanupPreview')
+        return campaignCleanup.preview(workspaceId)
+      })
+      ipcMain.handle('campaign:delete', async (_event, workspaceId: string, previewToken: string) => {
+        assertProductLicensedChannel('campaign:delete')
+        return campaignCleanup.delete(workspaceId, previewToken)
+      })
+
       // Remove workspace from config (cleanup stale entries)
       ipcMain.handle('workspace:remove', async (_event, workspaceId: string) => {
         assertProductLicensedChannel('workspace:remove')

@@ -126,6 +126,10 @@ interface OutputMatchResult {
 }
 
 export class ScheduledWorkRunner {
+  isWorkspaceScanInFlight(workspaceRootPath: string): boolean {
+    return this.inFlight.has(workspaceRootPath)
+  }
+
   readonly runtimeId = randomUUID()
   private readonly inFlight = new Set<string>()
   private readonly activeAgentRuns = new Set<string>()

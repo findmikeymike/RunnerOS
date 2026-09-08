@@ -304,7 +304,7 @@ function coerceTaskModes(
       dropped += 1;
       continue;
     }
-    if ((primarySkillSlugs.length > 1 || raw.fullMode === true) && (kind !== 'bundle' || raw.fullMode !== true)) {
+    if ((primarySkillSlugs.length > 1 || raw.fullMode === true) && kind !== 'bundle') {
       dropped += 1;
       continue;
     }
