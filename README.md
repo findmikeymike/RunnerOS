@@ -3,9 +3,30 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
-## Current Creator Command Center Build
+## Canonical Artist OS Checkout
 
-Active feature worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/active/artist-os-release-kit` (`codex/artist-os-release-kit`)
+**Agents: always use this checkout for the current Artist OS app:**
+
+```text
+/Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os
+```
+
+It must be on `main` and synchronized with `origin/main`. Do not launch Artist OS
+from `/Users/michaelb.williams/RunnerOS` or an `active/` feature worktree; those
+can contain older code or a different product profile.
+
+Launch the latest main build with:
+
+```bash
+cd /Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os
+git pull --ff-only
+bun run electron:dev:artist-os
+```
+
+Use `electron:dev:artist-os`, not the generic `electron:dev`, so the app uses the
+Artist OS product variant and `~/.artist-os-dev` profile.
+
+## Current Creator Command Center Build
 
 Current focus: Artist HQ and Campaign execution, including the Release Kit asset architecture, Calendar/Automations scheduling, guarded social publishing, and delegated community engagement.
 
