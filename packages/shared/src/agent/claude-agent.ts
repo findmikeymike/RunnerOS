@@ -1273,10 +1273,10 @@ export class ClaudeAgent extends BaseAgent {
                 onDebug: (msg) => this.onDebug?.(msg),
               });
 
-              // Consume pending steer message (if any) — will be injected via additionalContext
-              const steerMsg = this.pendingSteerMessage;
+              // Only consume when this hook result actually injects additionalContext.
+              // Other results leave the update available for a later hook or recovery.
+              const steerMsg = this.consumePendingSteerMessage(checkResult.type);
               if (steerMsg) {
-                this.pendingSteerMessage = null;
                 this.debug(`Injecting steer via additionalContext on ${input.tool_name}`);
               }
 
@@ -2575,8 +2575,17 @@ This is a branched conversation. All prior messages in this conversation are par
       return false;
     }
     this.debug(`Steering mid-stream: "${message.slice(0, 100)}"`);
-    this.pendingSteerMessage = message;
+    this.pendingSteerMessage = this.pendingSteerMessage
+      ? `${this.pendingSteerMessage}\n\n${message}`
+      : message;
     return true;
+  }
+
+  private consumePendingSteerMessage(checkType: PreToolUseCheckResult['type']): string | null {
+    if (checkType !== 'allow' && checkType !== 'modify') return null;
+    const message = this.pendingSteerMessage;
+    this.pendingSteerMessage = null;
+    return message;
   }
 
   /**

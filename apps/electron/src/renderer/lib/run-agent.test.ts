@@ -126,7 +126,7 @@ describe('buildAgentCreateSessionOptions memory receipts', () => {
     ])
     expect(options.launchReceipt?.injected.agentCatalog).toBeUndefined()
     expect(options.customSystemPrompt).toContain('Task mode (host-selected):')
-    expect(options.customSystemPrompt).toContain('Related capability boundaries (awareness only')
+    expect(options.customSystemPrompt).toContain('Related capabilities (available on demand — not preloaded)')
     expect(options.customSystemPrompt).not.toContain('Network.')
   })
 

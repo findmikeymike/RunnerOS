@@ -443,7 +443,7 @@ export function FreeFormInput({
   const appShellContext = useOptionalAppShellContext()
   const isFocusedPanel = appShellContext?.isFocusedPanel ?? true
 
-  const effectivePlaceholder = ''
+  const effectivePlaceholder = isProcessing ? 'Send an update while the agent works…' : ''
 
   // Performance optimization: Always use internal state for typing to avoid parent re-renders
   // Sync FROM parent on mount/change (for restoring drafts)
@@ -1072,17 +1072,6 @@ export function FreeFormInput({
     observer.observe(containerRef.current)
     return () => observer.disconnect()
   }, [onHeightChange])
-
-  // In compact mode, immediately report collapsed height when processing state changes
-  // This ensures smooth animation timing when input collapses/expands
-  React.useEffect(() => {
-    if (!onHeightChange || !compactMode) return
-    if (isProcessing) {
-      // Collapsed state - only bottom bar visible (~44px)
-      onHeightChange(44)
-    }
-    // When not processing, ResizeObserver will report the full height
-  }, [compactMode, isProcessing, onHeightChange])
 
   // Check if running in Electron environment (has electronAPI)
   const hasElectronAPI = typeof window !== 'undefined' && !!window.electronAPI
@@ -1809,8 +1798,7 @@ export function FreeFormInput({
         </AnimatePresence>
 
         {/* Rich Text Input with inline mention badges */}
-        {/* In compact mode, hide input while processing (collapses to just bottom bar) */}
-        {!(compactMode && isProcessing) && (
+        {/* Keep updates reachable during processing, including compact chats. */}
         <RichTextInput
           ref={richInputRef}
           value={input}
@@ -1831,15 +1819,17 @@ export function FreeFormInput({
           skills={skills}
           sources={sources}
           workspaceId={workspaceSlug}
-          className="pl-5 pr-4 pt-4 pb-3 overflow-y-auto min-h-[88px]"
+          className={cn(
+            'pl-5 pr-4 overflow-y-auto',
+            compactMode && isProcessing ? 'py-3 min-h-[44px]' : 'pt-4 pb-3 min-h-[88px]',
+          )}
           style={{
-            maxHeight: inputMaxHeight,
+            maxHeight: compactMode && isProcessing ? Math.min(inputMaxHeight, 120) : inputMaxHeight,
             caretColor: RENDERER_PRODUCT_VARIANT === 'artist-os' ? 'rgba(255, 255, 255, 0.92)' : undefined,
           }}
           data-tutorial="chat-input"
           spellCheck={spellCheck}
         />
-        )}
 
         {/* Bottom Row: Controls - wrapped in relative container for status slot overlay */}
         <div className="relative">
@@ -2355,8 +2345,8 @@ export function FreeFormInput({
             </Tooltip>
           )}
 
-          {/* 6. Send/Stop Button - Always show stop when processing */}
-          {isProcessing ? (
+          {/* Sending an update uses the normal mid-stream path; Stop stays separate. */}
+          {isProcessing && (
             <Button
               type="button"
               size="icon"
@@ -2372,11 +2362,12 @@ export function FreeFormInput({
             >
               <Square className="h-3 w-3 fill-current" />
             </Button>
-          ) : (
+          )}
             <Button
               type="submit"
               size="icon"
-              aria-label={t('shortcuts.sendMessage')}
+              aria-label={isProcessing ? 'Send update' : t('shortcuts.sendMessage')}
+              title={isProcessing ? 'Send an update while the agent works' : undefined}
               className={cn(
                 'send-btn h-7 w-7 shrink-0 rounded-full ml-2',
                 RENDERER_PRODUCT_VARIANT === 'artist-os' &&
@@ -2387,7 +2378,6 @@ export function FreeFormInput({
             >
               <ArrowUp className="h-4 w-4" />
             </Button>
-          )}
           </div>
           </div>
         </div>
