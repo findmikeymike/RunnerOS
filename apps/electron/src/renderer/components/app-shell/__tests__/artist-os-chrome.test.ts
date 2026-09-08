@@ -80,9 +80,11 @@ describe('Artist OS persistent shell chrome', () => {
     expect(shell).toContain('project.items.length > 10')
     expect(shell).toContain('max-h-[min(440px,calc(100vh-260px))] overflow-y-auto')
     expect(shell).toContain('getSessionListDisplay(item, true)')
-    expect(shell).toContain('{subtitle}')
-    expect(shell).toContain('overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]')
-    expect(shell).toContain('<TooltipContent side="right" className="max-w-[300px] px-3 py-2.5">')
+    expect(shell).toContain("subtitle.length > 17")
+    expect(shell).toContain("`${subtitle.slice(0, 17).trimEnd()}…`")
+    expect(shell).toContain('sideOffset={1}')
+    expect(shell).toContain('className="w-[320px] max-w-[calc(100vw-180px)] whitespace-normal px-3 py-2.5"')
+    expect(shell).toContain('mt-1 line-clamp-2 text-[11.5px]')
   })
 
   test('keeps the black canvas scoped to Artist OS main content', () => {

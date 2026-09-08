@@ -3115,6 +3115,9 @@ function AppShellContent({
                   {project.items.map((item) => {
                     const active = item.id === session.selected
                     const { title, subtitle } = getSessionListDisplay(item, true)
+                    const compactSubtitle = subtitle && subtitle.length > 17
+                      ? `${subtitle.slice(0, 17).trimEnd()}…`
+                      : subtitle
                     return (
                       <Tooltip key={item.id} delayDuration={250}>
                         <TooltipTrigger asChild>
@@ -3130,19 +3133,25 @@ function AppShellContent({
                             )}
                           >
                             <span className="block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium leading-4">{title}</span>
-                            {subtitle && (
+                            {compactSubtitle && (
                               <span className={cn(
-                                "block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px] leading-3.5",
+                                "block w-full max-w-full whitespace-nowrap text-[10.5px] leading-3.5",
                                 active ? "text-white/55" : "text-white/30",
                               )}>
-                                {subtitle}
+                                {compactSubtitle}
                               </span>
                             )}
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent side="right" className="max-w-[300px] px-3 py-2.5">
-                          <p className="text-[11px] font-semibold text-foreground">{title}</p>
-                          {subtitle && <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{subtitle}</p>}
+                        <TooltipContent
+                          side="right"
+                          align="start"
+                          sideOffset={1}
+                          collisionPadding={8}
+                          className="w-[320px] max-w-[calc(100vw-180px)] whitespace-normal px-3 py-2.5"
+                        >
+                          <p className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/70">{title}</p>
+                          {subtitle && <p className="mt-1 line-clamp-2 text-[11.5px] leading-4 text-foreground/90">{subtitle}</p>}
                         </TooltipContent>
                       </Tooltip>
                     )
