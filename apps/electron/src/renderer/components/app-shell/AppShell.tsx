@@ -3116,28 +3116,35 @@ function AppShellContent({
                     const active = item.id === session.selected
                     const { title, subtitle } = getSessionListDisplay(item, true)
                     return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => handleSidebarSessionClick(item.id)}
-                        title={subtitle ? `${title}: ${subtitle}` : title}
-                        className={cn(
-                          "flex h-11 w-full min-w-0 flex-col justify-center rounded-[7px] px-2.5 text-left transition-colors",
-                          active
-                            ? "bg-white/[0.06] text-white"
-                            : "text-white/42 hover:bg-white/[0.035] hover:text-white/70",
-                        )}
-                      >
-                        <span className="block w-full truncate text-[12px] font-medium leading-4">{title}</span>
-                        {subtitle && (
-                          <span className={cn(
-                            "block w-full truncate text-[10.5px] leading-3.5",
-                            active ? "text-white/55" : "text-white/30",
-                          )}>
-                            {subtitle}
-                          </span>
-                        )}
-                      </button>
+                      <Tooltip key={item.id} delayDuration={250}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => handleSidebarSessionClick(item.id)}
+                            aria-label={subtitle ? `${title}: ${subtitle}` : title}
+                            className={cn(
+                              "flex h-11 w-full min-w-0 flex-col justify-center overflow-hidden rounded-[7px] px-2.5 pr-3 text-left transition-colors",
+                              active
+                                ? "bg-white/[0.06] text-white"
+                                : "text-white/42 hover:bg-white/[0.035] hover:text-white/70",
+                            )}
+                          >
+                            <span className="block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium leading-4">{title}</span>
+                            {subtitle && (
+                              <span className={cn(
+                                "block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px] leading-3.5",
+                                active ? "text-white/55" : "text-white/30",
+                              )}>
+                                {subtitle}
+                              </span>
+                            )}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-[300px] px-3 py-2.5">
+                          <p className="text-[11px] font-semibold text-foreground">{title}</p>
+                          {subtitle && <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{subtitle}</p>}
+                        </TooltipContent>
+                      </Tooltip>
                     )
                   })}
                 </div>
