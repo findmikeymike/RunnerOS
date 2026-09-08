@@ -396,7 +396,13 @@ for (const mode of ['scan', 'links'] as const) for (const failedPhase of ['metad
     restored = true;
     const events: WorkflowRunEvent[] = [];
     const prompts: string[] = [];
-    const runner = new WorkflowRunner({ createSession: async () => ({ id: randomUUID() }),
+    const runner = new WorkflowRunner({
+      // Production supplies this resolver for the contract's explicit task modes.
+      resolveAgentSessionOptions: async (_workspaceId, agentSlug, options) => {
+        if (agentSlug === 'youtube-intelligence-agent') expect(options?.taskModeId).toBe('weekly-intelligence');
+        return {};
+      },
+      createSession: async () => ({ id: randomUUID() }),
       sendMessage: async (_id, prompt) => { prompts.push(prompt); },
       getLastAssistantText: () => prompts.length === 1 ? 'Fresh analysis of both videos' : JSON.stringify({ ...report(), examinedVideoIds: [videoId, secondId], noFindingVideoIds: [secondId] }),
       getSessionToolUseCount: () => 0, abortSession: async () => {}, getWorkspaceRootPath: () => root,
@@ -519,7 +525,13 @@ for (const phase of ['metadata', 'transcript'] as const) test(`status reads neve
   service = new SignalService({ workspaces: () => [workspace], provider, permission, now: () => now, admitRetry });
   restored = true; permission.mockClear();
   const events: WorkflowRunEvent[] = [];
-  const runner = new WorkflowRunner({ createSession: async () => ({ id: randomUUID() }), sendMessage: async () => {},
+  const runner = new WorkflowRunner({
+    // Production supplies this resolver for the contract's explicit task modes.
+    resolveAgentSessionOptions: async (_workspaceId, agentSlug, options) => {
+      if (agentSlug === 'youtube-intelligence-agent') expect(options?.taskModeId).toBe('weekly-intelligence');
+      return {};
+    },
+    createSession: async () => ({ id: randomUUID() }), sendMessage: async () => {},
     getLastAssistantText: () => JSON.stringify(report()), abortSession: async () => {}, getWorkspaceRootPath: () => root,
     authorizeRerun: async (old, next, signal) => {
       const refreshed = await service.authorizeRetry(old, next, signal);
