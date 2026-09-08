@@ -88,7 +88,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(shell).toContain('min-w-0 truncate text-[10.5px]')
     expect(shell).toContain('getSessionPreviewText(item, 140, title) ?? subtitle ?? title')
     expect(shell).toContain('sideOffset={1}')
-    expect(shell).toContain('className="w-[240px] max-w-[calc(100vw-180px)] whitespace-normal px-2.5 py-2"')
+    expect(shell).toContain('className="w-auto max-w-[min(240px,calc(100vw-180px))] whitespace-normal break-words px-2.5 py-2"')
     expect(shell).toContain('line-clamp-2 text-[11px] leading-4 text-foreground/90')
     expect(shell).not.toContain('uppercase tracking-[0.08em]')
     expect(shell).toContain('ref={primaryNavScrollRef}')

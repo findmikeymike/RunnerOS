@@ -3152,7 +3152,7 @@ function AppShellContent({
                           align="start"
                           sideOffset={1}
                           collisionPadding={8}
-                          className="w-[240px] max-w-[calc(100vw-180px)] whitespace-normal px-2.5 py-2"
+                          className="w-auto max-w-[min(240px,calc(100vw-180px))] whitespace-normal break-words px-2.5 py-2"
                         >
                           <p className="line-clamp-2 text-[11px] leading-4 text-foreground/90">{hoverPreview}</p>
                         </TooltipContent>
