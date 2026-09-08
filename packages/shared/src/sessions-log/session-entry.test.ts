@@ -18,6 +18,25 @@ function msg(
 const NOW = new Date('2026-09-05T12:00:00.000Z');
 
 describe('buildSessionLogEntry', () => {
+  test('never logs a hidden starter as an artist request, even with a title', () => {
+    expect(buildSessionLogEntry({
+      sessionId: 'hidden',
+      title: 'Branding Agent',
+      messages: [msg('user', 'INTERNAL START', 0, { hidden: true }), msg('assistant', 'What inspires you?', 1)],
+    })).toBeNull();
+    const entry = buildSessionLogEntry({
+      sessionId: 'visible',
+      messages: [
+        msg('user', 'INTERNAL START', 0, { hidden: true }),
+        msg('assistant', 'What inspires you?', 1),
+        msg('user', 'I want a neon visual world', 2),
+        msg('assistant', 'Internal annotation', 100, { hidden: true }),
+      ],
+    });
+    expect(entry?.summary).toBe('I want a neon visual world');
+    expect(entry?.turnCount).toBe(1);
+    expect(entry?.durationMinutes).toBe(1);
+  });
   test('prefers the session title, which the app already paid a model call for', () => {
     const entry = buildSessionLogEntry({
       sessionId: 's1',

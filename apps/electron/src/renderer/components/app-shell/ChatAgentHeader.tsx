@@ -1,7 +1,6 @@
 import * as React from 'react'
-import { MoreHorizontal } from 'lucide-react'
+import { Diamond, MoreHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { CHAT_LAYOUT } from '@/config/layout'
 import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { StyledDropdownMenuContent } from '@/components/ui/styled-dropdown'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
@@ -12,6 +11,7 @@ interface ChatAgentHeaderProps {
   menu?: React.ReactNode
   leadingAction?: React.ReactNode
   rightSidebarButton?: React.ReactNode
+  focusControls?: React.ReactNode
   className?: string
 }
 
@@ -21,51 +21,55 @@ export function ChatAgentHeader({
   menu,
   leadingAction,
   rightSidebarButton,
+  focusControls,
   className,
 }: ChatAgentHeaderProps) {
   return (
-    <div className={cn('relative z-panel shrink-0 px-3 pt-2 @xs/panel:px-4', className)}>
-      <div className={cn(CHAT_LAYOUT.maxWidth, 'relative mx-auto flex h-9 min-w-0 items-center justify-center')}>
-        {leadingAction && <div className="titlebar-no-drag absolute left-0 shrink-0">{leadingAction}</div>}
-
-        <div
-          className="titlebar-no-drag flex h-8 min-w-0 max-w-[64%] items-center gap-0.5 rounded-[10px] border border-[#ff8063]/[0.34] px-1 shadow-tinted"
-          style={{ '--shadow-color': '244, 63, 47' } as React.CSSProperties}
-        >
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                tabIndex={description ? 0 : -1}
-                className={cn(
-                  'inline-flex h-7 min-w-0 items-center justify-center px-3',
-                  'text-[11px] font-medium uppercase tracking-[0.13em] text-white/95 outline-none',
-                  description && 'cursor-help focus-visible:ring-1 focus-visible:ring-orange-200/70',
-                )}
-              >
-                <span className="truncate">{name}</span>
-              </span>
-            </TooltipTrigger>
-            {description ? <TooltipContent side="bottom" className="max-w-[360px] text-xs">{description}</TooltipContent> : null}
-          </Tooltip>
-          {menu && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Chat options"
-                  className="flex h-6 w-6 items-center justify-center rounded-[6px] text-white/38 transition-colors hover:bg-white/[0.07] hover:text-white/78 focus:outline-none focus-visible:ring-1 focus-visible:ring-white/25"
+    <div className={cn(
+      'relative z-panel flex min-h-[64px] shrink-0 items-center gap-3 border-b border-white/[0.07] bg-gradient-to-b from-[#16181c]/95 to-[#0c0e11]/95 px-3 py-2 shadow-hairline-top backdrop-blur-xl @md/panel:gap-5 @md/panel:px-5',
+      className,
+    )}>
+      {leadingAction && <div className="titlebar-no-drag shrink-0">{leadingAction}</div>}
+      <div className="titlebar-no-drag flex max-w-[48%] shrink-0 items-center gap-2.5 @md/panel:max-w-[38%]">
+        <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-[#ff9b7d]/20 bg-gradient-to-br from-[#ff9b7d]/12 to-[#ff8063]/[0.025] text-[#ffac91] shadow-hairline-top">
+          <Diamond className="size-3.5" strokeWidth={1.5} />
+        </span>
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <h2
+                  tabIndex={description ? 0 : -1}
+                  className={cn(
+                    'min-w-0 truncate rounded text-[10px] font-semibold uppercase leading-5 tracking-[0.1em] text-white/90 outline-none @md/panel:text-[11px]',
+                    description && 'cursor-help focus-visible:ring-1 focus-visible:ring-[#ffac91]/70',
+                  )}
                 >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <StyledDropdownMenuContent align="end" sideOffset={6}>
-                {menu}
-              </StyledDropdownMenuContent>
-            </DropdownMenu>
-          )}
+                  {name}
+                </h2>
+              </TooltipTrigger>
+              {description ? <TooltipContent side="bottom" className="max-w-[360px] text-xs">{description}</TooltipContent> : null}
+            </Tooltip>
+            {menu && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Chat options"
+                    className="flex size-6 shrink-0 items-center justify-center rounded-md text-white/35 transition-colors hover:bg-white/[0.07] hover:text-white/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#ffac91]/70"
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <StyledDropdownMenuContent align="start" sideOffset={8}>{menu}</StyledDropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+          {focusControls && <p className="whitespace-nowrap text-[10px] italic leading-4 text-white/45">What are we doing?</p>}
         </div>
-        {rightSidebarButton && <div className="titlebar-no-drag absolute right-0 shrink-0">{rightSidebarButton}</div>}
       </div>
+      {focusControls && <div className="min-w-0 flex-1 border-l border-white/[0.07] pl-3 @md/panel:pl-5">{focusControls}</div>}
+      {rightSidebarButton && <div className="titlebar-no-drag ml-auto shrink-0">{rightSidebarButton}</div>}
     </div>
   )
 }

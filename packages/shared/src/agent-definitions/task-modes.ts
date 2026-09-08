@@ -75,6 +75,12 @@ export function buildAgentTaskModePromptSection(mode: ResolvedAgentTaskMode | un
     `- Outcome: ${mode.description}`,
     `- Primary ${mode.primarySkillSlugs.length === 1 ? 'skill' : 'skills'} already selected: ${mode.primarySkillSlugs.map((slug) => `\`${slug}\``).join(', ')}`,
   ];
+  if (mode.primarySkillSlugs.length > 1 && !mode.fullMode) {
+    lines.push(
+      'Use every selected primary skill together for the selected outcome. Read both skill instructions before substantive work; do not pick only one.',
+      'Develop one coherent result through the conversation, not separate exercises or duplicate questionnaires. Reuse known artist context, ask only what is missing, and connect the two disciplines explicitly. This is a focused pairing, not a full brand-system pass.',
+    );
+  }
   if (mode.adjacentSkills.length > 0) {
     lines.push('', 'Related capabilities (available on demand — not preloaded):');
     for (const adjacent of mode.adjacentSkills) {

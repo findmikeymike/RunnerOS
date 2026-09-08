@@ -25,6 +25,7 @@ import { useAppShellContext, usePendingPermission, usePendingCredential, useSess
 import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
 import { coerceInputText } from '@/lib/input-text'
+import { syncTaskModeSelection, finishTaskModeSelection } from '@/lib/task-mode-selection-state'
 import { productDeepLink, RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
 import { normalizeArtistPermissionMode } from '@/components/app-shell/input/artist-permission-modes'
 import { deriveSessionMessagesLoadState, formatSessionLoadFailure } from '@/lib/session-load'
@@ -429,13 +430,15 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   )
   const taskModes = React.useMemo(() => currentAgent?.metadata.taskModes ?? [], [currentAgent])
   const receiptTaskModeId = session?.launchReceipt?.taskMode?.id
-  const [confirmedTaskModeId, setConfirmedTaskModeId] = React.useState<string | undefined>(receiptTaskModeId)
-  const [applyingTaskModeId, setApplyingTaskModeId] = React.useState<string | null>(null)
-
-  React.useEffect(() => {
-    setConfirmedTaskModeId(receiptTaskModeId)
-    setApplyingTaskModeId(null)
-  }, [receiptTaskModeId, sessionId])
+  const [taskModeState, setTaskModeState] = React.useState(() => syncTaskModeSelection(null, sessionId, receiptTaskModeId))
+  // Reconcile during render so a new session never renders with the previous
+  // session's acknowledgement, even before effects have run.
+  const currentTaskModeState = syncTaskModeSelection(taskModeState, sessionId, receiptTaskModeId)
+  if (currentTaskModeState !== taskModeState) setTaskModeState(currentTaskModeState)
+  const activeTaskModeState = React.useRef(currentTaskModeState)
+  activeTaskModeState.current = currentTaskModeState
+  const confirmedTaskModeId = currentTaskModeState.confirmedModeId
+  const applyingTaskModeId = currentTaskModeState.request?.modeId ?? null
 
   // The launch receipt can lag one event behind a successful mid-conversation
   // focus change, so prefer the local RPC acknowledgement until it catches up.
@@ -450,24 +453,28 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const handleTaskModeSelect = React.useCallback(async (taskModeId: string) => {
     if (!session || applyingTaskModeId || openingTaskModeConversation || selectedTaskModeId === taskModeId) return
     const shouldStartConversation = taskModeSelectionRequired && !conversationStarted
-    setApplyingTaskModeId(taskModeId)
+    const request = { modeId: taskModeId }
+    setTaskModeState((state) => ({ ...state, request }))
     try {
       await window.electronAPI.sessionCommand(session.id, {
         type: 'selectTaskMode',
         taskModeId,
         startConversation: shouldStartConversation,
       })
-      setConfirmedTaskModeId(taskModeId)
-      if (!shouldStartConversation) {
+      setTaskModeState((state) => finishTaskModeSelection(state, session.id, request, true))
+      if (activeTaskModeState.current.sessionId === session.id
+        && activeTaskModeState.current.request === request && !shouldStartConversation) {
         const label = taskModes.find((mode) => mode.id === taskModeId)?.label ?? 'New focus'
         toast.success(`${label} will guide the next reply.`)
       }
     } catch (error) {
-      toast.error('Could not set worker focus', {
-        description: error instanceof Error ? error.message : String(error),
-      })
-    } finally {
-      setApplyingTaskModeId(null)
+      setTaskModeState((state) => finishTaskModeSelection(state, session.id, request, false))
+      if (activeTaskModeState.current.sessionId === session.id
+        && activeTaskModeState.current.request === request) {
+        toast.error('Could not set worker focus', {
+          description: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
   }, [applyingTaskModeId, conversationStarted, openingTaskModeConversation, selectedTaskModeId, session, taskModeSelectionRequired, taskModes])
   const hasUnreadMessages = sessionMeta
@@ -702,6 +709,16 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       menu={titleMenu}
       leadingAction={leadingAction}
       rightSidebarButton={rightSidebarButton}
+      focusControls={showTaskModeBar ? (
+        <ChatAgentTaskModeBar
+          modes={taskModes}
+          selectedModeId={selectedTaskModeId}
+          applyingModeId={applyingTaskModeId}
+          conversationStarted={conversationStarted}
+          openingConversation={openingTaskModeConversation}
+          onSelect={(taskModeId) => void handleTaskModeSelect(taskModeId)}
+        />
+      ) : undefined}
     />
   ) : (
     <PanelHeader title={displayTitle} titleMenu={titleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
@@ -801,16 +818,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     <>
       <div className="runner-chat-page h-full flex flex-col">
         {chatHeader}
-        {showTaskModeBar && (
-          <ChatAgentTaskModeBar
-            modes={taskModes}
-            selectedModeId={selectedTaskModeId}
-            applyingModeId={applyingTaskModeId}
-            conversationStarted={conversationStarted}
-            openingConversation={openingTaskModeConversation}
-            onSelect={(taskModeId) => void handleTaskModeSelect(taskModeId)}
-          />
-        )}
         <SignalHandoffNotice key={sessionId} sessionId={sessionId} workspaceId={session.workspaceId} processing={!!session.isProcessing} onGuardChange={setSignalDraftGuarded} />
         <div className="flex-1 flex flex-col min-h-0">
           <ChatDisplay
