@@ -4238,7 +4238,8 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'update-system-agent'
             || a.slug === 'catalog-royalty-agent'
             || a.slug === 'legal-agent'
-            || a.slug === 'site-builder',
+            || a.slug === 'site-builder'
+            || a.slug === 'website-agent',
         )
         const { ensured } = ensureRequiredAgents(required)
         if (ensured > 0) {
