@@ -19,7 +19,7 @@ describe('session agent identity', () => {
     })
   })
 
-  test('uses the conversation topic as the title and agent as supporting context', () => {
+  test('uses the agent as the title and conversation topic as supporting context', () => {
     const session = {
       name: 'Build Visual World',
       preview: 'Help me build the visual world.',
@@ -27,8 +27,21 @@ describe('session agent identity', () => {
     }
 
     expect(getSessionListDisplay(session)).toEqual({
-      title: 'Build Visual World',
-      subtitle: 'Art Director',
+      title: 'Art Director',
+      subtitle: 'Build Visual World',
+    })
+  })
+
+  test('uses the first user message beneath a generic saved agent name', () => {
+    const session = {
+      name: 'Art Director',
+      preview: 'Help me build the visual world.',
+      spawnedFromAgent: { agentSlug: 'art-director', agentName: 'Art Director' },
+    }
+
+    expect(getSessionListDisplay(session)).toEqual({
+      title: 'Art Director',
+      subtitle: 'Help me build the visual world.',
     })
   })
 
@@ -43,6 +56,19 @@ describe('session agent identity', () => {
     expect(getSessionListDisplay(session)).toEqual({
       title: 'Art Director',
       subtitle: null,
+    })
+  })
+
+  test('does not treat a generic voice session name as its topic', () => {
+    const session = {
+      name: 'Artist Manager Voice',
+      preview: 'Plan the next single rollout.',
+      spawnedFromAgent: { agentSlug: 'concierge', agentName: 'Artist Manager' },
+    }
+
+    expect(getSessionListDisplay(session)).toEqual({
+      title: 'Artist Manager',
+      subtitle: 'Plan the next single rollout.',
     })
   })
 

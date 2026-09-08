@@ -118,16 +118,34 @@ export function getSessionListDisplay(
   session: SessionLike | SessionMeta,
   compact = false,
 ): { title: string; subtitle: string | null } {
-  const title = getSessionTitle(session)
   const agentName = getSessionAgentIdentity(session)?.name
-  const hasDistinctAgentName = agentName
-    && agentName.trim().toLocaleLowerCase() !== title.trim().toLocaleLowerCase()
+
+  if (agentName) {
+    const storedTitle = session.name?.trim()
+    const genericAgentNames = [
+      agentName,
+      session.spawnedFromAgent?.agentName,
+      session.launchReceipt?.agent?.name,
+    ]
+      .filter((name): name is string => Boolean(name?.trim()))
+      .flatMap(name => [name.trim(), `${name.trim()} Voice`])
+      .map(name => name.toLocaleLowerCase())
+
+    const topic = storedTitle && !genericAgentNames.includes(storedTitle.toLocaleLowerCase())
+      ? storedTitle
+      : getSessionPreviewText(session, 64, agentName)
+
+    return {
+      title: agentName,
+      subtitle: topic,
+    }
+  }
+
+  const title = getSessionTitle(session)
 
   return {
     title,
-    subtitle: hasDistinctAgentName
-      ? agentName
-      : (compact ? getSessionPreviewText(session, 64, title) : null),
+    subtitle: compact ? getSessionPreviewText(session, 64, title) : null,
   }
 }
 
