@@ -38,6 +38,12 @@ export interface EntityListGroup<T> {
   collapsible?: boolean
   /** Number of hidden items when collapsed. Present on collapsed placeholder groups (items will be []). */
   collapsedCount?: number
+  /** Optional bounded viewport around this group's items. */
+  itemsContainerClassName?: string
+  /** Accessible label for a bounded item viewport. */
+  itemsContainerAriaLabel?: string
+  /** Optional scroll handler for a bounded item viewport. */
+  onItemsContainerScroll?: React.UIEventHandler<HTMLDivElement>
 }
 
 export interface EntityListProps<T> {
@@ -204,7 +210,21 @@ export function EntityList<T>({
                       ) : (
                         <SectionHeader label={group.label} />
                       )}
-                      {group.items.map((item, indexInGroup) =>
+                      {group.itemsContainerClassName ? (
+                        <div
+                          className={group.itemsContainerClassName}
+                          role="group"
+                          aria-label={group.itemsContainerAriaLabel}
+                          tabIndex={0}
+                          onScroll={group.onItemsContainerScroll}
+                        >
+                          {group.items.map((item, indexInGroup) =>
+                            <React.Fragment key={getKey(item)}>
+                              {renderItem(item, indexInGroup, indexInGroup === 0)}
+                            </React.Fragment>
+                          )}
+                        </div>
+                      ) : group.items.map((item, indexInGroup) =>
                         <React.Fragment key={getKey(item)}>
                           {renderItem(item, indexInGroup, indexInGroup === 0)}
                         </React.Fragment>

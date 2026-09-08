@@ -6,7 +6,7 @@ import { parseLabelEntry } from "@craft-agent/shared/labels"
 import { fuzzyScore } from "@craft-agent/shared/search"
 import { getSessionTitle, getSessionStatus } from "@/utils/session"
 import { getSessionProjectInfo } from "@/utils/session-project"
-import type { SessionMeta } from "@/atoms/sessions"
+import { compareSessionsByRecency, getSessionRecency, type SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import type { SessionFilter } from "@/contexts/NavigationContext"
 
@@ -81,6 +81,7 @@ export interface UseSessionSearchResult {
 
   // Pagination
   hasMore: boolean
+  loadMore: () => void
   /** Metadata for collapsed groups (key + item count) — used to build header-only placeholder groups */
   collapsedGroupsMeta: CollapsedGroupMeta[]
 
@@ -102,7 +103,7 @@ function groupSessionsByDate(sessions: SessionMeta[]): DateGroup[] {
   const groups = new Map<string, { date: Date; sessions: SessionMeta[] }>()
 
   for (const session of sessions) {
-    const timestamp = session.lastMessageAt || 0
+    const timestamp = getSessionRecency(session)
     const date = startOfDay(new Date(timestamp))
     const key = date.toISOString()
 
@@ -123,7 +124,7 @@ function groupSessionsByDate(sessions: SessionMeta[]): DateGroup[] {
 function getCollapseGroupKey(item: SessionMeta, groupingMode?: 'date' | 'status' | 'project'): string {
   if (groupingMode === 'status') return `status-${getSessionStatus(item)}`
   if (groupingMode === 'project') return getSessionProjectInfo(item).key
-  return startOfDay(new Date(item.lastMessageAt || 0)).toISOString()
+  return startOfDay(new Date(getSessionRecency(item))).toISOString()
 }
 
 export interface CollapsedPaginationResult {
@@ -388,7 +389,7 @@ export function useSessionSearch({
 
   // Sort by most recent activity first
   const sortedItems = useMemo(() =>
-    [...visibleItems].sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0)),
+    [...visibleItems].sort(compareSessionsByRecency),
     [visibleItems]
   )
 
@@ -534,6 +535,7 @@ export function useSessionSearch({
     dateGroups,
     sessionIndexMap,
     hasMore,
+    loadMore,
     collapsedGroupsMeta,
     searchInputRef,
   }

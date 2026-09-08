@@ -82,6 +82,24 @@ export interface SessionMeta {
 }
 
 /**
+ * Most recent meaningful timestamp for conversation ordering.
+ * Older session headers may not have lastMessageAt, so creation time is the
+ * stable fallback instead of treating those conversations as equally old.
+ */
+export function getSessionRecency(
+  session: Pick<SessionMeta, 'lastMessageAt' | 'createdAt'>,
+): number {
+  return session.lastMessageAt ?? session.createdAt ?? 0
+}
+
+export function compareSessionsByRecency(
+  a: Pick<SessionMeta, 'lastMessageAt' | 'createdAt'>,
+  b: Pick<SessionMeta, 'lastMessageAt' | 'createdAt'>,
+): number {
+  return getSessionRecency(b) - getSessionRecency(a)
+}
+
+/**
  * Find the last final (non-intermediate) assistant or plan message ID
  */
 function findLastFinalMessageId(messages: Message[]): string | undefined {
@@ -285,9 +303,10 @@ export const initializeSessionsAtom = atom(
     }
     set(sessionMetaMapAtom, metaMap)
 
-    // Set ordered IDs (sorted by lastMessageAt desc)
+    // Set ordered IDs (most recent meaningful activity first)
     const ids = sessions
-      .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0))
+      .slice()
+      .sort(compareSessionsByRecency)
       .map(s => s.id)
     set(sessionIdsAtom, ids)
 
@@ -360,7 +379,7 @@ export const refreshSessionsMetadataAtom = atom(
     // Set ordered IDs
     const nextIds = sessions
       .slice()
-      .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0))
+      .sort(compareSessionsByRecency)
       .map(s => s.id)
     set(sessionIdsAtom, nextIds)
 

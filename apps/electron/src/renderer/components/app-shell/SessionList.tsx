@@ -28,7 +28,7 @@ import { useFocusZone } from "@/hooks/keyboard"
 import { useEscapeInterrupt } from "@/context/EscapeInterruptContext"
 import { useNavigation, useNavigationState, routes, isSessionsNavigation } from "@/contexts/NavigationContext"
 import { useFocusContext } from "@/context/FocusContext"
-import { sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
+import { compareSessionsByRecency, getSessionRecency, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import type { SessionStatusId, SessionStatus } from "@/config/session-status-config"
 import { buildCollapsedGroupsScopeSuffix } from "@/utils/session-list-collapse"
@@ -243,6 +243,7 @@ export function SessionList({
     exceededSearchLimit,
     flatItems,
     hasMore,
+    loadMore,
     collapsedGroupsMeta,
     searchInputRef,
   } = useSessionSearch({
@@ -326,8 +327,22 @@ export function SessionList({
         return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
       })
 
+      for (const group of orderedGroups) {
+        group.items.sort((a, b) => compareSessionsByRecency(a.item, b.item))
+        if (group.key === GENERAL_PROJECT_KEY && group.items.length > 10) {
+          group.itemsContainerClassName = 'max-h-[min(400px,50vh)] overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/15'
+          group.itemsContainerAriaLabel = 'Past conversations, newest first'
+          group.onItemsContainerScroll = (event) => {
+            const viewport = event.currentTarget
+            if (hasMore && viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 120) {
+              loadMore()
+            }
+          }
+        }
+      }
+
       return {
-        rows,
+        rows: orderedGroups.flatMap(group => group.items),
         groups: orderedGroups,
       }
     }
@@ -357,7 +372,7 @@ export function SessionList({
       for (const [key, { rows: groupRows, statusId }] of groupsByKey) {
         const state = sessionStatuses.find(s => s.id === statusId)
         if (!state) continue
-        groupRows.sort((a, b) => (b.item.lastMessageAt || 0) - (a.item.lastMessageAt || 0))
+        groupRows.sort((a, b) => compareSessionsByRecency(a.item, b.item))
         const collapsedMeta = collapsedGroupsMeta.find(m => m.key === key)
         orderedGroups.push({
           key,
@@ -389,7 +404,7 @@ export function SessionList({
     const groupDates = new Map<string, Date>()
 
     for (const row of rows) {
-      const day = startOfDay(new Date(row.item.lastMessageAt || 0))
+      const day = startOfDay(new Date(getSessionRecency(row.item)))
       const groupKey = day.toISOString()
 
       if (!groupsByKey.has(groupKey)) {
@@ -435,7 +450,7 @@ export function SessionList({
       rows,
       groups: orderedGroups,
     }
-  }, [isSearchMode, matchingFilterItems, otherResultItems, flatItems, groupingMode, sessionStatuses, collapsedGroupsMeta, t])
+  }, [isSearchMode, matchingFilterItems, otherResultItems, flatItems, groupingMode, sessionStatuses, collapsedGroupsMeta, hasMore, loadMore, t])
 
   const flatRows = rowData.rows
 
@@ -459,7 +474,7 @@ export function SessionList({
       setCollapsedGroups(allKeys)
     } else {
       const allKeys = new Set(items.map(item =>
-        startOfDay(new Date(item.lastMessageAt || 0)).toISOString()
+        startOfDay(new Date(getSessionRecency(item))).toISOString()
       ))
       setCollapsedGroups(allKeys)
     }

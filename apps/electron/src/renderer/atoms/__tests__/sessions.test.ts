@@ -10,6 +10,7 @@ import {
   forceSessionMessagesReloadAtom,
   refreshSessionsMetadataAtom,
   initializeSessionsAtom,
+  getSessionRecency,
 } from '../sessions'
 
 function msg(id: string, role: Message['role'] = 'user'): Message {
@@ -199,5 +200,23 @@ describe('refreshSessionsMetadataAtom', () => {
 
     // IDs are set
     expect(store.get(sessionIdsAtom)).toHaveLength(2)
+  })
+})
+
+describe('session recency ordering', () => {
+  it('uses creation time when older sessions do not have last-message metadata', () => {
+    expect(getSessionRecency({ createdAt: 200 })).toBe(200)
+    expect(getSessionRecency({ lastMessageAt: 300, createdAt: 200 })).toBe(300)
+  })
+
+  it('keeps the newest conversation first during initialization', () => {
+    const store = createStore()
+
+    store.set(initializeSessionsAtom, [
+      makeSession({ id: 'older', createdAt: 100 }),
+      makeSession({ id: 'newer', createdAt: 200 }),
+    ])
+
+    expect(store.get(sessionIdsAtom)).toEqual(['newer', 'older'])
   })
 })
