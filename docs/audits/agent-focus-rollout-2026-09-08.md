@@ -74,6 +74,21 @@ wiring checks fixed scheduling/editor focus loss. Confirmed findings were retest
 
 ## Live acceptance boundary
 
+### September 8 smoke-test correction
+
+The first live smoke exposed a missed startup integration: the metadata updater's
+built-in allowlist excluded 12 rollout agents. Their recipes existed in source but
+were absent from the installed library. The allowlist now covers them, and a
+regression exercises existing installations for all 27 agents. A second defect
+compared nested recipes by object identity, preventing updates to existing recipes;
+value comparison now permits refreshes while rejecting stale expected metadata.
+Storage and rollout tests: 122 passed, zero failed, 1,556 assertions.
+
+After the corrected canonical startup, HQ launches were checked directly in Electron:
+Content Genius showed 3 choices, Legendary Minds 5, and World Builder 4. Video Editor
+(no modes) was visually checked with its title centered at the existing header height.
+Both builds passed. These UI checks did not send messages or exercise providers.
+
 Browser checks use real UI components and built CSS in an isolated fixture. They do
 not certify the running Electron/provider loop. No paid provider quality comparison,
 50% prompt reduction target, latency claim, or two-round-trip guarantee is claimed.

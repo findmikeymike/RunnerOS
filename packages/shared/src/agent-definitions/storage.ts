@@ -27,6 +27,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { matter, stringifyFrontmatter, type GrayMatterFile } from '../config/frontmatter';
 import { atomicWriteFileSync } from '../utils/files.ts';
 import { SIGNAL_BRIEFING_INSTRUCTIONS } from '../shared-intel/briefing.ts';
@@ -933,6 +934,18 @@ export function replaceBuiltInAgentMetadata(
     'content-director',
     'record-doctor',
     'x-editorial',
+    'content-genius',
+    'persona-agent',
+    'world-builder',
+    'video-director',
+    'artist-os-release-manager',
+    'print-agent',
+    'raw-video-editor',
+    'hypermotion-agent',
+    'lyric-video-agent',
+    'open-slide-agent',
+    'site-builder',
+    'setup-concierge',
   ]);
   if (!builtIns.has(slug)) return { updated: false };
 
@@ -958,11 +971,8 @@ export function replaceBuiltInAgentMetadata(
 }
 
 function agentMetadataValueEquals(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (Array.isArray(a) && Array.isArray(b)) {
-    return a.length === b.length && a.every((value, index) => value === b[index]);
-  }
-  return false;
+  // Each load parses fresh objects, so nested recipes must compare by value.
+  return isDeepStrictEqual(a, b);
 }
 
 /**
