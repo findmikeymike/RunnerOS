@@ -26,12 +26,12 @@ export function ChatAgentHeader({
 }: ChatAgentHeaderProps) {
   return (
     <div className={cn(
-      'relative z-panel flex min-h-[64px] shrink-0 items-center gap-3 px-3 py-2 @md/panel:gap-5 @md/panel:px-5',
+      'relative z-panel flex min-h-[64px] shrink-0 items-center justify-center gap-3 px-3 py-2 @md/panel:gap-5 @md/panel:px-5',
       focusControls && 'flex-col gap-1 pt-2 pb-0 @md/panel:gap-1',
       className,
     )}>
-      {leadingAction && <div className={cn("titlebar-no-drag shrink-0", focusControls && "absolute left-3 top-1")}>{leadingAction}</div>}
-      <div className={cn("titlebar-no-drag flex shrink-0 items-center", focusControls ? "relative max-w-[calc(100%-80px)] gap-2" : "max-w-[48%] gap-2.5 @md/panel:max-w-[38%]")}>
+      {leadingAction && <div className={cn("titlebar-no-drag absolute left-3 shrink-0", focusControls ? "top-1" : "top-1/2 -translate-y-1/2")}>{leadingAction}</div>}
+      <div className="titlebar-no-drag relative flex max-w-[calc(100%-80px)] shrink-0 items-center gap-2">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1">
             <Tooltip>
@@ -66,7 +66,7 @@ export function ChatAgentHeader({
         </div>
       </div>
       {focusControls && <div className="w-full min-w-0">{focusControls}</div>}
-      {rightSidebarButton && <div className={cn("titlebar-no-drag shrink-0", focusControls ? "absolute right-3 top-1" : "ml-auto")}>{rightSidebarButton}</div>}
+      {rightSidebarButton && <div className={cn("titlebar-no-drag absolute right-3 shrink-0", focusControls ? "top-1" : "top-1/2 -translate-y-1/2")}>{rightSidebarButton}</div>}
     </div>
   )
 }

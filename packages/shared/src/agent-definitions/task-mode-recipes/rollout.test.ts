@@ -5,8 +5,45 @@ import { resolveAgentTaskMode, filterContextDocsForTaskMode, buildAgentTaskModeS
 import { buildWorkspaceContextSection } from '../../agent-prompt/compose.ts'
 import { TIER_TWO_TASK_MODES } from './tier-two.ts'
 import { MANAGER_TASK_MODES } from './manager.ts'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { loadGlobalAgent, writeGlobalAgent, replaceBuiltInAgentMetadata } from '../storage.ts'
 
 describe('shared agent focus rollout', () => {
+  test('startup updates every already-installed focused agent, preserving its other fields', () => {
+    const globalAgentsDir = mkdtempSync(join(tmpdir(), 'artist-focus-installed-'))
+    const options = { globalAgentsDir }
+    try {
+      for (const starter of STARTER_AGENTS.filter(agent => agent.metadata.taskModes?.length)) {
+        const { taskModes, ...metadata } = starter.metadata
+        const systemPrompt = `Existing installed prompt for ${starter.slug}`
+        writeGlobalAgent({ slug: starter.slug, metadata, systemPrompt }, options)
+        const installed = loadGlobalAgent(starter.slug, options)!
+        expect(replaceBuiltInAgentMetadata(starter.slug, {
+          taskModes: { from: installed.metadata.taskModes, to: taskModes },
+        }, options).updated, starter.slug).toBe(true)
+        const refreshed = loadGlobalAgent(starter.slug, options)!
+        expect(refreshed.metadata.taskModes, starter.slug).toEqual(taskModes)
+        expect(refreshed.systemPrompt, starter.slug).toBe(systemPrompt)
+        const { taskModes: updatedModes, ...remaining } = refreshed.metadata
+        expect(remaining, starter.slug).toEqual(installed.metadata)
+        for (const mode of updatedModes!) expect(resolveAgentTaskMode(refreshed, mode.id)).toBeDefined()
+        // A later startup must also refresh existing nested recipes, not only add missing ones.
+        const revised = structuredClone(taskModes!)
+        revised[0]!.helpText = 'Updated artist guidance'
+        expect(replaceBuiltInAgentMetadata(starter.slug, {
+          taskModes: { from: refreshed.metadata.taskModes, to: revised },
+        }, options).updated, starter.slug).toBe(true)
+        expect(loadGlobalAgent(starter.slug, options)!.metadata.taskModes, starter.slug).toEqual(revised)
+        expect(replaceBuiltInAgentMetadata(starter.slug, {
+          taskModes: { from: taskModes, to: [] },
+        }, options).updated, 'stale expected metadata must not overwrite newer recipes').toBe(false)
+      }
+    } finally {
+      rmSync(globalAgentsDir, { recursive: true, force: true })
+    }
+  })
   test('all installed recipes survive parsing and resolve against their own inventory', () => {
     const focused = STARTER_AGENTS.filter(agent => agent.metadata.taskModes?.length)
     expect(focused).toHaveLength(27)
