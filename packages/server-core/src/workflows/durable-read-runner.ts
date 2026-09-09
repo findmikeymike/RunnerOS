@@ -3,7 +3,7 @@ import type { AgentEvent, Workspace } from '@craft-agent/core/types';
 import type { AgentBackend, BackendHostRuntimeContext, CoreBackendConfig } from '../../../shared/src/agent/backend/types.ts';
 import type { ResolvedBackendContext } from '../../../shared/src/agent/backend/factory.ts';
 import { canonical, digest, type DurableJournal, type DurableRunSnapshot, type DurableRunSpec } from '../../../shared/src/durable-execution/index.ts';
-import { DURABLE_RUNTIME_MANIFEST, type DurableControlCommand, type DurableControlReceipt, type DurableJson } from '../../../shared/src/protocol/durable-execution.ts';
+import { DURABLE_RUNTIME_MANIFEST, type DurableCheckpoint, type DurableControlCommand, type DurableControlReceipt, type DurableDecisionCommand, type DurableDecisionReceipt, type DurableJson, type DurableToolAuthorization } from '../../../shared/src/protocol/durable-execution.ts';
 import type { LoadedWorkflow } from '../../../shared/src/workflows/types.ts';
 
 export interface DurableReadBinding {
@@ -16,6 +16,8 @@ export interface DurableReadInput {
   runId: string; commandId: string; workspaceId: string; connectionSlug: string; model: string;
   prompt: string; systemPrompt: string; allowedTools: DurableRunSpec['allowedTools'];
   maxOutputTokens: number; deadlineAt: number; maxModelAttempts: number;
+  /** Opt-in trusted authorization binding. Omit for the existing certified read path. */
+  approvalPrincipalId?: string;
   /** Certified by the host, never estimated from renderer input. */
   costPolicy: DurableRunSpec['costPolicy'];
 }
@@ -30,10 +32,15 @@ export interface DurableReadRunnerOptions {
   resolveBinding(workspaceId: string, connectionSlug: string, model: string): Promise<DurableReadBinding> | DurableReadBinding;
   createBackend?: (args: DurableReadBackendArgs) => Promise<ReadBackend> | ReadBackend;
   onEvent?: (runId: string, event: AgentEvent) => void;
+  authorizeTool?: (request: Extract<DurableCheckpoint, { kind: 'tool-start' }>, context: { runId: string; workspaceId: string; approvalPrincipalId: string }) => Promise<DurableToolAuthorization>;
 }
 export interface DurableReadControlResult {
   receipt: DurableControlReceipt;
   /** Host-owned execution handle, not an RPC value. Observe failures independently from command acknowledgement. */
+  execution?: Promise<DurableRunSnapshot>;
+}
+export interface DurableReadDecisionResult {
+  receipt: DurableDecisionReceipt;
   execution?: Promise<DurableRunSnapshot>;
 }
 interface FrozenReadContext {
@@ -103,6 +110,7 @@ export class DurableReadRunner {
       createdAt, commandId: requested.commandId, model: requested.model, allowedTools: requested.allowedTools,
       maxOutputTokens: requested.maxOutputTokens, maxModelAttempts: requested.maxModelAttempts, deadlineAt: requested.deadlineAt,
       costPolicy: requested.costPolicy, context: context as unknown as DurableJson,
+      ...(requested.approvalPrincipalId !== undefined ? { approvalPrincipalId: requested.approvalPrincipalId } : {}),
       authority: { adapter: 'pi-local-read-1', stepCount: 1, completion: 'journal-only' } };
     this.options.journal.admit(spec);
     return this.resume(spec.runId, spec.workspaceId);
@@ -132,22 +140,38 @@ export class DurableReadRunner {
       return { receipt };
     }
     if (command.action !== 'resume') return { receipt };
+    return { receipt, execution: this.resumeAfterDrain(receipt, previous?.promise) };
+  }
+
+  async decide(command: DurableDecisionCommand): Promise<DurableReadDecisionResult> {
+    command = JSON.parse(canonical(command)) as DurableDecisionCommand;
+    const receipt = Object.freeze(this.options.journal.decide(command));
+    const previous = this.active.get(canonical([command.workspaceId, command.runId]));
+    if (command.action === 'deny') {
+      if (this.options.journal.get(command.runId, command.workspaceId).status === 'cancelled') await previous?.backend?.abort('durable-approval-denied');
+      return { receipt };
+    }
+    if (receipt.status !== 'running') return { receipt };
+    return { receipt, execution: this.resumeAfterDrain(receipt, previous?.promise) };
+  }
+
+  private resumeAfterDrain(receipt: Pick<DurableControlReceipt, 'runId' | 'workspaceId' | 'controlRevision'>, previous?: Promise<DurableRunSnapshot>): Promise<DurableRunSnapshot> {
     const execution = (async () => {
       // A resumed owner must not race the still-draining model/tool response of the preceding claim.
       let previousFailure: unknown;
       let previouslyFailed = false;
-      try { await previous?.promise; } catch (error) { previouslyFailed = true; previousFailure = error; }
+      try { await previous; } catch (error) { previouslyFailed = true; previousFailure = error; }
       try {
-        const current = this.options.journal.get(command.runId, command.workspaceId);
+        const current = this.options.journal.get(receipt.runId, receipt.workspaceId);
         if (current.status !== 'running' || current.controlRevision !== receipt.controlRevision) return current;
-        return await this.resume(command.runId, command.workspaceId);
+        return await this.resume(receipt.runId, receipt.workspaceId);
       } catch (error) {
         if (previouslyFailed) throw new AggregateError([previousFailure, error], 'Durable resume failed after the previous execution failed', { cause: previousFailure });
         throw error;
       }
     })();
     void execution.catch(() => { /* The receipt can be observed alone; execution remains reject-observable to callers. */ });
-    return { receipt, execution };
+    return execution;
   }
 
   private checkBinding(binding: DurableReadBinding, workspaceId: string, connectionSlug: string, model: string): void {
@@ -158,11 +182,14 @@ export class DurableReadRunner {
   private async execute(runId: string, workspaceId: string, entry: { backend?: ReadBackend }): Promise<DurableRunSnapshot> {
     const { journal } = this.options, initial = journal.get(runId, workspaceId);
     if (initial.status !== 'running') return initial;
-    const claim = journal.claim(runId, workspaceId), journalBridge = journal.bridge(claim);
+    const claim = journal.claim(runId, workspaceId), journalBridge = journal.bridge(claim, initial.spec.approvalPrincipalId && this.options.authorizeTool ? {
+      authorizeTool: request => this.options.authorizeTool!(request, { runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId! }),
+    } : undefined);
     const assertDispatch = () => {
       const state = journal.get(runId, workspaceId);
       if (state.controlRevision !== claim.controlRevision) throw new Error('durable-control-changed');
       if (state.status === 'paused') throw new Error('durable-run-paused');
+      if (state.status === 'waiting-approval') throw new Error('durable-approval-required');
       if (state.status !== 'running' || Date.now() >= state.spec.deadlineAt) throw new Error('durable-read-dispatch-blocked');
     };
     const bridge: typeof journalBridge = { ...journalBridge, checkpoint: async request => {
@@ -204,9 +231,9 @@ export class DurableReadRunner {
       if (finalState.status === 'running' && finalState.controlRevision === claim.controlRevision) throw new Error('durable-read-missing-completion-checkpoint');
       return finalState;
     } catch (error) {
-      if (error instanceof Error && /durable-(?:run-paused|control-changed)/.test(error.message)) {
+      if (error instanceof Error && /durable-(?:run-paused|control-changed|approval-required|approval-expired|authorization-blocked)/.test(error.message)) {
         const current = journal.get(runId, workspaceId);
-        if (current.status === 'paused' || current.status === 'cancelled' || current.controlRevision !== claim.controlRevision) return current;
+        if (current.status === 'paused' || current.status === 'cancelled' || current.status === 'waiting-approval' || current.controlRevision !== claim.controlRevision) return current;
       }
       failed = true;
       try { await bridge.fail('durable-read-execution-failed'); } catch { /* Preserve the original storage/execution failure. */ }

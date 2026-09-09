@@ -18,7 +18,8 @@ try {
   rmSync(join(resources, 'default_app.asar'), { force: true });
   const appDir = join(resources, 'app'); mkdirSync(appDir);
   writeFileSync(join(appDir, 'package.json'), JSON.stringify({ name: 'artist-os-durability-fixture', version: '0.0.0', main: 'probe.cjs' }));
-  const probe = process.argv.includes('--control-journal') ? 'control-probe.electron.ts'
+  const probe = process.argv.includes('--approval-journal') ? 'approval-probe.electron.ts'
+    : process.argv.includes('--control-journal') ? 'control-probe.electron.ts'
     : process.argv.includes('--production-journal') ? 'journal-probe.electron.ts' : 'storage-probe.electron.ts';
   await build({ entryPoints: [join(import.meta.dir, probe)], outfile: join(appDir, 'probe.cjs'), bundle: true, platform: 'node', format: 'cjs', external: ['electron'] });
   const executable = join(appPath, 'Contents/MacOS/Durability Fixture');

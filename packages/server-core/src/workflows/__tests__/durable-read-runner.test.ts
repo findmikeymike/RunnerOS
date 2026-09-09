@@ -10,7 +10,8 @@ const cleanup: Array<() => void> = [];
 afterEach(() => { for (const fn of cleanup.splice(0).reverse()) fn(); });
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'artist-os-read-host-'));
-  const journal = new DurableJournal({ configRoot: root, key: randomBytes(32) });
+  const key = randomBytes(32);
+  const journal = new DurableJournal({ configRoot: root, key });
   cleanup.push(() => rmSync(root, { recursive: true, force: true }), () => journal.close());
   const binding: DurableReadBinding = { credentialIdentity: 'a'.repeat(64), workspace: { id: 'workspace', name: 'test', slug: 'test', rootPath: root, createdAt: 1 },
     context: { provider: 'pi', resolvedModel: 'test-model', authType: 'api_key', capabilities: { needsHttpPoolServer: false },
@@ -19,7 +20,7 @@ function fixture() {
     prompt: 'Read the release notes', systemPrompt: 'Only read local files', allowedTools: ['read'], maxOutputTokens: 128,
     deadlineAt: Date.now() + 60000, maxModelAttempts: 2, costPolicy: { unit: 'verified-free', maxTotalUnits: 0, maxUnitsPerAttempt: 0 } };
   const base: DurableReadRunnerOptions = { journal, hostRuntime: { appRootPath: root, isPackaged: false }, resolveBinding: () => binding };
-  return { root, journal, binding, input, base };
+  return { root, key, journal, binding, input, base };
 }
 async function complete(args: DurableReadBackendArgs) {
   const bridge = args.coreConfig.durableExecution!;
@@ -322,3 +323,132 @@ for (const breakFreshClaim of [false, true]) {
     } finally { journal.claim = originalClaim; }
   });
 }
+
+function approvalFixture() {
+  const setup = fixture();
+  const expiresAt = Date.now() + 60000;
+  let policyRevision = 'policy-1', authorized = true, authorizationChecks = 0, executions = 0;
+  const input = { ...setup.input, approvalPrincipalId: 'artist-principal' };
+  const options: DurableReadRunnerOptions = { ...setup.base,
+    authorizeTool: async (request, context) => {
+      authorizationChecks++;
+      expect(request.tool).toBe('read'); expect(context.approvalPrincipalId).toBe('artist-principal');
+      return { principalId: 'artist-principal', policyRevision, credentialIdentity: setup.binding.credentialIdentity,
+        allowed: authorized, requiresApproval: true, approvalExpiresAt: expiresAt };
+    },
+    createBackend: args => ({ async *chat() {
+      const bridge = args.coreConfig.durableExecution!;
+      const model = await bridge.checkpoint({ kind: 'model-start', turn: 0, context: { messages: [] } });
+      if (!model.cached) await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', content: [{ type: 'toolCall', id: 'approval-read', name: 'read', arguments: { path: 'notes.txt' } }], stopReason: 'toolUse' } });
+      const reply = await bridge.checkpoint({ kind: 'tool-start', turn: 0, callId: 'approval-read', tool: 'read', input: { path: 'notes.txt' } });
+      if (!reply.cached) {
+        executions++;
+        await bridge.checkpoint({ kind: 'tool-result', turn: 0, callId: 'approval-read', result: { content: [{ type: 'text', text: 'approved read result' }] } });
+      }
+      const final = await bridge.checkpoint({ kind: 'model-start', turn: 1, context: { messages: [], result: 'approved read result' } });
+      if (!final.cached) await bridge.checkpoint({ kind: 'model-result', turn: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'done' }], stopReason: 'stop' } });
+      await bridge.checkpoint({ kind: 'complete' });
+    }, async abort() {}, destroy() {} }),
+  };
+  return { ...setup, input, options, get executions() { return executions; }, get authorizationChecks() { return authorizationChecks; }, setPolicy(value: string) { policyRevision = value; }, revoke() { authorized = false; } };
+}
+
+function approvalDecision(journal: DurableJournal, input: DurableReadInput, action: 'approve' | 'deny' = 'approve') {
+  const state = journal.get(input.runId, input.workspaceId);
+  const approval = state.approvals!.findLast(item => item.status === 'pending')!;
+  return { runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: state.version,
+    action, approvalId: approval.id, inputDigest: approval.inputDigest, principalId: approval.principalId,
+    policyRevision: approval.policyRevision, credentialIdentity: approval.credentialIdentity };
+}
+
+test('approval survives reopening: decision resumes cached model and rechecks current authorization', async () => {
+  const setup = approvalFixture();
+  const first = new DurableReadRunner(setup.options);
+  const waiting = await first.start(setup.input);
+  expect(waiting.status).toBe('waiting-approval'); expect(setup.executions).toBe(0);
+  const reopened = new DurableJournal({ configRoot: setup.root, key: setup.key });
+  cleanup.push(() => reopened.close());
+  const resumed = new DurableReadRunner({ ...setup.options, journal: reopened });
+  const decision = await resumed.decide(approvalDecision(reopened, setup.input));
+  expect(decision.receipt.status).toBe('running');
+  const completed = await decision.execution!;
+  expect(completed.status).toBe('succeeded'); expect(setup.executions).toBe(1); expect(setup.authorizationChecks).toBe(2);
+  expect(completed.modelAttempts).toBe(2);
+});
+
+test('approved old policy cannot dispatch after policy change; a fresh approval is required', async () => {
+  const setup = approvalFixture(), runner = new DurableReadRunner(setup.options);
+  await runner.start(setup.input);
+  const command = approvalDecision(setup.journal, setup.input);
+  setup.setPolicy('policy-2');
+  const decision = await runner.decide(command);
+  const waiting = await decision.execution!;
+  expect(waiting.status).toBe('waiting-approval'); expect(setup.executions).toBe(0);
+  expect(waiting.approvals!.findLast(item => item.status === 'pending')!.policyRevision).toBe('policy-2');
+  expect(waiting.approvals!.findLast(item => item.status === 'pending')!.id).not.toBe(command.approvalId);
+});
+
+test('current permission revocation pauses an approved operation before dispatch', async () => {
+  const setup = approvalFixture(), runner = new DurableReadRunner(setup.options);
+  await runner.start(setup.input);
+  const command = approvalDecision(setup.journal, setup.input);
+  setup.revoke();
+  const decision = await runner.decide(command);
+  expect((await decision.execution!).status).toBe('paused'); expect(setup.executions).toBe(0);
+});
+
+test('later pause and duplicate approval receipt cannot restart execution', async () => {
+  const setup = approvalFixture();
+  const started = latch(), drain = latch();
+  const originalCreate = setup.options.createBackend!;
+  let attempts = 0;
+  const runner = new DurableReadRunner({ ...setup.options, createBackend: async args => {
+    const backend = await originalCreate(args);
+    attempts++;
+    return { ...backend, async *chat(prompt: string) {
+      try { yield* backend.chat(prompt); }
+      catch (error) { started.resolve(); await drain.promise; throw error; }
+    } };
+  } });
+  const first = runner.start(setup.input); await started.promise;
+  const command = approvalDecision(setup.journal, setup.input);
+  const approved = await runner.decide(command);
+  await runner.control({ runId: setup.input.runId, workspaceId: setup.input.workspaceId, commandId: randomUUID(), action: 'pause', expectedVersion: setup.journal.get(setup.input.runId, setup.input.workspaceId).version });
+  const duplicate = await runner.decide(command);
+  expect(duplicate.receipt).toEqual(approved.receipt);
+  drain.resolve();
+  expect((await first).status).toBe('paused'); expect((await approved.execution!).status).toBe('paused');
+  expect((await duplicate.execution!).status).toBe('paused'); expect(attempts).toBe(1); expect(setup.executions).toBe(0);
+});
+
+test('approval received while paused leaves the run paused without launching a backend', async () => {
+  const setup = approvalFixture(), runner = new DurableReadRunner(setup.options);
+  await runner.start(setup.input);
+  await runner.control({ runId: setup.input.runId, workspaceId: setup.input.workspaceId, commandId: randomUUID(), action: 'pause', expectedVersion: setup.journal.get(setup.input.runId, setup.input.workspaceId).version });
+  const approved = await runner.decide(approvalDecision(setup.journal, setup.input));
+  expect(approved.receipt.status).toBe('paused'); expect(approved.execution).toBeUndefined(); expect(setup.executions).toBe(0);
+});
+
+test('denial commits cancellation before aborting the waiting backend', async () => {
+  const setup = approvalFixture(), started = latch(), drain = latch();
+  const originalCreate = setup.options.createBackend!;
+  let aborts = 0;
+  const runner = new DurableReadRunner({ ...setup.options, createBackend: async args => {
+    const backend = await originalCreate(args);
+    return { ...backend, async *chat(prompt: string) {
+      try { yield* backend.chat(prompt); }
+      catch (error) { started.resolve(); await drain.promise; throw error; }
+    }, async abort() { aborts++; expect(setup.journal.get(setup.input.runId, setup.input.workspaceId).status).toBe('cancelled'); drain.resolve(); } };
+  } });
+  const running = runner.start(setup.input); await started.promise;
+  const denied = await runner.decide(approvalDecision(setup.journal, setup.input, 'deny'));
+  expect(denied.receipt.status).toBe('cancelled'); expect((await running).status).toBe('cancelled');
+  expect(aborts).toBe(1); expect(setup.executions).toBe(0);
+});
+
+test('ordinary certified read execution does not invoke or introduce approval checks', async () => {
+  const setup = approvalFixture(), runner = new DurableReadRunner(setup.options);
+  const { approvalPrincipalId: _principal, ...input } = setup.input;
+  expect((await runner.start(input)).status).toBe('succeeded');
+  expect(setup.authorizationChecks).toBe(0); expect(setup.executions).toBe(1);
+});

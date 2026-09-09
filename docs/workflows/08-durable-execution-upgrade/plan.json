@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "revision": "r4",
+  "revision": "r5",
   "sources": [
     {
       "id": "S-USER",
@@ -373,6 +373,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -418,6 +426,14 @@
           "path": "evidence/P-03-entry.md",
           "revision": "r4",
           "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -481,6 +497,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -537,6 +561,14 @@
           "path": "evidence/P-03-entry.md",
           "revision": "r4",
           "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -601,6 +633,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -640,6 +680,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -666,6 +714,14 @@
           "path": "evidence/P-03-entry.md",
           "revision": "r4",
           "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -715,6 +771,14 @@
           "path": "evidence/P-03-entry.md",
           "revision": "r4",
           "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -768,6 +832,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -798,6 +870,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -816,6 +896,14 @@
           "path": "evidence/P-03-entry.md",
           "revision": "r4",
           "environment": "Internal durable read-only control slice; real Pi/native reads and copied packaged Electron; public rollout and remaining P03 work excluded",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -861,17 +949,78 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "automated"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        }
+      ]
+    },
+    {
+      "id": "T-06B",
+      "kind": "task",
+      "title": "Persist exact approvals and revalidate each tool dispatch",
+      "owner": "approval-owner",
+      "depends_on": [
+        "G-03",
+        "T-06A"
+      ],
+      "status": "accepted",
+      "phase": "P-03",
+      "requirements": [
+        "R-02",
+        "R-03",
+        "R-06",
+        "R-08",
+        "R-11",
+        "R-13"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-06B.md",
+      "resources": [
+        "packages/shared/src/durable-execution",
+        "packages/shared/src/protocol/durable-execution.ts",
+        "packages/server-core/src/workflows/durable-read-runner.ts"
+      ],
+      "verification": [
+        {
+          "method": "Run approval identity/expiry/control race and transactional tests plus actual default-host SIGKILL recovery and current-policy drift; independent rival review and fixes",
+          "expected": "Exact valid decisions survive restart without repeating model work; stale or changed permission/identity cannot dispatch; pause/cancel stay authoritative",
+          "environment": "Disposable config, synthetic permission resolver, actual installed Pi SDK/native reads, independent loopback model provider"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/T-06B-approvals.md",
+          "revision": "r5",
+          "environment": "Internal certified read runner; actual Pi/default host SIGKILL with local simulator, copied packaged Electron; no public rollout or live-provider certification",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "automated"
+        },
+        {
+          "path": "evidence/T-06B-rival.md",
+          "revision": "r5",
+          "environment": "Independent adversarial review and final consolidated evidence review",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
     {
       "id": "T-06",
       "kind": "task",
-      "title": "Persist exact approvals and ordered steering after durable controls",
+      "title": "Persist ordered steering without mutating completed work or approval bindings",
       "owner": "runtime-owner",
       "depends_on": [
         "G-03",
-        "T-06A"
+        "T-06A",
+        "T-06B"
       ],
       "status": "planned",
       "phase": "P-03",

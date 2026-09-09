@@ -5,9 +5,47 @@ export interface DurableRuntimeManifest {
 }
 /** Bump adapterRevision whenever replay/normalization/authorization semantics change. */
 export const DURABLE_RUNTIME_MANIFEST: Readonly<DurableRuntimeManifest> = Object.freeze({
-  piAgentCore: '0.84.3', piAi: '0.84.3', piCodingAgent: '0.84.3', adapterRevision: 'pi-readonly-2',
+  piAgentCore: '0.84.3', piAi: '0.84.3', piCodingAgent: '0.84.3', adapterRevision: 'pi-readonly-3',
 });
-export type DurableRunStatus = 'running' | 'paused' | 'succeeded' | 'cancelled' | 'failed';
+export type DurableRunStatus = 'running' | 'paused' | 'waiting-approval' | 'succeeded' | 'cancelled' | 'failed';
+export interface DurableToolAuthorization {
+  principalId: string;
+  policyRevision: string;
+  credentialIdentity: string;
+  allowed: boolean;
+  requiresApproval: boolean;
+  approvalExpiresAt: number;
+}
+export interface DurableApproval {
+  id: string;
+  operationId: string;
+  turn: number;
+  callId: string;
+  tool: string;
+  inputDigest: string;
+  principalId: string;
+  policyRevision: string;
+  credentialIdentity: string;
+  expiresAt: number;
+  status: 'pending' | 'approved' | 'denied' | 'expired' | 'consumed';
+  decisionPrincipalId?: string;
+}
+export interface DurableDecisionCommand {
+  runId: string;
+  workspaceId: string;
+  commandId: string;
+  expectedVersion: number;
+  action: 'approve' | 'deny';
+  approvalId: string;
+  inputDigest: string;
+  principalId: string;
+  policyRevision: string;
+  credentialIdentity: string;
+}
+export interface DurableDecisionReceipt extends Omit<DurableControlReceipt, 'action'> {
+  action: DurableDecisionCommand['action'];
+  approvalId: string;
+}
 export interface DurableControlCommand {
   runId: string;
   workspaceId: string;
