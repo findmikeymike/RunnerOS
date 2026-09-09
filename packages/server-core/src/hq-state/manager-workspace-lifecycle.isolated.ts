@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -37,7 +37,7 @@ afterAll(() => {
 describe('Campaign deletion storage journey', () => {
   test('saves verified media in HQ then removes the actual root and registration while keeping other work', async () => {
     const { createCampaignCleanupController } = await import('../../../../apps/electron/src/main/campaign-cleanup.ts')
-    const { loadArtistVaultManifest } = await import('@craft-agent/shared/artist-vault')
+    const { emptyArtistVaultManifest, loadArtistVaultManifest } = await import('@craft-agent/shared/artist-vault')
     const hq = config.addWorkspace({ name: 'Cleanup HQ', rootPath: join(testRoot, 'cleanup-hq'), artistWorkspaceScope: 'hq' })
     const campaign = config.addWorkspace({ name: 'Finished Release', rootPath: join(testRoot, 'finished-release'), artistWorkspaceScope: 'campaign' })
     const other = config.addWorkspace({ name: 'Next Release', rootPath: join(testRoot, 'next-release'), artistWorkspaceScope: 'campaign' })
@@ -46,6 +46,14 @@ describe('Campaign deletion storage journey', () => {
     mkdirSync(join(campaign.rootPath, 'sessions', 'old-chat'), { recursive: true })
     writeFileSync(join(campaign.rootPath, 'sessions', 'old-chat', 'chat.txt'), 'Disposable old chat text')
     writeFileSync(join(other.rootPath, 'keep.txt'), 'Current campaign survives')
+    const otherVault = emptyArtistVaultManifest(other.id)
+    otherVault.assets.push({
+      id: 'linked-master', label: 'Finished master', category: 'music', kind: 'master-final',
+      absolutePath: join(campaign.rootPath, 'master.wav'), source: 'linked-file', status: 'final',
+      rightsStatus: 'private', usableByAgents: false, createdAt: '2026-01-01', updatedAt: '2026-01-01',
+    })
+    mkdirSync(join(other.rootPath, 'vault'), { recursive: true })
+    writeFileSync(join(other.rootPath, 'vault', 'manifest.json'), JSON.stringify(otherVault, null, 2))
     const memory = join(testRoot, 'global-memory.md')
     writeFileSync(memory, 'Artist prefers intimate acoustic arrangements.')
     const lease = { workspaceId: campaign.id, sourceRootPath: campaign.rootPath, released: false }
@@ -71,6 +79,9 @@ describe('Campaign deletion storage journey', () => {
     expect(saved).toBeDefined()
     expect(readFileSync(join(hq.rootPath, saved!.relativePath!))).toEqual(media)
     expect(readFileSync(join(other.rootPath, 'keep.txt'), 'utf-8')).toBe('Current campaign survives')
+    const repairedLink = loadArtistVaultManifest(other.rootPath, other.id).assets.find(asset => asset.id === 'linked-master')
+    expect(realpathSync(repairedLink!.absolutePath!).startsWith(realpathSync(hq.rootPath))).toBe(true)
+    expect(readFileSync(repairedLink!.absolutePath!)).toEqual(media)
     expect(readFileSync(memory, 'utf-8')).toBe('Artist prefers intimate acoustic arrangements.')
     expect(notified).toBe(true)
     await config.removeWorkspace(hq.id)
@@ -103,6 +114,7 @@ describe('Campaign deletion runtime', () => {
     expect(context.loadContextDoc(campaignRoot, 'mission-brief')?.body).toContain('Keep source data')
     manager.finishCampaignDeletion(lease)
     expect(lease.released).toBe(true)
+    expect(manager.isWorkspaceRootRetired(campaignRoot)).toBe(true)
     await config.removeWorkspace(campaign.id)
   })
 })

@@ -73,7 +73,10 @@ export function WorkspaceRail({
   const handleCampaignDeleted = (result: CampaignCleanupResult) => {
     setCleanupTarget(null)
     onWorkspaceRemoved?.()
-    toast.success('Campaign deleted', { description: `Kept files are in Vault → Past Releases → ${result.pastReleaseLabel}.` })
+    const warnings = result.warnings ?? []
+    const description = `Kept files are in Vault → Past Releases → ${result.pastReleaseLabel}.${warnings.length ? ` ${warnings.join(' ')}` : ''}`
+    if (warnings.length) toast.warning('Campaign deleted with cleanup warning', { description })
+    else toast.success('Campaign deleted', { description })
   }
   const deleteCampaignMenuItem = activeCampaign ? (
     <>

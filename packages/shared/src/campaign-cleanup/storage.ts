@@ -9,7 +9,7 @@ import { hashFileSha256 } from '../utils/hash-file.ts';
 import { assertPathWithinRealRoot, verifiedCopyFileSync } from '../workspaces/verified-copy.ts';
 import { readOutputFinalsRegistry } from '../outputs/finals.ts';
 import { isOutputManifest } from '../outputs/validation.ts';
-import type { CampaignCleanupOptions, CampaignCleanupPreview, CampaignCleanupResult, CampaignRetainedFile } from './types.ts';
+import type { CampaignCleanupOptions, CampaignCleanupPreview, CampaignCleanupResult, CampaignCleanupVaultWorkspace, CampaignRetainedFile } from './types.ts';
 
 const MEDIA = new Set('.wav .aiff .aif .flac .mp3 .m4a .ogg .opus .aac .mp4 .mov .m4v .webm .avi .mkv .png .jpg .jpeg .webp .gif .svg .heic .tif .tiff .psd .ai .eps .indd .fig .blend .glb .gltf .obj .fbx .aep .prproj .drp .als .logicx .band .flp .ptx .mid .midi'.split(' '));
 const TRANSIENT_ROOTS = new Set(['sessions', 'context', 'outputs', 'workflows', 'workflow-runs', 'automations', 'tasks', 'plans', 'logs', 'tmp', 'temp', '.cache', 'cache', '.git', 'node_modules', 'browser', 'sources', 'skills', 'agents', 'statuses', 'permissions', 'runs', 'scheduled-work', 'agenda', '.claude-plugin']);
@@ -18,24 +18,52 @@ const METADATA = new Set(['assets/manifest.json', 'release-kit/manifest.json', '
 const GENERATED_DIRS = new Set(['node_modules', '.git', '.cache', 'cache', 'caches']);
 type InventoryFile = CampaignRetainedFile & { retained: boolean };
 type DeclaredRecord = { relativePath?: string; absolutePath?: string; [key: string]: unknown };
+type VaultLinkRepair = { id: string; relativePath: string; kind: 'file' | 'folder' };
+type VaultPlan = CampaignCleanupVaultWorkspace & { manifest: VaultManifest; repairedLinks: VaultLinkRepair[] };
 
 function digest(value: unknown): string { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 function inside(root: string, candidate: string): boolean {
   const path = relative(resolve(root), resolve(candidate));
   return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
+function canonicalPath(candidate: string): string {
+  let existing = resolve(candidate);
+  const remainder: string[] = [];
+  while (!existsSync(existing)) {
+    const parent = dirname(existing);
+    if (parent === existing) return resolve(candidate);
+    remainder.unshift(basename(existing));
+    existing = parent;
+  }
+  return resolve(realpathSync(existing), ...remainder);
+}
 function readJson(path: string): any {
   try { return JSON.parse(readFileSync(path, 'utf8')); }
   catch { throw new Error(`Cannot safely finish campaign: invalid JSON in ${basename(dirname(path))}/${basename(path)}.`); }
 }
-function strictVault(options: CampaignCleanupOptions): VaultManifest {
-  const path = assertPathWithinRealRoot(options.hqRootPath, getArtistVaultManifestPath(options.hqRootPath));
-  if (!existsSync(path)) return emptyArtistVaultManifest(options.hqWorkspaceId);
+function strictVault(workspace: CampaignCleanupVaultWorkspace): VaultManifest {
+  const path = assertPathWithinRealRoot(workspace.rootPath, getArtistVaultManifestPath(workspace.rootPath));
+  if (!existsSync(path)) return emptyArtistVaultManifest(workspace.workspaceId);
   const raw = readJson(path);
-  const parsed = loadArtistVaultManifest(options.hqRootPath, options.hqWorkspaceId);
+  const parsed = loadArtistVaultManifest(workspace.rootPath, workspace.workspaceId);
   // The normal read API falls back to an empty manifest on corruption. Deletion must never do that.
-  if (JSON.stringify(raw) !== JSON.stringify(parsed)) throw new Error('Repair the Artist Vault manifest before finishing this campaign.');
+  if (JSON.stringify(raw) !== JSON.stringify(parsed)) throw new Error(`Repair the Artist Vault manifest in ${workspace.workspaceName} before finishing this campaign.`);
   return parsed;
+}
+
+function vaultWorkspaces(options: CampaignCleanupOptions): CampaignCleanupVaultWorkspace[] {
+  const hq: CampaignCleanupVaultWorkspace = {
+    workspaceId: options.hqWorkspaceId,
+    workspaceName: 'Artist HQ',
+    rootPath: options.hqRootPath,
+    writable: true,
+  };
+  const byRoot = new Map<string, CampaignCleanupVaultWorkspace>();
+  for (const workspace of [hq, ...(options.linkedVaultWorkspaces ?? [])]) {
+    const rootPath = realpathSync(workspace.rootPath);
+    if (!byRoot.has(rootPath)) byRoot.set(rootPath, { ...workspace, rootPath });
+  }
+  return [...byRoot.values()];
 }
 function retentionReason(path: string): string | undefined {
   if (path.split('/').some(part => GENERATED_DIRS.has(part))) return undefined;
@@ -59,7 +87,7 @@ function validateRoots(options: CampaignCleanupOptions): void {
 
 function buildPlan(options: CampaignCleanupOptions) {
   validateRoots(options);
-  const root = options.campaignRootPath;
+  const root = realpathSync(options.campaignRootPath);
   const files: InventoryFile[] = [];
   function walk(folder: string): void {
     for (const entry of readdirSync(folder, { withFileTypes: true }).sort((a,b) => a.name.localeCompare(b.name))) {
@@ -92,7 +120,7 @@ function buildPlan(options: CampaignCleanupOptions) {
   function retainDeclaredFile(record: DeclaredRecord, base: string, reason: string): void {
     const raw = record.relativePath ?? record.absolutePath;
     if (typeof raw !== 'string' || !raw || raw.includes('\0')) throw new Error('A saved campaign asset has no valid file path. Repair it before finishing.');
-    const path = resolve(base, raw);
+    const path = canonicalPath(resolve(base, raw));
     if (!inside(root, path)) {
       if (record.relativePath || !isAbsolute(raw)) throw new Error('A campaign asset path escapes the campaign folder.');
       externalLinks.push(record);
@@ -149,28 +177,79 @@ function buildPlan(options: CampaignCleanupOptions) {
       savedMetadata[file.relativePath] = { id: output.id, title: output.title, status: output.status, assets: output.assets, links: output.links, completedAt: output.completedAt };
     }
   }
-  const vault = strictVault(options);
-  const repairedLinks: Array<{ id: string; relativePath: string }> = [];
-  for (const asset of vault.assets) {
-    const path = resolveArtistVaultAssetPath(options.hqRootPath, asset);
-    if (!path || !inside(root, path)) continue;
-    retainDeclaredFile({ absolutePath: path }, root, 'Existing Artist Vault link');
-    repairedLinks.push({ id: asset.id, relativePath: relative(root, path).split(sep).join('/') });
+  const vaults: VaultPlan[] = vaultWorkspaces(options).map(workspace => ({
+    ...workspace,
+    manifest: strictVault(workspace),
+    repairedLinks: [],
+  }));
+  for (const vault of vaults) {
+    for (const asset of vault.manifest.assets) {
+      const resolvedAssetPath = resolveArtistVaultAssetPath(vault.rootPath, asset);
+      if (!resolvedAssetPath) continue;
+      const path = canonicalPath(resolvedAssetPath);
+      if (!inside(root, path)) continue;
+      if (!vault.writable) {
+        throw new Error(`${vault.workspaceName} links to assets inside this campaign, but its Vault cannot be updated safely. Remove those links or make that workspace locally writable before finishing.`);
+      }
+      assertPathWithinRealRoot(root, path);
+      const stat = lstatSync(path);
+      const relativePath = relative(root, path).split(sep).join('/');
+      if (stat.isDirectory()) {
+        const prefix = relativePath ? `${relativePath}/` : '';
+        for (const file of files) {
+          if (file.relativePath.startsWith(prefix) && !file.relativePath.split('/').some(part => GENERATED_DIRS.has(part))) {
+            file.retained = true;
+            file.reason = 'Existing Artist Vault folder link';
+          }
+        }
+      } else {
+        retainDeclaredFile({ absolutePath: path }, root, 'Existing Artist Vault link');
+      }
+      vault.repairedLinks.push({ id: asset.id, relativePath, kind: stat.isDirectory() ? 'folder' : 'file' });
+    }
   }
   const warnings = externalLinks.length ? [`${externalLinks.length} externally linked file(s) stay in their original locations; their references are retained.`] : [];
   const retainedFiles = files.filter(file => file.retained).map(({ retained: _retained, ...file }) => file);
+  const campaignContentToken = digest({
+    campaign: realpathSync(root),
+    id: options.campaignId,
+    name: options.campaignName,
+    files: files.map(({ relativePath, sizeBytes, sha256 }) => ({ relativePath, sizeBytes, sha256 })),
+  });
   const preview: CampaignCleanupPreview = {
     workspaceId: options.campaignId, campaignName: options.campaignName,
-    previewToken: digest({ campaign: realpathSync(root), hq: realpathSync(options.hqRootPath), id: options.campaignId, name: options.campaignName, files: files.map(({ relativePath, sizeBytes, sha256 }) => ({ relativePath, sizeBytes, sha256 })) }),
+    previewToken: digest({
+      campaignContentToken,
+      hq: realpathSync(options.hqRootPath),
+      vaults: vaults.map(vault => ({
+        workspaceId: vault.workspaceId,
+        rootPath: vault.rootPath,
+        manifest: {
+          version: vault.manifest.version,
+          workspaceId: vault.manifest.workspaceId,
+          vaultRoot: vault.manifest.vaultRoot,
+          storageMode: vault.manifest.storageMode,
+          assets: vault.manifest.assets,
+        },
+      })),
+    }),
     retainedFileCount: retainedFiles.length, retainedBytes: retainedFiles.reduce((sum,file) => sum + file.sizeBytes, 0),
     retainedMemoryCount: options.retainedMemoryCount ?? 0, retainedFiles,
     deletedFileCount: files.length - retainedFiles.length, warnings,
   };
-  return { preview, vault, repairedLinks, externalLinks, savedMetadata };
+  return { preview, campaignContentToken, vaults, externalLinks, savedMetadata };
 }
 
 export function previewCampaignCleanup(options: CampaignCleanupOptions): CampaignCleanupPreview {
   return buildPlan(options).preview;
+}
+
+async function withVaultMutexes<T>(rootPaths: readonly string[], action: () => Promise<T>): Promise<T> {
+  const roots = [...new Set(rootPaths.map(rootPath => realpathSync(rootPath)))].sort();
+  const enter = (index: number): Promise<T> => index >= roots.length
+    ? action()
+    : withArtistVaultMutex(roots[index]!, () => enter(index + 1));
+  return enter(0);
 }
 
 function durableJson(root: string, path: string, value: unknown): void {
@@ -188,12 +267,12 @@ function durableJson(root: string, path: string, value: unknown): void {
 
 /** Durable preservation only. The lifecycle owner must quiesce writers and delete the campaign afterward. */
 export async function preserveCampaignForDeletion(options: CampaignCleanupOptions, expectedToken: string): Promise<CampaignCleanupResult> {
-  return withArtistVaultMutex(options.hqRootPath, async () => {
+  return withVaultMutexes(vaultWorkspaces(options).map(workspace => workspace.rootPath), async () => {
     const plan = buildPlan(options);
     if (!expectedToken || plan.preview.previewToken !== expectedToken) throw new Error('Campaign changed since the preview. Review the updated files before finishing.');
     const safeId = `${options.campaignId.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 48)}-${digest(options.campaignId).slice(0, 12)}`;
     // Content-addressed batches permit safe retries without overwriting a previous preservation attempt.
-    const archiveRelative = `vault/past-releases/${safeId}/${expectedToken.slice(0, 16)}`;
+    const archiveRelative = `vault/past-releases/${safeId}/${plan.campaignContentToken.slice(0, 16)}`;
     const now = new Date().toISOString();
     const additions: VaultAssetRecord[] = [];
     for (const file of plan.preview.retainedFiles) {
@@ -222,8 +301,14 @@ export async function preserveCampaignForDeletion(options: CampaignCleanupOption
       preservedAt: now, files: plan.preview.retainedFiles, savedAssetMetadata: plan.savedMetadata,
       externalLinks: plan.externalLinks, savedMemories: 'Existing global saved memories were left unchanged.',
     });
-    const repaired = new Map(plan.repairedLinks.map(link => [link.id, `${archiveRelative}/files/${link.relativePath}`]));
-    const existing = plan.vault.assets.map(asset => {
+    const hqVault = plan.vaults.find(vault => vault.workspaceId === options.hqWorkspaceId && vault.rootPath === realpathSync(options.hqRootPath));
+    if (!hqVault) throw new Error('Artist HQ Vault changed during campaign preservation.');
+    for (const repair of plan.vaults.flatMap(vault => vault.repairedLinks).filter(repair => repair.kind === 'folder')) {
+      const destination = assertPathWithinRealRoot(options.hqRootPath, join(options.hqRootPath, archiveRelative, 'files', repair.relativePath));
+      mkdirSync(destination, { recursive: true });
+    }
+    const repaired = new Map(hqVault.repairedLinks.map(link => [link.id, `${archiveRelative}/files/${link.relativePath}`]));
+    const existing = hqVault.manifest.assets.map(asset => {
       const relativePath = repaired.get(asset.id);
       if (!relativePath) return asset;
       const { absolutePath: _absolutePath, ...rest } = asset;
@@ -243,7 +328,36 @@ export async function preserveCampaignForDeletion(options: CampaignCleanupOption
       if (!prior && existingPaths.has(asset.relativePath)) continue;
       byId.set(asset.id, prior ? { ...asset, createdAt: prior.createdAt } : asset);
     }
-    durableJson(options.hqRootPath, getArtistVaultManifestPath(options.hqRootPath), { ...plan.vault, assets: [...byId.values()], updatedAt: now });
-    return { workspaceId: options.campaignId, hqWorkspaceId: options.hqWorkspaceId, retainedFileCount: plan.preview.retainedFileCount, retainedMemoryCount: plan.preview.retainedMemoryCount, pastReleaseLabel: options.campaignName };
+    for (const vault of plan.vaults) {
+      if (vault === hqVault || vault.repairedLinks.length === 0) continue;
+      const linkedRepairs = new Map(vault.repairedLinks.map(link => [link.id, {
+        absolutePath: join(options.hqRootPath, archiveRelative, 'files', link.relativePath),
+        source: link.kind === 'folder' ? 'linked-folder' as const : 'linked-file' as const,
+      }]));
+      const assets = vault.manifest.assets.map(asset => {
+        const replacement = linkedRepairs.get(asset.id);
+        if (!replacement) return asset;
+        const { relativePath: _relativePath, absolutePath: _absolutePath, ...rest } = asset;
+        return {
+          ...rest,
+          absolutePath: replacement.absolutePath,
+          source: replacement.source,
+          campaigns: [...new Set([...(asset.campaigns ?? []), options.campaignId])],
+          tags: [...new Set([...(asset.tags ?? []), 'past-release', `release:${options.campaignName}`])],
+          updatedAt: now,
+        };
+      });
+      durableJson(vault.rootPath, getArtistVaultManifestPath(vault.rootPath), { ...vault.manifest, assets, updatedAt: now });
+    }
+    durableJson(options.hqRootPath, getArtistVaultManifestPath(options.hqRootPath), { ...hqVault.manifest, assets: [...byId.values()], updatedAt: now });
+    const postPreservationToken = buildPlan(options).preview.previewToken;
+    return {
+      workspaceId: options.campaignId,
+      hqWorkspaceId: options.hqWorkspaceId,
+      retainedFileCount: plan.preview.retainedFileCount,
+      retainedMemoryCount: plan.preview.retainedMemoryCount,
+      pastReleaseLabel: options.campaignName,
+      postPreservationToken,
+    };
   });
 }

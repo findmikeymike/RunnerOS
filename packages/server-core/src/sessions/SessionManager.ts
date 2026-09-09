@@ -2552,6 +2552,10 @@ export class SessionManager implements ISessionManager {
     MIGRATING_WORKSPACE_ROOTS.add(lease.sourceRootPath)
   }
 
+  isWorkspaceRootRetired(workspaceRootPath: string): boolean {
+    return MIGRATING_WORKSPACE_ROOTS.has(workspaceRootPath)
+  }
+
   async rebindWorkspaceAfterMigration(lease: WorkspaceMigrationRuntimeLease, newRootPath: string): Promise<void> {
     if (lease.released || !this.workspaceMigrationLocks.has(lease.workspaceId)) {
       throw new Error('Workspace migration lease is not active.')

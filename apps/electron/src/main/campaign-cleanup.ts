@@ -1,6 +1,7 @@
-import { existsSync, lstatSync, realpathSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, lstatSync, realpathSync, readdirSync, renameSync, rmSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { homedir, tmpdir } from 'node:os'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Workspace } from '@craft-agent/core/types'
 import { CONFIG_DIR, deleteSessionDraft, getWorkspaces, loadStoredConfig, saveConfig } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
@@ -27,8 +28,8 @@ interface Dependencies {
   workspaces?: typeof getWorkspaces
   preview?: typeof previewCampaignCleanup
   preserve?: typeof preserveCampaignForDeletion
-  clearPrivateState?: (workspace: Workspace) => Promise<void>
-  removeFilesAndRegistration?: (workspace: Workspace, hq: Workspace) => void
+  clearPrivateState?: (workspace: Workspace, sessionIds: readonly string[]) => Promise<void>
+  removeFilesAndRegistration?: (workspace: Workspace, hq: Workspace) => string[] | void
 }
 
 function contains(parent: string, child: string): boolean {
@@ -64,49 +65,129 @@ export function resolveCampaignCleanup(workspaces: Workspace[], workspaceId: str
     const otherRoot = existsSync(other.rootPath) ? realpathSync(other.rootPath) : resolve(other.rootPath)
     if (contains(root, otherRoot) || contains(otherRoot, root)) throw new Error('This campaign shares or overlaps another workspace folder and cannot be deleted safely.')
   }
-  return { campaign, hq, options: { campaignRootPath: root, hqRootPath: hqRoot, campaignId: campaign.id, campaignName: campaign.name, hqWorkspaceId: hq.id } }
+  const linkedVaultWorkspaces = workspaces
+    .filter(workspace => workspace.id !== campaign.id && workspace.id !== hq.id && !workspace.remoteServer && existsSync(workspace.rootPath))
+    .map(workspace => {
+      const workspaceConfig = loadWorkspaceConfig(workspace.rootPath)
+      return {
+        workspaceId: workspace.id,
+        workspaceName: workspace.name,
+        rootPath: realpathSync(workspace.rootPath),
+        writable: !lstatSync(workspace.rootPath).isSymbolicLink()
+          && !!workspaceConfig
+          && (!workspaceConfig.storage?.mode || workspaceConfig.storage.mode === 'solo')
+          && !existsSync(join(workspace.rootPath, '.git')),
+      }
+    })
+  return {
+    campaign,
+    hq,
+    options: {
+      campaignRootPath: root,
+      hqRootPath: hqRoot,
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      hqWorkspaceId: hq.id,
+      linkedVaultWorkspaces,
+    },
+  }
 }
 
-async function clearPrivateState(workspace: Workspace): Promise<void> {
-  const sessionIds = listSessions(workspace.rootPath).map(session => session.id)
+async function clearPrivateState(workspace: Workspace, sessionIds: readonly string[]): Promise<void> {
   deleteWorkspaceSessionLogEntries(workspace.id, sessionIds)
   for (const id of sessionIds) deleteSessionDraft(id)
   await getCredentialManager().deleteWorkspaceCredentials(workspace.id)
 }
 
-/** No asynchronous gap between unregistering and deleting; failed deletion restores discoverability. */
-function removeFilesAndRegistration(workspace: Workspace, hq: Workspace): void {
-  const config = loadStoredConfig()
+interface StagedCampaignRoot {
+  source: string
+  staged: string
+}
+
+export interface CampaignRemovalStorage {
+  exists(path: string): boolean
+  loadConfig(): ReturnType<typeof loadStoredConfig>
+  saveConfig(config: NonNullable<ReturnType<typeof loadStoredConfig>>): void
+  rename(source: string, destination: string): void
+  remove(path: string): void
+}
+
+const campaignRemovalStorage: CampaignRemovalStorage = {
+  exists: existsSync,
+  loadConfig: loadStoredConfig,
+  saveConfig,
+  rename: renameSync,
+  remove: path => rmSync(path, { recursive: true, force: true }),
+}
+
+function restoreStagedRoots(stagedRoots: readonly StagedCampaignRoot[], storage: CampaignRemovalStorage): void {
+  const failures: string[] = []
+  for (const staged of [...stagedRoots].reverse()) {
+    if (!storage.exists(staged.staged)) continue
+    try { storage.rename(staged.staged, staged.source) }
+    catch { failures.push(staged.source) }
+  }
+  if (failures.length) throw new Error(`Campaign removal could not be rolled back safely: ${failures.join(', ')}`)
+}
+
+/**
+ * Commit deletion synchronously by moving roots out of their registered paths,
+ * then unregistering the campaign. Physical cleanup happens afterward; a failed
+ * rm leaves an isolated tombstone instead of re-registering a partial campaign.
+ */
+export function removeFilesAndRegistration(
+  workspace: Workspace,
+  hq: Workspace,
+  storage: CampaignRemovalStorage = campaignRemovalStorage,
+): string[] {
+  const config = storage.loadConfig()
   const current = config?.workspaces.find((item) => item.id === workspace.id)
   if (!config || current?.rootPath !== workspace.rootPath) throw new Error('Campaign registration changed. Reopen the cleanup preview.')
   const legacyRoot = join(RUNTIME_IDENTITY.workspacesRoot, workspace.id)
-  if (resolve(legacyRoot) !== resolve(workspace.rootPath) && existsSync(legacyRoot)
+  if (resolve(legacyRoot) !== resolve(workspace.rootPath) && storage.exists(legacyRoot)
     && config.workspaces.some((item) => item.id !== workspace.id && (contains(resolve(legacyRoot), resolve(item.rootPath)) || contains(resolve(item.rootPath), resolve(legacyRoot))))) {
     throw new Error('The legacy campaign data folder overlaps another workspace. Its files were left untouched.')
   }
   const previousActiveWorkspaceId = config.activeWorkspaceId
   const previousActiveSessionId = config.activeSessionId
+  const roots = [workspace.rootPath]
+  if (resolve(legacyRoot) !== resolve(workspace.rootPath) && storage.exists(legacyRoot)) roots.unshift(legacyRoot)
+  const stagedRoots: StagedCampaignRoot[] = []
+  try {
+    for (const source of roots) {
+      if (!storage.exists(source)) continue
+      const staged = join(dirname(source), `.${basename(source)}.artist-os-delete-${randomUUID()}`)
+      storage.rename(source, staged)
+      stagedRoots.push({ source, staged })
+    }
+  } catch (error) {
+    restoreStagedRoots(stagedRoots, storage)
+    throw error
+  }
+
   config.workspaces = config.workspaces.filter((item) => item.id !== workspace.id)
   if (config.activeWorkspaceId === workspace.id) {
     config.activeWorkspaceId = hq.id
     config.activeSessionId = null
   }
-  saveConfig(config)
   try {
-    if (resolve(legacyRoot) !== resolve(workspace.rootPath) && existsSync(legacyRoot)) {
-      rmSync(legacyRoot, { recursive: true, force: true })
-    }
-    rmSync(workspace.rootPath, { recursive: true, force: true })
+    storage.saveConfig(config)
   } catch (error) {
-    const latest = loadStoredConfig()
-    if (latest && !latest.workspaces.some((item) => item.id === workspace.id)) {
-      latest.workspaces.push(workspace)
-      latest.activeWorkspaceId = previousActiveWorkspaceId
-      latest.activeSessionId = previousActiveSessionId
-      saveConfig(latest)
-    }
+    config.workspaces.push(workspace)
+    config.activeWorkspaceId = previousActiveWorkspaceId
+    config.activeSessionId = previousActiveSessionId
+    restoreStagedRoots(stagedRoots, storage)
     throw error
   }
+
+  const warnings: string[] = []
+  for (const staged of stagedRoots) {
+    try { storage.remove(staged.staged) }
+    catch {
+      warnings.push(`Campaign files were removed from Artist OS, but a temporary cleanup folder remains at ${staged.staged}.`)
+    }
+  }
+  return warnings
 }
 
 export function createCampaignCleanupController(deps: Dependencies) {
@@ -131,21 +212,28 @@ export function createCampaignCleanupController(deps: Dependencies) {
         releaseRequestFence = deps.acquireRequestFence?.()
         const { campaign, hq, options } = resolveInput(workspaceId)
         lease = await deps.runtime.quiesceCampaignForDeletion(workspaceId)
+        const privateSessionIds = listSessions(campaign.rootPath).map(session => session.id)
         await deps.stopMessaging(workspaceId)
         messagingStopped = true
         const receipt = await (deps.preserve ?? preserveCampaignForDeletion)(options, previewToken)
         // Refresh root/registration guards after asynchronous preservation.
-        resolveInput(workspaceId)
-        await (deps.clearPrivateState ?? clearPrivateState)(campaign)
+        const refreshed = resolveInput(workspaceId)
         await deps.runtime.disposeCampaignSessions(lease)
         // This last inventory check and folder removal are synchronous: no renderer
         // callback may change files between confirmation validation and deletion.
-        const finalPreview = (deps.preview ?? previewCampaignCleanup)(options)
-        if (finalPreview.previewToken !== previewToken) throw new Error('Campaign changed during cleanup. Review a fresh preview; it has not been deleted.')
-        ;(deps.removeFilesAndRegistration ?? removeFilesAndRegistration)(campaign, hq)
+        const finalPreview = (deps.preview ?? previewCampaignCleanup)(refreshed.options)
+        const deletionToken = receipt.postPreservationToken ?? previewToken
+        if (finalPreview.previewToken !== deletionToken) throw new Error('Campaign changed during cleanup. Review a fresh preview; it has not been deleted.')
+        const cleanupWarnings = (deps.removeFilesAndRegistration ?? removeFilesAndRegistration)(campaign, hq) ?? []
         removed = true
         deps.runtime.finishCampaignDeletion(lease)
-        const result: CampaignCleanupResult = { ...receipt, workspaceId, hqWorkspaceId: hq.id }
+        try {
+          await (deps.clearPrivateState ?? clearPrivateState)(campaign, privateSessionIds)
+        } catch (error) {
+          cleanupWarnings.push(`Campaign was deleted, but some private app state could not be cleared: ${error instanceof Error ? error.message : String(error)}`)
+        }
+        const { postPreservationToken: _postPreservationToken, ...publicReceipt } = receipt
+        const result: CampaignCleanupResult = { ...publicReceipt, workspaceId, hqWorkspaceId: hq.id, warnings: cleanupWarnings }
         try { deps.onDeleted(result) } catch (error) { console.error('Campaign deleted; window refresh failed:', error) }
         return result
       } catch (error) {

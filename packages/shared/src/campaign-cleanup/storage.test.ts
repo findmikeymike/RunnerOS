@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { previewCampaignCleanup, preserveCampaignForDeletion } from './storage.ts';
@@ -90,8 +90,76 @@ describe('campaign preservation', () => {
     expect(readFileSync(join(options.hqRootPath, repaired.relativePath!), 'utf8')).toBe('keep this');
     const count = loadArtistVaultManifest(options.hqRootPath).assets.length;
     expect(count).toBe(2); // Original HQ asset plus the release record, no duplicate card.
-    await preserveCampaignForDeletion(options, preview.previewToken);
+    const retryPreview = previewCampaignCleanup(options);
+    await preserveCampaignForDeletion(options, retryPreview.previewToken);
     expect(loadArtistVaultManifest(options.hqRootPath).assets.length).toBe(count);
+  });
+
+  test('repairs links from every writable local workspace before deleting campaign files', async () => {
+    const options = fixture();
+    const labRoot = join(dirname(options.hqRootPath), 'lab');
+    mkdirSync(labRoot);
+    write(options.campaignRootPath, 'assets/cover.png', 'cover art');
+    const manifest = emptyArtistVaultManifest('lab');
+    manifest.assets.push({
+      id: 'lab-cover', label: 'Campaign cover', category: 'visuals', kind: 'cover-art',
+      absolutePath: join(options.campaignRootPath, 'assets/cover.png'), source: 'linked-file', status: 'approved',
+      rightsStatus: 'private', usableByAgents: false, createdAt: '2026-01-01', updatedAt: '2026-01-01',
+    });
+    write(labRoot, 'vault/manifest.json', manifest);
+    options.linkedVaultWorkspaces = [{ workspaceId: 'lab', workspaceName: 'Creative Lab', rootPath: labRoot, writable: true }];
+
+    const preview = previewCampaignCleanup(options);
+    expect(preview.retainedFiles.map(file => file.relativePath)).toContain('assets/cover.png');
+    await preserveCampaignForDeletion(options, preview.previewToken);
+
+    const repaired = loadArtistVaultManifest(labRoot, 'lab').assets.find(asset => asset.id === 'lab-cover')!;
+    expect(repaired.relativePath).toBeUndefined();
+    expect(realpathSync(repaired.absolutePath!).startsWith(realpathSync(options.hqRootPath))).toBe(true);
+    expect(repaired.absolutePath?.includes('vault/past-releases/')).toBe(true);
+    expect(readFileSync(repaired.absolutePath!, 'utf8')).toBe('cover art');
+    expect(repaired.rightsStatus).toBe('private');
+  });
+
+  test('blocks deletion when a read-only workspace has a Vault link into the campaign', () => {
+    const options = fixture();
+    const sharedRoot = join(dirname(options.hqRootPath), 'shared');
+    mkdirSync(sharedRoot);
+    write(options.campaignRootPath, 'assets/master.wav', 'master');
+    const manifest = emptyArtistVaultManifest('shared');
+    manifest.assets.push({
+      id: 'shared-master', label: 'Master', category: 'music', kind: 'master-final',
+      absolutePath: join(options.campaignRootPath, 'assets/master.wav'), source: 'linked-file', status: 'final',
+      rightsStatus: 'safe-to-use', usableByAgents: true, createdAt: '2026-01-01', updatedAt: '2026-01-01',
+    });
+    write(sharedRoot, 'vault/manifest.json', manifest);
+    options.linkedVaultWorkspaces = [{ workspaceId: 'shared', workspaceName: 'Shared Campaign', rootPath: sharedRoot, writable: false }];
+    expect(() => previewCampaignCleanup(options)).toThrow('cannot be updated safely');
+  });
+
+  test('copies and repairs a linked campaign folder without retaining generated dependencies', async () => {
+    const options = fixture();
+    const labRoot = join(dirname(options.hqRootPath), 'folder-lab');
+    mkdirSync(labRoot);
+    write(options.campaignRootPath, 'project/index.html', 'site');
+    write(options.campaignRootPath, 'project/styles/site.css', 'css');
+    write(options.campaignRootPath, 'project/node_modules/pkg/index.js', 'dependency');
+    const manifest = emptyArtistVaultManifest('folder-lab');
+    manifest.assets.push({
+      id: 'site-folder', label: 'Website project', category: 'campaigns', kind: 'release-asset',
+      absolutePath: join(options.campaignRootPath, 'project'), source: 'linked-folder', status: 'approved',
+      rightsStatus: 'private', usableByAgents: false, createdAt: '2026-01-01', updatedAt: '2026-01-01',
+    });
+    write(labRoot, 'vault/manifest.json', manifest);
+    options.linkedVaultWorkspaces = [{ workspaceId: 'folder-lab', workspaceName: 'Website Lab', rootPath: labRoot, writable: true }];
+
+    const preview = previewCampaignCleanup(options);
+    expect(preview.retainedFiles.map(file => file.relativePath).sort()).toEqual(['project/index.html', 'project/styles/site.css']);
+    await preserveCampaignForDeletion(options, preview.previewToken);
+    const repaired = loadArtistVaultManifest(labRoot, 'folder-lab').assets[0]!;
+    expect(repaired.source).toBe('linked-folder');
+    expect(readFileSync(join(repaired.absolutePath!, 'index.html'), 'utf8')).toBe('site');
+    expect(existsSync(join(repaired.absolutePath!, 'node_modules'))).toBe(false);
   });
 
   test('does not follow symlinks or traverse external relative asset paths', () => {
@@ -159,7 +227,8 @@ describe('campaign preservation', () => {
     await preserveCampaignForDeletion(options, preview.previewToken);
     const copied = loadArtistVaultManifest(options.hqRootPath).assets.find(asset => asset.label === 'source.wav')!;
     writeFileSync(join(options.hqRootPath, copied.relativePath!), 'corrupted');
-    await expect(preserveCampaignForDeletion(options, preview.previewToken)).rejects.toThrow('differs');
+    const retryPreview = previewCampaignCleanup(options);
+    await expect(preserveCampaignForDeletion(options, retryPreview.previewToken)).rejects.toThrow('differs');
     expect(readFileSync(join(options.campaignRootPath, 'assets/source.wav'), 'utf8')).toBe('source audio');
   });
 

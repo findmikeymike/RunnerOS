@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync, existsSync 
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { Workspace } from '@craft-agent/core/types'
-import { createCampaignCleanupController, resolveCampaignCleanup } from './campaign-cleanup'
+import { createCampaignCleanupController, removeFilesAndRegistration, resolveCampaignCleanup } from './campaign-cleanup'
 
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
@@ -48,7 +48,7 @@ describe('campaign cleanup boundary', () => {
   test('preserves before any destructive cleanup and notifies after successful removal', async () => {
     const { controller, calls } = setup()
     expect(await controller.delete('campaign', 'fresh')).toMatchObject({ hqWorkspaceId: 'hq', retainedFileCount: 2 })
-    expect(calls).toEqual(['quiesce', 'stop-messaging', 'preserve', 'clear-private', 'dispose-sessions', 'remove', 'finish', 'notify'])
+    expect(calls).toEqual(['quiesce', 'stop-messaging', 'preserve', 'dispose-sessions', 'remove', 'finish', 'clear-private', 'notify'])
   })
   test('stale preview/preservation failure resumes runtime without deleting data', async () => {
     const { controller, calls, campaign } = setup({ preserve: async () => { throw new Error('Campaign changed. Review again.') } })
@@ -64,15 +64,25 @@ describe('campaign cleanup boundary', () => {
     })
     await expect(controller.delete('campaign', 'fresh')).rejects.toThrow('Campaign changed during cleanup')
     expect(calls).not.toContain('remove')
+    expect(calls).not.toContain('clear-private')
     expect(calls).toContain('resume')
     expect(events).toEqual(['fence', 'release'])
   })
-  test('private cleanup failure never reaches folder deletion', async () => {
+  test('private cleanup failure is reported after committed deletion without restoring the campaign', async () => {
     const { controller, calls } = setup({ clearPrivateState: async () => { throw new Error('Credentials locked') } })
-    await expect(controller.delete('campaign', 'fresh')).rejects.toThrow('Credentials locked')
-    expect(calls).not.toContain('remove')
-    expect(calls).not.toContain('notify')
-    expect(calls).toContain('resume')
+    const result = await controller.delete('campaign', 'fresh')
+    expect(result.warnings?.join(' ')).toContain('Credentials locked')
+    expect(calls).toContain('remove')
+    expect(calls).toContain('notify')
+    expect(calls).not.toContain('resume')
+  })
+  test('physical cleanup warnings do not re-register a committed campaign', async () => {
+    const { controller, calls } = setup({
+      removeFilesAndRegistration: () => { calls.push('remove'); return ['Temporary cleanup folder remains.'] },
+    })
+    const result = await controller.delete('campaign', 'fresh')
+    expect(result.warnings).toEqual(['Temporary cleanup folder remains.'])
+    expect(calls).toEqual(['quiesce', 'stop-messaging', 'preserve', 'dispose-sessions', 'remove', 'finish', 'clear-private', 'notify'])
   })
   test('busy runtime rejects before preservation', async () => {
     const { controller, calls } = setup({ runtime: { quiesceCampaignForDeletion: async () => { throw new Error('Stop active work') } } })
@@ -119,5 +129,43 @@ describe('campaign folder eligibility', () => {
   test('requires a separate local HQ', () => {
     const { campaign } = fixture()
     expect(() => resolveCampaignCleanup([campaign], campaign.id)).toThrow('local Artist HQ')
+  })
+})
+
+describe('campaign removal commit', () => {
+  test('restores the staged folder when registration cannot be saved', () => {
+    const { campaign, hq } = fixture()
+    const paths = new Set([campaign.rootPath])
+    const config = { workspaces: [campaign, hq], activeWorkspaceId: campaign.id, activeSessionId: 'session-1' } as any
+    const storage = {
+      exists: (path: string) => paths.has(path),
+      loadConfig: () => config,
+      saveConfig: () => { throw new Error('config locked') },
+      rename: (source: string, destination: string) => { paths.delete(source); paths.add(destination) },
+      remove: (path: string) => { paths.delete(path) },
+    }
+    expect(() => removeFilesAndRegistration(campaign, hq, storage)).toThrow('config locked')
+    expect(paths.has(campaign.rootPath)).toBe(true)
+    expect([...paths].some(path => path.includes('.artist-os-delete-'))).toBe(false)
+  })
+
+  test('does not re-register a campaign when final tombstone cleanup fails', () => {
+    const { campaign, hq } = fixture()
+    const paths = new Set([campaign.rootPath])
+    const config = { workspaces: [campaign, hq], activeWorkspaceId: campaign.id, activeSessionId: 'session-1' } as any
+    let saved: typeof config | undefined
+    const storage = {
+      exists: (path: string) => paths.has(path),
+      loadConfig: () => config,
+      saveConfig: (next: typeof config) => { saved = structuredClone(next) },
+      rename: (source: string, destination: string) => { paths.delete(source); paths.add(destination) },
+      remove: () => { throw new Error('busy file') },
+    }
+    const warnings = removeFilesAndRegistration(campaign, hq, storage)
+    expect(saved?.workspaces.map((workspace: Workspace) => workspace.id)).toEqual(['hq'])
+    expect(saved?.activeWorkspaceId).toBe('hq')
+    expect(paths.has(campaign.rootPath)).toBe(false)
+    expect([...paths].some(path => path.includes('.artist-os-delete-'))).toBe(true)
+    expect(warnings.join(' ')).toContain('temporary cleanup folder')
   })
 })

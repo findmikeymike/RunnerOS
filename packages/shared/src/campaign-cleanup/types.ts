@@ -1,9 +1,17 @@
+export interface CampaignCleanupVaultWorkspace {
+  workspaceId: string;
+  workspaceName: string;
+  rootPath: string;
+  writable: boolean;
+}
+
 export interface CampaignCleanupOptions {
   campaignRootPath: string;
   hqRootPath: string;
   campaignId: string;
   campaignName: string;
   hqWorkspaceId: string;
+  linkedVaultWorkspaces?: CampaignCleanupVaultWorkspace[];
   retainedMemoryCount?: number;
 }
 
@@ -32,4 +40,7 @@ export interface CampaignCleanupResult {
   retainedFileCount: number;
   retainedMemoryCount: number;
   pastReleaseLabel: string;
+  warnings?: string[];
+  /** Internal confirmation state after Vault links are repaired during preservation. */
+  postPreservationToken?: string;
 }

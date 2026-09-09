@@ -249,6 +249,8 @@ export interface ISessionManager {
   /** Return client-safe workspace list (no rootPath) for remote clients. */
   getWorkspacesInfo(): WorkspaceInfo[]
   setupConfigWatcher(workspaceRootPath: string, workspaceId: string): void
+  /** True when this process has retired a deleted root and stale callbacks remain fenced from it. */
+  isWorkspaceRootRetired?(workspaceRootPath: string): boolean
   quiesceWorkspaceForMigration?(workspaceId: string): Promise<WorkspaceMigrationRuntimeLease>
   quiesceCampaignForDeletion?(workspaceId: string): Promise<WorkspaceMigrationRuntimeLease>
   disposeCampaignSessions?(lease: WorkspaceMigrationRuntimeLease): Promise<void>

@@ -18,6 +18,17 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.server.HOME_DIR,
 ] as const
 
+export function nextAvailableWorkspaceRoot(
+  baseDir: string,
+  slug: string,
+  unavailable: (rootPath: string) => boolean,
+): string {
+  let rootPath = join(baseDir, slug)
+  let counter = 1
+  while (unavailable(rootPath)) rootPath = join(baseDir, `${slug}-${counter++}`)
+  return rootPath
+}
+
 export function registerServerHandlers(
   server: RpcServer,
   deps: HandlerDeps,
@@ -47,13 +58,11 @@ export function registerServerHandlers(
 
     ensureDefaultWorkspacesDir()
     const baseDir = getDefaultWorkspacesDir()
-    let rootPath = join(baseDir, slug)
-    let uniqueSlug = slug
-    let counter = 1
-    while (existsSync(rootPath)) {
-      uniqueSlug = `${slug}-${counter++}`
-      rootPath = join(baseDir, uniqueSlug)
-    }
+    const rootPath = nextAvailableWorkspaceRoot(
+      baseDir,
+      slug,
+      candidate => existsSync(candidate) || sessionManager.isWorkspaceRootRetired?.(candidate) === true,
+    )
 
     const rootExistedBeforeAdd = existsSync(rootPath)
     const workspace = addWorkspace({ name: trimmed, rootPath })
