@@ -146,10 +146,14 @@ test('real control service returns committed receipt without waiting and preserv
         control: async (request) => { dispatches++; return { receipt: journal.command(request), execution: new Promise(() => {}) } } },
     })
     const handlers = new Map<string, HandlerFn>()
-    registerWorkflowRunsHandlers({ handle: (channel: string, fn: HandlerFn) => handlers.set(channel, fn) } as unknown as RpcServer,
-      { getDurableWorkflowControls: () => service, getWorkflowRunner: () => { throw new Error('legacy fallback') } } as unknown as HandlerDeps)
+    const deps = { getWorkflowRunner: () => { throw new Error('legacy fallback') } } as unknown as HandlerDeps
+    registerWorkflowRunsHandlers({ handle: (channel: string, fn: HandlerFn) => handlers.set(channel, fn) } as unknown as RpcServer, deps)
     const control = handlers.get(RPC_CHANNELS.workflowRuns.DURABLE_CONTROL)!
     const invoke = (command: unknown, workspace = 'workspace') => control(context, workspace, 'control-run', command)
+    // Bootstrap registers legacy handlers first, then attaches durable controls only after successful startup.
+    await expect(invoke({ action: 'pause', commandId: 'early', expectedVersion: 1 })).rejects.toThrow('not available')
+    expect(dispatches).toBe(0)
+    deps.getDurableWorkflowControls = () => service
     const pause = { action: 'pause', commandId: 'pause', expectedVersion: journal.get('control-run', 'workspace').version }
     const first = await invoke(pause)
     expect(first.receipt.action).toBe('pause')

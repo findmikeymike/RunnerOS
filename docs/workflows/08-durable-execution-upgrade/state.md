@@ -25,3 +25,7 @@ Local owner slice: Electron authority factory now combines stable installation i
 Startup composition slice: a default-off entry point now joins authority and protected host creation, with local-only policy checks before/after identity loading. [Evidence](evidence/T-06-startup-gate-slice.md). Included in this commit; bootstrap invocation, production runner binding resolution and live verification remain pending.
 
 Binding slice: production read-binding resolver now uses host workspace/connection configuration and API-key fingerprints, rejecting fallback routes and configuration changes during credential lookup. [Evidence](evidence/T-06-binding-slice.md). Included in this commit; conservative API-key-only scope and no activation.
+
+Bootstrap slice: Electron now connects the internal host and existing control handlers only with explicit `CRAFT_DURABLE_READ_HOST=1` for Artist OS; default startup remains unchanged. [Evidence](evidence/T-06-bootstrap-slice.md). Included in this commit. Flag not set, app not restarted; live flagged startup/quit smoke and production authorization-provider integration remain pending.
+
+Approval/status follow-up: approval-bound reads now recheck current bindings and safe-mode permissions around authorization; explicit startup failure presents a generic warning. [Evidence](evidence/T-06-policy-status-slice.md). Included in this commit. Missing authorization providers still block dispatch; public admission stays legacy.

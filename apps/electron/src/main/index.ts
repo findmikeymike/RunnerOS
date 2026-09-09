@@ -1,3 +1,5 @@
+import { startElectronDurableWorkflowHost } from './durable-workflow-startup'
+import { createDurableReadBindingResolver } from '@craft-agent/server-core/workflows/durable-read-binding'
 import { electronDurableWorkflowLifetime } from './durable-workflow-lifetime'
 import { artistStartupWindow } from './artist-startup-window'
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
@@ -859,6 +861,7 @@ app.whenReady().then(async () => {
       }
 
       // Bootstrap the WS RPC server via shared bootstrap function.
+      let durableHandlerDeps: HandlerDeps | undefined
       const instance = await bootstrapServer<SessionManager, HandlerDeps>({
         serverToken,
         rpcHost,
@@ -977,7 +980,7 @@ app.whenReady().then(async () => {
           sm.setAutomationMessagingBinder(({ workspaceId, agentSlug, sessionId, platform, channelId, channelName }) => {
             messagingHandle?.registry.bindAutomationSession(workspaceId, agentSlug, sessionId, platform, channelId, channelName)
           })
-          return {
+          const deps: HandlerDeps = {
             sessionManager: sm,
             platform: p,
             windowManager: windowManager ?? undefined,
@@ -1006,6 +1009,8 @@ app.whenReady().then(async () => {
             },
             getNotificationService: () => sm.getNotificationService(),
           }
+          durableHandlerDeps = deps
+          return deps
         },
         // Headless: register only core handlers (no GUI handlers for browser, settings, etc.)
         // GUI: register all handlers (core + GUI)
@@ -1038,6 +1043,31 @@ app.whenReady().then(async () => {
           cleanupSessionFileWatchForClient(clientId)
         },
       })
+
+      // Explicit host-only opt-in. Public START still uses the legacy runner.
+      if (RUNTIME_IDENTITY.variant === 'artist-os' && process.env.CRAFT_DURABLE_READ_HOST === '1') {
+        try {
+          const durableHost = await startElectronDurableWorkflowHost({
+            enabled: true,
+            server: instance.wsServer,
+            getBinding: () => ({ host: rpcHost, serverModeEnabled: serverModeEnabled || getServerConfig().enabled }),
+            runnerOptions: {
+              hostRuntime: { appRootPath: app.getAppPath(), resourcesPath: process.resourcesPath, isPackaged: app.isPackaged },
+              resolveBinding: createDurableReadBindingResolver(),
+            },
+          })
+          if (durableHost && durableHandlerDeps) durableHandlerDeps.getDurableWorkflowControls = () => durableHost.controls
+        } catch {
+          // Do not expose keychain/credential details or break existing workflows.
+          mainLog.error('[durable-workflows] Host unavailable; durable controls remain disabled')
+          void dialog.showMessageBox({
+            type: 'warning', title: 'Workflow recovery unavailable',
+            message: 'The optional workflow recovery host could not start.',
+            detail: 'Durable workflow controls are unavailable. Existing workflows remain available. Check secure-storage access and local-only server settings before trying again on the next launch.',
+            buttons: ['OK'],
+          }).catch(() => mainLog.warn('[durable-workflows] Startup notice could not be displayed'))
+        }
+      }
 
       // Capture module-level references for before-quit cleanup and deep-link handlers
       sessionManager = instance.sessionManager

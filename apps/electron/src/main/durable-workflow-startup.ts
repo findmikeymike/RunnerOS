@@ -31,5 +31,5 @@ export function createDurableWorkflowStartup(deps = {
   };
 }
 
-/** Prepared entry point; Electron bootstrap does not invoke it yet. */
+/** Electron invokes this only behind the host-owned CRAFT_DURABLE_READ_HOST=1 opt-in. */
 export const startElectronDurableWorkflowHost = createDurableWorkflowStartup();

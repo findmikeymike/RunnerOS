@@ -1,3 +1,5 @@
+import { shouldAllowToolInMode } from '../../../shared/src/agent/mode-manager.ts';
+import { permissionsConfigCache } from '../../../shared/src/agent/permissions-config.ts';
 import { realpathSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { AgentEvent, Workspace } from '@craft-agent/core/types';
@@ -264,8 +266,24 @@ export class DurableReadRunner {
   private async execute(runId: string, workspaceId: string, entry: ActiveReadExecution): Promise<DurableRunSnapshot> {
     const { journal } = this.options, initial = journal.get(runId, workspaceId);
     if (initial.status !== 'running') return initial;
-    const claim = journal.claim(runId, workspaceId), journalBridge = journal.bridge(claim, initial.spec.approvalPrincipalId && this.options.authorizeTool ? {
-      authorizeTool: request => this.options.authorizeTool!(request, { runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId! }),
+    const claim = journal.claim(runId, workspaceId), journalBridge = journal.bridge(claim, initial.spec.approvalPrincipalId ? {
+      authorizeTool: async request => {
+        const frozen = frozenContext(initial.spec);
+        const checkCurrent = async () => {
+          const current = await this.options.resolveBinding(workspaceId, frozen.connectionSlug, initial.spec.model);
+          this.checkBinding(current, workspaceId, frozen.connectionSlug, initial.spec.model);
+          if (bindingDigest(current) !== frozen.bindingDigest) throw new Error('durable-authorization-blocked');
+          permissionsConfigCache.invalidateDefaults();
+          permissionsConfigCache.invalidateWorkspace(frozen.workspaceRoot);
+          const policyTool = { read: 'Read', grep: 'Grep', find: 'Glob', ls: 'Glob' }[request.tool];
+          if (!policyTool || !shouldAllowToolInMode(policyTool, request.input, 'safe', { permissionsContext: { workspaceRootPath: frozen.workspaceRoot, activeSourceSlugs: [] } }).allowed) throw new Error('durable-authorization-blocked');
+        };
+        await checkCurrent();
+        if (!this.options.authorizeTool) throw new Error('durable-authorization-blocked');
+        const authorization = await this.options.authorizeTool(request, { runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId! });
+        await checkCurrent();
+        return authorization;
+      },
     } : undefined);
     const assertDispatch = () => {
       const state = journal.get(runId, workspaceId);

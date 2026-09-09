@@ -692,3 +692,26 @@ test('quiesce retry retains a failed pause obligation after its active execution
   expect(journal.get(input.runId, input.workspaceId).status).toBe('paused');
   await expect(runner.resume(input.runId, input.workspaceId)).rejects.toThrow('durable-host-closing');
 });
+
+for (const scenario of ['sensitive-path', 'credential-change'] as const) {
+  test(`approval callback cannot bypass current policy: ${scenario}`, async () => {
+    const { input, binding, base, journal } = fixture(); input.approvalPrincipalId = 'alice';
+    let dispatched = false;
+    const runner = new DurableReadRunner({ ...base,
+      authorizeTool: async () => {
+        if (scenario === 'credential-change') binding.credentialIdentity = 'b'.repeat(64);
+        return { principalId: 'alice', credentialIdentity: 'a'.repeat(64), policyRevision: 'p', allowed: true, requiresApproval: false, approvalExpiresAt: Date.now() + 30000 };
+      },
+      createBackend: args => ({ async *chat() {
+        const bridge = args.coreConfig.durableExecution!;
+        await bridge.checkpoint({kind:'model-start',turn:0,context:{}});
+        await bridge.checkpoint({kind:'model-result',turn:0,message:{role:'assistant',stopReason:'toolUse',content:[{type:'toolCall',id:'read',name:'read',arguments:{path:'fixture'}}]}});
+        await bridge.checkpoint({kind:'tool-start',turn:0,callId:'read',tool:'read',input:{path:scenario === 'sensitive-path' ? '/tmp/.ssh/id_rsa' : '/tmp/fixture'}});
+        dispatched = true;
+      }, async abort() {}, destroy() {} }),
+    });
+    expect((await runner.start(input)).status).toBe('paused');
+    expect(dispatched).toBe(false);
+    expect(journal.get(input.runId,input.workspaceId).turns[0]!.calls[0]!.attempts).toBe(0);
+  });
+}
