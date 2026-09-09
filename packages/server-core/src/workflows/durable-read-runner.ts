@@ -148,8 +148,7 @@ export class DurableReadRunner {
     const key = canonical([command.workspaceId, command.runId]);
     const previous = this.active.get(key);
     if (command.action === 'cancel') {
-      if (this.options.journal.get(command.runId, command.workspaceId).status === 'cancelled') await previous?.backend?.abort('durable-run-cancelled');
-      return { receipt };
+      return { receipt, execution: this.abortAfterCommit(receipt, previous?.backend, 'durable-run-cancelled') };
     }
     if (command.action !== 'resume') return { receipt };
     return { receipt, execution: this.resumeAfterDrain(receipt, previous?.promise) };
@@ -160,8 +159,7 @@ export class DurableReadRunner {
     const receipt = Object.freeze(this.options.journal.decide(command));
     const previous = this.active.get(canonical([command.workspaceId, command.runId]));
     if (command.action === 'deny') {
-      if (this.options.journal.get(command.runId, command.workspaceId).status === 'cancelled') await previous?.backend?.abort('durable-approval-denied');
-      return { receipt };
+      return { receipt, execution: this.abortAfterCommit(receipt, previous?.backend, 'durable-approval-denied') };
     }
     if (receipt.status !== 'running') return { receipt };
     return { receipt, execution: this.resumeAfterDrain(receipt, previous?.promise) };
@@ -175,6 +173,19 @@ export class DurableReadRunner {
     const current = this.options.journal.get(command.runId, command.workspaceId);
     if (current.status !== 'running' || current.controlRevision !== receipt.controlRevision || previous && before.status === 'running') return { receipt };
     return { receipt, execution: this.resumeAfterDrain(receipt, previous?.promise) };
+  }
+
+  private abortAfterCommit(receipt: Pick<DurableControlReceipt, 'runId' | 'workspaceId'>, backend: ReadBackend | undefined, reason: string): Promise<DurableRunSnapshot> | undefined {
+    if (!backend) return undefined;
+    // Shutdown is cooperative; the committed cancellation must be acknowledged even if it hangs or rejects.
+    const execution = Promise.resolve().then(async () => {
+      const current = this.options.journal.get(receipt.runId, receipt.workspaceId);
+      if (current.status !== 'cancelled') return current;
+      await backend.abort(reason);
+      return this.options.journal.get(receipt.runId, receipt.workspaceId);
+    });
+    void execution.catch(() => { /* Keep failures observable without requiring receipt-only callers to await shutdown. */ });
+    return execution;
   }
 
   private resumeAfterDrain(receipt: Pick<DurableControlReceipt, 'runId' | 'workspaceId' | 'controlRevision'>, previous?: Promise<DurableRunSnapshot>): Promise<DurableRunSnapshot> {

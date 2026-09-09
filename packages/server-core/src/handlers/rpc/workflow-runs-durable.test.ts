@@ -1,5 +1,5 @@
 import { describe, expect, test, spyOn } from 'bun:test'
-import { RPC_CHANNELS, type WorkflowAttentionDTO } from '@craft-agent/shared/protocol'
+import { RPC_CHANNELS, DURABLE_RUNTIME_MANIFEST, type WorkflowAttentionDTO } from '@craft-agent/shared/protocol'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -118,4 +118,51 @@ test('mixed attention listing preserves a legacy filtered run with a real durabl
     readRun.mockRestore(); pending.mockRestore(); getWorkspace.mockRestore()
     journal.close(); rmSync(root, { recursive: true, force: true })
   }
+})
+
+
+test('explicit durable controls never use legacy controls or require service startup', async () => {
+  const handlers = new Map<string, HandlerFn>()
+  let legacyCalls = 0
+  registerWorkflowRunsHandlers({ handle: (channel: string, fn: HandlerFn) => handlers.set(channel, fn) } as unknown as RpcServer,
+    { getWorkflowRunner: () => { legacyCalls++; throw new Error('legacy fallback') } } as unknown as HandlerDeps)
+  await expect(handlers.get(RPC_CHANNELS.workflowRuns.DURABLE_CONTROL)!(context, 'workspace', 'run', { action: 'resume', commandId: 'resume', expectedVersion: 1 })).rejects.toThrow('not available')
+  expect(legacyCalls).toBe(0)
+})
+
+test('real control service returns committed receipt without waiting and preserves later state on duplicate', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'durable-rpc-control-'))
+  const journal = new DurableJournal({ configRoot: root, key: randomBytes(32) })
+  try {
+    journal.admit({ engine: 'sqlite-v2-readonly-1', runId: 'control-run', workspaceId: 'workspace', commandId: 'admit',
+      createdAt: Date.now(), credentialIdentity: 'a'.repeat(64), runtimeManifest: { ...DURABLE_RUNTIME_MANIFEST },
+      allowedTools: ['read'], model: 'fake', maxOutputTokens: 100, maxModelAttempts: 10, authority: {}, context: {},
+      deadlineAt: Date.now() + 60000, costPolicy: { unit: 'verified-free', maxTotalUnits: 0, maxUnitsPerAttempt: 0 }, approvalPrincipalId: 'alice' })
+    const actors: unknown[] = []
+    let dispatches = 0
+    const service = new DurableWorkflowControls({ journal,
+      resolvePrincipal: (_workspace, actor) => { actors.push(actor); return 'alice' },
+      runner: { decide: async () => { throw new Error('unexpected approval') },
+        control: async (request) => { dispatches++; return { receipt: journal.command(request), execution: new Promise(() => {}) } } },
+    })
+    const handlers = new Map<string, HandlerFn>()
+    registerWorkflowRunsHandlers({ handle: (channel: string, fn: HandlerFn) => handlers.set(channel, fn) } as unknown as RpcServer,
+      { getDurableWorkflowControls: () => service, getWorkflowRunner: () => { throw new Error('legacy fallback') } } as unknown as HandlerDeps)
+    const control = handlers.get(RPC_CHANNELS.workflowRuns.DURABLE_CONTROL)!
+    const invoke = (command: unknown, workspace = 'workspace') => control(context, workspace, 'control-run', command)
+    const pause = { action: 'pause', commandId: 'pause', expectedVersion: journal.get('control-run', 'workspace').version }
+    const first = await invoke(pause)
+    expect(first.receipt.action).toBe('pause')
+    expect(first.state.status).toBe('paused')
+    expect(actors).toEqual([{ clientId: context.clientId, workspaceId: context.workspaceId }])
+    const resumed = await invoke({ action: 'resume', commandId: 'resume', expectedVersion: first.state.version })
+    const duplicate = await invoke(pause)
+    expect(duplicate.receipt).toEqual(first.receipt)
+    expect(duplicate.state).toEqual(resumed.state)
+    expect(duplicate.state.status).toBe('running')
+    expect(dispatches).toBe(2)
+    await expect(invoke({ action: 'cancel', commandId: 'spoofed', expectedVersion: resumed.state.version, principalId: 'alice' })).rejects.toThrow('invalid-durable-control-command')
+    await expect(invoke({ action: 'cancel', commandId: 'cross-workspace', expectedVersion: resumed.state.version }, 'other')).rejects.toThrow('workspace-mismatch')
+    expect(journal.get('control-run', 'workspace').status).toBe('running')
+  } finally { journal.close(); rmSync(root, { recursive: true, force: true }) }
 })

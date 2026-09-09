@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "revision": "r7",
+  "revision": "r8",
   "sources": [
     {
       "id": "S-USER",
@@ -397,6 +397,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -466,6 +474,14 @@
           "path": "evidence/T-06D-rival.md",
           "revision": "r7",
           "environment": "Independent historical carryforward from r6; changed paths separately verified by T06D; historical evidence is not a fresh rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -553,6 +569,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -633,6 +657,14 @@
           "path": "evidence/T-06D-rival.md",
           "revision": "r7",
           "environment": "Independent historical carryforward from r6; changed paths separately verified by T06D; historical evidence is not a fresh rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -721,6 +753,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -784,6 +824,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -834,6 +882,14 @@
           "path": "evidence/T-06D-rival.md",
           "revision": "r7",
           "environment": "Independent historical carryforward from r6; changed paths separately verified by T06D; historical evidence is not a fresh rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -907,6 +963,14 @@
           "path": "evidence/T-06D-rival.md",
           "revision": "r7",
           "environment": "Independent historical carryforward from r6; changed paths separately verified by T06D; historical evidence is not a fresh rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -984,6 +1048,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1038,6 +1110,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1080,6 +1160,14 @@
           "path": "evidence/T-06D-rival.md",
           "revision": "r7",
           "environment": "Independent historical carryforward from r6; changed paths separately verified by T06D; historical evidence is not a fresh rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -1146,6 +1234,14 @@
           "path": "evidence/T-06D-rival.md",
           "revision": "r7",
           "environment": "Independent historical carryforward from r6; changed paths separately verified by T06D; historical evidence is not a fresh rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -1217,6 +1313,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1276,6 +1380,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1327,6 +1439,65 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent historical carryforward from r7; changed controls/attention paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        }
+      ]
+    },
+    {
+      "id": "T-06E",
+      "kind": "task",
+      "title": "Route explicit durable pause resume cancel and steering commands",
+      "owner": "controls-integration-owner",
+      "depends_on": [
+        "G-03",
+        "T-06D"
+      ],
+      "status": "accepted",
+      "phase": "P-03",
+      "requirements": [
+        "R-06",
+        "R-08",
+        "R-11",
+        "R-12"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-06E.md",
+      "resources": [
+        "packages/server-core/src/workflows/durable-workflow-controls.ts",
+        "packages/server-core/src/handlers/rpc/workflow-runs.ts",
+        "packages/shared/src/protocol",
+        "apps/electron/src/transport/channel-map.ts"
+      ],
+      "verification": [
+        {
+          "method": "Real journal service/control RPC tests, transport routing, actual Pi process control recovery and independent review",
+          "expected": "Exact commands persist before acknowledgement and cannot repeat effects or cross authority boundaries; legacy rerun semantics unchanged",
+          "environment": "Optional service with synthetic trusted principal; disposable Pi/loopback provider and copied packaged journal"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/T-06E-controls.md",
+          "revision": "r8",
+          "environment": "Optional service/control RPC, actual Pi process recovery, transport routing and copied packaged journal; no live UI or host bootstrap",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "automated"
+        },
+        {
+          "path": "evidence/T-06E-rival.md",
+          "revision": "r8",
+          "environment": "Independent adversarial review and actual runner abort fault reproduction, final evidence review",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1340,7 +1511,8 @@
         "T-06A",
         "T-06B",
         "T-06C",
-        "T-06D"
+        "T-06D",
+        "T-06E"
       ],
       "status": "planned",
       "phase": "P-03",

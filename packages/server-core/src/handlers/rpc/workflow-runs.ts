@@ -6,7 +6,7 @@
  * façades over the runner + the run-storage helpers.
  */
 
-import { type WorkflowAttentionDTO, type WorkflowAttentionDecisionDTO, RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { type DurableWorkflowCommandDTO, type DurableWorkflowControlResultDTO, type WorkflowAttentionDTO, type WorkflowAttentionDecisionDTO, RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   loadGlobalWorkflow,
   readActivatedWorkflows,
@@ -31,6 +31,7 @@ const WORKFLOW_RUNS_RESUME =
   'workflow-runs:resume'
 
 export const HANDLED_CHANNELS = [
+  RPC_CHANNELS.workflowRuns.DURABLE_CONTROL,
   RPC_CHANNELS.workflowRuns.START,
   RPC_CHANNELS.workflowRuns.GET,
   RPC_CHANNELS.workflowRuns.LIST,
@@ -58,6 +59,14 @@ async function assertWorkflowRunPermission(workspaceId: string, action: 'agent.c
 }
 
 export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDeps): void {
+  server.handle(
+    RPC_CHANNELS.workflowRuns.DURABLE_CONTROL,
+    async (ctx, workspaceId: string, runId: string, command: DurableWorkflowCommandDTO): Promise<DurableWorkflowControlResultDTO> => {
+      if (!deps.getDurableWorkflowControls) throw new Error('Durable workflow controls are not available on this host')
+      return deps.getDurableWorkflowControls().control(workspaceId, runId, command,
+        { clientId: ctx.clientId, ...(ctx.workspaceId === null ? {} : { workspaceId: ctx.workspaceId }) })
+    },
+  )
   server.handle(
     RPC_CHANNELS.workflowRuns.LIST_ATTENTION,
     async (ctx, workspaceId: string, runId?: string): Promise<WorkflowAttentionDTO[]> => {

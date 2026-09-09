@@ -592,6 +592,7 @@ export const CHANNEL_MAP = {
   onWorkflowsChanged: listener(RPC_CHANNELS.workflows.CHANGED),
 
   // Workflow runs
+  controlDurableWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.DURABLE_CONTROL),
   startWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.START),
   getWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.GET),
   listWorkflowRuns: invoke(RPC_CHANNELS.workflowRuns.LIST),

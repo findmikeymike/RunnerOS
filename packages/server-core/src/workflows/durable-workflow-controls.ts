@@ -1,12 +1,14 @@
 import { canonical, digest, type DurableJournal, type DurableRunSnapshot } from '../../../shared/src/durable-execution/index.ts';
-import { DURABLE_RUNTIME_MANIFEST, type DurableApproval, type DurableDecisionCommand } from '../../../shared/src/protocol/durable-execution.ts';
-import type { WorkflowAttentionDTO } from '../../../shared/src/protocol/dto.ts';
+import { DURABLE_RUNTIME_MANIFEST, type DurableApproval, type DurableDecisionCommand, type DurableControlCommand, type DurableSteeringCommand } from '../../../shared/src/protocol/durable-execution.ts';
+import type { WorkflowAttentionDTO, DurableWorkflowCommandDTO, DurableWorkflowControlResultDTO } from '../../../shared/src/protocol/dto.ts';
 import type { DurableReadRunner } from './durable-read-runner.ts';
 
 export interface DurableWorkflowActor { clientId: string; workspaceId?: string }
+export type DurableWorkflowControlInput = DurableWorkflowCommandDTO;
+export type DurableWorkflowControlResult = DurableWorkflowControlResultDTO;
 export interface DurableWorkflowControlsOptions {
   journal: DurableJournal;
-  runner: Pick<DurableReadRunner, 'decide'>;
+  runner: Pick<DurableReadRunner, 'decide'> & Partial<Pick<DurableReadRunner, 'control' | 'steer'>>;
   /** Must verify current access and return a stable principal; clientId is only a connection ID. */
   resolvePrincipal: (workspaceId: string, actor: DurableWorkflowActor) => Promise<string> | string;
 }
@@ -43,6 +45,28 @@ export class DurableWorkflowControls {
     catch (error) { if (runId && error instanceof Error && error.message === 'durable-run-not-found') return []; throw error; }
     if (runId && states[0]!.spec.approvalPrincipalId !== principal) throw new Error('durable-attention-principal-mismatch');
     return states.flatMap(state => state.spec.approvalPrincipalId !== principal || !['running', 'paused', 'waiting-approval'].includes(state.status) ? [] : (state.approvals ?? []).filter(approval => ['pending', 'expired'].includes(approval.status) && (state.approvals ?? []).filter(candidate => candidate.operationId === approval.operationId).at(-1)?.id === approval.id).map(approval => this.project(state, approval)));
+  }
+
+  async control(workspaceId: string, runId: string, command: DurableWorkflowControlInput, actor: DurableWorkflowActor): Promise<DurableWorkflowControlResult> {
+    const pinned = JSON.parse(canonical(command)) as DurableWorkflowControlInput;
+    if (!pinned || Array.isArray(pinned) || Object.keys(pinned).some(key => !['commandId', 'expectedVersion', 'action', ...(pinned.action === 'steer' ? ['text'] : [])].includes(key)) || typeof pinned.commandId !== 'string' || !pinned.commandId.trim() || !Number.isSafeInteger(pinned.expectedVersion) || pinned.expectedVersion < 1 || !['pause', 'resume', 'cancel', 'steer'].includes(pinned.action) || pinned.action === 'steer' && (typeof pinned.text !== 'string' || !pinned.text.trim())) throw new Error('invalid-durable-control-command');
+    const principal = await this.principal(workspaceId, actor);
+    const before = this.options.journal.get(runId, workspaceId);
+    if (!before.spec.approvalPrincipalId || before.spec.approvalPrincipalId !== principal) throw new Error('durable-attention-principal-mismatch');
+    const request = { ...pinned, workspaceId, runId } as DurableControlCommand | DurableSteeringCommand;
+    let receipt = this.options.journal.controlReceipt(request);
+    if (!receipt) {
+      const runner = this.options.runner;
+      if (request.action === 'steer') {
+        if (!runner.steer) throw new Error('durable-control-unavailable');
+        const result = await runner.steer(request); receipt = result.receipt; void result.execution?.catch(() => {});
+      } else {
+        if (!runner.control) throw new Error('durable-control-unavailable');
+        const result = await runner.control(request); receipt = result.receipt; void result.execution?.catch(() => {});
+      }
+    }
+    const current = this.options.journal.get(runId, workspaceId);
+    return { receipt, state: { runId, workspaceId, status: current.status, version: current.version, controlRevision: current.controlRevision, continuationRevision: current.continuationRevision ?? 0, pendingUpdates: current.steering?.filter(entry => entry.appliedAfterTurn === undefined || !current.turns[entry.appliedAfterTurn + 1]).length ?? 0 } };
   }
 
   async resolveAttention(workspaceId: string, id: string, decision: 'approved' | 'rejected', command: { commandId: string; expectedVersion: number }, actor: DurableWorkflowActor): Promise<WorkflowAttentionDTO> {

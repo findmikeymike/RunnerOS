@@ -528,3 +528,68 @@ test('repeated pending steering without applying its boundary cannot spin foreve
   await expect(running).rejects.toThrow('durable-steering-replay-stalled');
   expect(attempts).toBe(2);
 });
+
+for (const action of ['cancel', 'deny'] as const) for (const shutdown of ['reject', 'hang'] as const) {
+  test(`${action} acknowledges committed cancellation when backend aborts ${shutdown}`, async () => {
+    const { journal, input: original, base } = fixture();
+    const input = { ...original, ...(action === 'deny' ? { approvalPrincipalId: 'artist-principal' } : {}) };
+    let ready!: () => void, finish!: () => void;
+    const started = new Promise<void>(resolve => { ready = resolve; });
+    const drain = new Promise<void>(resolve => { finish = resolve; });
+    const abortError = new Error('backend-shutdown-rejected');
+    let aborts = 0;
+    const runner = new DurableReadRunner({ ...base,
+      authorizeTool: async () => ({ principalId: 'artist-principal', credentialIdentity: 'a'.repeat(64), policyRevision: 'policy', allowed: true, requiresApproval: true, approvalExpiresAt: Date.now() + 30000 }),
+      createBackend: args => ({
+        async *chat() {
+          if (action === 'deny') {
+            const bridge = args.coreConfig.durableExecution!;
+            await bridge.checkpoint({ kind: 'model-start', turn: 0, context: {} });
+            await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'toolUse', content: [{ type: 'toolCall', id: 'read', name: 'read', arguments: {} }] } });
+            await expect(bridge.checkpoint({ kind: 'tool-start', turn: 0, callId: 'read', tool: 'read', input: {} })).rejects.toThrow('approval-required');
+          }
+          ready(); await drain;
+          yield { type: 'error', message: 'late cancelled backend error' };
+        },
+        async abort() {
+          aborts++;
+          expect(journal.get(input.runId, input.workspaceId).status).toBe('cancelled');
+          if (shutdown === 'reject') throw abortError;
+          await new Promise<void>(() => {});
+        }, destroy() {},
+      }),
+    });
+    const running = runner.start(input); await started;
+    try {
+      const result = await (action === 'deny'
+        ? runner.decide(approvalDecision(journal, input, 'deny'))
+        : runner.control({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'cancel' }));
+      expect(result.receipt.status).toBe('cancelled');
+      expect(aborts).toBe(1);
+      expect(result.execution).toBeDefined();
+      if (shutdown === 'reject') await expect(result.execution!).rejects.toBe(abortError);
+      expect(journal.get(input.runId, input.workspaceId).status).toBe('cancelled');
+    } finally { finish(); }
+    expect((await running).status).toBe('cancelled');
+  });
+}
+
+test('cancel after committed success leaves its draining backend alone', async () => {
+  const { journal, input, base } = fixture();
+  let ready!: () => void, finish!: () => void;
+  const started = new Promise<void>(resolve => { ready = resolve; });
+  const drain = new Promise<void>(resolve => { finish = resolve; });
+  let aborts = 0;
+  const runner = new DurableReadRunner({ ...base, createBackend: args => ({
+    async *chat() { await complete(args); ready(); await drain; },
+    async abort() { aborts++; }, destroy() {},
+  }) });
+  const running = runner.start(input); await started;
+  try {
+    const result = await runner.control({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'cancel' });
+    expect(result.receipt.status).toBe('succeeded');
+    expect((await result.execution!)!.status).toBe('succeeded');
+    expect(aborts).toBe(0);
+  } finally { finish(); }
+  expect((await running).status).toBe('succeeded');
+});

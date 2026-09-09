@@ -14,7 +14,7 @@ import type {
   AnnotationV1,
   PermissionRequest as BasePermissionRequest,
 } from '@craft-agent/core/types'
-import type { DurableDecisionReceipt } from './durable-execution'
+import type { DurableDecisionReceipt, DurableControlReceipt, DurableSteeringReceipt, DurableRunStatus } from './durable-execution'
 import type { PermissionMode } from '../agent/mode-types'
 import type { ThinkingLevel } from '../agent/thinking-levels'
 import type { AppEvent, QueueWorkAction } from '../automations/types'
@@ -196,6 +196,26 @@ export interface RemoteSessionTransferPayload {
   chatGoal?: ChatGoalState
   /** Advisory task list; runtime-local execution claims are removed on import. */
   sessionTasks?: SessionTaskList
+}
+
+/** Explicit durable command; legacy Resume continues to mean rerun-from-step. */
+export type DurableWorkflowCommandDTO = {
+  commandId: string
+  expectedVersion: number
+} & ({ action: 'pause' | 'resume' | 'cancel' } | { action: 'steer'; text: string })
+
+export interface DurableWorkflowControlResultDTO {
+  /** Historical command acknowledgement; state below may reflect later commands. */
+  receipt: DurableControlReceipt | DurableSteeringReceipt
+  state: {
+    runId: string
+    workspaceId: string
+    status: DurableRunStatus
+    version: number
+    controlRevision: number
+    continuationRevision: number
+    pendingUpdates: number
+  }
 }
 
 export interface WorkflowAttentionDecisionDTO {

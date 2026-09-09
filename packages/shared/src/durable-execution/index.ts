@@ -63,6 +63,11 @@ export interface DurableRunSnapshot {
   boundaries?: Array<{ afterTurn: number; sequences: number[]; continuationRevision: number }>;
   failure?: string;
 }
+function validateControlInput(command: DurableControlCommand | DurableSteeringCommand): void {
+  canonical(command);
+  const fields = ['runId', 'workspaceId', 'commandId', 'expectedVersion', 'action', ...(command.action === 'steer' ? ['text'] : [])];
+  if (Object.keys(command).some(key => !fields.includes(key)) || ['runId', 'workspaceId', 'commandId'].some(key => typeof (command as any)[key] !== 'string' || !(command as any)[key].trim()) || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1 || !['pause', 'resume', 'cancel', 'steer'].includes(command.action) || command.action === 'steer' && (typeof command.text !== 'string' || !command.text.trim())) throw new Error('invalid-durable-control-command');
+}
 export interface DurableJournalOptions { configRoot: string; key: Buffer; ownerId?: string; isProcessAlive?: (pid: number) => boolean; maxPayloadBytes?: number }
 export class DurableJournal {
   readonly path: string;
@@ -175,8 +180,18 @@ export class DurableJournal {
   fail(runId: string, workspaceId: string, _reason: string): void { this.control(runId, workspaceId, 'failed'); }
   private control(runId: string, workspaceId: string, status: 'cancelled' | 'failed'): void { this.transaction(() => { const state = this.get(runId, workspaceId); if (state.status === 'running' || status === 'cancelled' && ['paused', 'waiting-approval'].includes(state.status)) { state.status = status; state.controlRevision++; this.save(state, status); } }); }
 
+  controlReceipt(command: DurableControlCommand | DurableSteeringCommand): DurableControlReceipt | DurableSteeringReceipt | undefined {
+    validateControlInput(command);
+    this.row(command.runId, command.workspaceId);
+    const prior = this.db.prepare('SELECT payload FROM control_commands WHERE workspace=? AND id=?').get(command.workspaceId, command.commandId);
+    if (!prior) return undefined;
+    const saved = this.decrypt(prior.payload, canonical([command.workspaceId, command.commandId]));
+    if (digest(saved.command) !== digest(command)) throw new Error('durable-command-conflict');
+    return saved.receipt;
+  }
+
   command(command: DurableControlCommand): DurableControlReceipt {
-    canonical(command);
+    validateControlInput(command);
     if (!command.commandId || !command.runId || !command.workspaceId || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1 || !['pause', 'resume', 'cancel'].includes(command.action)) throw new Error('invalid-durable-control-command');
     return this.transaction(() => {
       // Resolve workspace/run authority before disclosing any old command receipt.
@@ -207,7 +222,7 @@ export class DurableJournal {
     });
   }
   steer(command: DurableSteeringCommand): DurableSteeringReceipt {
-    canonical(command);
+    validateControlInput(command);
     if (!command.commandId || !command.runId || !command.workspaceId || command.action !== 'steer' || typeof command.text !== 'string' || !command.text.trim() || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1) throw new Error('invalid-durable-steering-command');
     return this.transaction(() => {
       const state = this.get(command.runId, command.workspaceId);

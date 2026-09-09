@@ -6,6 +6,8 @@ import type {
   DiscoverOmniRouteModelsParams,
   DiscoverOmniRouteModelsResult,
   WorkflowAttentionDTO,
+  DurableWorkflowCommandDTO,
+  DurableWorkflowControlResultDTO,
 } from '@craft-agent/shared/protocol'
 
 // =============================================================================
@@ -1401,6 +1403,7 @@ export interface ElectronAPI {
   onWorkflowsChanged(callback: (workspaceId: string | null, workflows: WorkflowDTO[]) => void): () => void
 
   // Workflow runs
+  controlDurableWorkflowRun(workspaceId: string, runId: string, command: DurableWorkflowCommandDTO): Promise<DurableWorkflowControlResultDTO>
   startWorkflowRun(workspaceId: string, workflowSlug: string, triggerInputs: Record<string, unknown>): Promise<WorkflowRunDTO>
   getWorkflowRun(workspaceId: string, runId: string): Promise<WorkflowRunDTO | null>
   listWorkflowRuns(workspaceId: string): Promise<WorkflowRunDTO[]>
