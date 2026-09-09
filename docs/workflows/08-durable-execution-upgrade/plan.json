@@ -1,0 +1,1083 @@
+{
+  "schema_version": 1,
+  "revision": "r2",
+  "sources": [
+    {
+      "id": "S-USER",
+      "path": "specification.md#1-purpose-and-authority",
+      "authority": "User authorized spec amendment and first task-group implementation, then rival review and fix, on 2026-09-09"
+    },
+    {
+      "id": "S-RUN",
+      "path": "../../../packages/server-core/src/workflows/runner.ts",
+      "authority": "Current implementation or historical contract; scope in specification source register",
+      "version": "8ce9f5c11782caa3c46713df8a9b7150513c95eb"
+    },
+    {
+      "id": "S-SESSION",
+      "path": "../../../packages/server-core/src/sessions/SessionManager.ts",
+      "authority": "Current implementation or historical contract; scope in specification source register",
+      "version": "8ce9f5c11782caa3c46713df8a9b7150513c95eb"
+    },
+    {
+      "id": "S-APPROVAL",
+      "path": "../../../packages/shared/src/agent/subconscious-mode.ts",
+      "authority": "Current implementation or historical contract; scope in specification source register",
+      "version": "8ce9f5c11782caa3c46713df8a9b7150513c95eb"
+    },
+    {
+      "id": "S-CHILD",
+      "path": "../../../packages/shared/src/agent-messaging/storage.ts",
+      "authority": "Current implementation or historical contract; scope in specification source register",
+      "version": "8ce9f5c11782caa3c46713df8a9b7150513c95eb"
+    },
+    {
+      "id": "S-SCHEDULE",
+      "path": "../../../packages/server-core/src/scheduled-work/ScheduledWorkRunner.ts",
+      "authority": "Current implementation or historical contract; scope in specification source register",
+      "version": "8ce9f5c11782caa3c46713df8a9b7150513c95eb"
+    },
+    {
+      "id": "S-OLD",
+      "path": "../../../docs/workflows/06-recovery-plan.md",
+      "authority": "Current implementation or historical contract; scope in specification source register",
+      "version": "8ce9f5c11782caa3c46713df8a9b7150513c95eb"
+    },
+    {
+      "id": "S-PYTHON",
+      "path": "../../../tools/squad/vendor/squad/scripts/run_creative_production_durable.py",
+      "authority": "Current implementation or historical contract; scope in specification source register",
+      "version": "8ce9f5c11782caa3c46713df8a9b7150513c95eb"
+    },
+    {
+      "id": "S-DBOS",
+      "path": "https://docs.dbos.dev/architecture",
+      "authority": "External primary reference, consulted 2026-09-09"
+    },
+    {
+      "id": "S-SQLITE",
+      "path": "https://www.sqlite.org/wal.html",
+      "authority": "External primary reference, consulted 2026-09-09"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "R-01",
+      "statement": "Preserve workflow format, output lineage, permissions and existing run visibility",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER",
+        "S-RUN",
+        "S-OLD"
+      ],
+      "acceptance": [
+        "A-01, A-18"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-02",
+      "statement": "Commit durable state before acknowledging or dispatching dependent work; reject unsafe storage modes",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER",
+        "S-RUN",
+        "S-SQLITE"
+      ],
+      "acceptance": [
+        "A-02, A-14"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-03",
+      "statement": "Stable operation identity, canonical inputs, strict divergence detection and reusable completed results",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER",
+        "S-RUN",
+        "S-DBOS"
+      ],
+      "acceptance": [
+        "A-03, A-04"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-04",
+      "statement": "Persist model turns/tool batches and resume from a recorded continuation",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER",
+        "S-SESSION"
+      ],
+      "acceptance": [
+        "A-05"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-05",
+      "statement": "Classify and reconcile external effects; bound retry amplification and cost",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER",
+        "S-SCHEDULE",
+        "S-DBOS"
+      ],
+      "acceptance": [
+        "A-06, A-07"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-06",
+      "statement": "Persist approval waits and consume exact authorized decisions once across restart",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER",
+        "S-APPROVAL"
+      ],
+      "acceptance": [
+        "A-08"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-07",
+      "statement": "Persist child creation, results, joins and inherited constraints",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER",
+        "S-CHILD"
+      ],
+      "acceptance": [
+        "A-09"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-08",
+      "statement": "Enforce ownership epochs and terminal/cancellation fences",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER",
+        "S-SCHEDULE"
+      ],
+      "acceptance": [
+        "A-10, A-11"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-09",
+      "statement": "Atomically admit schedule occurrences and apply explicit overdue policy",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER",
+        "S-SCHEDULE"
+      ],
+      "acceptance": [
+        "A-12"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-10",
+      "statement": "Pin compatibility and support reversible, nonduplicating migration",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER",
+        "S-RUN",
+        "S-OLD"
+      ],
+      "acceptance": [
+        "A-13, A-18"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-11",
+      "statement": "Keep credentials out of the journal and scope every command to the workspace/principal",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER",
+        "S-APPROVAL",
+        "S-CHILD"
+      ],
+      "acceptance": [
+        "A-15"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-12",
+      "statement": "Show clear recovery states and safe actions in existing Work/Run views",
+      "priority": "P1",
+      "source_refs": [
+        "S-USER",
+        "S-OLD"
+      ],
+      "acceptance": [
+        "A-16"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-13",
+      "statement": "Conserve budgets, attempts and deadlines across retry, delegation, sleep and restart",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER",
+        "S-CHILD",
+        "S-SCHEDULE"
+      ],
+      "acceptance": [
+        "A-07, A-17"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-14",
+      "statement": "Provide reconciliation telemetry, backup, retention and a recovery runbook",
+      "priority": "P1",
+      "source_refs": [
+        "S-USER",
+        "S-RUN",
+        "S-SQLITE"
+      ],
+      "acceptance": [
+        "A-14, A-19"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-15",
+      "statement": "Release only after independent fault testing and staged compatibility verification",
+      "priority": "P0",
+      "source_refs": [
+        "S-USER"
+      ],
+      "acceptance": [
+        "A-01\u2013A-20"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R-16",
+      "statement": "Cross-machine automatic recovery and distributed leases",
+      "priority": "Deferred",
+      "source_refs": [
+        "S-USER"
+      ],
+      "acceptance": [
+        "Separate design required; no network-share SQLite"
+      ],
+      "disposition": "deferred",
+      "reason": "Separate design required; no network-share SQLite"
+    },
+    {
+      "id": "R-17",
+      "statement": "Broad product rewrite or new workflow editor",
+      "priority": "Excluded",
+      "source_refs": [
+        "S-USER"
+      ],
+      "acceptance": [
+        "Preserve existing authoring and surfaces"
+      ],
+      "disposition": "excluded",
+      "reason": "Preserve existing authoring and surfaces"
+    }
+  ],
+  "phases": [
+    {
+      "id": "P-01",
+      "act": "I",
+      "title": "Prove the architecture",
+      "entry_gate": "G-01",
+      "exit_gate": "G-01-EXIT",
+      "brief": "roadmap.md"
+    },
+    {
+      "id": "P-02",
+      "act": "I",
+      "title": "Journal and durable agent turns",
+      "entry_gate": "G-02",
+      "exit_gate": "G-02-EXIT",
+      "brief": "roadmap.md"
+    },
+    {
+      "id": "P-03",
+      "act": "II",
+      "title": "Approvals effects and child agents",
+      "entry_gate": "G-03",
+      "exit_gate": "G-03-EXIT",
+      "brief": "roadmap.md"
+    },
+    {
+      "id": "P-04",
+      "act": "II",
+      "title": "Scheduling and multijob continuation",
+      "entry_gate": "G-04",
+      "exit_gate": "G-04-EXIT",
+      "brief": "roadmap.md"
+    },
+    {
+      "id": "P-05",
+      "act": "III",
+      "title": "Compatibility experience and operations",
+      "entry_gate": "G-05",
+      "exit_gate": "G-05-EXIT",
+      "brief": "roadmap.md"
+    },
+    {
+      "id": "P-06",
+      "act": "III",
+      "title": "Certification and rollout",
+      "entry_gate": "G-06",
+      "exit_gate": "G-06-EXIT",
+      "brief": "roadmap.md"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "S-LOCAL",
+      "kind": "setup",
+      "title": "Verify disposable local runtime and configuration",
+      "owner": "integration-owner",
+      "depends_on": [],
+      "status": "accepted",
+      "mode": "live",
+      "evidence": [
+        {
+          "path": "evidence/T-02-storage.md",
+          "revision": "r2",
+          "environment": "Synthetic disposable P-01 fixture; Bun plus packaged Electron44.2 main-process proof; product/provider behavior unchanged",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        }
+      ]
+    },
+    {
+      "id": "S-LIVE",
+      "kind": "setup",
+      "title": "Verify prepared safe provider target and required authorization",
+      "owner": "integration-owner",
+      "depends_on": [
+        "T-13"
+      ],
+      "status": "planned",
+      "mode": "live"
+    },
+    {
+      "id": "G-01",
+      "kind": "gate",
+      "title": "Entry review for P-01",
+      "owner": "integration-lead",
+      "depends_on": [
+        "S-LOCAL"
+      ],
+      "status": "accepted",
+      "gate_type": "review",
+      "evidence": [
+        {
+          "path": "evidence/T-01-boundaries.md",
+          "revision": "r2",
+          "environment": "Synthetic disposable P-01 fixture; Bun plus packaged Electron44.2 main-process proof; product/provider behavior unchanged",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        }
+      ]
+    },
+    {
+      "id": "T-01",
+      "kind": "task",
+      "title": "Locate and freeze execution boundaries",
+      "owner": "runtime-owner",
+      "depends_on": [
+        "G-01",
+        "S-LOCAL"
+      ],
+      "status": "accepted",
+      "phase": "P-01",
+      "requirements": [
+        "R-01",
+        "R-03",
+        "R-04",
+        "R-06",
+        "R-07",
+        "R-10",
+        "R-15"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-01.md",
+      "resources": [
+        "docs/workflows/08-durable-execution-upgrade",
+        "packages/server-core/src/workflows/__tests__/durability"
+      ],
+      "verification": [
+        {
+          "method": "Run the existing baseline command in tasks/T-01.md and independently review the actual source-boundary inventory and proposed adapter/continuation contract",
+          "expected": "Existing tests pass; every required boundary has an exact current source location or an explicit support gap. Mapped A IDs are design traceability only, not upgraded acceptance passed.",
+          "environment": "Disposable local configuration, fresh worker processes, independent persistent fake-provider ledger; packaged Electron for T-02 binding proof"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/T-01-boundaries.md",
+          "revision": "r2",
+          "environment": "Synthetic disposable P-01 fixture; Bun plus packaged Electron44.2 main-process proof; product/provider behavior unchanged",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "automated"
+        }
+      ]
+    },
+    {
+      "id": "T-02",
+      "kind": "task",
+      "title": "Prove transactional storage in desktop runtime",
+      "owner": "persistence-owner",
+      "depends_on": [
+        "G-01",
+        "T-01"
+      ],
+      "status": "accepted",
+      "phase": "P-01",
+      "requirements": [
+        "R-02",
+        "R-08",
+        "R-10",
+        "R-11",
+        "R-14",
+        "R-15"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-02.md",
+      "resources": [
+        "packages/server-core/src/workflows/__tests__/durability",
+        "db/prototype-schema"
+      ],
+      "verification": [
+        {
+          "method": "Execute only the disposable storage/ownership/schema/backup subprocess prototype and packaged-runtime storage proof in tasks/T-02.md",
+          "expected": "Prototype storage cases pass with fresh-process evidence and D-02 recommendation. This is a subset of mapped A IDs; production integrations and complete release acceptance remain unverified.",
+          "environment": "Disposable local configuration, fresh worker processes, independent persistent fake-provider ledger; packaged Electron for T-02 binding proof"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/T-02-storage.md",
+          "revision": "r2",
+          "environment": "Synthetic disposable P-01 fixture; Bun plus packaged Electron44.2 main-process proof; product/provider behavior unchanged",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "automated"
+        }
+      ]
+    },
+    {
+      "id": "T-03",
+      "kind": "task",
+      "title": "Prove durable workflow and select engine",
+      "owner": "runtime-owner",
+      "depends_on": [
+        "G-01",
+        "T-02"
+      ],
+      "status": "accepted",
+      "phase": "P-01",
+      "requirements": [
+        "R-03",
+        "R-04",
+        "R-05",
+        "R-06",
+        "R-07",
+        "R-08",
+        "R-13",
+        "R-15"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-03.md",
+      "resources": [
+        "packages/server-core/src/workflows/__tests__/durability",
+        "docs/workflows/08-durable-execution-upgrade"
+      ],
+      "verification": [
+        {
+          "method": "Execute the six thin-journey experiments and boundary repetitions in tasks/T-03.md; independently review engine ADR and evidence",
+          "expected": "Named prototype boundary cases pass and engine choice is supported by recorded evidence. Full production fault matrix, randomized campaign, performance, migration, soak and live certification remain unverified.",
+          "environment": "Disposable local configuration, fresh worker processes, independent persistent fake-provider ledger; packaged Electron for T-02 binding proof"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/T-03-recovery.md",
+          "revision": "r2",
+          "environment": "Synthetic disposable P-01 fixture; Bun plus packaged Electron44.2 main-process proof; product/provider behavior unchanged",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "automated"
+        }
+      ]
+    },
+    {
+      "id": "G-01-EXIT",
+      "kind": "gate",
+      "title": "Independent exit review for P-01",
+      "owner": "integration-lead",
+      "depends_on": [
+        "T-01",
+        "T-02",
+        "T-03"
+      ],
+      "status": "accepted",
+      "gate_type": "review",
+      "evidence": [
+        {
+          "path": "evidence/rival-review.md",
+          "revision": "r2",
+          "environment": "Synthetic disposable P-01 fixture; Bun plus packaged Electron44.2 main-process proof; product/provider behavior unchanged",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        }
+      ]
+    },
+    {
+      "id": "G-02",
+      "kind": "gate",
+      "title": "Entry review for P-02",
+      "owner": "integration-lead",
+      "depends_on": [
+        "G-01-EXIT"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "T-04",
+      "kind": "task",
+      "title": "Implement protected payload journal ownership and projections",
+      "owner": "persistence-owner",
+      "depends_on": [
+        "G-02"
+      ],
+      "status": "planned",
+      "phase": "P-02",
+      "requirements": [
+        "R-02",
+        "R-03",
+        "R-08",
+        "R-10",
+        "R-11",
+        "R-14"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "packages/shared/src/durable-execution",
+        "packages/shared/src/workflows/run-storage.ts",
+        "db/schema"
+      ],
+      "verification": [
+        {
+          "method": "Execute A-02/03/04/10/14/15 as defined in specification section 15 and task packet/phase expansion",
+          "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
+          "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ]
+    },
+    {
+      "id": "T-05",
+      "kind": "task",
+      "title": "Integrate certified per-dispatch model turns and tool batches",
+      "owner": "runtime-owner",
+      "depends_on": [
+        "G-02",
+        "T-04"
+      ],
+      "status": "planned",
+      "phase": "P-02",
+      "requirements": [
+        "R-01",
+        "R-03",
+        "R-04",
+        "R-05"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "packages/server-core/src/workflows/runner.ts",
+        "packages/server-core/src/sessions/SessionManager.ts"
+      ],
+      "verification": [
+        {
+          "method": "Execute A-01/03/04/05/07 as defined in specification section 15 and task packet/phase expansion",
+          "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
+          "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ]
+    },
+    {
+      "id": "G-02-EXIT",
+      "kind": "gate",
+      "title": "Independent exit review for P-02",
+      "owner": "integration-lead",
+      "depends_on": [
+        "T-04",
+        "T-05"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G-03",
+      "kind": "gate",
+      "title": "Entry review for P-03",
+      "owner": "integration-lead",
+      "depends_on": [
+        "G-02-EXIT"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "T-06",
+      "kind": "task",
+      "title": "Persist approvals cancellation and steering",
+      "owner": "runtime-owner",
+      "depends_on": [
+        "G-03"
+      ],
+      "status": "planned",
+      "phase": "P-03",
+      "requirements": [
+        "R-06",
+        "R-08",
+        "R-11",
+        "R-12"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "packages/shared/src/agent",
+        "packages/server-core/src/sessions/SessionManager.ts"
+      ],
+      "verification": [
+        {
+          "method": "Execute A-08/11/15/16 as defined in specification section 15 and task packet/phase expansion",
+          "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
+          "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ]
+    },
+    {
+      "id": "T-07",
+      "kind": "task",
+      "title": "Implement effect contracts and prepare early safe provider proof",
+      "owner": "integration-owner",
+      "depends_on": [
+        "G-03",
+        "T-06"
+      ],
+      "status": "planned",
+      "phase": "P-03",
+      "requirements": [
+        "R-05",
+        "R-13"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "packages/shared/src/durable-execution/adapters",
+        "packages/server-core/src/workflows/runner.ts"
+      ],
+      "verification": [
+        {
+          "method": "Execute A-06/07/17 as defined in specification section 15 and task packet/phase expansion",
+          "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
+          "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ]
+    },
+    {
+      "id": "T-08",
+      "kind": "task",
+      "title": "Recover child admissions and joins",
+      "owner": "runtime-owner",
+      "depends_on": [
+        "G-03",
+        "T-07"
+      ],
+      "status": "planned",
+      "phase": "P-03",
+      "requirements": [
+        "R-07",
+        "R-08",
+        "R-13"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "packages/shared/src/agent-messaging",
+        "packages/server-core/src/sessions/SessionManager.ts"
+      ],
+      "verification": [
+        {
+          "method": "Execute A-09/10/11/17 as defined in specification section 15 and task packet/phase expansion",
+          "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
+          "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ]
+    },
+    {
+      "id": "G-03-EXIT",
+      "kind": "gate",
+      "title": "Independent exit review for P-03",
+      "owner": "integration-lead",
+      "depends_on": [
+        "T-06",
+        "T-07",
+        "T-08",
+        "T-07-LIVE"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G-04",
+      "kind": "gate",
+      "title": "Entry review for P-04",
+      "owner": "integration-lead",
+      "depends_on": [
+        "G-03-EXIT"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "T-09",
+      "kind": "task",
+      "title": "Atomically admit schedule occurrences",
+      "owner": "scheduler-owner",
+      "depends_on": [
+        "G-04"
+      ],
+      "status": "planned",
+      "phase": "P-04",
+      "requirements": [
+        "R-02",
+        "R-09",
+        "R-10"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "packages/shared/src/automations",
+        "packages/server-core/src/scheduled-work/AutomationWorkQueue.ts"
+      ],
+      "verification": [
+        {
+          "method": "Execute A-02/12/18 as defined in specification section 15 and task packet/phase expansion",
+          "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
+          "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ]
+    },
+    {
+      "id": "T-10",
+      "kind": "task",
+      "title": "Recover scheduled continuation rounds",
+      "owner": "runtime-owner",
+      "depends_on": [
+        "G-04",
+        "T-09"
+      ],
+      "status": "planned",
+      "phase": "P-04",
+      "requirements": [
+        "R-07",
+        "R-08",
+        "R-13"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "packages/server-core/src/scheduled-work/ScheduledWorkRunner.ts"
+      ],
+      "verification": [
+        {
+          "method": "Execute A-09/10/11/17 as defined in specification section 15 and task packet/phase expansion",
+          "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
+          "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ]
+    },
+    {
+      "id": "G-04-EXIT",
+      "kind": "gate",
+      "title": "Independent exit review for P-04",
+      "owner": "integration-lead",
+      "depends_on": [
+        "T-09",
+        "T-10"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G-05",
+      "kind": "gate",
+      "title": "Entry review for P-05",
+      "owner": "integration-lead",
+      "depends_on": [
+        "G-04-EXIT"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "T-11",
+      "kind": "task",
+      "title": "Migrate and route legacy and v2 runs safely",
+      "owner": "persistence-owner",
+      "depends_on": [
+        "G-05"
+      ],
+      "status": "planned",
+      "phase": "P-05",
+      "requirements": [
+        "R-01",
+        "R-02",
+        "R-10",
+        "R-14"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "packages/shared/src/durable-execution",
+        "db/schema",
+        "packages/shared/src/workflows/run-storage.ts"
+      ],
+      "verification": [
+        {
+          "method": "Execute A-13/14/18 as defined in specification section 15 and task packet/phase expansion",
+          "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
+          "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ]
+    },
+    {
+      "id": "T-12",
+      "kind": "task",
+      "title": "Expose recovery through existing Work screens",
+      "owner": "frontend-owner",
+      "depends_on": [
+        "G-05",
+        "T-11"
+      ],
+      "status": "planned",
+      "phase": "P-05",
+      "requirements": [
+        "R-01",
+        "R-06",
+        "R-08",
+        "R-12"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "apps/electron/src/renderer"
+      ],
+      "verification": [
+        {
+          "method": "Execute A-01/08/11/16/18 as defined in specification section 15 and task packet/phase expansion",
+          "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
+          "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ]
+    },
+    {
+      "id": "T-13",
+      "kind": "task",
+      "title": "Operational recovery privacy and certification preparation",
+      "owner": "operations-owner",
+      "depends_on": [
+        "G-05",
+        "T-11"
+      ],
+      "status": "planned",
+      "phase": "P-05",
+      "requirements": [
+        "R-11",
+        "R-14",
+        "R-15"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "docs/workflows",
+        "packages/shared/src/durable-execution/operations"
+      ],
+      "verification": [
+        {
+          "method": "Execute A-14/15/19 as defined in specification section 15 and task packet/phase expansion",
+          "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
+          "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ]
+    },
+    {
+      "id": "G-05-EXIT",
+      "kind": "gate",
+      "title": "Independent exit review for P-05",
+      "owner": "integration-lead",
+      "depends_on": [
+        "T-11",
+        "T-12",
+        "T-13"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G-06",
+      "kind": "gate",
+      "title": "Entry review for P-06",
+      "owner": "integration-lead",
+      "depends_on": [
+        "G-05-EXIT"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "T-14",
+      "kind": "task",
+      "title": "Run fault matrix soak and release regression",
+      "owner": "verification-owner",
+      "depends_on": [
+        "G-06"
+      ],
+      "status": "planned",
+      "phase": "P-06",
+      "requirements": [
+        "R-01",
+        "R-02",
+        "R-03",
+        "R-04",
+        "R-05",
+        "R-06",
+        "R-07",
+        "R-08",
+        "R-09",
+        "R-10",
+        "R-11",
+        "R-12",
+        "R-13",
+        "R-14",
+        "R-15"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "packages/server-core/src/workflows/__tests__/durability",
+        "environment/disposable-release-test"
+      ],
+      "verification": [
+        {
+          "method": "Execute A-01 through A-19 as defined in specification section 15 and task packet/phase expansion",
+          "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
+          "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ]
+    },
+    {
+      "id": "T-15",
+      "kind": "task",
+      "title": "Certify live adapter and stage rollout",
+      "owner": "integration-owner",
+      "depends_on": [
+        "G-06",
+        "T-14",
+        "S-LIVE"
+      ],
+      "status": "planned",
+      "phase": "P-06",
+      "requirements": [
+        "R-05",
+        "R-12",
+        "R-15"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "environment/live-provider-test",
+        "docs/workflows"
+      ],
+      "verification": [
+        {
+          "method": "Execute A-20 as defined in specification section 15 and task packet/phase expansion",
+          "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
+          "environment": "Named authorized safe provider target and canonical packaged Electron build"
+        }
+      ]
+    },
+    {
+      "id": "G-06-EXIT",
+      "kind": "gate",
+      "title": "Independent exit review for P-06",
+      "owner": "integration-lead",
+      "depends_on": [
+        "T-14",
+        "T-15"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "S-EARLY-LIVE",
+      "kind": "setup",
+      "title": "Prepare exact safe early provider target and verify action authorization",
+      "owner": "integration-owner",
+      "depends_on": [
+        "T-07"
+      ],
+      "status": "planned",
+      "mode": "live"
+    },
+    {
+      "id": "T-07-LIVE",
+      "kind": "task",
+      "title": "Prove one private or test-mode real adapter after core effect protocol",
+      "owner": "integration-owner",
+      "depends_on": [
+        "T-07",
+        "S-EARLY-LIVE",
+        "G-03"
+      ],
+      "status": "planned",
+      "phase": "P-03",
+      "requirements": [
+        "R-05",
+        "R-15"
+      ],
+      "detail": "outlined",
+      "packet": "roadmap.md",
+      "resources": [
+        "provider/early-certification"
+      ],
+      "verification": [
+        {
+          "method": "Run the prepared safe real-provider effect and reconcile using the actual SDK; record provider receipt and limits",
+          "expected": "One verified outcome or an explicit adapter blocker; no fake-provider pass counted as real certification",
+          "environment": "Named private or test-mode provider target with required authorization"
+        }
+      ]
+    }
+  ]
+}

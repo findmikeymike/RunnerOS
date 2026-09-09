@@ -1,5 +1,11 @@
 # Workflows — Spec & Plan
 
+For the proposed reliability upgrade, start with
+[`08-durable-execution-upgrade/specification.md`](./08-durable-execution-upgrade/specification.md).
+Its [build packet](./08-durable-execution-upgrade/start-here.md) covers durable
+tool results, approval and child-agent recovery, scheduling, migration and
+crash-test acceptance. It is a specification, not implemented runtime behavior.
+
 A predefined, savable, shareable pipeline of agents that work in sequence (and eventually in parallel) to accomplish a multi-step job.
 
 ## Why this exists
@@ -11,7 +17,12 @@ RunnerOS has two complementary execution modes:
 
 Workflows give users repeatability + reliability + shareability. Rooms give users flexibility. Both share the same agent runtime — a workflow step is just a session with a pre-filled prompt and a "resume parent run when done" callback.
 
-## Why we are NOT using a framework
+## Original framework decision (historical)
+
+The rationale below records the initial implementation decision. The current
+main engine is a custom TypeScript runner; the optional Python DBOS lane does
+not make the main workflow engine DBOS-backed. The proposed upgrade above
+reassesses the execution layer through a bounded architecture proof.
 
 Considered: Temporal, DBOS, LangChain/LangGraph, Inngest, ChatDev.
 

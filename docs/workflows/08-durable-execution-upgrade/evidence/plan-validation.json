@@ -1,0 +1,6 @@
+{
+  "valid": true,
+  "errors": [],
+  "disclaimer": "Checks structure and evidence/approval file presence only; does not authenticate reviewers, approvals, test results, credentials, or live behavior.",
+  "ready": []
+}
