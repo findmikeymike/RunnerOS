@@ -5,7 +5,7 @@ export interface DurableRuntimeManifest {
 }
 /** Bump adapterRevision whenever replay/normalization/authorization semantics change. */
 export const DURABLE_RUNTIME_MANIFEST: Readonly<DurableRuntimeManifest> = Object.freeze({
-  piAgentCore: '0.84.3', piAi: '0.84.3', piCodingAgent: '0.84.3', adapterRevision: 'pi-readonly-4',
+  piAgentCore: '0.84.3', piAi: '0.84.3', piCodingAgent: '0.84.3', adapterRevision: 'pi-readonly-5',
 });
 export type DurableRunStatus = 'running' | 'paused' | 'waiting-approval' | 'succeeded' | 'cancelled' | 'failed';
 export interface DurableToolAuthorization {
@@ -23,6 +23,8 @@ export interface DurableApproval {
   callId: string;
   tool: string;
   inputDigest: string;
+  /** Exact normalized review payload; protected by journal encryption. Older records may lack it. */
+  input?: DurableJson;
   principalId: string;
   policyRevision: string;
   credentialIdentity: string;

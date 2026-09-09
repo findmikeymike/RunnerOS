@@ -14,6 +14,7 @@ import type {
   AnnotationV1,
   PermissionRequest as BasePermissionRequest,
 } from '@craft-agent/core/types'
+import type { DurableDecisionReceipt } from './durable-execution'
 import type { PermissionMode } from '../agent/mode-types'
 import type { ThinkingLevel } from '../agent/thinking-levels'
 import type { AppEvent, QueueWorkAction } from '../automations/types'
@@ -197,7 +198,24 @@ export interface RemoteSessionTransferPayload {
   sessionTasks?: SessionTaskList
 }
 
+export interface WorkflowAttentionDecisionDTO {
+  commandId: string
+  expectedVersion: number
+}
+
 export interface WorkflowAttentionDTO {
+  /** Present only for journal-owned decisions. Never infer authority from display fields. */
+  durable?: {
+    engine: 'sqlite-v2-readonly-1'
+    workspaceId: string
+    runId: string
+    approvalId: string
+    version: number
+    expiresAt: number
+    reviewable: boolean
+    /** Immutable acknowledgement, separate from the current attention projection. */
+    decisionReceipt?: DurableDecisionReceipt
+  }
   id: string
   workflowRunId: string
   taskId?: string

@@ -251,7 +251,7 @@ export class DurableJournal {
     if (!approval || !sameBinding || approval.status === 'expired') {
       if (approval && !sameBinding && approval.status === 'pending') approval.status = 'expired';
       approval = { id: digest([operationId, inputDigest, authorization.principalId, authorization.policyRevision, authorization.credentialIdentity, forOperation.length]), operationId,
-        turn: request.turn, callId: request.callId, tool: request.tool, inputDigest,
+        turn: request.turn, callId: request.callId, tool: request.tool, inputDigest, input: request.input,
         principalId: authorization.principalId, policyRevision: authorization.policyRevision, credentialIdentity: authorization.credentialIdentity,
         expiresAt: authorization.approvalExpiresAt, status: authorization.approvalExpiresAt > Date.now() ? 'pending' : 'expired' };
       approvals.push(approval);
@@ -263,6 +263,18 @@ export class DurableJournal {
     call.inputDigest = inputDigest;
     state.status = 'waiting-approval'; state.controlRevision++; this.save(state, approval.status === 'expired' ? 'approval-expired' : 'approval-pending');
     return { blocked: approval.status === 'expired' ? 'durable-approval-expired' : 'durable-approval-required' };
+  }
+
+  /** Read an immutable acknowledgement without dispatching or reviving execution. */
+  decisionReceipt(command: DurableDecisionCommand): DurableDecisionReceipt | undefined {
+    canonical(command);
+    if (!command.commandId || !command.runId || !command.workspaceId || !command.approvalId || !command.inputDigest || !command.principalId || !command.policyRevision || !command.credentialIdentity || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1 || !['approve', 'deny'].includes(command.action)) throw new Error('invalid-durable-decision-command');
+    this.row(command.runId, command.workspaceId);
+    const prior = this.db.prepare('SELECT payload FROM control_commands WHERE workspace=? AND id=?').get(command.workspaceId, command.commandId);
+    if (!prior) return undefined;
+    const saved = this.decrypt(prior.payload, canonical([command.workspaceId, command.commandId]));
+    if (digest(saved.command) !== digest(command)) throw new Error('durable-command-conflict');
+    return saved.receipt;
   }
 
   decide(command: DurableDecisionCommand): DurableDecisionReceipt {
@@ -280,7 +292,7 @@ export class DurableJournal {
       if (state.version !== command.expectedVersion) throw new Error('durable-control-version-conflict');
       if (!['running', 'paused', 'waiting-approval'].includes(state.status)) throw new Error('durable-run-terminal');
       const approval = state.approvals?.find(candidate => candidate.id === command.approvalId);
-      if (!approval || state.approvals!.filter(candidate => candidate.operationId === approval.operationId).at(-1)?.id !== approval.id || approval.status !== 'pending'
+      if (!approval || state.approvals!.filter(candidate => candidate.operationId === approval.operationId).at(-1)?.id !== approval.id || (approval.status !== 'pending' && !(command.action === 'deny' && approval.status === 'expired'))
         || approval.inputDigest !== command.inputDigest || approval.principalId !== command.principalId || approval.policyRevision !== command.policyRevision || approval.credentialIdentity !== command.credentialIdentity
         || command.principalId !== state.spec.approvalPrincipalId || command.credentialIdentity !== state.spec.credentialIdentity) throw new Error('durable-approval-decision-mismatch');
       if (command.action === 'approve' && (approval.expiresAt <= Date.now() || state.spec.deadlineAt <= Date.now())) {

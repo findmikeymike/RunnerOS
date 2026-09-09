@@ -42,6 +42,8 @@ export interface HandlerDeps<
    * call this once on use and surface a clear error when undefined.
    */
   getWorkflowRunner?: () => import('../workflows/runner').WorkflowRunner
+  /** Optional internal durable attention bridge; omission keeps rollout disabled. */
+  getDurableWorkflowControls?: () => Pick<import('../workflows/durable-workflow-controls').DurableWorkflowControls, 'listAttention' | 'resolveAttention'>
   getDeepResearchRunner?: () => import('../deep-research/DeepResearchRunner').DeepResearchRunner
   validateSocialProfile?: (input: { platform: string; profileId: string }) => Promise<{ ready: boolean; reason?: string }>
   /**

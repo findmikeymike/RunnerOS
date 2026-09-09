@@ -1,6 +1,6 @@
 # Workflow hardening roadmap
 
-Revision r6. Graph/status authority: [plan.json](plan.json). Technical contract and acceptance IDs: [specification.md](specification.md).
+Revision r7. Graph/status authority: [plan.json](plan.json). Technical contract and acceptance IDs: [specification.md](specification.md).
 
 ## Dependency backbone
 
@@ -61,7 +61,9 @@ Entry: P-02 complete; expand adapter and approval integration packets.
 
 - **T-06C, steering owner, accepted:** durable ordered updates at actual Pi turn boundaries; skip replaced unstarted reads and preserve completed work. See [steering evidence](evidence/T-06C-steering.md).
 
-- **T-06, runtime owner:** remaining existing escalation integration and control-path wiring. Own escalation integration and relevant SessionManager control paths. Acceptance A-08/11/15/16.
+- **T-06D, attention owner, accepted:** journal-backed attention service and optional existing RPC path, exact review payload, private notifications and retry-safe decision requests. See [attention evidence](evidence/T-06D-attention.md). Production dependency remains unconfigured.
+
+- **T-06, runtime owner:** remaining control routing and host lifecycle wiring, without enabling public admission before the rollout phase. Own escalation integration and relevant SessionManager control paths. Acceptance A-08/11/15/16.
 - **T-07, integration owner:** effect-policy registry, persistent retry/budget reservations, provider status reconciliation and nonreplayable fallback. Own adapter contracts and provider fixture coverage. Also prepare and execute one safe, private/test-mode real adapter proof (T-07-LIVE), after checking any missing action authorization; no paid/public operation is implied. Durable budget/attempt enforcement precedes paid dispatch; child identity precedes delegation regardless of table layout. Acceptance A-06/07/17.
 - **T-08, runtime owner:** child admission, restored sessions, completion joins, inherited limits, detached lifecycle and validated output. Own agent-messaging integration. Acceptance A-09/10/11/17.
 

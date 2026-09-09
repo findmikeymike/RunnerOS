@@ -6,7 +6,7 @@
  * façades over the runner + the run-storage helpers.
  */
 
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { type WorkflowAttentionDTO, type WorkflowAttentionDecisionDTO, RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   loadGlobalWorkflow,
   readActivatedWorkflows,
@@ -23,7 +23,6 @@ import {
   approveEscalation,
   listPendingEscalations,
   rejectEscalation,
-  type Escalation,
 } from '@craft-agent/shared/agent'
 
 const WORKFLOW_RUNS_RESUME =
@@ -61,10 +60,14 @@ async function assertWorkflowRunPermission(workspaceId: string, action: 'agent.c
 export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDeps): void {
   server.handle(
     RPC_CHANNELS.workflowRuns.LIST_ATTENTION,
-    async (_ctx, workspaceId: string, runId?: string): Promise<Escalation[]> => {
+    async (ctx, workspaceId: string, runId?: string): Promise<WorkflowAttentionDTO[]> => {
       const rootPath = resolveRootPath(workspaceId)
-      return listPendingEscalations(runId ? { workflowRunId: runId } : undefined)
+      const legacy = listPendingEscalations(runId ? { workflowRunId: runId } : undefined)
         .filter((attention) => readRun(rootPath, attention.workflowRunId)?.workspaceId === workspaceId)
+      const durable = deps.getDurableWorkflowControls
+        ? await deps.getDurableWorkflowControls().listAttention(workspaceId, { clientId: ctx.clientId, ...(ctx.workspaceId === null ? {} : { workspaceId: ctx.workspaceId }) }, runId)
+        : []
+      return [...legacy, ...durable]
     },
   )
 
@@ -75,7 +78,29 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
       workspaceId: string,
       escalationId: string,
       decision: 'approved' | 'rejected',
-    ): Promise<Escalation> => {
+      command?: WorkflowAttentionDecisionDTO,
+    ): Promise<WorkflowAttentionDTO> => {
+      if (decision !== 'approved' && decision !== 'rejected') throw new Error('Invalid attention decision')
+      if (typeof escalationId !== 'string') throw new Error('Invalid attention ID')
+      if (escalationId.startsWith('durable:')) {
+        if (!command || typeof command !== 'object' || Array.isArray(command)
+          || typeof command.commandId !== 'string' || !command.commandId.trim()
+          || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 0
+          || Object.keys(command).some((key) => key !== 'commandId' && key !== 'expectedVersion')) {
+          throw new Error('Durable attention requires commandId and expectedVersion')
+        }
+        if (!deps.getDurableWorkflowControls) throw new Error('Durable workflow controls are not available on this host')
+        const resolved = await deps.getDurableWorkflowControls().resolveAttention(
+          workspaceId, escalationId, decision, command,
+          { clientId: ctx.clientId, ...(ctx.workspaceId === null ? {} : { workspaceId: ctx.workspaceId }) },
+        )
+        // The decision is already committed. A disconnected observer cannot undo it.
+        try {
+          server.push(RPC_CHANNELS.workflowRuns.ATTENTION_UPDATED, { to: 'client', clientId: ctx.clientId }, workspaceId, resolved)
+        } catch { /* Clients recover the saved decision by listing again. */ }
+        return resolved
+      }
+      if (command !== undefined) throw new Error('Durable command metadata cannot target legacy attention')
       const pending = listPendingEscalations().find((item) => item.id === escalationId)
       if (!pending) throw new Error(`Pending attention item not found: ${escalationId}`)
       const run = readRun(resolveRootPath(workspaceId), pending.workflowRunId)

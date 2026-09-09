@@ -7,6 +7,7 @@ import { useNavigation } from '@/contexts/NavigationContext'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { StructuredInput } from '@/components/app-shell/input/StructuredInput'
 import { routes } from '../../shared/routes'
+import { resolveWorkflowAttentionWithRecovery } from '@/lib/workflow-attention'
 import { useWorkflowRuns } from '@/hooks/useWorkflowRuns'
 import { useAgents } from '@/hooks/useAgents'
 import { WorkflowLaunchDialog } from '@/components/workflows/WorkflowLaunchDialog'
@@ -46,6 +47,7 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
   const [recoveryPendingStepId, setRecoveryPendingStepId] = React.useState<string | null>(null)
   const [now, setNow] = React.useState(() => Date.now())
   const [attention, setAttention] = React.useState<WorkflowAttentionDTO[]>([])
+  const attentionCommands = React.useRef(new Map<string, { commandId: string; expectedVersion: number }>())
   const [resolvingAttentionId, setResolvingAttentionId] = React.useState<string | null>(null)
 
   // Hydrate on mount; live updates flow through useWorkflowRuns broadcast.
@@ -140,9 +142,9 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
   const handleAttention = async (item: WorkflowAttentionDTO, decision: 'approved' | 'rejected') => {
     setResolvingAttentionId(item.id)
     try {
-      await window.electronAPI.resolveWorkflowAttention(workspaceId, item.id, decision)
+      const resolved = await resolveWorkflowAttentionWithRecovery({ workspaceId, runId, item, decision, commands: attentionCommands.current, api: window.electronAPI, refresh: setAttention })
       setAttention((current) => current.filter((candidate) => candidate.id !== item.id))
-      toast.success(decision === 'approved' ? 'Action authorized' : 'Action skipped')
+      toast.success(item.durable && decision === 'approved' && resolved.status !== 'approved' ? 'Decision saved; this action has since changed' : decision === 'approved' ? 'Action authorized' : item.durable ? 'Workflow stopped' : 'Action skipped')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     } finally {
@@ -242,8 +244,8 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
                   <div className="mt-2 text-[11px] text-white/38">Agent note</div>
                   <div className="mt-0.5 text-xs text-white/55">{item.recommendation}</div>
                   <div className="mt-3 flex gap-2">
-                    <Button size="sm" onClick={() => void handleAttention(item, 'approved')} disabled={resolvingAttentionId !== null}>Allow this action</Button>
-                    <Button size="sm" variant="outline" onClick={() => void handleAttention(item, 'rejected')} disabled={resolvingAttentionId !== null}>Skip action</Button>
+                    <Button size="sm" onClick={() => void handleAttention(item, 'approved')} disabled={resolvingAttentionId !== null || Boolean(item.durable && (!item.durable.reviewable || item.durable.expiresAt <= Date.now()))}>Allow this action</Button>
+                    <Button size="sm" variant="outline" onClick={() => void handleAttention(item, 'rejected')} disabled={resolvingAttentionId !== null}>{item.durable ? 'Stop workflow' : 'Skip action'}</Button>
                   </div>
                 </div>
               ))}
