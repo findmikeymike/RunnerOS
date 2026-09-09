@@ -74,6 +74,8 @@ describe('Artist OS persistent shell chrome', () => {
     expect(shell).not.toContain('title: "Chat"')
     expect(shell).toContain('SONG_DIRECTOR_SLUG')
     expect(shell).toContain("{isLabWorkspace ? 'New Command' : 'New Chat'}")
+    expect(shell).toContain("if (artistGuideWorkspaceKind === 'lab' || !newPanel)")
+    expect(shell).toContain('void openWorkCommand(false)')
   })
 
   test('keeps Command conversation history bounded, newest-first, and topic-labelled', () => {
@@ -83,6 +85,8 @@ describe('Artist OS persistent shell chrome', () => {
     expect(shell).toContain('project.items.length > 10')
     expect(shell).toContain('max-h-[min(440px,calc(100vh-260px))] overflow-y-auto')
     expect(shell).toContain('getSessionListDisplay(item, true)')
+    expect(shell).toContain('mt-1 w-full min-w-0 space-y-2 overflow-hidden px-3 pb-5')
+    expect(shell).toContain('min-w-0 space-y-0.5 overflow-hidden')
     expect(shell).toContain("subtitleWords.length > 2")
     expect(shell).toContain("`${subtitleWords.slice(0, 2).join(' ')}…`")
     expect(shell).toContain('min-w-0 truncate text-[10.5px]')

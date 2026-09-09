@@ -46,6 +46,7 @@ import {
 } from './types.ts';
 import { getActivatedAgentsManifestPath } from '../workspaces/storage.ts';
 import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
+import { buildTaskModeSkillInventory } from './task-modes.ts';
 
 // ============================================================================
 // Paths
@@ -283,7 +284,7 @@ function coerceTaskModes(
     warnings.push(warning('taskModes', 'invalid-task-modes', 'taskModes must be an array of focused launch recipes.'));
     return undefined;
   }
-  const skills = new Set(inventory.skills ?? []);
+  const skills = buildTaskModeSkillInventory(inventory.skills ?? []);
   const sources = new Set([...(inventory.sources ?? []), ...(inventory.optionalSources ?? [])]);
   const seen = new Set<string>();
   const modes: AgentTaskModeDefinition[] = [];

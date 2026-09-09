@@ -2379,7 +2379,12 @@ function AppShellContent({
   const handleNewChat = useCallback((newPanel: boolean = false) => {
     if (!activeWorkspace) return
 
-    if (artistGuideWorkspaceKind === 'lab') {
+    // Artist OS chats always start with the workspace's command agent. A raw
+    // session has no agent identity, focus controls, or manager context and
+    // becomes the "dead chat" users were seeing in conversation history.
+    // Keep the explicit multi-panel action generic because it is a separate
+    // advanced workflow; the visible New Chat entry points open a fresh agent.
+    if (artistGuideWorkspaceKind === 'lab' || !newPanel) {
       void openWorkCommand(false)
       return
     }
@@ -3032,7 +3037,7 @@ function AppShellContent({
     if (!sessionsNavExpanded || !workChatActive) return null
 
     return (
-      <div className="mt-1 space-y-2 px-3 pb-5">
+      <div className="mt-1 w-full min-w-0 space-y-2 overflow-hidden px-3 pb-5">
         <button
           type="button"
           onClick={() => handleNewChat()}
@@ -3046,7 +3051,7 @@ function AppShellContent({
           const projectExpanded = isExpanded(projectCollapseKey)
 
           return (
-            <div key={project.key} className="space-y-0.5">
+            <div key={project.key} className="min-w-0 space-y-0.5 overflow-hidden">
               <div className="flex items-center rounded-[7px] bg-white/[0.035] text-[11px] font-semibold text-white/70 transition-colors hover:bg-white/[0.055] hover:text-white/85">
                 <button
                   type="button"

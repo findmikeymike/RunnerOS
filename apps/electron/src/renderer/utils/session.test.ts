@@ -59,6 +59,23 @@ describe('session agent identity', () => {
     })
   })
 
+  test('uses the selected focus as context before the artist sends a visible message', () => {
+    const session = {
+      name: undefined,
+      preview: undefined,
+      messageCount: 2,
+      spawnedFromAgent: { agentSlug: 'branding-agent', agentName: 'Branding Agent' },
+      launchReceipt: {
+        taskMode: { id: 'campaign-angles', label: 'Campaign Angles' },
+      },
+    } as never
+
+    expect(getSessionListDisplay(session)).toEqual({
+      title: 'Branding Agent',
+      subtitle: 'Campaign Angles',
+    })
+  })
+
   test('does not treat a generic voice session name as its topic', () => {
     const session = {
       name: 'Artist Manager Voice',

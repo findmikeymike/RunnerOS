@@ -1,5 +1,19 @@
 import type { AgentTaskModeDefinition, LoadedAgent } from './types.ts';
 
+/**
+ * Older built-in agent installs may retain qualified `legacy:<slug>` skill
+ * assignments so migrations do not overwrite user state. Focus recipes use
+ * canonical slugs, so expose both spellings while validating the inventory.
+ */
+export function buildTaskModeSkillInventory(skillSlugs: readonly string[]): Set<string> {
+  const inventory = new Set<string>();
+  for (const slug of skillSlugs) {
+    inventory.add(slug);
+    if (slug.startsWith('legacy:')) inventory.add(slug.slice('legacy:'.length));
+  }
+  return inventory;
+}
+
 export interface ResolvedAgentTaskMode {
   id: string;
   label: string;
@@ -22,7 +36,7 @@ export function resolveAgentTaskMode(
   const mode = agent.metadata.taskModes?.find((candidate) => candidate.id === taskModeId);
   if (!mode) throw new Error(`Task mode "${taskModeId}" is not available for ${agent.metadata.name}.`);
 
-  const skillInventory = new Set(agent.metadata.skills ?? []);
+  const skillInventory = buildTaskModeSkillInventory(agent.metadata.skills ?? []);
   const sourceInventory = new Set([
     ...(agent.metadata.sources ?? []),
     ...(agent.metadata.optionalSources ?? []),

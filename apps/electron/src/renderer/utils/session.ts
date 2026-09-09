@@ -122,6 +122,7 @@ export function getSessionListDisplay(
 
   if (agentName) {
     const storedTitle = session.name?.trim()
+    const focusedTopic = session.launchReceipt?.taskMode?.label?.trim()
     const genericAgentNames = [
       agentName,
       session.spawnedFromAgent?.agentName,
@@ -133,7 +134,7 @@ export function getSessionListDisplay(
 
     const topic = storedTitle && !genericAgentNames.includes(storedTitle.toLocaleLowerCase())
       ? storedTitle
-      : getSessionPreviewText(session, 64, agentName)
+      : getSessionPreviewText(session, 64, agentName) ?? focusedTopic ?? null
 
     return {
       title: agentName,

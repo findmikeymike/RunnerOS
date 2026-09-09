@@ -114,6 +114,19 @@ describe('agent task modes', () => {
     expect(parsed?.warnings).toEqual([]);
     expect(parsed?.metadata.taskModes).toEqual(branding.metadata.taskModes);
   });
+
+  test('keeps canonical focus recipes available for legacy-qualified built-in skills', () => {
+    const manager = STARTER_AGENTS.find((agent) => agent.slug === 'concierge')!;
+    const metadata = structuredClone(manager.metadata);
+    metadata.skills = metadata.skills?.map((slug) => (
+      slug === 'artist-manager-operating-system' ? `legacy:${slug}` : slug
+    ));
+
+    const parsed = parseAgentFile(serializeAgent(metadata, manager.systemPrompt))!;
+    expect(parsed.metadata.taskModes).toEqual(manager.metadata.taskModes);
+    expect(resolveAgentTaskMode({ ...manager, metadata: parsed.metadata }, 'this-week')?.primarySkillSlugs)
+      .toEqual(['artist-manager-operating-system']);
+  });
 });
 
 describe('focused adapter selection', () => {
