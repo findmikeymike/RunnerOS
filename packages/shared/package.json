@@ -23,6 +23,7 @@
     "./agenda": "./src/agenda/index.ts",
     "./agent/thinking-levels": "./src/agent/thinking-levels.ts",
     "./auth": "./src/auth/index.ts",
+    "./auth/chatgpt-credentials": "./src/auth/chatgpt-credentials.ts",
     "./auth/callback-page": "./src/auth/callback-page.ts",
     "./auth/types": "./src/auth/types.ts",
     "./config": "./src/config/index.ts",

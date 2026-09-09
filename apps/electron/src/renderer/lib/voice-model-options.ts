@@ -1,3 +1,4 @@
+import { isChatGptVoiceConnection, isFastChatGptVoiceModel } from '../../shared/voice-subscription-route'
 import type { LlmConnectionWithStatus } from '../../shared/types'
 
 export type VoiceModelCatalogEntry = { id: string; name: string }
@@ -22,12 +23,14 @@ const SUPPORTED_PROVIDERS = new Set([
 ])
 const SUPPORTED_APIS = new Set(['openai-completions', 'openai-responses', 'anthropic-messages'])
 const PROVIDER_LABELS: Record<string, string> = {
-  anthropic: 'Anthropic', openai: 'OpenAI', deepseek: 'DeepSeek', openrouter: 'OpenRouter',
+  'openai-codex': 'ChatGPT', anthropic: 'Anthropic', openai: 'OpenAI', deepseek: 'DeepSeek', openrouter: 'OpenRouter',
   xai: 'xAI', groq: 'Groq', cerebras: 'Cerebras', fireworks: 'Fireworks', together: 'Together',
 }
 
 export function voiceModelProvider(connection: LlmConnectionWithStatus): string | null {
-  if (!connection.isAuthenticated || !['api_key', 'api_key_with_endpoint'].includes(connection.authType)) return null
+  if (!connection.isAuthenticated) return null
+  if (isChatGptVoiceConnection(connection)) return 'openai-codex'
+  if (!['api_key', 'api_key_with_endpoint'].includes(connection.authType)) return null
   const provider = connection.piAuthProvider || (connection.providerType === 'anthropic' ? 'anthropic' : '')
   if (!SUPPORTED_PROVIDERS.has(provider)) return null
   if (connection.customEndpoint && !SUPPORTED_APIS.has(connection.customEndpoint.api)) return null
@@ -56,7 +59,7 @@ export function buildVoiceModelOptions(
     const provider = voiceModelProvider(connection)
     if (!provider) continue
     for (const model of catalogs[provider] ?? []) {
-      if (!isFastVoiceModel(model.id)) continue
+      if (!(provider === 'openai-codex' ? isFastChatGptVoiceModel(model.id) : isFastVoiceModel(model.id))) continue
       const value = voiceModelOptionValue(connection.slug, model.id)
       if (seen.has(value)) continue
       seen.add(value)

@@ -1,3 +1,4 @@
+import { isChatGptVoiceConnection } from '../shared/voice-subscription-route'
 import { randomUUID } from 'node:crypto'
 import type { Api, Context, Model, SimpleStreamOptions } from '@earendil-works/pi-ai'
 import { getArtistManagerVoiceSettings } from '@craft-agent/shared/config/artist-manager-voice-storage'
@@ -33,12 +34,12 @@ export type VoiceFocusDiagnostic = {
 export type VoiceFocusDependencies = {
   resolveConfig(request: VoiceFocusRegisterRequest): Promise<VoiceFocusResolvedConfig>
   resolveModel(connection: LlmConnection, model: string): Promise<Model<Api>>
-  getApiKey(connection: string): Promise<string | null>
+  getApiKey(connection: string, signal?: AbortSignal, expectedModel?: Model<Api>): Promise<string | null>
   stream(model: Model<Api>, context: Context, options: SimpleStreamOptions): AsyncIterable<StreamEvent> | Promise<AsyncIterable<StreamEvent>>
   timeoutMs?: number
 }
 
-const supportedApis = new Set(['openai-completions', 'openai-responses', 'anthropic-messages'])
+const supportedApis = new Set(['openai-completions', 'openai-responses', 'anthropic-messages', 'openai-codex-responses'])
 const bareModel = (id: string) => id.startsWith('pi/') ? id.slice(3) : id
 const SPEECH_MODE_PROMPT = 'Respond using exactly one tool: voice_reply for conversation or advice; open_command_chat only for an agreed handoff. voice_reply streams directly to speech, so keep it to 1–3 short sentences and at most 60 words unless more is requested. Never put text outside the tool or combine tools.\n\n'
 const SPEECH_TOOL: NonNullable<Context['tools']>[number] = {
@@ -95,11 +96,19 @@ async function validateResolvedVoiceRoute(
   requestedModel: string,
   resolveModel: VoiceFocusDependencies['resolveModel'],
 ): Promise<Model<Api>> {
-  if (connection.authType !== 'api_key' && connection.authType !== 'api_key_with_endpoint') {
-    throw new Error('Conversation voice requires an API-key connection; OAuth and other auth are not supported')
+  const chatGpt = isChatGptVoiceConnection(connection)
+  if (!chatGpt && connection.authType !== 'api_key' && connection.authType !== 'api_key_with_endpoint') {
+    throw new Error('Use a ChatGPT connection or an API-key provider for Conversation. Claude requires an Anthropic API key.')
   }
   const model = await resolveModel(connection, requestedModel)
   if (bareModel(requestedModel) !== model.id || !supportedApis.has(model.api)) throw new Error('The exact voice model is unavailable; no fallback was used')
+  if (chatGpt) {
+    if (model.provider !== 'openai-codex' || model.api !== 'openai-codex-responses' || model.baseUrl !== 'https://chatgpt.com/backend-api') {
+      throw new Error('The ChatGPT voice route must use the official subscription endpoint')
+    }
+  } else if (model.api === 'openai-codex-responses') {
+    throw new Error('Choose a signed-in ChatGPT connection for this voice model')
+  }
   assertEndpoint(model.baseUrl)
   return model
 }
@@ -141,7 +150,20 @@ const productionDependencies: VoiceFocusDependencies = {
     return resolved
   },
   resolveModel: resolveConfiguredVoiceModel,
-  async getApiKey(connection) {
+  async getApiKey(connection, signal, expectedModel) {
+    const configured = await getConfiguredConnection(connection)
+    if (!configured) throw new Error('Voice connection was removed')
+    if (expectedModel) {
+      const currentModel = await validateResolvedVoiceRoute(configured, expectedModel.id, resolveConfiguredVoiceModel)
+      if (currentModel.provider !== expectedModel.provider || currentModel.api !== expectedModel.api || currentModel.baseUrl !== expectedModel.baseUrl) {
+        throw new Error('Voice connection changed; start a new conversation')
+      }
+    }
+    if (isChatGptVoiceConnection(configured)) {
+      const { getChatGptAccessToken } = await import('@craft-agent/shared/auth/chatgpt-credentials')
+      return getChatGptAccessToken(connection, signal)
+    }
+    if (configured.authType !== 'api_key' && configured.authType !== 'api_key_with_endpoint') throw new Error('Voice connection changed; choose a model again')
     const { getCredentialManager } = await import('@craft-agent/shared/credentials')
     return getCredentialManager().getLlmApiKey(connection)
   },
@@ -260,7 +282,7 @@ export class ArtistManagerVoiceFocusService {
       let continuingAfterOffer = false
       if (pending && pendingOffer && !confirmation) {
         pendingIntentUnresolved = true
-        apiKey = await this.deps.getApiKey(session.info.connection)
+        apiKey = await this.deps.getApiKey(session.info.connection, signal, session.sdkModel)
         if (!current()) return
         if (!apiKey?.trim()) throw new Error('missing credential')
         const intent = await resolveVoiceHandoffIntent({
@@ -295,7 +317,7 @@ export class ArtistManagerVoiceFocusService {
       }
       const greetingOnly = session.history.length === 0 && isOpeningGreeting(request.text)
       const handoffTool = greetingOnly || continuingAfterOffer ? null : buildVoiceHandoffTool(session.handoffTargets)
-      apiKey ??= await this.deps.getApiKey(session.info.connection)
+      apiKey ??= await this.deps.getApiKey(session.info.connection, signal, session.sdkModel)
       if (!current()) return
       if (!apiKey?.trim()) throw new Error('missing credential')
       // DeepSeek rejects required tools while reasoning is enabled. Enable this
@@ -315,6 +337,7 @@ export class ArtistManagerVoiceFocusService {
       }
       context.messages.push({ role: 'user', content: request.text, timestamp: Date.now() })
       const stream = await this.deps.stream(session.sdkModel, context, {
+        transport: session.sdkModel.api === 'openai-codex-responses' ? 'sse' : undefined,
         apiKey, signal, maxTokens: session.info.thinking === 'off' ? VOICE_FOCUS_LIMITS.outputTokens : VOICE_FOCUS_LIMITS.reasoningOutputTokens, maxRetries: 0,
         reasoning: session.info.thinking === 'off' ? undefined : session.info.thinking,
         toolChoice: handoffTool ? 'auto' : 'none',

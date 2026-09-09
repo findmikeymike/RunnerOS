@@ -44,7 +44,7 @@ export async function resolveVoiceHandoffIntent(input: {
           offer: { agent: input.proposal.agentName.slice(0, 80), task: input.proposal.taskTitle.slice(0, 120) },
           reply: input.text,
         }) }],
-      }, { apiKey: input.apiKey, signal: controller.signal, maxTokens: 128, maxRetries: 0, toolChoice: 'none' })
+      }, { transport: input.model.api === 'openai-codex-responses' ? 'sse' : undefined, apiKey: input.apiKey, signal: controller.signal, maxTokens: 128, maxRetries: 0, toolChoice: 'none' })
       if (controller.signal.aborted) return 'clarify'
       iterator = stream[Symbol.asyncIterator]()
       let answer = ''

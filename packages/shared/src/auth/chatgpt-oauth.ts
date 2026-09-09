@@ -150,7 +150,8 @@ export async function exchangeChatGptTokens(
  */
 export async function refreshChatGptTokens(
   refreshToken: string,
-  onStatus?: (message: string) => void
+  onStatus?: (message: string) => void,
+  signal?: AbortSignal,
 ): Promise<ChatGptTokens> {
   onStatus?.('Refreshing tokens...');
 
@@ -163,6 +164,7 @@ export async function refreshChatGptTokens(
   try {
     const response = await fetch(TOKEN_URL, {
       method: 'POST',
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Accept: 'application/json',

@@ -5,6 +5,7 @@
  * for cross-platform compatibility without OS keychain prompts.
  */
 
+import { credentialIdToAccount } from './types.ts';
 import type { CredentialBackend } from './backends/types.ts';
 import type { CredentialId, CredentialType, StoredCredential, CredentialHealthStatus, CredentialHealthIssue } from './types.ts';
 import type { LlmAuthType, LlmProviderType } from '../config/llm-connections.ts';
@@ -37,6 +38,20 @@ export function maskSecretValue(value: string): string {
 }
 
 export class CredentialManager {
+  private mutations = new Map<string, Promise<unknown>>();
+
+  private async mutate<T>(id: CredentialId, operation: () => Promise<T>): Promise<T> {
+    const key = credentialIdToAccount(id);
+    const previous = this.mutations.get(key);
+    const pending = (async () => {
+      if (previous) await previous.catch(() => {});
+      return operation();
+    })();
+    this.mutations.set(key, pending);
+    try { return await pending; }
+    finally { if (this.mutations.get(key) === pending) this.mutations.delete(key); }
+  }
+
   private backends: CredentialBackend[] = [];
   private writeBackend: CredentialBackend | null = null;
   private initialized = false;
@@ -133,6 +148,10 @@ export class CredentialManager {
    * Automatically initializes if needed.
    */
   async set(id: CredentialId, credential: StoredCredential): Promise<void> {
+    return this.mutate(id, () => this.setUnlocked(id, credential));
+  }
+
+  private async setUnlocked(id: CredentialId, credential: StoredCredential): Promise<void> {
     await this.ensureInitialized();
 
     if (!this.writeBackend) {
@@ -148,6 +167,10 @@ export class CredentialManager {
    * Automatically initializes if needed.
    */
   async delete(id: CredentialId): Promise<boolean> {
+    return this.mutate(id, () => this.deleteUnlocked(id));
+  }
+
+  private async deleteUnlocked(id: CredentialId): Promise<boolean> {
     await this.ensureInitialized();
 
     let deleted = false;
@@ -426,6 +449,24 @@ export class CredentialManager {
       refreshToken: credentials.refreshToken,
       expiresAt: credentials.expiresAt,
       idToken: credentials.idToken,
+    });
+  }
+
+  /** Save a refresh only while the original sign-in still owns this credential. */
+  async compareAndSetLlmOAuth(
+    connectionSlug: string,
+    expected: NonNullable<Awaited<ReturnType<CredentialManager['getLlmOAuth']>>>,
+    replacement: NonNullable<Awaited<ReturnType<CredentialManager['getLlmOAuth']>>>,
+  ): Promise<boolean> {
+    const id = { type: 'llm_oauth' as const, connectionSlug };
+    return this.mutate(id, async () => {
+      const current = await this.getLlmOAuth(connectionSlug);
+      if (!current || current.accessToken !== expected.accessToken || current.refreshToken !== expected.refreshToken) return false;
+      await this.setUnlocked(id, {
+        value: replacement.accessToken, refreshToken: replacement.refreshToken,
+        expiresAt: replacement.expiresAt, idToken: replacement.idToken,
+      });
+      return true;
     });
   }
 

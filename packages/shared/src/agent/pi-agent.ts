@@ -51,7 +51,7 @@ import { getCredentialManager } from '../credentials/manager.ts';
 import { toPiTransportCredential } from './pi-auth-credential.ts';
 
 // ChatGPT OAuth token refresh (shared with CodexAgent)
-import { refreshChatGptTokens } from '../auth/chatgpt-oauth.ts';
+import { getChatGptAccessToken } from '../auth/chatgpt-credentials.ts';
 
 // Session-scoped tool callbacks (for SubmitPlan, source auth, etc.)
 import {
@@ -625,6 +625,7 @@ export class PiAgent extends BaseAgent {
       const slug = this.config.connectionSlug || 'pi';
 
       if (this.config.authType === 'oauth') {
+        if (piAuthProvider === 'openai-codex') await getChatGptAccessToken(slug);
         const oauth = await credentialManager.getLlmOAuth(slug);
         if (oauth?.accessToken) {
           this.debug(`Retrieved OAuth credential for Pi provider: ${piAuthProvider}`);
@@ -765,13 +766,7 @@ export class PiAgent extends BaseAgent {
           });
         } else {
           // ChatGPT Plus: use existing refresh utility
-          const newTokens = await refreshChatGptTokens(stored.refreshToken);
-          await credentialManager.setLlmOAuth(slug, {
-            accessToken: newTokens.accessToken,
-            idToken: newTokens.idToken,
-            refreshToken: newTokens.refreshToken,
-            expiresAt: newTokens.expiresAt,
-          });
+          await getChatGptAccessToken(slug, undefined, true);
         }
         this.debug('Token refresh successful');
 

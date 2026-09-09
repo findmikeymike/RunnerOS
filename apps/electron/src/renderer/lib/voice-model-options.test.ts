@@ -42,3 +42,19 @@ test('an excluded legacy selection is never introduced by its label or curated t
   })
   expect(choices).toEqual([])
 })
+
+test('ChatGPT sign-in exposes only fast subscription catalog models on its exact route', () => {
+  const chatgpt = connection('chatgpt', 'openai-codex', { authType: 'oauth' })
+  expect(voiceModelProvider(chatgpt)).toBe('openai-codex')
+  const ids = ['gpt-5.4-mini', 'gpt-5.6-luna', 'gpt-5.3-codex-spark', 'gpt-5.6-sol', 'gpt-4.1-mini', 'codex-mini-latest']
+  const choices = buildVoiceModelOptions([chatgpt], { 'openai-codex': ids.map(id => ({ id: `pi/${id}`, name: id })) })
+  expect(choices.map(choice => choice.model).sort()).toEqual(ids.slice(0, 3).map(id => `pi/${id}`).sort())
+  expect(choices.every(choice => choice.connectionSlug === 'chatgpt' && choice.description.startsWith('ChatGPT'))).toBe(true)
+  expect(buildVoiceModelOptions([chatgpt], {})).toEqual([])
+})
+
+test('subscription tokens cannot use custom endpoints or signed-out connections', () => {
+  for (const extra of [{ isAuthenticated: false }, { baseUrl: 'https://proxy.example/v1' }, { customEndpoint: { api: 'openai-responses', baseUrl: 'https://proxy.example' } }]) {
+    expect(voiceModelProvider(connection('chatgpt', 'openai-codex', { authType: 'oauth', ...extra } as Partial<LlmConnectionWithStatus>))).toBeNull()
+  }
+})

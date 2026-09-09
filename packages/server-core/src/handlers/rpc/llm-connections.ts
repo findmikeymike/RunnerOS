@@ -750,6 +750,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       })
 
       pendingChatGptFlows.delete(state)
+      pushTyped(server, RPC_CHANNELS.llmConnections.CHANGED, { to: 'all' })
       deps.platform.logger?.info(`[ChatGPT OAuth] Flow complete for ${flow.connectionSlug}`)
       return { success: true }
     } catch (error) {
@@ -807,6 +808,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     try {
       const credentialManager = getCredentialManager()
       await credentialManager.deleteLlmCredentials(connectionSlug)
+      pushTyped(server, RPC_CHANNELS.llmConnections.CHANGED, { to: 'all' })
       deps.platform.logger?.info('ChatGPT credentials cleared')
       return { success: true }
     } catch (error) {

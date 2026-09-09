@@ -358,3 +358,41 @@ describe('independent saved conversation voice route', () => {
     }
   })
 })
+
+describe('ChatGPT subscription voice', () => {
+  const chatgpt = { ...connection, authType: 'oauth' as const, piAuthProvider: 'openai-codex' }
+  const subscriptionModel = { ...model, id: 'gpt-5.4-mini', provider: 'openai-codex', api: 'openai-codex-responses' as const, baseUrl: 'https://chatgpt.com/backend-api' }
+  it('validates and streams the subscription model with cancellation and exact credential routing', async () => {
+    let credentialArgs: Parameters<VoiceFocusDependencies['getApiKey']> | undefined
+    const { service, requests } = fixture({
+      resolveConfig: async () => ({ connection: chatgpt, model: 'pi/gpt-5.4-mini' }),
+      resolveModel: async () => subscriptionModel,
+      getApiKey: async (...args) => { credentialArgs = args; return 'subscription-token-canary' },
+    })
+    try {
+      await validateVoiceSettingsRoute({ ...DEFAULT_ARTIST_MANAGER_VOICE_SETTINGS, connectionSlug: chatgpt.slug, model: 'pi/gpt-5.4-mini' }, { getConnection: () => chatgpt, resolveModel: async () => subscriptionModel })
+      const session = await service.register(7, { workspaceId: 'workspace', systemPrompt: 'Voice context' })
+      const events: VoiceFocusEvent[] = []
+      await service.startTurn(7, { sessionId: session.sessionId, turnId: 'hello', text: 'Hello' }, event => events.push(event))
+      expect(requests[0]![0]).toEqual(subscriptionModel)
+      expect(requests[0]![2].apiKey).toBe('subscription-token-canary')
+      expect(credentialArgs?.[0]).toBe(chatgpt.slug)
+      expect(credentialArgs?.[1]).toBe(requests[0]![2].signal)
+      expect(credentialArgs?.[2]).toEqual(subscriptionModel)
+      expect(events.some(event => event.type === 'done')).toBe(true)
+      expect(JSON.stringify({ session, events })).not.toContain('subscription-token-canary')
+    } finally { service.close() }
+  })
+  it('rejects proxy endpoints and mismatched protocols before credentials are read', async () => {
+    for (const [selected, resolved] of [
+      [{ ...chatgpt, baseUrl: 'https://proxy.example' }, subscriptionModel],
+      [chatgpt, { ...subscriptionModel, baseUrl: 'https://proxy.example' }],
+      [chatgpt, { ...subscriptionModel, api: 'openai-responses' as const }],
+      [chatgpt, { ...subscriptionModel, provider: 'openai' }],
+    ] as const) {
+      const { service, credentials } = fixture({ resolveConfig: async () => ({ connection: selected, model: 'pi/gpt-5.4-mini' }), resolveModel: async () => resolved })
+      try { await expect(service.register(7, registration)).rejects.toThrow(); expect(credentials()).toBe(0) }
+      finally { service.close() }
+    }
+  })
+})

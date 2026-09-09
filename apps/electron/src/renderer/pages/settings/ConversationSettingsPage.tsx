@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -21,7 +21,7 @@ const HEARING_OPTIONS = [
 
 export default function ConversationSettingsPage() {
   const { t } = useTranslation()
-  const { llmConnections } = useAppShellContext()
+  const { llmConnections, refreshLlmConnections } = useAppShellContext()
   const [saved, setSaved] = useState<ArtistManagerVoiceSettings | null>(null)
   const [draft, setDraft] = useState<ArtistManagerVoiceSettings | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,10 +36,24 @@ export default function ConversationSettingsPage() {
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelError, setModelError] = useState(false)
   const [modelRetry, setModelRetry] = useState(0)
+  const [refreshingConnections, setRefreshingConnections] = useState(false)
+  const [connectionError, setConnectionError] = useState(false)
   const mounted = useRef(false)
   const savingRef = useRef(false)
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  const refreshModels = useCallback(async () => {
+    setRefreshingConnections(true); setConnectionError(false)
+    try {
+      await refreshLlmConnections()
+      if (mounted.current) setModelRetry(value => value + 1)
+    } catch {
+      if (mounted.current) setConnectionError(true)
+    } finally {
+      if (mounted.current) setRefreshingConnections(false)
+    }
+  }, [refreshLlmConnections])
+  useEffect(() => { void refreshModels() }, [refreshModels])
   useEffect(() => {
     let cancelled = false
     setLoading(true); setError(null)
@@ -138,9 +152,15 @@ export default function ConversationSettingsPage() {
                   onValueChange={value => change({ style: value as ArtistManagerVoiceSettings['style'] })}
                   options={ARTIST_MANAGER_VOICE_STYLES.map(style => ({ value: style.id, label: style.label, description: style.description }))} />
               </div>
-              {unavailableRoute && !modelsLoading && !modelError ? <p className="text-xs text-muted-foreground">{draft.model ? 'Choose a supported fast model before saving. Your saved model has not been changed.' : models.length ? 'Choose a voice model to get started.' : 'Connect an API-key provider in Models to choose a fast voice model.'}</p> : null}
+              {unavailableRoute && !modelsLoading && !modelError ? <p className="text-xs text-muted-foreground">{draft.model ? 'Choose a supported fast model before saving. Your saved model has not been changed.' : models.length ? 'Choose a voice model to get started.' : 'Sign in to ChatGPT or connect an API-key provider in Models to choose a fast voice model.'}</p> : null}
+              {llmConnections.some(connection => connection.isAuthenticated && connection.authType === 'oauth' && (connection.providerType === 'anthropic' || connection.piAuthProvider === 'anthropic')) ? <p className="text-xs text-muted-foreground">Claude sign-in is connected for Command. To use Haiku in Conversation, add an Anthropic API key in Models.</p> : null}
+              {selectedModel && connections.find(connection => connection.slug === selectedModel.connectionSlug)?.piAuthProvider === 'openai-codex' ? <p className="text-xs text-muted-foreground">Uses your ChatGPT connection. Model access and usage limits depend on your plan.</p> : null}
               {modelError ? <p className="text-xs text-destructive">Some model choices could not be loaded. <button type="button" className="underline" onClick={() => setModelRetry(value => value + 1)}>Retry</button></p> : null}
-              <Button variant="link" className="h-auto p-0 text-xs" onClick={() => navigate(routes.view.settings('ai'))}>Manage models</Button>
+              {connectionError ? <p role="alert" className="text-xs text-destructive">Connections could not be refreshed. Please try again.</p> : null}
+              <div className="flex items-center gap-4">
+                <Button variant="link" className="h-auto p-0 text-xs" onClick={() => navigate(routes.view.settings('ai'))}>Manage models</Button>
+                <Button variant="link" className="h-auto p-0 text-xs" disabled={refreshingConnections || modelsLoading || saving} onClick={() => void refreshModels()}>{refreshingConnections || modelsLoading ? 'Refreshing…' : 'Refresh models'}</Button>
+              </div>
             </SettingsSection>
             <SettingsSection title="Audio">
               <div className="divide-y divide-white/[0.06]">
