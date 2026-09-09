@@ -78,7 +78,10 @@ for (const mode of ['success', 'reject-model', 'credential-mismatch', 'runtime-m
       }
       await child.wait(message => message.type === 'ready');
       child.send({ type: 'prompt', id: 'prompt', message: 'Read the fixture.', systemPrompt: 'Read the supplied local fixture with the read tool, then report completion.' });
-      const first = await child.wait(message => message.type === 'durable_checkpoint_request');
+      const initialBoundary = await child.wait(message => message.type === 'durable_checkpoint_request' && message.checkpoint.kind === 'turn-boundary');
+      expect(initialBoundary.checkpoint.turn).toBe(-1);
+      child.send({ type: 'durable_checkpoint_response', requestId: initialBoundary.requestId, reply: await bridge.checkpoint(initialBoundary.checkpoint) });
+      const first = await child.wait(message => message.type === 'durable_checkpoint_request' && message.checkpoint.kind === 'model-start');
       expect(first.checkpoint.kind).toBe('model-start');
       await new Promise(resolve => setTimeout(resolve, 40));
       expect(requests).toHaveLength(0);
@@ -100,7 +103,7 @@ for (const mode of ['success', 'reject-model', 'credential-mismatch', 'runtime-m
         expect(journal.get(spec.runId, spec.workspaceId).status).toBe('failed');
       } else {
         child.send({ type: 'durable_checkpoint_response', requestId: modelResult.requestId, reply: await bridge.checkpoint(modelResult.checkpoint) });
-        const handled = new Set([first.requestId, modelResult.requestId]);
+        const handled = new Set([initialBoundary.requestId, first.requestId, modelResult.requestId]);
         let complete = false;
         while (!complete) {
           const item = await child.wait(message => (message.type === 'durable_checkpoint_request' || message.type === 'pre_tool_use_request' || message.type === 'error') && !handled.has(message.requestId));

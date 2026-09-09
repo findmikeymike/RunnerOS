@@ -5,7 +5,7 @@ export interface DurableRuntimeManifest {
 }
 /** Bump adapterRevision whenever replay/normalization/authorization semantics change. */
 export const DURABLE_RUNTIME_MANIFEST: Readonly<DurableRuntimeManifest> = Object.freeze({
-  piAgentCore: '0.84.3', piAi: '0.84.3', piCodingAgent: '0.84.3', adapterRevision: 'pi-readonly-3',
+  piAgentCore: '0.84.3', piAi: '0.84.3', piCodingAgent: '0.84.3', adapterRevision: 'pi-readonly-4',
 });
 export type DurableRunStatus = 'running' | 'paused' | 'waiting-approval' | 'succeeded' | 'cancelled' | 'failed';
 export interface DurableToolAuthorization {
@@ -27,7 +27,7 @@ export interface DurableApproval {
   policyRevision: string;
   credentialIdentity: string;
   expiresAt: number;
-  status: 'pending' | 'approved' | 'denied' | 'expired' | 'consumed';
+  status: 'pending' | 'approved' | 'denied' | 'expired' | 'consumed' | 'superseded';
   decisionPrincipalId?: string;
 }
 export interface DurableDecisionCommand {
@@ -45,6 +45,26 @@ export interface DurableDecisionCommand {
 export interface DurableDecisionReceipt extends Omit<DurableControlReceipt, 'action'> {
   action: DurableDecisionCommand['action'];
   approvalId: string;
+}
+/** Ordered host-authorized update. The receipt acknowledges persistence, not application. */
+export interface DurableSteeringCommand {
+  runId: string;
+  workspaceId: string;
+  commandId: string;
+  expectedVersion: number;
+  action: 'steer';
+  text: string;
+}
+export interface DurableSteeringEntry {
+  commandId: string;
+  sequence: number;
+  text: string;
+  /** Revision equals the ordered sequence; assigned to a safe boundary before model dispatch. */
+  appliedAfterTurn?: number;
+}
+export interface DurableSteeringReceipt extends Omit<DurableControlReceipt, 'action'> {
+  action: 'steer';
+  sequence: number;
 }
 export interface DurableControlCommand {
   runId: string;
@@ -85,11 +105,16 @@ export interface DurableExecutionDescriptor {
 export type DurableCheckpoint =
   | { kind: 'model-start'; turn: number; context: DurableJson }
   | { kind: 'model-result'; turn: number; message: DurableJson }
+  | { kind: 'tool-disposition'; turn: number; callId: string; tool: string }
   | { kind: 'tool-start'; turn: number; callId: string; tool: string; input: DurableJson }
   | { kind: 'tool-result'; turn: number; callId: string; result: DurableJson }
+  | { kind: 'turn-boundary'; turn: number }
   | { kind: 'complete' };
 export interface DurableCheckpointReply {
   cached?: DurableJson;
+  steering?: DurableSteeringEntry[];
+  /** Durable non-execution disposition; SDK emits an honest skipped tool error. */
+  skipped?: boolean;
 }
 export interface DurableExecutionBridge {
   descriptor: DurableExecutionDescriptor;

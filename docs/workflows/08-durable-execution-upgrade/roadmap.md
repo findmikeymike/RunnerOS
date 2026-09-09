@@ -1,6 +1,6 @@
 # Workflow hardening roadmap
 
-Revision r5. Graph/status authority: [plan.json](plan.json). Technical contract and acceptance IDs: [specification.md](specification.md).
+Revision r6. Graph/status authority: [plan.json](plan.json). Technical contract and acceptance IDs: [specification.md](specification.md).
 
 ## Dependency backbone
 
@@ -49,7 +49,7 @@ Exit: independent fault evidence, typechecks and packaged main-process smoke. St
 
 ## Act II — Recover whole agent chains
 
-### P-03 — Approvals, effects and child agents (controls and approvals accepted; phase remains open)
+### P-03 — Approvals, effects and child agents (controls, approvals and steering accepted; phase remains open)
 
 **Observable outcome:** a workflow can wait for a decision or required child across restart, and can reconcile an uncertain effect without repeating it.
 
@@ -59,7 +59,9 @@ Entry: P-02 complete; expand adapter and approval integration packets.
 
 - **T-06B, approval owner, accepted:** exact approval waits/decisions and current permission revalidation. See [approval evidence](evidence/T-06B-approvals.md). Internal certified reads only.
 
-- **T-06, runtime owner:** remaining ordered steering and escalation integration. Own escalation integration and relevant SessionManager control paths. Acceptance A-08/11/15/16.
+- **T-06C, steering owner, accepted:** durable ordered updates at actual Pi turn boundaries; skip replaced unstarted reads and preserve completed work. See [steering evidence](evidence/T-06C-steering.md).
+
+- **T-06, runtime owner:** remaining existing escalation integration and control-path wiring. Own escalation integration and relevant SessionManager control paths. Acceptance A-08/11/15/16.
 - **T-07, integration owner:** effect-policy registry, persistent retry/budget reservations, provider status reconciliation and nonreplayable fallback. Own adapter contracts and provider fixture coverage. Also prepare and execute one safe, private/test-mode real adapter proof (T-07-LIVE), after checking any missing action authorization; no paid/public operation is implied. Durable budget/attempt enforcement precedes paid dispatch; child identity precedes delegation regardless of table layout. Acceptance A-06/07/17.
 - **T-08, runtime owner:** child admission, restored sessions, completion joins, inherited limits, detached lifecycle and validated output. Own agent-messaging integration. Acceptance A-09/10/11/17.
 

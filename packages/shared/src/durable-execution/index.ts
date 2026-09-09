@@ -4,8 +4,8 @@ import { dirname, join, resolve } from 'node:path';
 import type { DurableCheckpoint, DurableCheckpointReply, DurableExecutionBridge, DurableExecutionDescriptor, DurableJson } from '../protocol/durable-execution.ts';
 import { DURABLE_RUNTIME_MANIFEST } from '../protocol/durable-execution.ts';
 import { privateDurableDirectory } from './key-provider.ts';
-import type { DurableApproval, DurableToolAuthorization, DurableDecisionCommand, DurableDecisionReceipt, DurableControlCommand, DurableControlReceipt, DurableRunStatus } from '../protocol/durable-execution.ts';
-export type { DurableApproval, DurableToolAuthorization, DurableDecisionCommand, DurableDecisionReceipt, DurableControlCommand, DurableControlReceipt } from '../protocol/durable-execution.ts';
+import type { DurableSteeringCommand, DurableSteeringReceipt, DurableSteeringEntry, DurableApproval, DurableToolAuthorization, DurableDecisionCommand, DurableDecisionReceipt, DurableControlCommand, DurableControlReceipt, DurableRunStatus } from '../protocol/durable-execution.ts';
+export type { DurableSteeringCommand, DurableSteeringReceipt, DurableSteeringEntry, DurableApproval, DurableToolAuthorization, DurableDecisionCommand, DurableDecisionReceipt, DurableControlCommand, DurableControlReceipt } from '../protocol/durable-execution.ts';
 export { loadDurableKey, type DurableSafeStorage } from './key-provider.ts';
 
 interface Statement { run(...args: any[]): unknown; get(...args: any[]): any; all(...args: any[]): any[] }
@@ -47,8 +47,8 @@ export interface DurableRunSpec extends DurableExecutionDescriptor {
   costPolicy: { maxTotalUnits: number; maxUnitsPerAttempt: number; unit: 'verified-free' | 'trusted-upper-bound' };
 }
 export interface DurableClaim { runId: string; workspaceId: string; ownerId: string; epoch: number; controlRevision: number }
-interface Call { id: string; tool: string; inputDigest?: string; attempts: number; result?: DurableJson }
-interface Turn { contextDigest: string; message?: DurableJson; calls: Call[] }
+interface Call { id: string; tool: string; inputDigest?: string; attempts: number; skipped?: true; result?: DurableJson }
+interface Turn { continuationRevision?: number; contextDigest: string; message?: DurableJson; calls: Call[] }
 export interface DurableRunSnapshot {
   spec: DurableRunSpec;
   status: DurableRunStatus;
@@ -58,6 +58,9 @@ export interface DurableRunSnapshot {
   reservedUnits: number;
   turns: Turn[];
   approvals?: DurableApproval[];
+  steering?: DurableSteeringEntry[];
+  continuationRevision?: number;
+  boundaries?: Array<{ afterTurn: number; sequences: number[]; continuationRevision: number }>;
   failure?: string;
 }
 export interface DurableJournalOptions { configRoot: string; key: Buffer; ownerId?: string; isProcessAlive?: (pid: number) => boolean; maxPayloadBytes?: number }
@@ -141,13 +144,13 @@ export class DurableJournal {
       if (old.length) { if (old.length !== 1 || old[0].id !== spec.runId || old[0].workspace !== spec.workspaceId || old[0].spec_digest !== digest(spec)) throw new Error('durable-command-conflict'); return this.decrypt(old[0].payload, spec.runId); }
       if (spec.deadlineAt <= Date.now()) throw new Error('invalid-durable-admission');
       if (digest(spec.runtimeManifest) !== digest(DURABLE_RUNTIME_MANIFEST)) throw new Error('durable-runtime-manifest-changed');
-      const state: DurableRunSnapshot = { spec: JSON.parse(canonical(spec)), status: 'running', controlRevision: 0, version: 0, modelAttempts: 0, reservedUnits: 0, turns: [], approvals: [] };
+      const state: DurableRunSnapshot = { spec: JSON.parse(canonical(spec)), status: 'running', controlRevision: 0, version: 0, modelAttempts: 0, reservedUnits: 0, turns: [], approvals: [], steering: [], continuationRevision: 0, boundaries: [] };
       this.db.prepare('INSERT INTO runs(id,workspace,command,spec_digest,payload) VALUES (?,?,?,?,?)').run(spec.runId, spec.workspaceId, spec.commandId, digest(spec), this.encrypt(state, spec.runId));
       this.save(state, 'admitted'); return state;
     });
   }
-  get(runId: string, workspaceId: string): DurableRunSnapshot { const state = this.decrypt(this.row(runId, workspaceId).payload, runId); state.controlRevision ??= 0; state.approvals ??= []; return state; }
-  listInternal(workspaceId: string): DurableRunSnapshot[] { return this.db.prepare('SELECT id,payload FROM runs WHERE workspace=? ORDER BY rowid').all(workspaceId).map(row => { const state = this.decrypt(row.payload, row.id); state.controlRevision ??= 0; state.approvals ??= []; return state; }); }
+  get(runId: string, workspaceId: string): DurableRunSnapshot { const state = this.decrypt(this.row(runId, workspaceId).payload, runId); state.controlRevision ??= 0; state.approvals ??= []; state.steering ??= []; state.continuationRevision ??= 0; state.boundaries ??= []; return state; }
+  listInternal(workspaceId: string): DurableRunSnapshot[] { return this.db.prepare('SELECT id,payload FROM runs WHERE workspace=? ORDER BY rowid').all(workspaceId).map(row => { const state = this.decrypt(row.payload, row.id); state.controlRevision ??= 0; state.approvals ??= []; state.steering ??= []; state.continuationRevision ??= 0; state.boundaries ??= []; return state; }); }
   list(workspaceId: string): Array<{ runId: string; status: DurableRunSnapshot['status']; version: number; modelAttempts: number; reservedUnits: number }> { return this.listInternal(workspaceId).map(state => ({runId: state.spec.runId, status: state.status, version: state.version, modelAttempts: state.modelAttempts, reservedUnits: state.reservedUnits})); }
   claim(runId: string, workspaceId: string): DurableClaim {
     return this.transaction(() => {
@@ -199,6 +202,34 @@ export class DurableJournal {
         this.save(state, command.action);
       }
       const receipt: DurableControlReceipt = { runId: command.runId, workspaceId: command.workspaceId, commandId: command.commandId, action: command.action, version: state.version, status: state.status, controlRevision: state.controlRevision };
+      this.db.prepare('INSERT INTO control_commands(workspace,id,run_id,payload) VALUES (?,?,?,?)').run(command.workspaceId, command.commandId, command.runId, this.encrypt({ command, receipt }, identity));
+      return receipt;
+    });
+  }
+  steer(command: DurableSteeringCommand): DurableSteeringReceipt {
+    canonical(command);
+    if (!command.commandId || !command.runId || !command.workspaceId || command.action !== 'steer' || typeof command.text !== 'string' || !command.text.trim() || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1) throw new Error('invalid-durable-steering-command');
+    return this.transaction(() => {
+      const state = this.get(command.runId, command.workspaceId);
+      const identity = canonical([command.workspaceId, command.commandId]);
+      const prior = this.db.prepare('SELECT payload FROM control_commands WHERE workspace=? AND id=?').get(command.workspaceId, command.commandId);
+      if (prior) {
+        const saved = this.decrypt(prior.payload, identity);
+        if (digest(saved.command) !== digest(command)) throw new Error('durable-command-conflict');
+        return saved.receipt;
+      }
+      if (state.version !== command.expectedVersion) throw new Error('durable-control-version-conflict');
+      if (!['running', 'paused', 'waiting-approval'].includes(state.status)) throw new Error('durable-run-terminal');
+      const sequence = (state.continuationRevision ?? 0) + 1;
+      state.continuationRevision = sequence;
+      (state.steering ??= []).push({ commandId: command.commandId, sequence, text: command.text });
+      for (const approval of state.approvals ?? []) {
+        const call = state.turns[approval.turn]?.calls.find(call => call.id === approval.callId);
+        if (call && call.attempts === 0 && ['pending', 'approved'].includes(approval.status)) approval.status = 'superseded';
+      }
+      if (state.status === 'waiting-approval') { state.status = 'running'; state.controlRevision++; }
+      this.save(state, 'steering-queued');
+      const receipt: DurableSteeringReceipt = { runId: command.runId, workspaceId: command.workspaceId, commandId: command.commandId, action: 'steer', sequence, version: state.version, status: state.status, controlRevision: state.controlRevision };
       this.db.prepare('INSERT INTO control_commands(workspace,id,run_id,payload) VALUES (?,?,?,?)').run(command.workspaceId, command.commandId, command.runId, this.encrypt({ command, receipt }, identity));
       return receipt;
     });
@@ -276,6 +307,10 @@ export class DurableJournal {
       const pinned = JSON.parse(canonical(request)) as DurableCheckpoint;
       let authorization: DurableToolAuthorization | undefined;
       let authorizationFailure: unknown;
+      if (pinned.kind === 'tool-start') {
+        const disposition = this.checkpoint(claim, { kind: 'tool-disposition', turn: pinned.turn, callId: pinned.callId, tool: pinned.tool });
+        if (disposition.skipped) return disposition;
+      }
       if (pinned.kind === 'tool-start' && spec.approvalPrincipalId) {
         try { authorization = options.authorizeTool ? JSON.parse(canonical(await options.authorizeTool(freezeJson(JSON.parse(canonical(pinned)))))) : undefined; } catch (error) { authorizationFailure = error; /* Preserve cause after committing the blocked state. */ }
       }
@@ -306,20 +341,37 @@ export class DurableJournal {
         if (state.status !== 'running' || Date.now() >= state.spec.deadlineAt) throw new Error('durable-dispatch-blocked');
         if (state.controlRevision !== claim.controlRevision) throw new Error('durable-control-changed');
       } else if (!['running', 'paused', 'waiting-approval', 'cancelled'].includes(state.status)) throw new Error('durable-dispatch-blocked');
-      const priorDone = (turn: Turn) => turn.message !== undefined && turn.calls.every(call => call.result !== undefined);
+      const priorDone = (turn: Turn) => turn.message !== undefined && turn.calls.every(call => call.result !== undefined || call.skipped);
+      const pending = () => state.steering!.some(entry => entry.appliedAfterTurn === undefined);
+      const steeringBlocked = () => { state.controlRevision++; this.save(state, 'steering-replay-required'); return { blocked: 'durable-steering-pending' }; };
+      if (request.kind === 'turn-boundary') {
+        if (!Number.isSafeInteger(request.turn) || request.turn < -1 || request.turn >= state.turns.length) throw new Error('durable-invalid-turn');
+        if (state.turns.slice(0, request.turn + 1).some(turn => !priorDone(turn))) throw new Error('durable-predecessor-incomplete');
+        let boundary = state.boundaries!.find(boundary => boundary.afterTurn === request.turn);
+        let changed = false;
+        if (!boundary) { boundary = { afterTurn: request.turn, sequences: [], continuationRevision: 0 }; state.boundaries!.push(boundary); changed = true; }
+        if (!state.turns[request.turn + 1]) {
+          for (const entry of state.steering!) if (entry.appliedAfterTurn === undefined) { entry.appliedAfterTurn = request.turn; boundary.sequences.push(entry.sequence); changed = true; }
+          boundary.continuationRevision = state.continuationRevision!;
+        }
+        if (changed) this.save(state, 'turn-boundary');
+        return { steering: state.steering!.filter(entry => boundary!.sequences.includes(entry.sequence)) };
+      }
       if (request.kind === 'complete') {
+        if (pending() || state.steering!.some(entry => !state.turns[entry.appliedAfterTurn! + 1])) return steeringBlocked();
         if (!state.turns.length || !state.turns.every(priorDone) || state.turns[state.turns.length - 1]!.calls.length) throw new Error('durable-incomplete');
         state.status = 'succeeded'; this.save(state, 'succeeded'); return {};
       }
       if (!Number.isSafeInteger(request.turn) || request.turn < 0 || request.turn > state.turns.length) throw new Error('durable-invalid-turn');
       let turn = state.turns[request.turn];
       if (request.kind === 'model-start') {
+        if (!turn && pending()) return steeringBlocked();
         const contextDigest = digest(canonicalContext(request.context));
         if (turn && turn.contextDigest !== contextDigest) throw new Error('durable-context-changed');
         if (turn?.message !== undefined) return { cached: turn.message };
         if (state.turns.slice(0, request.turn).some(t => !priorDone(t)) || request.turn < state.turns.length - 1) throw new Error('durable-predecessor-incomplete');
         if (state.modelAttempts >= state.spec.maxModelAttempts || state.reservedUnits + state.spec.costPolicy.maxUnitsPerAttempt > state.spec.costPolicy.maxTotalUnits) throw new Error('durable-budget-exhausted');
-        if (!turn) { turn = { contextDigest, calls: [] }; state.turns.push(turn); }
+        if (!turn) { turn = { contextDigest, calls: [], continuationRevision: state.boundaries!.find(boundary => boundary.afterTurn === request.turn - 1)?.continuationRevision ?? 0 }; state.turns.push(turn); }
         state.modelAttempts++; state.reservedUnits += state.spec.costPolicy.maxUnitsPerAttempt;
       } else {
         if (!turn) throw new Error('durable-model-not-started');
@@ -337,9 +389,16 @@ export class DurableJournal {
         } else {
           if (turn.message === undefined) throw new Error('durable-model-not-committed');
           const call = turn.calls.find(c => c.id === request.callId);
-          if (!call || turn.calls.slice(0, turn.calls.indexOf(call)).some(c => c.result === undefined)) throw new Error('durable-call-order');
-          if (request.kind === 'tool-start') {
+          if (!call || turn.calls.slice(0, turn.calls.indexOf(call)).some(c => c.result === undefined && !c.skipped)) throw new Error('durable-call-order');
+          if (request.kind === 'tool-start' || request.kind === 'tool-disposition') {
             if (call.tool !== request.tool || !state.spec.allowedTools.includes(request.tool as any)) throw new Error('durable-uncertified-tool');
+            if (call.skipped) return { skipped: true };
+            if (call.attempts === 0 && call.result === undefined && pending()) {
+              call.skipped = true;
+              if (request.kind === 'tool-start') call.inputDigest = digest(request.input);
+              this.save(state, 'tool-skipped'); return { skipped: true };
+            }
+            if (request.kind === 'tool-disposition') return {};
             const inputDigest = digest(request.input);
             if (call.inputDigest && call.inputDigest !== inputDigest) throw new Error('durable-tool-input-changed');
             const approval = this.authorize(state, request, call, inputDigest, authorization);
@@ -348,7 +407,7 @@ export class DurableJournal {
             if (call.attempts >= state.spec.maxModelAttempts) throw new Error('durable-tool-attempts-exhausted');
             call.inputDigest = inputDigest; call.attempts++;
           } else {
-            if (!call.inputDigest || call.attempts < 1) throw new Error('durable-tool-not-started');
+            if (call.skipped || !call.inputDigest || call.attempts < 1) throw new Error('durable-tool-not-started');
             if (call.result !== undefined) { if (digest(call.result) !== digest(request.result)) throw new Error('durable-tool-result-conflict'); return { cached: call.result }; }
             call.result = request.result;
           }

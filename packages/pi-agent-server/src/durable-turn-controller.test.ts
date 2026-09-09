@@ -14,7 +14,7 @@ function message(tool = true): AssistantMessage {
 function fixture(checkpoint: (request: DurableCheckpoint) => Promise<DurableCheckpointReply>, execute = async () => ({ content: [{ type: 'text' as const, text: 'read-result' }], details: {} }), response = message(true)) {
   const controller = new DurableTurnController(descriptor, checkpoint);
   let requests = 0;
-  const read: AgentTool = { name: 'read', label: 'Read', description: 'fixture read', parameters: Type.Object({ path: Type.String() }), execute: (id, input) => controller.tool(id, 'read', input, execute) };
+  const read: AgentTool = { name: 'read', label: 'Read', description: 'fixture read', parameters: Type.Object({ path: Type.String() }), execute: async (id, input) => { await controller.disposition(id, 'read'); return controller.tool(id, 'read', input, execute); } };
   const agent = new Agent({ initialState: { model, tools: [read] }, streamFn: (_model, _context, options) => {
     expect(options?.maxRetries).toBe(0);
     expect(options?.maxTokens).toBe(128);
@@ -36,7 +36,7 @@ describe('durable Pi core SDK boundary', () => {
     const order: string[] = [];
     const run = fixture(async event => { order.push(event.kind); await Promise.resolve(); return {}; }, async () => { order.push('effect'); return { content: [{ type: 'text', text: 'ok' }], details: {} }; });
     await run.controller.run(run.agent, 'frozen prompt', 'frozen system');
-    expect(order).toEqual(['model-start', 'model-result', 'tool-start', 'effect', 'tool-result', 'model-start', 'model-result', 'complete']);
+    expect(order).toEqual(['turn-boundary', 'model-start', 'model-result', 'tool-disposition', 'tool-start', 'effect', 'tool-result', 'turn-boundary', 'model-start', 'model-result', 'turn-boundary', 'complete']);
     expect(run.agent.state.messages[0]?.timestamp).toBe(100);
   });
   test('replays committed responses and reads through real SDK without provider or tool calls', async () => {
@@ -76,6 +76,70 @@ describe('durable Pi core SDK boundary', () => {
     const bad = message(true); (bad.content[0] as { name: string }).name = 'bash';
     const run = fixture(async () => ({}), undefined, bad);
     await expect(run.controller.run(run.agent, 'frozen', 'system')).rejects.toThrow('Unsupported');
+    expect(run.requests()).toBe(1);
+  });
+});
+
+
+describe('ordered durable steering through the real SDK loop', () => {
+  test('initial, after-tool and terminal updates enter provider context in order with stable timestamps', async () => {
+    const contexts: any[] = [];
+    const batches = new Map<number, string[]>([[-1, ['initial one', 'initial two']], [0, ['after tool one', 'after tool two']], [1, ['after final']]]);
+    const offsets = new Map([[-1, 1], [0, 3], [1, 5]]);
+    const run = fixture(async event => {
+      if (event.kind === 'model-start') contexts.push(event.context);
+      if (event.kind === 'turn-boundary') return { steering: (batches.get(event.turn) ?? []).map((text, index) => ({ commandId: text, sequence: offsets.get(event.turn)! + index, text, appliedAfterTurn: event.turn })) };
+      return {};
+    });
+    run.agent.steer({ role: 'user', content: 'untracked update', timestamp: 0 });
+    await run.controller.run(run.agent, 'frozen', 'system');
+    expect(run.requests()).toBe(3);
+    const userTexts = (index: number) => contexts[index].messages.filter((m: any) => m.role === 'user').map((m: any) => m.content[0].text);
+    expect(userTexts(0)).toEqual(['frozen', 'initial one', 'initial two']);
+    expect(userTexts(1)).toEqual(['frozen', 'initial one', 'initial two', 'after tool one', 'after tool two']);
+    expect(userTexts(2)).toEqual(['frozen', 'initial one', 'initial two', 'after tool one', 'after tool two', 'after final']);
+    expect(contexts[2].messages.filter((m: any) => m.role === 'user').map((m: any) => m.timestamp)).toEqual([100, 101, 102, 103, 104, 105]);
+  });
+
+  test('reconstruction replays steering and committed outputs without repeat model or tool execution', async () => {
+    const recorded = new Map<string, any>(), contexts: any[] = [];
+    const bridge = async (event: DurableCheckpoint): Promise<DurableCheckpointReply> => {
+      if (event.kind === 'turn-boundary') return { steering: event.turn === 0 ? [{ commandId: 'update', sequence: 1, text: 'Use the new direction', appliedAfterTurn: 0 }] : [] };
+      if (event.kind === 'model-start') { contexts.push(event.context); return { cached: recorded.get(`model-${event.turn}`) }; }
+      if (event.kind === 'model-result') recorded.set(`model-${event.turn}`, event.message);
+      if (event.kind === 'tool-start') return { cached: recorded.get(event.callId) };
+      if (event.kind === 'tool-result') recorded.set(event.callId, event.result);
+      return {};
+    };
+    const first = fixture(bridge); await first.controller.run(first.agent, 'frozen', 'system');
+    const second = fixture(bridge, async () => { throw new Error('no repeated effects'); });
+    await second.controller.run(second.agent, 'frozen', 'system');
+    expect(first.requests()).toBe(2); expect(second.requests()).toBe(0);
+    expect(contexts.slice(0, 2)).toEqual(contexts.slice(2));
+  });
+
+  for (const skipAt of ['tool-disposition', 'tool-start'] as const) {
+    test(`${skipAt} records honest non-execution and permits the ordered next turn`, async () => {
+      let effects = 0;
+      const kinds: string[] = [];
+      const run = fixture(async event => {
+        kinds.push(event.kind);
+        if (event.kind === skipAt) return { skipped: true };
+        if (event.kind === 'turn-boundary' && event.turn === 0) return { steering: [{ commandId: 'skip-old', sequence: 1, text: 'New direction', appliedAfterTurn: 0 }] };
+        return {};
+      }, async () => { effects++; throw new Error('must not execute'); });
+      await run.controller.run(run.agent, 'frozen', 'system');
+      expect(effects).toBe(0); expect(run.requests()).toBe(2); expect(kinds).not.toContain('tool-result');
+      if (skipAt === 'tool-disposition') expect(kinds).not.toContain('tool-start');
+      const toolResult = run.agent.state.messages.find(m => m.role === 'toolResult') as any;
+      expect(toolResult.isError).toBe(true);
+      expect(toolResult.content[0].text).toBe('Operation skipped because newer user instructions superseded it.');
+    });
+  }
+
+  test('uncommitted turn boundary stops before successor provider request', async () => {
+    const run = fixture(async event => { if (event.kind === 'turn-boundary' && event.turn === 0) throw new Error('boundary commit unavailable'); return {}; });
+    await expect(run.controller.run(run.agent, 'frozen', 'system')).rejects.toThrow('boundary commit unavailable');
     expect(run.requests()).toBe(1);
   });
 });

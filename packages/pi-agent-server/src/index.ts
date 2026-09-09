@@ -775,6 +775,9 @@ function wrapSingleTool(tool: ToolDefinition<any, any>): ToolDefinition<any, any
       inputObj = { ...inputObj, file_path: inputObj.path };
     }
 
+    // A superseded operation must not enter the old permission path. This does not authorize execution.
+    if (durableController) await durableController.disposition(toolCallId, tool.name);
+
     // Send to main process for permission checking + transforms
     inputObj = await requestPreToolUseApproval(sdkToolName, inputObj, toolCallId);
 

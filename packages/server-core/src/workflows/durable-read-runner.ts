@@ -3,7 +3,7 @@ import type { AgentEvent, Workspace } from '@craft-agent/core/types';
 import type { AgentBackend, BackendHostRuntimeContext, CoreBackendConfig } from '../../../shared/src/agent/backend/types.ts';
 import type { ResolvedBackendContext } from '../../../shared/src/agent/backend/factory.ts';
 import { canonical, digest, type DurableJournal, type DurableRunSnapshot, type DurableRunSpec } from '../../../shared/src/durable-execution/index.ts';
-import { DURABLE_RUNTIME_MANIFEST, type DurableCheckpoint, type DurableControlCommand, type DurableControlReceipt, type DurableDecisionCommand, type DurableDecisionReceipt, type DurableJson, type DurableToolAuthorization } from '../../../shared/src/protocol/durable-execution.ts';
+import { DURABLE_RUNTIME_MANIFEST, type DurableCheckpoint, type DurableControlCommand, type DurableControlReceipt, type DurableDecisionCommand, type DurableDecisionReceipt, type DurableJson, type DurableSteeringCommand, type DurableSteeringReceipt, type DurableToolAuthorization } from '../../../shared/src/protocol/durable-execution.ts';
 import type { LoadedWorkflow } from '../../../shared/src/workflows/types.ts';
 
 export interface DurableReadBinding {
@@ -43,6 +43,8 @@ export interface DurableReadDecisionResult {
   receipt: DurableDecisionReceipt;
   execution?: Promise<DurableRunSnapshot>;
 }
+export interface DurableReadSteeringResult { receipt: DurableSteeringReceipt; execution?: Promise<DurableRunSnapshot> }
+interface ActiveReadExecution { backend?: ReadBackend; promise: Promise<DurableRunSnapshot>; replayForSteering?: boolean }
 interface FrozenReadContext {
   prompt: string; systemPrompt: string; connectionSlug: string; workspaceRoot: string; bindingDigest: string;
   requireNonEmptyOutput: boolean;
@@ -72,7 +74,7 @@ function frozenContext(spec: DurableRunSpec): FrozenReadContext {
 
 /** Single-step local read execution. Only journal checkpoints authorize success. */
 export class DurableReadRunner {
-  private readonly active = new Map<string, { backend?: ReadBackend; promise: Promise<DurableRunSnapshot> }>();
+  private readonly active = new Map<string, ActiveReadExecution>();
   constructor(private readonly options: DurableReadRunnerOptions) {}
 
   /** Existing workflow adapter: unsupported execution semantics fail before admission. */
@@ -119,9 +121,19 @@ export class DurableReadRunner {
   resume(runId: string, workspaceId: string): Promise<DurableRunSnapshot> {
     const key = canonical([workspaceId, runId]), prior = this.active.get(key);
     if (prior) return prior.promise;
-    const entry: { backend?: ReadBackend; promise: Promise<DurableRunSnapshot> } = { promise: undefined! };
+    const entry: ActiveReadExecution = { promise: undefined! };
     this.active.set(key, entry);
-    entry.promise = Promise.resolve().then(() => this.execute(runId, workspaceId, entry)).finally(() => this.active.delete(key));
+    entry.promise = Promise.resolve().then(async () => {
+      let previousPendingProgress: string | undefined;
+      while (true) {
+        entry.replayForSteering = false;
+        const state = await this.execute(runId, workspaceId, entry);
+        if (!entry.replayForSteering || state.status !== 'running') return state;
+        const progress = digest({ steering: state.steering ?? [], continuationRevision: state.continuationRevision ?? 0, modelAttempts: state.modelAttempts });
+        if (progress === previousPendingProgress) throw new Error('durable-steering-replay-stalled');
+        previousPendingProgress = progress;
+      }
+    }).finally(() => this.active.delete(key));
     return entry.promise;
   }
 
@@ -155,6 +167,16 @@ export class DurableReadRunner {
     return { receipt, execution: this.resumeAfterDrain(receipt, previous?.promise) };
   }
 
+  async steer(command: DurableSteeringCommand): Promise<DurableReadSteeringResult> {
+    command = JSON.parse(canonical(command)) as DurableSteeringCommand;
+    const before = this.options.journal.get(command.runId, command.workspaceId);
+    const receipt = Object.freeze(this.options.journal.steer(command));
+    const previous = this.active.get(canonical([command.workspaceId, command.runId]));
+    const current = this.options.journal.get(command.runId, command.workspaceId);
+    if (current.status !== 'running' || current.controlRevision !== receipt.controlRevision || previous && before.status === 'running') return { receipt };
+    return { receipt, execution: this.resumeAfterDrain(receipt, previous?.promise) };
+  }
+
   private resumeAfterDrain(receipt: Pick<DurableControlReceipt, 'runId' | 'workspaceId' | 'controlRevision'>, previous?: Promise<DurableRunSnapshot>): Promise<DurableRunSnapshot> {
     const execution = (async () => {
       // A resumed owner must not race the still-draining model/tool response of the preceding claim.
@@ -179,7 +201,7 @@ export class DurableReadRunner {
     bindingDigest(binding);
   }
 
-  private async execute(runId: string, workspaceId: string, entry: { backend?: ReadBackend }): Promise<DurableRunSnapshot> {
+  private async execute(runId: string, workspaceId: string, entry: ActiveReadExecution): Promise<DurableRunSnapshot> {
     const { journal } = this.options, initial = journal.get(runId, workspaceId);
     if (initial.status !== 'running') return initial;
     const claim = journal.claim(runId, workspaceId), journalBridge = journal.bridge(claim, initial.spec.approvalPrincipalId && this.options.authorizeTool ? {
@@ -231,6 +253,11 @@ export class DurableReadRunner {
       if (finalState.status === 'running' && finalState.controlRevision === claim.controlRevision) throw new Error('durable-read-missing-completion-checkpoint');
       return finalState;
     } catch (error) {
+      if (error instanceof Error && error.message.includes('durable-steering-pending')) {
+        const current = journal.get(runId, workspaceId);
+        entry.replayForSteering = current.status === 'running';
+        return current;
+      }
       if (error instanceof Error && /durable-(?:run-paused|control-changed|approval-required|approval-expired|authorization-blocked)/.test(error.message)) {
         const current = journal.get(runId, workspaceId);
         if (current.status === 'paused' || current.status === 'cancelled' || current.status === 'waiting-approval' || current.controlRevision !== claim.controlRevision) return current;
@@ -241,6 +268,7 @@ export class DurableReadRunner {
     } finally {
       let cleanupError: unknown;
       try { entry.backend?.destroy(); } catch (error) { cleanupError = error; }
+      entry.backend = undefined;
       try { journal.release(claim); } catch (error) { cleanupError ??= error; }
       if (!failed && cleanupError !== undefined) throw cleanupError;
     }

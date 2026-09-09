@@ -338,15 +338,18 @@ function approvalFixture() {
     },
     createBackend: args => ({ async *chat() {
       const bridge = args.coreConfig.durableExecution!;
-      const model = await bridge.checkpoint({ kind: 'model-start', turn: 0, context: { messages: [] } });
+      const initial = await bridge.checkpoint({ kind: 'turn-boundary', turn: -1 });
+      const model = await bridge.checkpoint({ kind: 'model-start', turn: 0, context: { messages: [], steering: JSON.parse(JSON.stringify(initial.steering ?? [])) } });
       if (!model.cached) await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', content: [{ type: 'toolCall', id: 'approval-read', name: 'read', arguments: { path: 'notes.txt' } }], stopReason: 'toolUse' } });
       const reply = await bridge.checkpoint({ kind: 'tool-start', turn: 0, callId: 'approval-read', tool: 'read', input: { path: 'notes.txt' } });
-      if (!reply.cached) {
+      if (!reply.skipped && !reply.cached) {
         executions++;
         await bridge.checkpoint({ kind: 'tool-result', turn: 0, callId: 'approval-read', result: { content: [{ type: 'text', text: 'approved read result' }] } });
       }
-      const final = await bridge.checkpoint({ kind: 'model-start', turn: 1, context: { messages: [], result: 'approved read result' } });
+      const updates = await bridge.checkpoint({ kind: 'turn-boundary', turn: 0 });
+      const final = await bridge.checkpoint({ kind: 'model-start', turn: 1, context: { messages: [], result: reply.skipped ? 'skipped' : 'approved read result', steering: JSON.parse(JSON.stringify(updates.steering ?? [])) } });
       if (!final.cached) await bridge.checkpoint({ kind: 'model-result', turn: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'done' }], stopReason: 'stop' } });
+      await bridge.checkpoint({ kind: 'turn-boundary', turn: 1 });
       await bridge.checkpoint({ kind: 'complete' });
     }, async abort() {}, destroy() {} }),
   };
@@ -451,4 +454,77 @@ test('ordinary certified read execution does not invoke or introduce approval ch
   const { approvalPrincipalId: _principal, ...input } = setup.input;
   expect((await runner.start(input)).status).toBe('succeeded');
   expect(setup.authorizationChecks).toBe(0); expect(setup.executions).toBe(1);
+});
+
+
+test('late steering before completion automatically replays only after the prior owner releases', async () => {
+  const { input, base, journal } = fixture(), ready = latch(), finish = latch();
+  let creations = 0, destroyed = 0;
+  const runner = new DurableReadRunner({ ...base, createBackend: args => {
+    const attempt = ++creations;
+    if (attempt === 2) expect(destroyed).toBe(1);
+    return { async *chat() {
+      const bridge = args.coreConfig.durableExecution!;
+      await bridge.checkpoint({ kind: 'turn-boundary', turn: -1 });
+      const model = await bridge.checkpoint({ kind: 'model-start', turn: 0, context: { messages: [] } });
+      if (!model.cached) await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', content: [{ type: 'text', text: 'old answer' }], stopReason: 'stop' } });
+      const updates = await bridge.checkpoint({ kind: 'turn-boundary', turn: 0 });
+      if (attempt === 1) { ready.resolve(); await finish.promise; }
+      if (updates.steering?.length) {
+        expect(updates.steering.map(item => item.text)).toEqual(['Use the new direction']);
+        await bridge.checkpoint({ kind: 'model-start', turn: 1, context: { steering: JSON.parse(JSON.stringify(updates.steering)) } });
+        await bridge.checkpoint({ kind: 'model-result', turn: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'new answer' }], stopReason: 'stop' } });
+        await bridge.checkpoint({ kind: 'turn-boundary', turn: 1 });
+      }
+      await bridge.checkpoint({ kind: 'complete' });
+    }, async abort() {}, destroy() { destroyed++; } };
+  } });
+  const running = runner.start(input); await ready.promise;
+  const queued = await runner.steer({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'steer', text: 'Use the new direction' });
+  expect(queued.receipt.sequence).toBe(1); expect(queued.execution).toBeUndefined(); expect(creations).toBe(1);
+  finish.resolve();
+  expect((await running).status).toBe('succeeded'); expect(creations).toBe(2); expect(journal.get(input.runId, input.workspaceId).modelAttempts).toBe(2);
+});
+
+test('steering supersedes a pending approval and restarts the waiting read without executing it', async () => {
+  const setup = approvalFixture(), runner = new DurableReadRunner(setup.options);
+  expect((await runner.start(setup.input)).status).toBe('waiting-approval');
+  const command = { runId: setup.input.runId, workspaceId: setup.input.workspaceId, commandId: randomUUID(), expectedVersion: setup.journal.get(setup.input.runId, setup.input.workspaceId).version, action: 'steer' as const, text: 'Skip this read and use the new direction' };
+  const queued = await runner.steer(command);
+  expect(queued.receipt.status).toBe('running');
+  const result = await queued.execution!;
+  expect(result.status).toBe('succeeded'); expect(setup.executions).toBe(0);
+  expect(result.approvals![0]!.status).toBe('superseded'); expect(result.steering![0]!.text).toBe(command.text);
+});
+
+test('steering while paused persists its ordered message without starting execution', async () => {
+  const setup = approvalFixture(), runner = new DurableReadRunner(setup.options);
+  await runner.start(setup.input);
+  await runner.control({ runId: setup.input.runId, workspaceId: setup.input.workspaceId, commandId: randomUUID(), expectedVersion: setup.journal.get(setup.input.runId, setup.input.workspaceId).version, action: 'pause' });
+  const command = { runId: setup.input.runId, workspaceId: setup.input.workspaceId, commandId: randomUUID(), expectedVersion: setup.journal.get(setup.input.runId, setup.input.workspaceId).version, action: 'steer' as const, text: 'New direction after pause' };
+  const queued = await runner.steer(command), duplicate = await runner.steer(command);
+  expect(queued.receipt.status).toBe('paused'); expect(queued.execution).toBeUndefined();
+  expect(duplicate.receipt).toEqual(queued.receipt); expect(duplicate.execution).toBeUndefined();
+  expect(setup.journal.get(setup.input.runId, setup.input.workspaceId).steering).toHaveLength(1); expect(setup.executions).toBe(0);
+});
+
+test('repeated pending steering without applying its boundary cannot spin forever', async () => {
+  const { input, base, journal } = fixture(), ready = latch(), finish = latch();
+  let attempts = 0;
+  const runner = new DurableReadRunner({ ...base, createBackend: args => {
+    const attempt = ++attempts;
+    return { async *chat() {
+      const bridge = args.coreConfig.durableExecution!;
+      const model = await bridge.checkpoint({ kind: 'model-start', turn: 0, context: {} });
+      if (!model.cached) await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', content: [{ type: 'text', text: 'old answer' }], stopReason: 'stop' } });
+      if (attempt === 1) { ready.resolve(); await finish.promise; }
+      // Deliberately broken injected backend: never applies the queued boundary.
+      await bridge.checkpoint({ kind: 'complete' });
+    }, async abort() {}, destroy() {} };
+  } });
+  const running = runner.start(input); await ready.promise;
+  await runner.steer({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'steer', text: 'Apply this update' });
+  finish.resolve();
+  await expect(running).rejects.toThrow('durable-steering-replay-stalled');
+  expect(attempts).toBe(2);
 });

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "revision": "r5",
+  "revision": "r6",
   "sources": [
     {
       "id": "S-USER",
@@ -381,6 +381,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -434,6 +442,14 @@
           "path": "evidence/T-06B-rival.md",
           "revision": "r5",
           "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -505,6 +521,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -569,6 +593,14 @@
           "path": "evidence/T-06B-rival.md",
           "revision": "r5",
           "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -641,6 +673,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -688,6 +728,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -722,6 +770,14 @@
           "path": "evidence/T-06B-rival.md",
           "revision": "r5",
           "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -779,6 +835,14 @@
           "path": "evidence/T-06B-rival.md",
           "revision": "r5",
           "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -840,6 +904,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -878,6 +950,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -904,6 +984,14 @@
           "path": "evidence/T-06B-rival.md",
           "revision": "r5",
           "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -954,6 +1042,14 @@
           "path": "evidence/T-06B-rival.md",
           "revision": "r5",
           "environment": "Independent carryforward of prior r4 acceptance; historical evidence remains historical; changed approval components verified separately",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -1009,18 +1105,78 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent carryforward of prior r5 acceptance; historical evidence remains historical; changed steering paths freshly verified",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        }
+      ]
+    },
+    {
+      "id": "T-06C",
+      "kind": "task",
+      "title": "Persist ordered steering at immutable continuation boundaries",
+      "owner": "steering-owner",
+      "depends_on": [
+        "G-03",
+        "T-06B"
+      ],
+      "status": "accepted",
+      "phase": "P-03",
+      "requirements": [
+        "R-02",
+        "R-03",
+        "R-08",
+        "R-11",
+        "R-13"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-06C.md",
+      "resources": [
+        "packages/shared/src/durable-execution",
+        "packages/pi-agent-server/src",
+        "packages/server-core/src/workflows/durable-read-runner.ts"
+      ],
+      "verification": [
+        {
+          "method": "Ordered command, boundary and control race tests plus actual Pi host SIGKILL and independent rival review",
+          "expected": "Updates delivered in order once per continuation; completed work unchanged; unused approvals cannot dispatch superseded work",
+          "environment": "Disposable configuration, actual installed Pi/native reads, loopback model simulator and copied packaged Electron"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/T-06C-steering.md",
+          "revision": "r6",
+          "environment": "Internal certified reads, actual default Pi host SIGKILL and boundary races with local simulator; copied packaged Electron",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "automated"
+        },
+        {
+          "path": "evidence/T-06C-rival.md",
+          "revision": "r6",
+          "environment": "Independent cold code review, targeted checks and final consolidated evidence review; no public rollout",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
     {
       "id": "T-06",
       "kind": "task",
-      "title": "Persist ordered steering without mutating completed work or approval bindings",
+      "title": "Integrate durable decisions and steering with existing escalation paths",
       "owner": "runtime-owner",
       "depends_on": [
         "G-03",
         "T-06A",
-        "T-06B"
+        "T-06B",
+        "T-06C"
       ],
       "status": "planned",
       "phase": "P-03",
