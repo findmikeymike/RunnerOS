@@ -1,3 +1,5 @@
+import { createDurableReadAuthorization, readDurablePolicyRevision } from '@craft-agent/server-core/workflows/durable-read-authorization';
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity';
 import type { DurableWorkflowHostOptions } from '@craft-agent/server-core/workflows/durable-workflow-host';
 import { createElectronDurableWorkflowAuthority } from './durable-workflow-authority';
 import { openElectronDurableWorkflowHost } from './durable-workflow-storage';
@@ -27,7 +29,10 @@ export function createDurableWorkflowStartup(deps = {
     const resolvePrincipal = await deps.createAuthority({ server, getBinding });
     // Identity loading is asynchronous; policy may have changed while it waited.
     assertLocal();
-    return deps.openHost({ runnerOptions, resolvePrincipal });
+    return deps.openHost({ runnerOptions: { ...runnerOptions, readPolicyRevision: workspaceRoot => readDurablePolicyRevision(RUNTIME_IDENTITY.dataRoot, workspaceRoot), authorizeRun: context => resolvePrincipal.assertRunPrincipal(context.workspaceId, context.approvalPrincipalId), authorizeTool: createDurableReadAuthorization({
+      configRoot: RUNTIME_IDENTITY.dataRoot, resolveBinding: runnerOptions.resolveBinding,
+      assertRunPrincipal: resolvePrincipal.assertRunPrincipal,
+    }) }, resolvePrincipal });
   };
 }
 

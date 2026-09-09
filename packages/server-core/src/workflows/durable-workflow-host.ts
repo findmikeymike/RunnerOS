@@ -1,3 +1,4 @@
+import type { DurableChildRequest, DurableChildResult } from './durable-child-runner.ts';
 import { DurableJournal, loadDurableKey, type DurableSafeStorage, type DurableRunSnapshot } from '../../../shared/src/durable-execution/index.ts';
 import { DurableReadRunner, type DurableReadInput, type DurableReadRunnerOptions } from './durable-read-runner.ts';
 import { DurableWorkflowControls, type DurableWorkflowControlsOptions } from './durable-workflow-controls.ts';
@@ -40,6 +41,11 @@ export class DurableWorkflowHost {
 
   /** Trusted host admission only; the public workflow START handler remains unchanged. */
   start(input: DurableReadInput): Promise<DurableRunSnapshot> { return this.track(() => this.runner.start(input)); }
+
+  /** Host-only child orchestration; no renderer or general delegation tool is registered. */
+  startChild(parentRunId: string, workspaceId: string, request: DurableChildRequest): Promise<DurableChildResult> {
+    return this.track(() => this.runner.startChild(parentRunId, workspaceId, request));
+  }
 
   private track<T>(action: () => Promise<T>): Promise<T> {
     if (this.closing) return Promise.reject(new Error('durable-host-closing'));

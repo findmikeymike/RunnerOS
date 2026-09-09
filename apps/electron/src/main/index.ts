@@ -1,3 +1,4 @@
+import { waitForSafeShutdown } from './shutdown-wait'
 import { startElectronDurableWorkflowHost } from './durable-workflow-startup'
 import { createDurableReadBindingResolver } from '@craft-agent/server-core/workflows/durable-read-binding'
 import { electronDurableWorkflowLifetime } from './durable-workflow-lifetime'
@@ -1499,7 +1500,7 @@ app.whenReady().then(async () => {
     setBeforeUpdateInstallHook(async () => {
       isQuitting = true
       windowManager?.setAppQuitting(true)
-      try { await performQuitCleanup() }
+      try { await waitForQuitCleanup() }
       catch (error) { isQuitting = false; windowManager?.setAppQuitting(false); throw error }
     })
     setInstallQuitFailedHook(() => {
@@ -1585,6 +1586,23 @@ function captureAndSaveWindowState(reason: 'before-quit' | 'pre-update'): number
   return windows.length
 }
 
+let shutdownNotice: Promise<void> | undefined
+function showShutdownWaiting(): Promise<void> {
+  if (shutdownNotice) return shutdownNotice
+  const notice = dialog.showMessageBox({
+    type: 'info', title: 'Finishing active work',
+    message: `${RUNTIME_IDENTITY.productName} is still waiting for active work to stop safely.`,
+    detail: 'Your work and storage remain open while this finishes. Quit or update will continue automatically when it is safe. Choose Quit again to check the status.',
+    buttons: ['Keep waiting'], defaultId: 0, cancelId: 0,
+  }).then(() => {})
+  shutdownNotice = notice
+  void notice.finally(() => { if (shutdownNotice === notice) shutdownNotice = undefined }).catch(() => {})
+  return notice
+}
+function waitForQuitCleanup(): Promise<void> {
+  return waitForSafeShutdown(performQuitCleanup(), { waitMs: 15_000, onWaiting: showShutdownWaiting })
+}
+
 let quitCleanupRan = false
 let quitCleanupComplete = false
 let quitCleanupAttempt: Promise<void> | undefined
@@ -1667,7 +1685,7 @@ app.on('before-quit', async (event) => {
   // Avoid re-entry when we call app.exit()
   if (isQuitting && quitCleanupComplete) return
   event.preventDefault()
-  if (isQuitting) return
+  if (isQuitting) { void showShutdownWaiting().catch(() => {}); return }
   isQuitting = true
 
   // Ensure Cmd+Q/app quit bypasses layered window close interception (Cmd+W behavior).
@@ -1675,12 +1693,19 @@ app.on('before-quit', async (event) => {
 
   captureAndSaveWindowState('before-quit')
   try {
-    await performQuitCleanup()
+    await waitForQuitCleanup()
     app.exit(0)
   } catch (error) {
     mainLog.error('Quit cleanup failed; quit can be retried:', error)
     isQuitting = false
     windowManager?.setAppQuitting(false)
+    const choice = await dialog.showMessageBox({
+      type: 'warning', title: 'Could not finish quitting',
+      message: `${RUNTIME_IDENTITY.productName} could not finish stopping active work safely.`,
+      detail: 'The app has not forced storage closed. Retry when the connection or storage is available.',
+      buttons: ['Retry quit', 'Keep app open'], defaultId: 0, cancelId: 1,
+    })
+    if (choice.response === 0) app.quit()
   }
 })
 

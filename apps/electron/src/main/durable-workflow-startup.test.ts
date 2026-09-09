@@ -4,14 +4,14 @@ import type { DurableWorkflowHost } from '@craft-agent/server-core/workflows/dur
 
 function fixture() {
   const calls: string[] = [], binding = { host: '127.0.0.1', serverModeEnabled: false };
-  const principal = () => 'desktop-owner:fixture';
+  const principal = Object.assign(() => 'desktop-owner:fixture', { assertRunPrincipal: () => {} });
   const host = { close: async () => {} } as DurableWorkflowHost;
   const options: DurableWorkflowStartupOptions = { getBinding: () => binding,
     server: { isAuthenticatedClientConnected: () => true },
     runnerOptions: { hostRuntime: { appRootPath: '/fixture', isPackaged: false }, resolveBinding: () => { throw new Error('must not execute'); } } };
   const deps = { createAuthority: async () => { calls.push('authority'); return principal; },
     openHost: async (input: Parameters<typeof import('./durable-workflow-storage').openElectronDurableWorkflowHost>[0]) => {
-      calls.push('host'); expect(input.resolvePrincipal).toBe(principal); expect(input.runnerOptions).toBe(options.runnerOptions); return host;
+      calls.push('host'); expect(input.resolvePrincipal).toBe(principal); expect(input.runnerOptions.resolveBinding).toBe(options.runnerOptions.resolveBinding); expect(input.runnerOptions.authorizeTool).toBeFunction(); expect(input.runnerOptions.readPolicyRevision).toBeFunction(); return host;
     } };
   return { calls, binding, options, deps, host };
 }
@@ -39,7 +39,7 @@ test('shared or external startup is refused before identity/storage access', asy
 test('policy changes during identity loading and identity failures cannot open storage', async () => {
   const f = fixture();
   const start = createDurableWorkflowStartup({ ...f.deps, createAuthority: async () => {
-    f.binding.serverModeEnabled = true; return () => 'owner';
+    f.binding.serverModeEnabled = true; return Object.assign(() => 'owner', { assertRunPrincipal: () => {} });
   } });
   await expect(start({ ...f.options, enabled: true })).rejects.toThrow('local-startup-required'); expect(f.calls).toEqual([]);
   f.binding.serverModeEnabled = false;

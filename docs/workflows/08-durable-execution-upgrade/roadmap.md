@@ -1,3 +1,5 @@
+> r10 integration update: T-06, T-07 and T-08 now have executable packets under `tasks/`. Work covers the opt-in read host, a native immutable artifact adapter and bounded read children. P-03 remains open until independent review and required runtime/provider proof; no public rollout is implied.
+
 # Workflow hardening roadmap
 
 Revision r9. Graph/status authority: [plan.json](plan.json). Technical contract and acceptance IDs: [specification.md](specification.md).

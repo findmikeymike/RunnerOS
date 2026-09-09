@@ -1,31 +1,19 @@
 # Build state
 
-Revision r9 · 2026-09-09 · **T-06F host startup/shutdown implemented and independently reviewed; included in this commit. T-06/P-03 remain open.**
+Revision r10 · 2026-09-09 · **P-03 internal implementation pass finished; phase exit remains open.**
 
-Canonical checkout: `/Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os`, branch `main`, starting HEAD `8a5537d89`. User requested only the first task or two of the next phase slice; completed one task and stopped. No push or app restart.
+Canonical checkout: `/Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os`, branch `main`; starting HEAD `32d4b000c` matches origin/main. Earlier slices are pushed. This r10 pass is recorded with its source/evidence commit; verify `git log` for the SHA. Remote push is separate. The user authorized the larger integration pass, replacing the small-slice limit. Never restart the user's app without permission.
 
-The new trusted host factory opens the protected journal and owns the read runner/controls lifetime. Shutdown blocks new work immediately, saves active work as paused, drains existing operations, and then closes storage. Settled failures remain visible and permit safe close retry; hung work keeps storage open. Request arguments are pinned before asynchronous work.
+Implemented and independently reviewed:
 
-Evidence: [host lifecycle](evidence/T-06F-lifecycle.md), [independent review and fixes](evidence/T-06F-rival.md), [task packet](tasks/T-06F.md).
+- Production read approvals bind current local/team authority, exact connection/account/model, matching validated policy sources and expiry. Policy changes across awaited lookups block stale approval use; access revocation blocks later model calls.
+- Shutdown reports prolonged waiting and failed cleanup without forcing storage closed or installing an update prematurely.
+- Encrypted effect intent/attempt/outcome records enforce immutable identity, bounded shared cost, exact output validation and authoritative uncertainty reconciliation. Observation-only recovery records stopped-run outcomes without permitting dispatch.
+- Native immutable artifact adapter pins directory identity across restart and writes exclusively with fsync. SIGKILL after write before acknowledgement recovers with one invocation.
+- Dedicated atomic child admission commits the child row, parent edge and full root reservations together. Stable IDs, ordered validated joins, required parent pause/cancel fences and explicit detached behavior are enforced. Certification is one-level local read only. SIGKILL before launch and before join recovers one child/read.
 
-The factory is not registered in Electron bootstrap. Next task: production host/actor/key and quit wiring with public admission still gated, followed by run-view projections. Effects/reconciliation, safe provider proof, children, schedules, migration and full rollout remain ahead. Runtime manifest stays pi-readonly-5.
+Final evidence is in [P-03 r10 integration](evidence/P-03-r10-integration.md). The plan graph is structurally valid; that is not runtime certification. Historical accepted nodes retain only their prior scopes.
 
-Small follow-up after `43172a1ff`: real Pi now verified through the new host factory, including native read, close/reopen and completed-result reuse. [Evidence](evidence/T-06F-real-host-followup.md). Test-only follow-up remains included in this commit; production wiring is still next.
+Not activated: default-off `CRAFT_DURABLE_READ_HOST=1` opt-in remains unchanged; public START and legacy AgentMessageService remain legacy. No general write tools or model-facing delegation were enabled. The internal host now exposes a tracked startChild seam using its active parent claim. Actual default-factory Pi child recovery and integrated required/detached child shutdown have both passed disposable tests. No public/model-facing delegation tool was exposed.
 
-Small authority slice: a current host-authentication/workspace resolver and real-journal denial tests are implemented, included in this commit. [Evidence and integration contract](evidence/T-06-authority-slice.md). Trusted authentication/membership sources must be supplied during startup wiring; no live activation claimed.
-
-Small Electron storage slice: main-process host factory now supplies Electron safeStorage and canonical data root. Readiness, plaintext fallback and locked-keychain refusal covered by focused tests. [Evidence](evidence/T-06-electron-storage-slice.md). Included in this commit; startup registration and real OS keychain certification remain pending.
-
-Small shutdown slice: pending host startup and drainage now precede app cleanup; repeated quit cannot bypass the wait, failed drainage is retryable, and update installation aborts when cleanup fails. [Evidence](evidence/T-06-shutdown-slice.md). Included in this commit. Production host startup and live quit/update verification remain pending.
-
-After commit `a12a12ba4`, a small startup prerequisite adds authenticated live-connection lookup to the RPC server. [Evidence](evidence/T-06-live-connection-slice.md). This connection-check slice is included in this commit; stable identity/membership wiring and host startup remain pending.
-
-Local owner slice: Electron authority factory now combines stable installation identity, authenticated live connections and current configured workspaces; shared-server/external bindings fail closed. [Evidence](evidence/T-06-local-owner-slice.md). Included in this commit. Host activation remains separate.
-
-Startup composition slice: a default-off entry point now joins authority and protected host creation, with local-only policy checks before/after identity loading. [Evidence](evidence/T-06-startup-gate-slice.md). Included in this commit; bootstrap invocation, production runner binding resolution and live verification remain pending.
-
-Binding slice: production read-binding resolver now uses host workspace/connection configuration and API-key fingerprints, rejecting fallback routes and configuration changes during credential lookup. [Evidence](evidence/T-06-binding-slice.md). Included in this commit; conservative API-key-only scope and no activation.
-
-Bootstrap slice: Electron now connects the internal host and existing control handlers only with explicit `CRAFT_DURABLE_READ_HOST=1` for Artist OS; default startup remains unchanged. [Evidence](evidence/T-06-bootstrap-slice.md). Included in this commit. Flag not set, app not restarted; live flagged startup/quit smoke and production authorization-provider integration remain pending.
-
-Approval/status follow-up: approval-bound reads now recheck current bindings and safe-mode permissions around authorization; explicit startup failure presents a generic warning. [Evidence](evidence/T-06-policy-status-slice.md). Included in this commit. Missing authorization providers still block dispatch; public admission stays legacy.
+Open exit gates: a concrete safe remote-provider adapter/target proof, copied/packaged Electron safeStorage and actual UI restart journey. The copied Electron probe timed out before confirming availability; this is not a pass. The user's running app and live credentials were untouched. P-04 scheduling, P-05 migration/UI and P-06 rollout/certification remain ahead.

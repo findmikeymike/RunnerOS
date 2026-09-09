@@ -17,3 +17,14 @@ test('failed shutdown prevents update install and leaves the downloaded update r
   updates.setBeforeUpdateInstallHook(async () => {});
   await updates.installUpdate(); expect(installs).toBe(1);
 });
+
+test('hung cleanup reports waiting and cannot install until the original cleanup settles', async () => {
+  const { waitForSafeShutdown } = await import('./shutdown-wait');
+  await handlers.get('update-downloaded')!({ version: '3.0.0' });
+  let finish!: () => void, announce!: () => void;
+  const cleanup = new Promise<void>(resolve => finish = resolve), notice = new Promise<void>(resolve => announce = resolve);
+  updates.setBeforeUpdateInstallHook(() => waitForSafeShutdown(cleanup, { waitMs: 1, onWaiting: announce }));
+  const before = installs, installation = updates.installUpdate(); await notice;
+  expect(installs).toBe(before); expect(updates.isUpdating()).toBe(true);
+  finish(); await installation; expect(installs).toBe(before + 1);
+});

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "revision": "r9",
+  "revision": "r10",
   "sources": [
     {
       "id": "S-USER",
@@ -413,6 +413,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -498,6 +506,14 @@
           "path": "evidence/T-06F-rival.md",
           "revision": "r9",
           "environment": "Independent historical carryforward from r8; changed runner paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -601,6 +617,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -697,6 +721,14 @@
           "path": "evidence/T-06F-rival.md",
           "revision": "r9",
           "environment": "Independent historical carryforward from r8; changed runner paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -801,6 +833,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -880,6 +920,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -946,6 +994,14 @@
           "path": "evidence/T-06F-rival.md",
           "revision": "r9",
           "environment": "Independent historical carryforward from r8; changed runner paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -1035,6 +1091,14 @@
           "path": "evidence/T-06F-rival.md",
           "revision": "r9",
           "environment": "Independent historical carryforward from r8; changed runner paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -1128,6 +1192,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1198,6 +1270,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1256,6 +1336,14 @@
           "path": "evidence/T-06F-rival.md",
           "revision": "r9",
           "environment": "Independent historical carryforward from r8; changed runner paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -1338,6 +1426,14 @@
           "path": "evidence/T-06F-rival.md",
           "revision": "r9",
           "environment": "Independent historical carryforward from r8; changed runner paths freshly verified separately; not a historical rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -1425,6 +1521,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1500,6 +1604,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1567,6 +1679,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1626,6 +1746,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1667,6 +1795,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-r10-carryforward.md",
+          "revision": "r10",
+          "environment": "Independent historical scoped carryforward from r9; new integration obligations remain open, not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1684,7 +1820,7 @@
         "T-06E",
         "T-06F"
       ],
-      "status": "planned",
+      "status": "implemented",
       "phase": "P-03",
       "requirements": [
         "R-06",
@@ -1692,17 +1828,29 @@
         "R-11",
         "R-12"
       ],
-      "detail": "outlined",
-      "packet": "roadmap.md",
+      "detail": "executable",
+      "packet": "tasks/T-06.md",
       "resources": [
-        "packages/shared/src/agent",
-        "packages/server-core/src/sessions/SessionManager.ts"
+        "packages/server-core/src/workflows/durable-read-authorization.ts",
+        "packages/server-core/src/workflows/durable-read-runner.ts",
+        "apps/electron/src/main/durable-workflow-startup.ts",
+        "apps/electron/src/main/index.ts"
       ],
       "verification": [
         {
           "method": "Execute A-08/11/15/16 as defined in specification section 15 and task packet/phase expansion",
           "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
           "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/P-03-r10-integration.md",
+          "revision": "r10",
+          "environment": "Bounded internal implementation and disposable native/process proof; live Electron/provider and broader exposure remain open",
+          "reviewer": "integration-lead",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1715,23 +1863,35 @@
         "G-03",
         "T-06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "phase": "P-03",
       "requirements": [
         "R-05",
         "R-13"
       ],
-      "detail": "outlined",
-      "packet": "roadmap.md",
+      "detail": "executable",
+      "packet": "tasks/T-07.md",
       "resources": [
-        "packages/shared/src/durable-execution/adapters",
-        "packages/server-core/src/workflows/runner.ts"
+        "packages/shared/src/durable-execution/index.ts",
+        "packages/shared/src/durable-execution/operation-types.ts",
+        "packages/server-core/src/workflows/durable-effect-runner.ts",
+        "packages/server-core/src/workflows/durable-artifact-adapter.ts"
       ],
       "verification": [
         {
           "method": "Execute A-06/07/17 as defined in specification section 15 and task packet/phase expansion",
           "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
           "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/P-03-r10-integration.md",
+          "revision": "r10",
+          "environment": "Bounded internal implementation and disposable native/process proof; live Electron/provider and broader exposure remain open",
+          "reviewer": "integration-lead",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -1744,24 +1904,34 @@
         "G-03",
         "T-07"
       ],
-      "status": "planned",
+      "status": "implemented",
       "phase": "P-03",
       "requirements": [
         "R-07",
         "R-08",
         "R-13"
       ],
-      "detail": "outlined",
-      "packet": "roadmap.md",
+      "detail": "executable",
+      "packet": "tasks/T-08.md",
       "resources": [
-        "packages/shared/src/agent-messaging",
-        "packages/server-core/src/sessions/SessionManager.ts"
+        "packages/shared/src/durable-execution/index.ts",
+        "packages/server-core/src/workflows/durable-child-runner.ts"
       ],
       "verification": [
         {
           "method": "Execute A-09/10/11/17 as defined in specification section 15 and task packet/phase expansion",
           "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
           "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/P-03-r10-integration.md",
+          "revision": "r10",
+          "environment": "Bounded internal implementation and disposable native/process proof; live Electron/provider and broader exposure remain open",
+          "reviewer": "integration-lead",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },

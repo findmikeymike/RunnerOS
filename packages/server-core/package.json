@@ -12,6 +12,7 @@
     "./outputs": "./src/outputs/OutputService.ts",
     "./release-kit": "./src/release-kit/index.ts",
     "./runtime": "./src/runtime/index.ts",
+    "./workflows/durable-read-authorization": "./src/workflows/durable-read-authorization.ts",
     "./workflows/durable-read-binding": "./src/workflows/durable-read-binding.ts",
     "./workflows/durable-read-runner": "./src/workflows/durable-read-runner.ts",
     "./workflows/durable-workflow-authority": "./src/workflows/durable-workflow-authority.ts",

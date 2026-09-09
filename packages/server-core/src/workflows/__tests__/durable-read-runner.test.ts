@@ -715,3 +715,21 @@ for (const scenario of ['sensitive-path', 'credential-change'] as const) {
     expect(journal.get(input.runId,input.workspaceId).turns[0]!.calls[0]!.attempts).toBe(0);
   });
 }
+
+test('workspace revocation after a tool result blocks the next model reservation', async () => {
+  const { input, base, binding, journal } = fixture(); let revoked = false, dispatched = false;
+  const runner = new DurableReadRunner({ ...base, resolveBinding: () => { if (revoked) throw new Error('workspace removed'); return binding; },
+    createBackend: args => ({ async *chat() {
+      const bridge = args.coreConfig.durableExecution!;
+      await bridge.checkpoint({kind:'model-start',turn:0,context:{}});
+      await bridge.checkpoint({kind:'model-result',turn:0,message:{role:'assistant',stopReason:'toolUse',content:[{type:'toolCall',id:'read',name:'read',arguments:{path:'/tmp/fixture'}}]}});
+      await bridge.checkpoint({kind:'tool-start',turn:0,callId:'read',tool:'read',input:{path:'/tmp/fixture'}});
+      await bridge.checkpoint({kind:'tool-result',turn:0,callId:'read',result:{content:'private data'}});
+      revoked = true;
+      await bridge.checkpoint({kind:'model-start',turn:1,context:{messages:['private data']}});
+      dispatched = true;
+    }, async abort() {}, destroy() {} }),
+  });
+  expect((await runner.start(input)).status).toBe('paused'); expect(dispatched).toBe(false);
+  expect(journal.get(input.runId,input.workspaceId).modelAttempts).toBe(1);
+});

@@ -1,3 +1,4 @@
+import { DurableChildRunner, type DurableChildRequest, type DurableChildResult } from './durable-child-runner.ts';
 import { shouldAllowToolInMode } from '../../../shared/src/agent/mode-manager.ts';
 import { permissionsConfigCache } from '../../../shared/src/agent/permissions-config.ts';
 import { realpathSync } from 'node:fs';
@@ -5,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import type { AgentEvent, Workspace } from '@craft-agent/core/types';
 import type { AgentBackend, BackendHostRuntimeContext, CoreBackendConfig } from '../../../shared/src/agent/backend/types.ts';
 import type { ResolvedBackendContext } from '../../../shared/src/agent/backend/factory.ts';
-import { canonical, digest, type DurableJournal, type DurableRunSnapshot, type DurableRunSpec } from '../../../shared/src/durable-execution/index.ts';
+import { canonical, digest, type DurableClaim, type DurableJournal, type DurableRunSnapshot, type DurableRunSpec } from '../../../shared/src/durable-execution/index.ts';
 import { DURABLE_RUNTIME_MANIFEST, type DurableCheckpoint, type DurableControlCommand, type DurableControlReceipt, type DurableDecisionCommand, type DurableDecisionReceipt, type DurableJson, type DurableSteeringCommand, type DurableSteeringReceipt, type DurableToolAuthorization } from '../../../shared/src/protocol/durable-execution.ts';
 import type { LoadedWorkflow } from '../../../shared/src/workflows/types.ts';
 
@@ -35,7 +36,10 @@ export interface DurableReadRunnerOptions {
   resolveBinding(workspaceId: string, connectionSlug: string, model: string): Promise<DurableReadBinding> | DurableReadBinding;
   createBackend?: (args: DurableReadBackendArgs) => Promise<ReadBackend> | ReadBackend;
   onEvent?: (runId: string, event: AgentEvent) => void;
-  authorizeTool?: (request: Extract<DurableCheckpoint, { kind: 'tool-start' }>, context: { runId: string; workspaceId: string; approvalPrincipalId: string }) => Promise<DurableToolAuthorization>;
+  /** Synchronous source revision after the last awaited authorization/binding lookup. */
+  readPolicyRevision?: (workspaceRoot: string) => string;
+  authorizeRun?: (context: { runId: string; workspaceId: string; approvalPrincipalId: string }) => void;
+  authorizeTool?: (request: Extract<DurableCheckpoint, { kind: 'tool-start' }>, context: { runId: string; workspaceId: string; approvalPrincipalId: string; connectionSlug: string; model: string; credentialIdentity: string; deadlineAt: number }) => Promise<DurableToolAuthorization>;
 }
 export interface DurableReadControlResult {
   receipt: DurableControlReceipt;
@@ -47,7 +51,7 @@ export interface DurableReadDecisionResult {
   execution?: Promise<DurableRunSnapshot>;
 }
 export interface DurableReadSteeringResult { receipt: DurableSteeringReceipt; execution?: Promise<DurableRunSnapshot> }
-interface ActiveReadExecution { backend?: ReadBackend; promise: Promise<DurableRunSnapshot>; replayForSteering?: boolean }
+interface ActiveReadExecution { claim?: DurableClaim; backend?: ReadBackend; promise: Promise<DurableRunSnapshot>; replayForSteering?: boolean }
 interface FrozenReadContext {
   prompt: string; systemPrompt: string; connectionSlug: string; workspaceRoot: string; bindingDigest: string;
   requireNonEmptyOutput: boolean;
@@ -164,6 +168,17 @@ export class DurableReadRunner {
     return this.resume(spec.runId, spec.workspaceId);
   }
 
+  /** Internal orchestration seam: children use this host's active parent claim and lifetime. */
+  startChild(parentRunId: string, workspaceId: string, request: DurableChildRequest): Promise<DurableChildResult> {
+    if (this.closing) return Promise.reject(new Error('durable-host-closing'));
+    const claim = this.active.get(canonical([workspaceId, parentRunId]))?.claim;
+    if (!claim) return Promise.reject(new Error('durable-child-active-parent-required'));
+    const parent = this.options.journal.get(parentRunId, workspaceId);
+    if (!parent.spec.approvalPrincipalId) return Promise.reject(new Error('durable-child-principal-required'));
+    this.options.authorizeRun?.({ runId: parentRunId, workspaceId, approvalPrincipalId: parent.spec.approvalPrincipalId });
+    return new DurableChildRunner({ journal: this.options.journal, runner: this }).start(claim, request);
+  }
+
   resume(runId: string, workspaceId: string): Promise<DurableRunSnapshot> {
     if (this.closing) return Promise.reject(new Error('durable-host-closing'));
     const key = canonical([workspaceId, runId]), prior = this.active.get(key);
@@ -266,11 +281,15 @@ export class DurableReadRunner {
   private async execute(runId: string, workspaceId: string, entry: ActiveReadExecution): Promise<DurableRunSnapshot> {
     const { journal } = this.options, initial = journal.get(runId, workspaceId);
     if (initial.status !== 'running') return initial;
-    const claim = journal.claim(runId, workspaceId), journalBridge = journal.bridge(claim, initial.spec.approvalPrincipalId ? {
+    const claim = journal.claim(runId, workspaceId);
+    entry.claim = claim;
+    const journalBridge = journal.bridge(claim, initial.spec.approvalPrincipalId ? {
       authorizeTool: async request => {
         const frozen = frozenContext(initial.spec);
         const checkCurrent = async () => {
+          this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId! });
           const current = await this.options.resolveBinding(workspaceId, frozen.connectionSlug, initial.spec.model);
+          this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId! });
           this.checkBinding(current, workspaceId, frozen.connectionSlug, initial.spec.model);
           if (bindingDigest(current) !== frozen.bindingDigest) throw new Error('durable-authorization-blocked');
           permissionsConfigCache.invalidateDefaults();
@@ -280,8 +299,9 @@ export class DurableReadRunner {
         };
         await checkCurrent();
         if (!this.options.authorizeTool) throw new Error('durable-authorization-blocked');
-        const authorization = await this.options.authorizeTool(request, { runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId! });
+        const authorization = await this.options.authorizeTool(request, { runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId!, connectionSlug: frozen.connectionSlug, model: initial.spec.model, credentialIdentity: initial.spec.credentialIdentity, deadlineAt: initial.spec.deadlineAt });
         await checkCurrent();
+        if (this.options.readPolicyRevision && this.options.readPolicyRevision(frozen.workspaceRoot) !== authorization.policyRevision) throw new Error('durable-authorization-blocked');
         return authorization;
       },
     } : undefined);
@@ -293,6 +313,21 @@ export class DurableReadRunner {
       if (state.status !== 'running' || Date.now() >= state.spec.deadlineAt) throw new Error('durable-read-dispatch-blocked');
     };
     const bridge: typeof journalBridge = { ...journalBridge, checkpoint: async request => {
+      if (request.kind === 'model-start') {
+        try {
+          const frozen = frozenContext(initial.spec);
+          if (initial.spec.approvalPrincipalId) this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId });
+          const current = await this.options.resolveBinding(workspaceId, frozen.connectionSlug, initial.spec.model);
+          if (initial.spec.approvalPrincipalId) this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId });
+          this.checkBinding(current, workspaceId, frozen.connectionSlug, initial.spec.model);
+          if (bindingDigest(current) !== frozen.bindingDigest) throw new Error('durable-read-binding-changed');
+        } catch (error) {
+          const state = journal.get(runId, workspaceId);
+          if (state.status === 'running') journal.command({ runId, workspaceId, commandId: randomUUID(), expectedVersion: state.version, action: 'pause' });
+          throw new Error('durable-authorization-blocked', { cause: error });
+        }
+        assertDispatch();
+      }
       if (request.kind === 'complete') assertDispatch();
       if (request.kind === 'complete' && frozenContext(initial.spec).requireNonEmptyOutput) {
         const turns = journal.get(runId, workspaceId).turns;
@@ -347,6 +382,7 @@ export class DurableReadRunner {
       let cleanupError: unknown;
       try { entry.backend?.destroy(); } catch (error) { cleanupError = error; }
       entry.backend = undefined;
+      entry.claim = undefined;
       try { journal.release(claim); } catch (error) { cleanupError ??= error; }
       if (!failed && cleanupError !== undefined) throw cleanupError;
     }

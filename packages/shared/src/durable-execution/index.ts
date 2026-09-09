@@ -4,6 +4,8 @@ import { dirname, join, resolve } from 'node:path';
 import type { DurableCheckpoint, DurableCheckpointReply, DurableExecutionBridge, DurableExecutionDescriptor, DurableJson } from '../protocol/durable-execution.ts';
 import { DURABLE_RUNTIME_MANIFEST } from '../protocol/durable-execution.ts';
 import { privateDurableDirectory } from './key-provider.ts';
+import type { DurableOperation, DurableOperationIntent, DurableOperationOutcome, DurableOperationValidator, DurableOperationAttemptToken, DurableOperationStart } from './operation-types.ts';
+export type * from './operation-types.ts';
 import type { DurableSteeringCommand, DurableSteeringReceipt, DurableSteeringEntry, DurableApproval, DurableToolAuthorization, DurableDecisionCommand, DurableDecisionReceipt, DurableControlCommand, DurableControlReceipt, DurableRunStatus } from '../protocol/durable-execution.ts';
 export type { DurableSteeringCommand, DurableSteeringReceipt, DurableSteeringEntry, DurableApproval, DurableToolAuthorization, DurableDecisionCommand, DurableDecisionReceipt, DurableControlCommand, DurableControlReceipt } from '../protocol/durable-execution.ts';
 export { loadDurableKey, type DurableSafeStorage } from './key-provider.ts';
@@ -38,6 +40,7 @@ export function canonicalContext(context: DurableJson): DurableJson {
 }
 export interface DurableRunSpec extends DurableExecutionDescriptor {
   commandId: string;
+  parent?: { runId: string; slotId: string; mode: 'required' | 'detached' };
   /** Trusted principal whose tool authorization must be resolved before every dispatch. */
   approvalPrincipalId?: string;
   authority: DurableJson;
@@ -46,7 +49,7 @@ export interface DurableRunSpec extends DurableExecutionDescriptor {
   maxModelAttempts: number;
   costPolicy: { maxTotalUnits: number; maxUnitsPerAttempt: number; unit: 'verified-free' | 'trusted-upper-bound' };
 }
-export interface DurableClaim { runId: string; workspaceId: string; ownerId: string; epoch: number; controlRevision: number }
+export interface DurableClaim { runId: string; workspaceId: string; ownerId: string; epoch: number; controlRevision: number; observationOnly?: true }
 interface Call { id: string; tool: string; inputDigest?: string; attempts: number; skipped?: true; result?: DurableJson }
 interface Turn { continuationRevision?: number; contextDigest: string; message?: DurableJson; calls: Call[] }
 export interface DurableRunSnapshot {
@@ -62,7 +65,24 @@ export interface DurableRunSnapshot {
   continuationRevision?: number;
   boundaries?: Array<{ afterTurn: number; sequences: number[]; continuationRevision: number }>;
   failure?: string;
+  operations?: DurableOperation[];
+  children?: DurableChildEdge[];
+  childReservedModelAttempts?: number;
+  pausedByParent?: boolean;
 }
+export interface DurableChildEdge {
+  slotId: string;
+  childRunId: string;
+  mode: 'required' | 'detached';
+  intentDigest: string;
+  outputSchema: DurableJson;
+  reservedUnits: number;
+  reservedModelAttempts: number;
+  status: 'admitted' | 'joined';
+  childVersion?: number;
+  result?: DurableJson;
+}
+export interface DurableChildAdmission { slotId: string; mode: 'required' | 'detached'; childSpec: DurableRunSpec; outputSchema: DurableJson }
 function validateControlInput(command: DurableControlCommand | DurableSteeringCommand): void {
   canonical(command);
   const fields = ['runId', 'workspaceId', 'commandId', 'expectedVersion', 'action', ...(command.action === 'steer' ? ['text'] : [])];
@@ -77,6 +97,7 @@ export class DurableJournal {
   private readonly alive: (pid: number) => boolean;
   private readonly maxBytes: number;
   private poisoned = false;
+  private readonly observationEpochs = new Set<string>();
   constructor(options: DurableJournalOptions) {
     if (options.key.length !== 32) throw new Error('durable-key-required');
     this.key = Buffer.from(options.key);
@@ -138,9 +159,21 @@ export class DurableJournal {
     this.db.prepare('UPDATE runs SET payload=? WHERE id=?').run(this.encrypt(state, state.spec.runId), state.spec.runId);
     this.db.prepare('INSERT INTO events(run_id,version,kind) VALUES (?,?,?)').run(state.spec.runId, state.version, kind);
     this.db.prepare('INSERT INTO outbox(sequence) SELECT sequence FROM events WHERE run_id=? AND version=?').run(state.spec.runId, state.version);
+    // Parent controls and owned-child eligibility change in the same transaction.
+    if (['paused', 'cancelled', 'failed'].includes(state.status)) for (const edge of state.children ?? []) {
+      if (edge.mode !== 'required') continue;
+      const child = this.get(edge.childRunId, state.spec.workspaceId);
+      if (!['running', 'paused', 'waiting-approval'].includes(child.status)) continue;
+      if (state.status === 'paused') {
+        if (child.status === 'paused') continue;
+        child.status = 'paused'; child.pausedByParent = true;
+      } else child.status = 'cancelled';
+      child.controlRevision++; this.save(child, 'parent-control');
+    }
   }
   admit(spec: DurableRunSpec): DurableRunSnapshot {
     canonical(spec);
+    if (spec.parent !== undefined) throw new Error('durable-child-atomic-admission-required');
     const policy = spec.costPolicy;
     if (spec.approvalPrincipalId !== undefined && (typeof spec.approvalPrincipalId !== 'string' || !spec.approvalPrincipalId.trim())) throw new Error('invalid-approval-principal');
     if (!/^[a-f0-9]{64}$/.test(spec.credentialIdentity) || !spec.runtimeManifest || Object.values(spec.runtimeManifest).some(value => typeof value !== 'string') || spec.engine !== 'sqlite-v2-readonly-1' || !spec.runId || !spec.workspaceId || !spec.commandId || !spec.model || !Number.isSafeInteger(spec.maxOutputTokens) || spec.maxOutputTokens < 1 || !Number.isSafeInteger(spec.maxModelAttempts) || spec.maxModelAttempts < 1 || !Number.isFinite(spec.deadlineAt) || !Array.isArray(spec.allowedTools) || spec.allowedTools.some(t => !['read', 'grep', 'find', 'ls'].includes(t)) || !policy || !['verified-free', 'trusted-upper-bound'].includes(policy.unit) || !Number.isSafeInteger(policy.maxTotalUnits) || !Number.isSafeInteger(policy.maxUnitsPerAttempt) || policy.maxTotalUnits < 0 || policy.maxUnitsPerAttempt < 0 || (policy.unit === 'verified-free' ? policy.maxTotalUnits !== 0 || policy.maxUnitsPerAttempt !== 0 : policy.maxUnitsPerAttempt === 0)) throw new Error('invalid-durable-admission');
@@ -165,10 +198,27 @@ export class DurableJournal {
       if (state.status === 'waiting-approval') throw new Error('durable-approval-required');
       if (state.status === 'paused') throw new Error('durable-run-paused');
       if (state.status !== 'running') throw new Error('durable-run-terminal');
+      this.assertChildParent(state);
       const epoch = row.epoch + 1;
       this.db.prepare('UPDATE runs SET owner=?,pid=?,epoch=? WHERE id=?').run(this.ownerId, process.pid, epoch, runId);
       return { runId, workspaceId, ownerId: this.ownerId, epoch, controlRevision: state.controlRevision };
     });
+  }
+  /** Recover external observations without granting execution authority to a stopped run. */
+  claimObservation(runId: string, workspaceId: string): DurableClaim {
+    return this.transaction(() => {
+      const row = this.row(runId, workspaceId);
+      if (row.owner && this.alive(row.pid)) throw new Error('durable-run-owned');
+      const state = this.get(runId, workspaceId);
+      if (!['paused', 'cancelled', 'failed'].includes(state.status)) throw new Error('durable-observation-state-invalid');
+      const epoch = row.epoch + 1;
+      this.db.prepare('UPDATE runs SET owner=?,pid=?,epoch=? WHERE id=?').run(this.ownerId, process.pid, epoch, runId);
+      this.observationEpochs.add(canonical([runId, workspaceId, epoch]));
+      return { runId, workspaceId, ownerId: this.ownerId, epoch, controlRevision: state.controlRevision, observationOnly: true };
+    });
+  }
+  private assertExecutionClaim(claim: DurableClaim): void {
+    if (claim.observationOnly || this.observationEpochs.has(canonical([claim.runId, claim.workspaceId, claim.epoch]))) throw new Error('durable-observation-only');
   }
   private fenced(claim: DurableClaim): DurableRunSnapshot {
     const row = this.row(claim.runId, claim.workspaceId);
@@ -206,6 +256,7 @@ export class DurableJournal {
       if (state.version !== command.expectedVersion) throw new Error('durable-control-version-conflict');
       const terminal = !['running', 'paused', 'waiting-approval'].includes(state.status);
       if (terminal && command.action !== 'cancel') throw new Error('durable-run-terminal');
+      if (command.action === 'resume') this.assertChildParent(state);
       if (command.action === 'resume' && Date.now() >= state.spec.deadlineAt) throw new Error('durable-dispatch-blocked');
       if (command.action === 'resume' && digest(state.spec.runtimeManifest) !== digest(DURABLE_RUNTIME_MANIFEST)) throw new Error('durable-runtime-manifest-changed');
       // Resume never grants a pending approval. Expired waits may reopen solely to reauthorize.
@@ -327,6 +378,7 @@ export class DurableJournal {
   }
 
   bridge(claim: DurableClaim, options: { authorizeTool?: (request: Extract<DurableCheckpoint, { kind: 'tool-start' }>) => Promise<DurableToolAuthorization> } = {}): DurableExecutionBridge {
+    this.assertExecutionClaim(claim);
     const spec = this.fenced(claim).spec;
     const descriptor: DurableExecutionDescriptor = { credentialIdentity: spec.credentialIdentity, runtimeManifest: Object.freeze({...spec.runtimeManifest}), engine: spec.engine, runId: spec.runId, workspaceId: spec.workspaceId, createdAt: spec.createdAt, allowedTools: [...spec.allowedTools], model: spec.model, maxOutputTokens: spec.maxOutputTokens };
     Object.freeze(descriptor.allowedTools); Object.freeze(descriptor);
@@ -364,6 +416,7 @@ export class DurableJournal {
       if (digest(state.spec.runtimeManifest) !== digest(DURABLE_RUNTIME_MANIFEST)) throw new Error('durable-runtime-manifest-changed');
       const isResult = request.kind === 'model-result' || request.kind === 'tool-result';
       if (!isResult) {
+        this.assertChildParent(state);
         if (state.status === 'paused') throw new Error('durable-run-paused');
         if (state.status !== 'running' || Date.now() >= state.spec.deadlineAt) throw new Error('durable-dispatch-blocked');
         if (state.controlRevision !== claim.controlRevision) throw new Error('durable-control-changed');
@@ -385,6 +438,8 @@ export class DurableJournal {
         return { steering: state.steering!.filter(entry => boundary!.sequences.includes(entry.sequence)) };
       }
       if (request.kind === 'complete') {
+        if (state.children?.some(child => child.mode === 'required' && child.status !== 'joined')) throw new Error('durable-child-join-required');
+        if (state.operations?.some(operation => operation.status !== 'succeeded')) throw new Error('durable-operation-incomplete');
         if (pending() || state.steering!.some(entry => !state.turns[entry.appliedAfterTurn! + 1])) return steeringBlocked();
         if (!state.turns.length || !state.turns.every(priorDone) || state.turns[state.turns.length - 1]!.calls.length) throw new Error('durable-incomplete');
         state.status = 'succeeded'; this.save(state, 'succeeded'); return {};
@@ -392,12 +447,13 @@ export class DurableJournal {
       if (!Number.isSafeInteger(request.turn) || request.turn < 0 || request.turn > state.turns.length) throw new Error('durable-invalid-turn');
       let turn = state.turns[request.turn];
       if (request.kind === 'model-start') {
+        if (!turn && state.children?.some(child => child.mode === 'required' && child.status !== 'joined')) throw new Error('durable-child-join-required');
         if (!turn && pending()) return steeringBlocked();
         const contextDigest = digest(canonicalContext(request.context));
         if (turn && turn.contextDigest !== contextDigest) throw new Error('durable-context-changed');
         if (turn?.message !== undefined) return { cached: turn.message };
         if (state.turns.slice(0, request.turn).some(t => !priorDone(t)) || request.turn < state.turns.length - 1) throw new Error('durable-predecessor-incomplete');
-        if (state.modelAttempts >= state.spec.maxModelAttempts || state.reservedUnits + state.spec.costPolicy.maxUnitsPerAttempt > state.spec.costPolicy.maxTotalUnits) throw new Error('durable-budget-exhausted');
+        if (state.modelAttempts + (state.childReservedModelAttempts ?? 0) >= state.spec.maxModelAttempts || state.reservedUnits + state.spec.costPolicy.maxUnitsPerAttempt > state.spec.costPolicy.maxTotalUnits) throw new Error('durable-budget-exhausted');
         if (!turn) { turn = { contextDigest, calls: [], continuationRevision: state.boundaries!.find(boundary => boundary.afterTurn === request.turn - 1)?.continuationRevision ?? 0 }; state.turns.push(turn); }
         state.modelAttempts++; state.reservedUnits += state.spec.costPolicy.maxUnitsPerAttempt;
       } else {
@@ -441,6 +497,187 @@ export class DurableJournal {
         }
       }
       this.save(state, request.kind); return {};
+    });
+  }
+  /** Identity, child row, parent edge and conservative root reservations are one commit. */
+  admitChild(claim: DurableClaim, input: DurableChildAdmission): DurableChildEdge {
+    const request = JSON.parse(canonical(input)) as DurableChildAdmission;
+    return this.transaction(() => {
+      const parent = this.fenced(claim);
+      if (parent.spec.parent) throw new Error('durable-child-depth-exceeded');
+      if (!parent.spec.approvalPrincipalId) throw new Error('durable-child-principal-required');
+      const child = request.childSpec, policy = child.costPolicy;
+      const old = parent.children?.find(edge => edge.slotId === request.slotId);
+      if (old) {
+        if (old.intentDigest !== digest(request)) throw new Error('durable-child-intent-conflict');
+        if (old.status === 'joined') return old;
+        this.operationDispatch(parent, claim);
+        const existing = this.get(old.childRunId, parent.spec.workspaceId);
+        if (existing.pausedByParent && existing.status === 'paused') {
+          delete existing.pausedByParent;
+          existing.status = existing.approvals?.some(approval => approval.status === 'pending' && approval.expiresAt > Date.now()) ? 'waiting-approval' : 'running';
+          existing.controlRevision++; this.save(existing, 'parent-resumed');
+        }
+        return old;
+      }
+      this.operationDispatch(parent, claim);
+      const hash = digest(['durable-child-v1', parent.spec.workspaceId, parent.spec.runId, request.slotId]);
+      const childRunId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+      const context = child.context as Record<string, DurableJson>;
+      const expected = { ...parent.spec, runId: childRunId, commandId: `child:${parent.spec.runId}:${request.slotId}`,
+        parent: { runId: parent.spec.runId, slotId: request.slotId, mode: request.mode },
+        context: { ...(parent.spec.context as Record<string, DurableJson>), prompt: context?.prompt, systemPrompt: context?.systemPrompt },
+        allowedTools: child.allowedTools, maxOutputTokens: child.maxOutputTokens, maxModelAttempts: child.maxModelAttempts, deadlineAt: child.deadlineAt, costPolicy: policy };
+      if (typeof request.slotId !== 'string' || !request.slotId.trim() || !['required', 'detached'].includes(request.mode) || !context || typeof context.prompt !== 'string' || !context.prompt.trim() || typeof context.systemPrompt !== 'string' || !context.systemPrompt.trim()
+        || digest(child) !== digest(expected) || !Array.isArray(child.allowedTools) || new Set(child.allowedTools).size !== child.allowedTools.length || child.allowedTools.some(tool => !parent.spec.allowedTools.includes(tool))
+        || !Number.isSafeInteger(child.maxOutputTokens) || child.maxOutputTokens < 1 || child.maxOutputTokens > parent.spec.maxOutputTokens
+        || !Number.isSafeInteger(child.maxModelAttempts) || child.maxModelAttempts < 1 || !Number.isFinite(child.deadlineAt) || child.deadlineAt > parent.spec.deadlineAt || child.deadlineAt <= Date.now()
+        || !policy || policy.unit !== parent.spec.costPolicy.unit || !Number.isSafeInteger(policy.maxTotalUnits) || policy.maxTotalUnits < 0 || !Number.isSafeInteger(policy.maxUnitsPerAttempt) || policy.maxUnitsPerAttempt < 0 || policy.maxUnitsPerAttempt > parent.spec.costPolicy.maxUnitsPerAttempt
+        || (policy.unit === 'verified-free' && (policy.maxTotalUnits !== 0 || policy.maxUnitsPerAttempt !== 0)) || (policy.unit === 'trusted-upper-bound' && policy.maxUnitsPerAttempt === 0)) throw new Error('durable-child-constraints-invalid');
+      if (parent.modelAttempts + (parent.childReservedModelAttempts ?? 0) + child.maxModelAttempts > parent.spec.maxModelAttempts || parent.reservedUnits + policy.maxTotalUnits > parent.spec.costPolicy.maxTotalUnits) throw new Error('durable-child-budget-exhausted');
+      if (this.db.prepare('SELECT id FROM runs WHERE id=? OR (workspace=? AND command=?)').get(childRunId, child.workspaceId, child.commandId)) throw new Error('durable-child-identity-conflict');
+      const childState: DurableRunSnapshot = { spec: child, status: 'running', controlRevision: 0, version: 0, modelAttempts: 0, reservedUnits: 0, turns: [], approvals: [], steering: [], boundaries: [], continuationRevision: 0 };
+      this.db.prepare('INSERT INTO runs(id,workspace,command,spec_digest,payload) VALUES (?,?,?,?,?)').run(childRunId, child.workspaceId, child.commandId, digest(child), this.encrypt(childState, childRunId));
+      this.save(childState, 'child-admitted');
+      const edge: DurableChildEdge = { slotId: request.slotId, childRunId, mode: request.mode, intentDigest: digest(request), outputSchema: request.outputSchema, reservedUnits: policy.maxTotalUnits, reservedModelAttempts: child.maxModelAttempts, status: 'admitted' };
+      (parent.children ??= []).push(edge); parent.reservedUnits += policy.maxTotalUnits; parent.childReservedModelAttempts = (parent.childReservedModelAttempts ?? 0) + child.maxModelAttempts;
+      this.save(parent, 'child-admitted'); return edge;
+    });
+  }
+
+  joinChild(claim: DurableClaim, slotId: string, validate: (text: string, schema: DurableJson) => DurableJson): DurableChildEdge {
+    return this.transaction(() => {
+      const parent = this.fenced(claim);
+      const edge = parent.children?.find(edge => edge.slotId === slotId);
+      if (!edge || edge.mode !== 'required') throw new Error('durable-child-join-invalid');
+      if (edge.status === 'joined') return edge;
+      this.operationDispatch(parent, claim);
+      if (parent.children!.slice(0, parent.children!.indexOf(edge)).some(prior => prior.mode === 'required' && prior.status !== 'joined')) throw new Error('durable-child-join-order');
+      const child = this.get(edge.childRunId, parent.spec.workspaceId);
+      if (child.status !== 'succeeded') throw new Error('durable-child-incomplete');
+      const message = child.turns.at(-1)?.message as { content?: Array<{ type?: string; text?: string }> } | undefined;
+      const text = message?.content?.filter(item => item.type === 'text').map(item => item.text ?? '').join('') ?? '';
+      if (!text.trim()) throw new Error('durable-child-empty-output');
+      const result = JSON.parse(canonical(validate(text, freezeJson(JSON.parse(canonical(edge.outputSchema)))))) as DurableJson;
+      edge.result = result; edge.status = 'joined'; edge.childVersion = child.version;
+      this.save(parent, 'child-joined'); return edge;
+    });
+  }
+
+  private assertChildParent(state: DurableRunSnapshot): void {
+    const lineage = state.spec.parent;
+    if (!lineage || lineage.mode === 'detached') return;
+    const parent = this.get(lineage.runId, state.spec.workspaceId);
+    const edge = parent.children?.find(edge => edge.slotId === lineage.slotId && edge.childRunId === state.spec.runId && edge.mode === 'required');
+    if (!edge || parent.status !== 'running') throw new Error('durable-child-parent-blocked');
+  }
+  private operationDispatch(state: DurableRunSnapshot, claim: DurableClaim): void {
+    this.assertExecutionClaim(claim);
+    this.assertChildParent(state);
+    if (state.status !== 'running' || state.controlRevision !== claim.controlRevision || Date.now() >= state.spec.deadlineAt) throw new Error('durable-operation-dispatch-blocked');
+    if (digest(state.spec.runtimeManifest) !== digest(DURABLE_RUNTIME_MANIFEST)) throw new Error('durable-runtime-manifest-changed');
+  }
+  private operation(state: DurableRunSnapshot, slotId: string): DurableOperation {
+    const operation = state.operations?.find(item => item.intent.slotId === slotId);
+    if (!operation) throw new Error('durable-operation-not-found');
+    return operation;
+  }
+  getOperation(runId: string, workspaceId: string, slotId: string): DurableOperation | undefined {
+    return this.get(runId, workspaceId).operations?.find(item => item.intent.slotId === slotId);
+  }
+  /** Commit immutable intent before an adapter receives permission to invoke anything. */
+  reserveOperation(claim: DurableClaim, input: DurableOperationIntent): DurableOperation {
+    const intent = JSON.parse(canonical(input)) as DurableOperationIntent;
+    const fields = ['slotId','adapterId','adapterVersion','credentialIdentity','effectClass','idempotencyKey','input','outputSchema','maxAttempts','maxUnitsPerAttempt'];
+    if (!intent || Array.isArray(intent) || Object.keys(intent).some(key => !fields.includes(key)) ||
+      ['slotId','adapterId','adapterVersion','idempotencyKey'].some(key => typeof (intent as any)[key] !== 'string' || !(intent as any)[key].trim()) ||
+      !/^[a-f0-9]{64}$/.test(intent.credentialIdentity) || !['read','idempotent-write','reconcilable-write'].includes(intent.effectClass) ||
+      !intent.outputSchema || Object.keys(intent.outputSchema).some(key => !['id','version'].includes(key)) ||
+      ![intent.outputSchema.id,intent.outputSchema.version].every(value => typeof value === 'string' && value.trim()) ||
+      !Number.isSafeInteger(intent.maxAttempts) || intent.maxAttempts < 1 || !Number.isFinite(intent.maxUnitsPerAttempt) || intent.maxUnitsPerAttempt < 0 || !Object.hasOwn(intent,'input')) throw new Error('invalid-durable-operation-intent');
+    return this.transaction(() => {
+      const state = this.fenced(claim);
+      const existing = state.operations?.find(item => item.intent.slotId === intent.slotId);
+      if (existing) { if (digest(existing.intent) !== digest(intent)) throw new Error('durable-operation-intent-conflict'); return existing; }
+      this.operationDispatch(state, claim);
+      if (state.operations?.some(item => item.intent.idempotencyKey === intent.idempotencyKey)) throw new Error('durable-operation-key-conflict');
+      const operation: DurableOperation = { operationId: digest([claim.workspaceId,claim.runId,intent.slotId]), intent,
+        inputDigest: digest(intent.input), status: 'intent', attempts: [] };
+      (state.operations ??= []).push(operation);
+      this.save(state, 'operation-intent');
+      return operation;
+    });
+  }
+  /** Each command can authorize only its first invocation; even a lost start reply requires reconciliation. */
+  startOperation(claim: DurableClaim, slotId: string, commandId: string): DurableOperationStart {
+    if (typeof commandId !== 'string' || !commandId.trim()) throw new Error('invalid-durable-operation-command');
+    return this.transaction(() => {
+      const state = this.fenced(claim), operation = this.operation(state, slotId);
+      const duplicate = state.operations?.flatMap(item => item.attempts).find(attempt => attempt.commandId === commandId);
+      if (duplicate) {
+        if (duplicate.operationId !== operation.operationId) throw new Error('durable-operation-command-conflict');
+        return { operation, dispatch: false };
+      }
+      this.operationDispatch(state, claim);
+      if (operation.status !== 'intent') throw new Error('durable-operation-reconciliation-required');
+      if (state.operations!.slice(0, state.operations!.indexOf(operation)).some(item => item.status !== 'succeeded')) throw new Error('durable-operation-predecessor-incomplete');
+      if (operation.attempts.length >= operation.intent.maxAttempts || state.reservedUnits + operation.intent.maxUnitsPerAttempt > state.spec.costPolicy.maxTotalUnits) throw new Error('durable-operation-budget-exhausted');
+      const attempt: DurableOperationAttemptToken = { operationId: operation.operationId, slotId, commandId,
+        attempt: operation.attempts.length + 1, ownerId: claim.ownerId, epoch: claim.epoch };
+      operation.attempts.push({ ...attempt, reservedUnits: operation.intent.maxUnitsPerAttempt });
+      operation.status = 'inflight';
+      state.reservedUnits += operation.intent.maxUnitsPerAttempt;
+      this.save(state, 'operation-started');
+      return { operation, dispatch: true, attempt };
+    });
+  }
+  private operationOutcome(operation: DurableOperation, input: DurableOperationOutcome, validator?: DurableOperationValidator): DurableOperationOutcome {
+    const outcome = JSON.parse(canonical(input)) as DurableOperationOutcome;
+    if (!outcome || Array.isArray(outcome) || !['succeeded','not-applied','unknown','failed'].includes(outcome.kind) ||
+      Object.keys(outcome).some(key => !['kind', outcome.kind === 'succeeded' ? 'output' : 'reason'].includes(key))) throw new Error('invalid-durable-operation-outcome');
+    if (outcome.kind === 'succeeded') {
+      if (!Object.hasOwn(outcome,'output') || !validator || validator.id !== operation.intent.outputSchema.id || validator.version !== operation.intent.outputSchema.version ||
+        validator.validate(freezeJson(JSON.parse(canonical(outcome.output)))) !== true) throw new Error('durable-operation-output-invalid');
+    } else if (typeof outcome.reason !== 'string' || !outcome.reason.trim()) throw new Error('invalid-durable-operation-outcome');
+    return outcome;
+  }
+  private applyOperationOutcome(operation: DurableOperation, outcome: DurableOperationOutcome): void {
+    operation.status = outcome.kind === 'not-applied' ? 'intent' : outcome.kind;
+  }
+  /** Only the issued owner may settle; control changes do not discard already issued observations. */
+  settleOperation(claim: DurableClaim, input: DurableOperationAttemptToken, result: DurableOperationOutcome, validator?: DurableOperationValidator): DurableOperation {
+    const token = JSON.parse(canonical(input)) as DurableOperationAttemptToken;
+    const pinned = this.operation(this.fenced(claim), token.slotId);
+    const outcome = this.operationOutcome(pinned, result, validator);
+    return this.transaction(() => {
+      const state = this.fenced(claim), operation = this.operation(state, token.slotId);
+      const attempt = operation.attempts[token.attempt - 1];
+      if (!attempt || digest({ operationId: attempt.operationId,slotId: attempt.slotId,commandId: attempt.commandId,attempt: attempt.attempt,ownerId: attempt.ownerId,epoch: attempt.epoch }) !== digest(token) || token.ownerId !== claim.ownerId || token.epoch !== claim.epoch) throw new Error('durable-operation-attempt-mismatch');
+      if (attempt.outcome) { if (digest(attempt.outcome) !== digest(outcome)) throw new Error('durable-operation-outcome-conflict'); return operation; }
+      if (attempt !== operation.attempts.at(-1) || operation.status !== 'inflight') throw new Error('durable-operation-outcome-conflict');
+      attempt.outcome = outcome; this.applyOperationOutcome(operation, outcome);
+      this.save(state, 'operation-settled'); return operation;
+    });
+  }
+  /** A trusted adapter supplies an authoritative observation. Never retry an unclassified outcome. */
+  reconcileOperation(claim: DurableClaim, input: DurableOperationAttemptToken, result: DurableOperationOutcome, validator?: DurableOperationValidator): DurableOperation {
+    const token = JSON.parse(canonical(input)) as DurableOperationAttemptToken;
+    const pinned = this.operation(this.fenced(claim), token.slotId);
+    const outcome = this.operationOutcome(pinned, result, validator);
+    return this.transaction(() => {
+      const state = this.fenced(claim), operation = this.operation(state, token.slotId), attempt = operation.attempts[token.attempt - 1];
+      if (!attempt) throw new Error('durable-operation-not-started');
+      if (digest({ operationId: attempt.operationId,slotId: attempt.slotId,commandId: attempt.commandId,attempt: attempt.attempt,ownerId: attempt.ownerId,epoch: attempt.epoch }) !== digest(token)) throw new Error('durable-operation-attempt-mismatch');
+      if (attempt.reconciliation && attempt.reconciliation.kind !== 'unknown') {
+        if (digest(attempt.reconciliation) !== digest(outcome)) throw new Error('durable-operation-outcome-conflict');
+        return operation;
+      }
+      if (!['inflight','unknown'].includes(operation.status)) throw new Error('durable-operation-not-uncertain');
+      if (attempt !== operation.attempts.at(-1)) throw new Error('durable-operation-attempt-mismatch');
+      if (operation.status === 'inflight' && attempt.ownerId === claim.ownerId && attempt.epoch === claim.epoch) throw new Error('durable-operation-still-inflight');
+      if (attempt.reconciliation && digest(attempt.reconciliation) === digest(outcome)) return operation;
+      attempt.reconciliation = outcome; this.applyOperationOutcome(operation, outcome);
+      this.save(state, 'operation-reconciled'); return operation;
     });
   }
   events(runId: string, workspaceId: string, afterSequence = 0): Array<{ sequence: number; version: number; kind: string }> { this.row(runId, workspaceId); return this.db.prepare('SELECT sequence,version,kind FROM events WHERE run_id=? AND sequence>? ORDER BY sequence').all(runId, afterSequence); }
