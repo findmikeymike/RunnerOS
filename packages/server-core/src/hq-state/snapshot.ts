@@ -33,6 +33,7 @@ import {
 } from '@craft-agent/shared/scheduled-work';
 import { loadAuthorizedContextDocsForAgent, loadContextDoc } from '@craft-agent/shared/workspace-context';
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions';
+import { collectManagerSignals } from './signals';
 import { buildHqOperationalSnapshot } from './operational';
 import { loadCampaignReleaseReadiness, nextMissingReleaseEssentials } from './release-readiness';
 
@@ -55,6 +56,7 @@ export function buildHqStateInput(workspaceRootPath: string, now = new Date()): 
     docs: loadAuthorizedContextDocsForAgent(workspaceRootPath, CONCIERGE_SLUG),
     relatedCampaigns: workspace ? buildManagerCampaignSnapshots(now) : [],
     operational: buildHqOperationalSnapshot(workspaceRootPath),
+    signals: collectManagerSignals(workspaceRootPath, workspace?.id ?? basename(workspaceRootPath), now),
     timezone: resolveTimelineTimezone(),
     now,
   };

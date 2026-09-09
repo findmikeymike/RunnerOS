@@ -147,6 +147,31 @@ export interface ManagerSourceHealth {
   message?: string;
 }
 
+/** Small read-only projection of validated Signals reports, never full report text. */
+export interface ManagerSignalFinding {
+  title: string;
+  excerpt: string;
+  track: 'industry' | 'your-world';
+  createdAt: string;
+  coverageStatus: 'complete' | 'partial';
+  reference: { hqWorkspaceId: string; outputId: string; contentHash: string; entryId: string };
+}
+
+export interface ManagerSignalsSnapshot {
+  findings: ManagerSignalFinding[];
+  sourceHealth: ManagerSourceHealth[];
+}
+
+export interface ManagerIntelligenceItem {
+  id: string;
+  title: string;
+  summary: string;
+  whyItMatters?: string;
+  confidence?: 'high' | 'medium' | 'low';
+  source: ManagerSourceRef;
+  signal?: Pick<ManagerSignalFinding, 'track' | 'coverageStatus' | 'reference'>;
+}
+
 export interface ManagerCollectionSummary {
   total: number;
   active?: number;
@@ -311,14 +336,7 @@ export interface ManagerBriefV1 {
     spotify?: ManagerGrowthSignal;
     instagram?: ManagerGrowthSignal;
   };
-  intelligence: Array<{
-    id: string;
-    title: string;
-    summary: string;
-    whyItMatters?: string;
-    confidence: 'high' | 'medium' | 'low';
-    source: ManagerSourceRef;
-  }>;
+  intelligence: ManagerIntelligenceItem[];
   operatingState: {
     nextMove?: { title: string; why: string; worker?: string };
     attention: string[];
@@ -338,6 +356,7 @@ export interface BuildManagerBriefInput {
     blockers?: string[];
   };
   operational?: HqOperationalSnapshot;
+  signals?: ManagerSignalsSnapshot;
   /** Reference timezone for the timeline window (spec 20 §13.1). Defaults to UTC. */
   timezone?: string;
   now?: Date;
@@ -373,6 +392,7 @@ export interface BuildHqStateInput {
   docs: LoadedContextDoc[];
   relatedCampaigns: ManagerCampaignSnapshot[];
   operational?: HqOperationalSnapshot;
+  signals?: ManagerSignalsSnapshot;
   /** Reference timezone for the timeline window (spec 20 §13.1). Defaults to UTC. */
   timezone?: string;
   now?: Date;

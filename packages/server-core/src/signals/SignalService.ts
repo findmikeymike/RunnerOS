@@ -35,6 +35,7 @@ export interface SignalServiceDeps {
   queue?: typeof queueAutomationWork;
   wake?: (workspace: Workspace) => void;
   changed?: (workspaceId: string) => void;
+  reportPublished?: (workspace: Workspace) => void;
   now?: () => string;
   preparationTimeoutMs?: number;
   admitRetry?: (original: WorkflowRunSnapshot, retry: WorkflowRunSnapshot, orderIds: string[]) => Promise<void>;
@@ -51,7 +52,11 @@ export class SignalService {
     (this.deps.permission ?? assertTeamPermission)(workspace.rootPath, action);
   }
   private state(workspace: Workspace): CollectionStore { return readSignals(workspace.rootPath, workspace.id) as CollectionStore; }
-  private save(workspace: Workspace, state: SignalStore) { writeSignals(workspace.rootPath, state); this.deps.changed?.(workspace.id); }
+  private save(workspace: Workspace, state: SignalStore) {
+    writeSignals(workspace.rootPath, state);
+    try { this.deps.changed?.(workspace.id); }
+    catch (error) { console.warn('[signals] Failed to notify observers after journal commit:', error); }
+  }
   private view(state: SignalStore): SignalState {
     return { hqWorkspaceId: state.hqWorkspaceId, tracks: state.tracks, runs: state.requests.map(({ runId, track, mode, status, workflowRunId, orderIds, outputId, createdAt, updatedAt, error }) => ({ runId, track, mode, status, workflowRunId, orderIds, outputId, createdAt, updatedAt, error })).reverse() };
   }
@@ -488,6 +493,7 @@ export class SignalService {
       const state = this.state(workspace);
       const request = state.requests.find(item => item.runId === run.trigger.inputs.signalRequestId);
       if (!request || (request.workflowRunId ?? request.identity.workflowRunId) !== run.id || !request.collectionComplete || run.workflowSlug !== signalWorkflowFor(request.track, request.mode)) throw new Error('Signals finalization provenance is invalid.');
+      const previousReport = `${request.status}:${request.reportMetadataHash ?? ''}`;
       const identity = { ...request.identity, workflowRunId: run.id };
       for (const packet of request.packets) readEvidence(workspace.rootPath, packet.contentHash);
       for (const packet of request.websites) readEvidence(workspace.rootPath, packet.contentHash);
@@ -551,6 +557,11 @@ export class SignalService {
       request.examinedVideoIds = result.examinedVideoIds; request.updatedAt = this.now();
       if (request.mode === 'scan' && request.outputId) state.latestScan[request.track] = request.outputId;
       this.save(workspace, state);
+      if (['report', 'partial'].includes(request.status) && request.reportMetadataHash
+        && previousReport !== `${request.status}:${request.reportMetadataHash}`) {
+        try { this.deps.reportPublished?.(workspace); }
+        catch (error) { console.warn('[signals] Failed to refresh manager after report publication:', error); }
+      }
       return true;
     });
   }

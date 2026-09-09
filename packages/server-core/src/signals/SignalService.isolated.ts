@@ -856,3 +856,44 @@ test('YouTube Help fixture reaches synthesis without invented dates and remains 
   expect(state.requests[0]!.outputId).toBeTruthy();
   expect(state.ledger).toHaveLength(0);
 });
+
+test('manager publication callback sees saved terminal metadata once, never preparation or ordinary reads', async () => {
+  const published = mock((ws: Workspace) => {
+    const saved = readSignals(ws.rootPath, ws.id).requests[0]!;
+    expect(saved.status).toBe('report');
+    expect(saved.reportMetadataHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+  service = new SignalService({ workspaces: () => [workspace], provider, permission, now: () => now, reportPublished: published });
+  const request = await prepared();
+  expect(published).not.toHaveBeenCalled();
+  const snapshot = run(request, report(), 'running'); workflows.writeRun(root, snapshot);
+  await service.complete(snapshot, new AbortController().signal);
+  expect(published).not.toHaveBeenCalled();
+  const succeeded = { ...workflows.readRun(root, snapshot.id)!, state: 'succeeded' as const }; workflows.writeRun(root, succeeded);
+  await service.complete(succeeded, new AbortController().signal);
+  expect(published).toHaveBeenCalledTimes(1);
+  await service.complete(succeeded, new AbortController().signal);
+  await service.getState('hq');
+  expect(published).toHaveBeenCalledTimes(1);
+});
+
+test('manager observer failure does not fail completed report publication', async () => {
+  service = new SignalService({ workspaces: () => [workspace], provider, permission, now: () => now,
+    reportPublished: () => { throw new Error('observer unavailable'); } });
+  const request = await prepared();
+  const snapshot = run(request, report()); workflows.writeRun(root, snapshot);
+  await expect(service.complete(snapshot, new AbortController().signal)).resolves.toBe(true);
+  expect(readSignals(root, 'hq').requests[0]!.status).toBe('report');
+});
+
+
+test('ordinary observer failure preserves terminal report publication and manager refresh', async () => {
+  const published = mock(() => {});
+  const request = await prepared();
+  service = new SignalService({ workspaces: () => [workspace], provider, permission, now: () => now,
+    changed: () => { throw new Error('output observer disconnected'); }, reportPublished: published });
+  const snapshot = run(request, report()); workflows.writeRun(root, snapshot);
+  await expect(service.complete(snapshot, new AbortController().signal)).resolves.toBe(true);
+  expect(published).toHaveBeenCalledTimes(1);
+  expect(readSignals(root, 'hq').requests[0]!.status).toBe('report');
+});

@@ -1,3 +1,4 @@
+import { collectManagerSignals } from './signals';
 import { withScriptwriterArtistContext } from './scriptwriter-context';
 import { getWorkspaces } from '@craft-agent/shared/config';
 import {
@@ -270,8 +271,11 @@ export function getArtistContextDetail(
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         .slice(0, limit)
         .map((note) => ({ id: note.id, title: cap(note.title, 160), summary: cap(note.summary, 600), whyItMatters: cap(note.whyItMatters, 400), tags: note.tags?.slice(0, 12), confidence: note.confidence, updatedAt: note.updatedAt }));
-      data = { notes };
-      updatedAt = notes[0]?.updatedAt;
+      const hq = findArtistHqWorkspace();
+      const signals = hq ? collectManagerSignals(hq.rootPath, hq.id, now) : { findings: [], sourceHealth: [] };
+      const findings = signals.findings.filter(finding => !query || `${finding.title} ${finding.excerpt}`.toLowerCase().includes(query)).slice(0, limit);
+      data = { notes, signals: findings, signalsSourceHealth: signals.sourceHealth };
+      updatedAt = [...notes.map(note => note.updatedAt), ...findings.map(finding => finding.createdAt)].sort().at(-1);
       break;
     }
     case 'calendar': {

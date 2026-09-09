@@ -156,6 +156,7 @@ export function buildHqStateOfPlay(args: BuildHqStateInput): HqStateOfPlayV2 {
       docs,
       relatedCampaigns: args.relatedCampaigns,
       operational: args.operational,
+      signals: args.signals,
       operatingState: {
         nextMove,
         attention,
