@@ -1,4 +1,5 @@
 import { realpathSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import type { AgentEvent, Workspace } from '@craft-agent/core/types';
 import type { AgentBackend, BackendHostRuntimeContext, CoreBackendConfig } from '../../../shared/src/agent/backend/types.ts';
 import type { ResolvedBackendContext } from '../../../shared/src/agent/backend/factory.ts';
@@ -75,10 +76,51 @@ function frozenContext(spec: DurableRunSpec): FrozenReadContext {
 /** Single-step local read execution. Only journal checkpoints authorize success. */
 export class DurableReadRunner {
   private readonly active = new Map<string, ActiveReadExecution>();
+  private closing = false;
+  private quiescing?: Promise<void>;
+  private readonly pendingPauses = new Set<string>();
+  private readonly background = new Set<Promise<DurableRunSnapshot>>();
   constructor(private readonly options: DurableReadRunnerOptions) {}
+
+  /** Fence admission immediately, persist cooperative pauses, then drain before the host closes storage. */
+  quiesce(): Promise<void> {
+    if (this.quiescing) return this.quiescing;
+    this.closing = true;
+    const errors: unknown[] = [];
+    const active = [...this.active.entries()];
+    for (const [key] of active) this.pendingPauses.add(key);
+    for (const key of this.pendingPauses) {
+      const [workspaceId, runId] = JSON.parse(key) as [string, string];
+      try {
+        const state = this.options.journal.get(runId, workspaceId);
+        if (state.status === 'running') this.options.journal.command({ runId, workspaceId, commandId: randomUUID(), expectedVersion: state.version, action: 'pause' });
+        this.pendingPauses.delete(key);
+      } catch (error) { errors.push(error); }
+    }
+    this.quiescing = (async () => {
+      const results = await Promise.allSettled([...active.map(([, entry]) => entry.promise), ...this.background]);
+      for (const result of results) if (result.status === 'rejected') errors.push(result.reason);
+      if (errors.length === 1) throw errors[0];
+      if (errors.length) throw new AggregateError(errors, 'Durable host quiesce failed');
+    })();
+    const attempt = this.quiescing;
+    void attempt.catch(() => {
+      // Preserve this attempt's rejection, but allow a later close to retry retained pause obligations.
+      if (this.quiescing === attempt) this.quiescing = undefined;
+    });
+    return attempt;
+  }
+
+  private assertOpen(): void { if (this.closing) throw new Error('durable-host-closing'); }
+  private trackBackground(execution: Promise<DurableRunSnapshot>): Promise<DurableRunSnapshot> {
+    this.background.add(execution);
+    void execution.then(() => this.background.delete(execution), () => this.background.delete(execution));
+    return execution;
+  }
 
   /** Existing workflow adapter: unsupported execution semantics fail before admission. */
   startWorkflow(workflow: LoadedWorkflow, input: Omit<DurableReadInput, 'prompt'> & { resolvedAgentSlug: string }): Promise<DurableRunSnapshot> {
+    if (this.closing) return Promise.reject(new Error('durable-host-closing'));
     workflow = JSON.parse(JSON.stringify(workflow)) as LoadedWorkflow;
     const step = workflow.metadata.steps[0];
     if (workflow.parseWarnings?.length || workflow.metadata.trigger.type !== 'manual' || workflow.metadata.steps.length !== 1 || !step
@@ -96,9 +138,11 @@ export class DurableReadRunner {
   start(input: DurableReadInput): Promise<DurableRunSnapshot> { return this.admit(input); }
 
   private async admit(input: DurableReadInput, workflow?: LoadedWorkflow): Promise<DurableRunSnapshot> {
+    this.assertOpen();
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.runId) || !input.prompt.trim() || !input.systemPrompt.trim()) throw new Error('invalid-durable-read-input');
     const requested = JSON.parse(canonical(input)) as DurableReadInput;
     const binding = JSON.parse(JSON.stringify(await this.options.resolveBinding(requested.workspaceId, requested.connectionSlug, requested.model))) as DurableReadBinding;
+    this.assertOpen();
     this.checkBinding(binding, requested.workspaceId, requested.connectionSlug, requested.model);
     const context: FrozenReadContext = { prompt: requested.prompt, systemPrompt: requested.systemPrompt,
       connectionSlug: requested.connectionSlug, workspaceRoot: realpathSync(binding.workspace.rootPath), bindingDigest: bindingDigest(binding),
@@ -119,6 +163,7 @@ export class DurableReadRunner {
   }
 
   resume(runId: string, workspaceId: string): Promise<DurableRunSnapshot> {
+    if (this.closing) return Promise.reject(new Error('durable-host-closing'));
     const key = canonical([workspaceId, runId]), prior = this.active.get(key);
     if (prior) return prior.promise;
     const entry: ActiveReadExecution = { promise: undefined! };
@@ -128,7 +173,7 @@ export class DurableReadRunner {
       while (true) {
         entry.replayForSteering = false;
         const state = await this.execute(runId, workspaceId, entry);
-        if (!entry.replayForSteering || state.status !== 'running') return state;
+        if (this.closing || !entry.replayForSteering || state.status !== 'running') return state;
         const progress = digest({ steering: state.steering ?? [], continuationRevision: state.continuationRevision ?? 0, modelAttempts: state.modelAttempts });
         if (progress === previousPendingProgress) throw new Error('durable-steering-replay-stalled');
         previousPendingProgress = progress;
@@ -138,11 +183,13 @@ export class DurableReadRunner {
   }
 
   async cancel(runId: string, workspaceId: string): Promise<void> {
+    this.assertOpen();
     this.options.journal.cancel(runId, workspaceId);
     await this.active.get(canonical([workspaceId, runId]))?.backend?.abort('durable-run-cancelled');
   }
 
   async control(command: DurableControlCommand): Promise<DurableReadControlResult> {
+    this.assertOpen();
     command = JSON.parse(canonical(command)) as DurableControlCommand;
     const receipt = Object.freeze(this.options.journal.command(command));
     const key = canonical([command.workspaceId, command.runId]);
@@ -155,6 +202,7 @@ export class DurableReadRunner {
   }
 
   async decide(command: DurableDecisionCommand): Promise<DurableReadDecisionResult> {
+    this.assertOpen();
     command = JSON.parse(canonical(command)) as DurableDecisionCommand;
     const receipt = Object.freeze(this.options.journal.decide(command));
     const previous = this.active.get(canonical([command.workspaceId, command.runId]));
@@ -166,6 +214,7 @@ export class DurableReadRunner {
   }
 
   async steer(command: DurableSteeringCommand): Promise<DurableReadSteeringResult> {
+    this.assertOpen();
     command = JSON.parse(canonical(command)) as DurableSteeringCommand;
     const before = this.options.journal.get(command.runId, command.workspaceId);
     const receipt = Object.freeze(this.options.journal.steer(command));
@@ -185,7 +234,7 @@ export class DurableReadRunner {
       return this.options.journal.get(receipt.runId, receipt.workspaceId);
     });
     void execution.catch(() => { /* Keep failures observable without requiring receipt-only callers to await shutdown. */ });
-    return execution;
+    return this.trackBackground(execution);
   }
 
   private resumeAfterDrain(receipt: Pick<DurableControlReceipt, 'runId' | 'workspaceId' | 'controlRevision'>, previous?: Promise<DurableRunSnapshot>): Promise<DurableRunSnapshot> {
@@ -196,7 +245,7 @@ export class DurableReadRunner {
       try { await previous; } catch (error) { previouslyFailed = true; previousFailure = error; }
       try {
         const current = this.options.journal.get(receipt.runId, receipt.workspaceId);
-        if (current.status !== 'running' || current.controlRevision !== receipt.controlRevision) return current;
+        if (this.closing || current.status !== 'running' || current.controlRevision !== receipt.controlRevision) return current;
         return await this.resume(receipt.runId, receipt.workspaceId);
       } catch (error) {
         if (previouslyFailed) throw new AggregateError([previousFailure, error], 'Durable resume failed after the previous execution failed', { cause: previousFailure });
@@ -204,7 +253,7 @@ export class DurableReadRunner {
       }
     })();
     void execution.catch(() => { /* The receipt can be observed alone; execution remains reject-observable to callers. */ });
-    return execution;
+    return this.trackBackground(execution);
   }
 
   private checkBinding(binding: DurableReadBinding, workspaceId: string, connectionSlug: string, model: string): void {

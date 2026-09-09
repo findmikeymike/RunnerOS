@@ -1,11 +1,11 @@
 # Build state
 
-Revision r8 · 2026-09-09 · **T-06D committed; T-06E durable control routing implemented, verified and committed. T-06/P-03 remain open.**
+Revision r9 · 2026-09-09 · **T-06F host startup/shutdown implemented and independently reviewed; included in this commit. T-06/P-03 remain open.**
 
-Canonical checkout: `/Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os`, branch `main`. P-01: `dfac3d512`; P-02: `34d2ba786`; controls: `dd1798b7b`; approvals: `d77f96f2f`; steering: `9274f2041`; attention bridge: `8dba3c438`. T-06E is included in the durable-control integration commit containing this state file. Other-agent work preserved. No push or app restart.
+Canonical checkout: `/Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os`, branch `main`, starting HEAD `8a5537d89`. User requested only the first task or two of the next phase slice; completed one task and stopped. No push or app restart.
 
-Dedicated durable-control RPC and Electron API route Pause, same-run Resume, Cancel and ordered updates through trusted host authority. Exact retry receipts never repeat runtime calls. Current redacted state is separate. Cancel/Deny acknowledgement is independent of cooperative backend shutdown; shutdown errors remain separately observable. Legacy rerun behavior is unchanged.
+The new trusted host factory opens the protected journal and owns the read runner/controls lifetime. Shutdown blocks new work immediately, saves active work as paused, drains existing operations, and then closes storage. Settled failures remain visible and permit safe close retry; hung work keeps storage open. Request arguments are pinned before asynchronous work.
 
-Fresh checks and scope are in [T-06E evidence](evidence/T-06E-controls.md) and [independent review](evidence/T-06E-rival.md). Real Pi process controls and copied packaged control journal proof passed. Service is still an optional unconfigured production dependency, so this is not live UI activation.
+Evidence: [host lifecycle](evidence/T-06F-lifecycle.md), [independent review and fixes](evidence/T-06F-rival.md), [task packet](tasks/T-06F.md).
 
-Runtime manifest remains pi-readonly-5. Next: host actor/key lifecycle and run-view projections, then remaining P-03 effects/reconciliation, safe provider proof and children. Scheduling, migration, UI rollout and full certification remain ahead.
+The factory is not registered in Electron bootstrap. Next task: production host/actor/key and quit wiring with public admission still gated, followed by run-view projections. Effects/reconciliation, safe provider proof, children, schedules, migration and full rollout remain ahead. Runtime manifest stays pi-readonly-5.

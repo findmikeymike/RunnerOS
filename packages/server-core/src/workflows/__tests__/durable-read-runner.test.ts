@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, test, spyOn } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -592,4 +592,103 @@ test('cancel after committed success leaves its draining backend alone', async (
     expect(aborts).toBe(0);
   } finally { finish(); }
   expect((await running).status).toBe('succeeded');
+});
+
+test('quiesce persists pause immediately, fences new calls, and drains without cancellation', async () => {
+  const { journal, input, base } = fixture();
+  let ready!: () => void, finish!: () => void;
+  const started = new Promise<void>(resolve => { ready = resolve; });
+  const drain = new Promise<void>(resolve => { finish = resolve; });
+  let destroyed = false, aborts = 0;
+  const runner = new DurableReadRunner({ ...base, createBackend: () => ({
+    async *chat() { ready(); await drain; }, async abort() { aborts++; }, destroy() { destroyed = true; },
+  }) });
+  const running = runner.start(input); await started;
+  let drained = false;
+  const closing = runner.quiesce(); void closing.then(() => { drained = true; });
+  expect(runner.quiesce()).toBe(closing);
+  expect(journal.get(input.runId, input.workspaceId).status).toBe('paused');
+  await expect(runner.start(input)).rejects.toThrow('durable-host-closing');
+  await expect(runner.resume(input.runId, input.workspaceId)).rejects.toThrow('durable-host-closing');
+  await expect(runner.control({} as never)).rejects.toThrow('durable-host-closing');
+  await expect(runner.decide({} as never)).rejects.toThrow('durable-host-closing');
+  await expect(runner.steer({} as never)).rejects.toThrow('durable-host-closing');
+  expect(drained).toBe(false); expect(aborts).toBe(0);
+  finish(); expect((await running).status).toBe('paused'); await closing;
+  expect(destroyed).toBe(true); expect(drained).toBe(true);
+  expect(journal.get(input.runId, input.workspaceId).status).toBe('paused');
+});
+
+test('quiesce prevents an admission waiting for binding from writing a run', async () => {
+  const { journal, input, base, binding } = fixture();
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const runner = new DurableReadRunner({ ...base, resolveBinding: async () => { await gate; return binding; } });
+  const starting = runner.start(input);
+  await runner.quiesce(); release();
+  await expect(starting).rejects.toThrow('durable-host-closing');
+  expect(journal.listInternal(input.workspaceId)).toEqual([]);
+});
+
+test('quiesce drains pending resume continuations without starting a replacement backend', async () => {
+  const { journal, input, base } = fixture();
+  let ready!: () => void, finish!: () => void, creations = 0;
+  const started = new Promise<void>(resolve => { ready = resolve; });
+  const drain = new Promise<void>(resolve => { finish = resolve; });
+  const runner = new DurableReadRunner({ ...base, createBackend: () => {
+    creations++; return { async *chat() { ready(); await drain; }, async abort() {}, destroy() {} };
+  } });
+  const running = runner.start(input); await started;
+  await runner.control({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'pause' });
+  const resume = await runner.control({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'resume' });
+  const closing = runner.quiesce(); finish(); await running; await closing;
+  expect((await resume.execution!)!.status).toBe('paused'); expect(creations).toBe(1);
+});
+
+test('quiesce waits for pending backend shutdown and reports its original failure', async () => {
+  const { input, journal, base } = fixture();
+  let ready!: () => void, finish!: () => void, rejectAbort!: (error: Error) => void;
+  const started = new Promise<void>(resolve => { ready = resolve; });
+  const drain = new Promise<void>(resolve => { finish = resolve; });
+  const shutdown = new Promise<void>((_resolve, reject) => { rejectAbort = reject; });
+  const runner = new DurableReadRunner({ ...base, createBackend: () => ({
+    async *chat() { ready(); await drain; }, async abort() { await shutdown; }, destroy() {},
+  }) });
+  const running = runner.start(input); await started;
+  const cancelled = await runner.control({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'cancel' });
+  let settled = false;
+  const closing = runner.quiesce(); void closing.then(() => { settled = true; }, () => { settled = true; });
+  finish(); await running;
+  expect(settled).toBe(false);
+  const failure = new Error('shutdown-failed'); rejectAbort(failure);
+  await expect(closing).rejects.toBe(failure);
+  await expect(cancelled.execution!).rejects.toBe(failure);
+  await runner.quiesce();
+  await expect(runner.start(input)).rejects.toThrow('durable-host-closing');
+  expect(journal.get(input.runId, input.workspaceId).status).toBe('cancelled');
+});
+
+test('quiesce retry retains a failed pause obligation after its active execution drained', async () => {
+  const { journal, input, base } = fixture();
+  let ready!: () => void, finish!: () => void;
+  const started = new Promise<void>(resolve => { ready = resolve; });
+  const drain = new Promise<void>(resolve => { finish = resolve; });
+  const failure = new Error('transient-pause-storage-error');
+  const originalBridge = journal.bridge.bind(journal);
+  const failedBridge = spyOn(journal, 'bridge').mockImplementation((...args) => ({ ...originalBridge(...args), fail: async () => { throw failure; } }));
+  const runner = new DurableReadRunner({ ...base, createBackend: () => ({
+    async *chat() { ready(); await drain; }, async abort() {}, destroy() {},
+  }) });
+  const running = runner.start(input); void running.catch(() => {}); await started;
+  const command = spyOn(journal, 'command').mockImplementation(() => { throw failure; });
+  const first = runner.quiesce(); finish();
+  try {
+    await expect(running).rejects.toThrow('missing-completion-checkpoint');
+    try { await first; throw new Error('expected quiesce failure'); }
+    catch (error) { expect(error).toBeInstanceOf(AggregateError); expect((error as AggregateError).errors).toContain(failure); }
+    expect(journal.get(input.runId, input.workspaceId).status).toBe('running');
+  } finally { command.mockRestore(); failedBridge.mockRestore(); }
+  const retried = runner.quiesce(); expect(retried).not.toBe(first); await retried;
+  expect(journal.get(input.runId, input.workspaceId).status).toBe('paused');
+  await expect(runner.resume(input.runId, input.workspaceId)).rejects.toThrow('durable-host-closing');
 });
