@@ -22,7 +22,6 @@ an implementing agent as-is.
 | [44 State-Aware First-Use Guide](./44-state-aware-first-use-guide-spec.md) | Extends the existing question-mark Guide with an optional first-use setup path whose progress comes from real AI, Brain, Vault, and first-work state | no `ArtistSetupSnapshot`, onboarding presentation state, setup mode, or coach-mark target contract |
 | [45 HQ / Campaign Scope Clarity](./45-hq-campaign-scope-clarity-spec.md) | One stated rule for where shared work lives, the unified timeline shown inside campaigns, and cross-owner channel-collision warnings — no new space, no new store | `collectArtistTimeline` has no RPC and only `manager-tools.ts` calls it; no `TimelineCollision` or `channel` on `TimelineEntry` |
 | [49 HQ Performance Monthly Widgets](./49-hq-performance-monthly-widgets-spec.md) | Replaces per-run HQ Performance charts with 12-month monthly views complete on first capture: career-total + monthly-streams bars with cumulative overlay, monthly listeners bars, signed Instagram follower gain/loss bars | no `monthlyStreams`/`monthlyListeners`/`monthlyFollowers` fields, no `SignalMonthlyBars`, history is still one point per snapshot file |
-| [50 Built-in Skill Protection](./50-built-in-skill-protection-spec.md) | Keeps managed skill internals private in normal app use while preserving discovery, runtime access, and personal instructions | implemented and automated checks passed; live Electron/provider acceptance pending |
 
 Specs 38 and 41 remain at their existing paths for cross-reference stability,
 and their core workflows are implemented; full live loop acceptance remains open. Spec 48 also stays here for stable links: its
@@ -30,6 +29,10 @@ and their core workflows are implemented; full live loop acceptance remains open
 tracked-work propagation, and bounded expansion. Automated and browser evidence is
 in [the rollout audit](../../audits/agent-focus-rollout-2026-09-08.md); live provider
 performance/quality acceptance remains open.
+Spec 50 also stays here for stable links: managed skill storage/runtime, personal
+instructions, compatibility migration, and automated acceptance are implemented.
+Live Electron/provider acceptance remains open; see the
+[built-in skill audit](../../audits/built-in-skill-protection-2026-09-08.md).
 See the [parent index](../README.md), [backlog](../../backlog/TO-DO.md), and
 [consolidation audit](../../audits/artist-os-consolidation-2026-09-08.md) for
 implementation and acceptance status. The folder name is not a status claim.

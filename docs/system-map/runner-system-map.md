@@ -1,13 +1,13 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-08-30
+last_verified: 2026-09-08
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-08-30
+Generated: 2026-09-08
 
 ## Why This Exists
 
@@ -16,6 +16,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 ## Source Files
 
 - starterAgents: `packages/shared/src/agent-definitions/starter-templates.ts`
+- scriptwriterAgent: `packages/shared/src/agent-definitions/scriptwriter.ts`
 - agentTypes: `packages/shared/src/agent-definitions/types.ts`
 - systemSkills: `packages/shared/src/skills/system.ts`
 - starterSkills: `packages/shared/src/skills/starter-templates.ts`
@@ -54,19 +55,19 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ## Summary
 
-- Agents mapped: 49
+- Agents mapped: 61
 - Hidden from Workers home: 5
-- Campaign default workers: `branding-agent`, `world-builder`, `college-radio-agent`, `spotify-playlist-creator`, `content-genius`, `scroll-stopper`, `anticipation-director`, `content-director`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
+- Campaign default workers: `branding-agent`, `scriptwriter`, `world-builder`, `site-builder`, `college-radio-agent`, `spotify-playlist-creator`, `x-editorial`, `artist-os-release-manager`, `content-genius`, `scroll-stopper`, `anticipation-director`, `content-director`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
 - Lab default workers: `the-excavator`, `reverse-magic`, `hooker`, `legendary-writer`, `reference-master`, `record-doctor`
-- Starter workflows mapped: 7
+- Starter workflows mapped: 12
 - Shared Intel prompt injection: wired
 - Campaign Release Kit: wired
 - Legacy HQ Finals compatibility: wired
 - Scheduled Work execution: wired
-- Domains: Command 3, Content Creation 9, Creative 6, Merch 2, Operators 2, Other Workers 6, Outreach 5, Promotion 9, Research 4, Socials 3
-- Permission modes: ask 41, safe 8
-- Known skills: 127 (91 bundled, 7 system, 127 user-global on this machine)
-- Known builtin sources: 27
+- Domains: Command 5, Content Creation 10, Creative 7, Merch 2, Operators 2, Other Workers 9, Outreach 8, Promotion 11, Research 4, Socials 3
+- Permission modes: ask 49, safe 12
+- Known skills: 173 (109 bundled, 8 system, 173 user-global on this machine)
+- Known builtin sources: 28
 
 ## Reference Health
 
@@ -76,8 +77,8 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Saved agents live in the global library and are activated per workspace.
 - Workers page shows active agents, except system agents and hidden worker-home slugs.
-- Artist HQ default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator.
-- Campaign default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator, content-genius, scroll-stopper, anticipation-director, content-director, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
+- Artist HQ default workers are currently branding-agent, scriptwriter, world-builder, site-builder, college-radio-agent, spotify-playlist-creator, x-editorial.
+- Campaign default workers are currently branding-agent, scriptwriter, world-builder, site-builder, college-radio-agent, spotify-playlist-creator, x-editorial, artist-os-release-manager, content-genius, scroll-stopper, anticipation-director, content-director, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
 - Lab workspaces can pass defaultVisibleSlugs, currently the-excavator, reverse-magic, hooker, legendary-writer, reference-master, record-doctor.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
@@ -136,6 +137,22 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ## Starter Workflows
 
+### Social Comment Replies (`social-comment-replies`)
+
+- Description: Inspect and answer eligible public comments and mentions across every verified artist social profile.
+- Trigger: `manual`; inputs: 2; steps: 1
+- Agent refs: `social-publisher`
+- Missing agent refs: none
+- Step order: reply -> @social-publisher
+
+### Weekly Signal Scan (`weekly-signal-scan`)
+
+- Description: Collect YouTube, official platform, and music-industry intelligence, then synthesize one artist-specific weekly brief.
+- Trigger: `manual`; inputs: 2; steps: 4
+- Agent refs: `signal-analyst-agent`, `signal-scout-agent`, `youtube-intelligence-agent`
+- Missing agent refs: none
+- Step order: youtube-intel -> @youtube-intelligence-agent; platform-watch -> @signal-scout-agent; industry-desk -> @signal-scout-agent; synthesize -> @signal-analyst-agent
+
 ### Weekly Content Pipeline (`weekly-content-pipeline`)
 
 - Description: Research a topic, draft a post, critique it, revise, hand off for human approval.
@@ -192,17 +209,55 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Missing agent refs: none
 - Step order: build-kit -> @print-agent
 
+### Your World Signal Scan (`weekly-world-scan`)
+
+- Description: Your World Signal Scan with host-scoped evidence and durable per-video coverage.
+- Trigger: `manual`; inputs: 6; steps: 2
+- Agent refs: `signal-analyst-agent`, `youtube-intelligence-agent`
+- Missing agent refs: none
+- Step order: youtube-intel -> @youtube-intelligence-agent; synthesize -> @signal-analyst-agent
+
+### Signal Video Review (`signal-video-review`)
+
+- Description: Signal Video Review with host-scoped evidence and durable per-video coverage.
+- Trigger: `manual`; inputs: 6; steps: 2
+- Agent refs: `signal-analyst-agent`, `youtube-intelligence-agent`
+- Missing agent refs: none
+- Step order: youtube-intel -> @youtube-intelligence-agent; synthesize -> @signal-analyst-agent
+
+### Industry Signal Scan (`signals-industry-scan`)
+
+- Description: Industry Signal Scan with host-scoped evidence and durable per-video coverage.
+- Trigger: `manual`; inputs: 6; steps: 2
+- Agent refs: `signal-analyst-agent`, `youtube-intelligence-agent`
+- Missing agent refs: none
+- Step order: youtube-intel -> @youtube-intelligence-agent; synthesize -> @signal-analyst-agent
+
 
 ## Workers By Domain
 
 ### Command
 
-#### HNIC (`concierge`)
+#### Anything Agent (`anything-agent`)
+
+- Description: Connects to thousands of tools, apps, and services to help you do almost anything — a Swiss Army knife for workflows.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: `monid`, `zero`
+- Sources: none
+- Optional sources: `monid`, `zero`
+- Trusted tools: none
+- Tags: `command`, `monid`, `zero`, `api`, `fallback`, `external-tools`, `paid`
+- Signals: `approval-capable`, `explicit-approval-required`, `external-action-boundary`, `memory-scope-instructions`, `optional-source-aware`
+- Inputs: A specific capability gap, desired result, constraints, sensitive-data limits, and any required external side effect.
+- Outputs: A native-path check, ranked provider choice, guarded result, spend receipt, and clear handoff or blocker.
+
+#### Artist Manager (`concierge`)
 
 - Description: Main work chat. Routes goals to the right workers, skills, automations, and workflows.
 - Permission: `safe`; thinking: `medium`
 - Launch surfaces: `hq-sidebar-chat`, `campaign-sidebar-chat`, `system-agent-hidden-from-worker-home`
-- Skills: `agent-creator`, `automation-creator`, `workflow-creator`, `source-recipe`, `artist-manager-operating-system`, `artist-os-guide`, `runneros-self-edit`
+- Skills: `agent-creator`, `automation-creator`, `workflow-creator`, `skill-scout`, `source-recipe`, `artist-manager-operating-system`, `artist-os-guide`, `runneros-self-edit`
 - Sources: none
 - Optional sources: none
 - Trusted tools: none
@@ -216,7 +271,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Break a goal into steps and coordinate the right agents.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `system-agent-hidden-from-worker-home`
-- Skills: `agent-creator`, `automation-creator`, `workflow-creator`, `source-recipe`
+- Skills: `agent-creator`, `automation-creator`, `workflow-creator`, `skill-scout`, `source-recipe`
 - Sources: none
 - Optional sources: none
 - Trusted tools: none
@@ -224,6 +279,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Signals: `approval-capable`, `artifact-output-aware`, `memory-scope-instructions`
 - Inputs: A goal or outcome you want to achieve.
 - Outputs: A step-by-step plan with named owners, plus the executed result.
+
+#### Release Manager (`artist-os-release-manager`)
+
+- Description: Prepare and verify distributor delivery, pre-save links, metadata, rights and splits, DSP pitches, and final release QA.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Skills: `artist-os-release-operations`, `artist-os-rights-and-credits`, `artist-os-release-package-qa`, `artist-os-dsp-editorial-pitch`
+- Sources: none
+- Optional sources: `printing-press-social`, `google-drive`, `gmail`
+- Trusted tools: `list_release_kit`, `get_release_kit_item`, `list_campaign_assets`, `list_campaign_outputs`, `get_campaign_output`, `list_artist_vault`, `get_asset_record`, `create_output`
+- Tags: `release-ops`, `distribution`, `metadata`, `rights`, `qa`
+- Signals: `approval-capable`, `artifact-output-aware`, `external-action-boundary`, `optional-source-aware`, `trusted-worker-tools`
+- Inputs: Campaign brief and date, Release Kit, Campaign Assets and Outputs, artist profile, master and artwork, contributors, rights facts, distributor or DSP account, and the exact release-ready item.
+- Outputs: Release delivery packets, metadata sheets, rights and splits packets, pre-save handoffs, DSP pitches, final QA reports, approval packets, and verified provider receipts when connected.
 
 #### Setup Concierge (`setup-concierge`)
 
@@ -235,7 +304,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Optional sources: none
 - Trusted tools: none
 - Tags: `setup`, `connections`, `keys`, `help`, `guide`, `command`
-- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`
+- Signals: `agent-catalog-aware`, `approval-capable`, `artifact-output-aware`, `external-action-boundary`
 - Inputs: A setup goal, pasted credential, app-feature question, broken connection, or “what do I do next?” request.
 - Outputs: A guided setup step, saved-setting plan, connection test path, app explanation, or follow-up checklist.
 
@@ -285,7 +354,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 #### Lottie Animation Agent (`lottie-animation-agent`)
 
-- Description: Create lightweight web and app animations.
+- Description: Creates, edits, previews, and verifies production-ready Lottie JSON animations using the official diffusionstudio/lottie Skia player harness.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `hidden-from-workers-home`
 - Skills: none
@@ -316,14 +385,28 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Edit existing raw footage into polished clips, reels, shorts, interviews, and social cutdowns.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
-- Skills: `raw-video-editor`
+- Skills: `raw-video-editor`, `raw-video-edit-direction`, `social-video-repurposing`
 - Sources: `raw-video-editor`, `video-studio`
 - Optional sources: none
 - Trusted tools: none
 - Tags: `creative`, `video`, `editing`, `raw-footage`, `captions`, `social`
 - Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
-- Inputs: A folder of existing video/audio files, desired platform/aspect ratio, target runtime, pacing direction, must-keep moments, must-cut moments, caption style, and brand/editing notes.
-- Outputs: An edit folder with inventory, packed transcript, EDL, preview/final MP4 paths, self-check notes, and clear limits when source media or transcription is missing.
+- Inputs: Existing video/audio files, desired platform/aspect ratio, target runtime, pacing direction, must-keep and must-cut moments, caption style, brand/editing notes, and an optional clean song master for performance sync.
+- Outputs: An edit folder with inventory, packed transcript, EDL, preview/final MP4 paths, optional master-sync report and synchronized preview, self-check notes, and clear limits when source media or transcription is missing.
+
+#### Scriptwriter (`scriptwriter`)
+
+- Description: Write YouTube, Reels, and TikTok scripts that carry your voice, artist world, and continuity from one video to the next.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `hq-workers-default-visible`, `campaign-workers-default-visible`
+- Skills: `artist-script-dna`, `youtube-camera-script`, `reels-tiktok-script`
+- Sources: none
+- Optional sources: none
+- Trusted tools: `create_output`
+- Tags: `creative`, `content`, `scripts`, `youtube`, `shortform`
+- Signals: `approval-capable`, `artifact-output-aware`, `external-action-boundary`, `memory-scope-instructions`, `trusted-worker-tools`
+- Inputs: An idea or draft, intended audience, platform and duration, approved artist voice and world, campaign context, references, or earlier scripts.
+- Outputs: Complete spoken scripts, opening options when useful, filming and delivery notes, honest runtime estimates, and an approved continuity record for future videos.
 
 #### Scroll Stopper (`scroll-stopper`)
 
@@ -374,14 +457,28 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Create highly aesthetic single and album art, merch, posters, and campaign visuals.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
-- Skills: `artist-art-direction`, `artist-typography-taste`, `artist-visual-world-director`, `ad-creative`, `zero`
+- Skills: `artist-art-direction`, `artist-typography-taste`, `artist-visual-world-director`, `ad-creative`, `monid`, `zero`
 - Sources: none
-- Optional sources: `media-generation`, `zero`
+- Optional sources: `media-generation`, `monid`, `zero`
 - Trusted tools: `artwork_compose`, `create_output`
 - Tags: `creative`, `art-direction`, `album-art`, `merch`, `design`, `image-generation`, `visuals`
 - Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`, `trusted-worker-tools`
 - Inputs: Artist HQ Profile, Voice, Branding, themes, similar artists, music style, song/release notes, lyrics, references, approved artist photos and face references, cover/merch mode, format, and generation approval.
 - Outputs: Taste-led visual concepts, style-lane recommendations, album/single art prompts, merch graphic specs, reference-image requirements, typography/layout direction, SVG/PNG artwork composition exports, Canvas-visible artifacts, anti-slop checks, and approved image-generation/layout briefs.
+
+#### Catalog & Royalties (`catalog-royalty-agent`)
+
+- Description: Find likely royalty-registration gaps across PROs, MLC, SoundExchange, and copyright records, then prepare filing packets.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: `catalog-royalty-reconciliation`
+- Sources: none
+- Optional sources: none
+- Trusted tools: `create_output`
+- Tags: `rights`, `royalties`, `catalog`, `bmi`, `soundexchange`, `mlc`
+- Signals: `approval-capable`, `artifact-output-aware`, `external-action-boundary`, `memory-scope-instructions`, `trusted-worker-tools`
+- Inputs: Distributor exports, manual catalog rows, split sheets, Artist HQ rights data, and artist-confirmed BMI/ASCAP/SESAC, MLC, SoundExchange, or copyright evidence.
+- Outputs: A confirmed catalog, registration-status matrix, prioritized probable-gap list, evidence ledger, and blocked-or-ready filing packets.
 
 #### Content Genius (`content-genius`)
 
@@ -427,7 +524,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 #### Record Doctor (`record-doctor`)
 
-- Description: Have your song reviewed by a Grammy-winning, multi-platinum producer and songwriter for an unbiased, credible expert perspective before release.
+- Description: Have your song reviewed by a Grammy-winning, multi-platinum producer and songwriter for an unbiased, credible perspective before release.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`, `lab-workers-default-visible`
 - Skills: `record-doctor-handoff`, `artist-comms-strategist`
@@ -529,6 +626,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Inputs: A song concept, verse, existing hook, chorus draft, title line, genre, ambition, or rhythmic pocket.
 - Outputs: Hook candidates, chorus punch-ups, title-line options, diagnosis, setup fixes, and singability notes.
 
+#### Legal & Deals (`legal-agent`)
+
+- Description: Reviews music agreements, explains the real deal in plain English, and prepares negotiation priorities and questions for counsel.
+- Permission: `safe`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: `music-contract-review`
+- Sources: none
+- Optional sources: none
+- Trusted tools: `create_output`
+- Tags: `legal`, `contracts`, `music-business`, `deals`, `negotiation`, `rights`
+- Signals: `artifact-output-aware`, `context-doc-aware`, `external-action-boundary`, `memory-scope-instructions`, `safe-default`, `trusted-worker-tools`
+- Inputs: A music-business agreement or readable contract text, the artist party/role, draft or signed status, deal context, and supplied exhibits or side letters.
+- Outputs: An evidence-backed deal brief, key-term table, missing protections, prioritized negotiation plan, suggested language, and questions for qualified music counsel.
+
 #### Open Slide (`open-slide-agent`)
 
 - Description: Create clean slide decks and export them to HTML or PDF.
@@ -571,6 +682,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Inputs: A reference artist/song, Genius annotations or song-analysis notes, and the new song concept.
 - Outputs: A new original song draft built from the reference psychology, with section notes and annotation-bait reasoning.
 
+#### Site Builder (`site-builder`)
+
+- Description: Builds and renders the artist website under website/: content, templates, theme. Builds, audits, and previews. Never publishes.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `hq-workers-default-visible`, `campaign-workers-default-visible`
+- Skills: `artist-website-builder`, `artist-website-playbook`
+- Sources: none
+- Optional sources: none
+- Trusted tools: `website_get_manifest`, `website_create`, `website_set_content`, `website_build`, `website_preview`, `website_seo_audit`
+- Tags: `website`, `html`, `css`, `build`, `seo`, `preview`
+- Signals: `approval-capable`, `artifact-output-aware`, `external-action-boundary`, `memory-scope-instructions`, `trusted-worker-tools`
+- Inputs: A bounded brief: a new site, a page, a section, a theme change, new releases or shows, or a bug on the site.
+- Outputs: Edited content and templates under website/, a passing build with its hash and audit score, and a preview in the canvas.
+
 #### The Excavator (`the-excavator`)
 
 - Description: Finds the buried song idea when the writer feels blocked or generic.
@@ -584,6 +709,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Signals: `approval-capable`, `trusted-worker-tools`
 - Inputs: Writer block, loose life details, a flat draft, a vague theme, or a need for a song prompt.
 - Outputs: One-question-at-a-time digs, song titles, first lines, charged concepts, and follow-up doors for writing.
+
+#### Website Agent (`website-agent`)
+
+- Description: Runs the artist website: keeps it current with releases and shows, pulls signups into the fan list, and watches search health.
+- Permission: `ask`; thinking: `medium`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: `artist-website-playbook`
+- Sources: none
+- Optional sources: none
+- Trusted tools: `website_get_manifest`, `website_status`, `website_history`, `website_seo_audit`, `website_set_content`, `website_build`, `website_preview`, `website_capture_sync`, `website_deploy`, `website_domain_check`, `website_inspect_external`, `browser_tool`
+- Tags: `website`, `site`, `publish`, `seo`, `signup`, `routine`
+- Signals: `approval-capable`, `external-action-boundary`, `memory-scope-instructions`, `trusted-worker-tools`
+- Inputs: A goal: bring the site up to date, add a release or show, publish, roll back, connect a domain, or check how it is doing.
+- Outputs: A published or preview-ready site change with its URL, a plain summary of what changed and why, or a readout of what the site needs.
 
 #### Writer (`writer`)
 
@@ -626,36 +765,78 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Trusted tools: none
 - Tags: `comms`, `email`, `press`, `fans`, `outreach`, `copy`
 - Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`
-- Inputs: Artist HQ Profile, Voice, Branding cards, Intel reports, release/campaign context, audience segment, offer/news, links, facts, approvals, and send channel.
+- Inputs: Artist HQ Profile, Voice, Branding cards, Artist Network people and emails, Intel reports, release/campaign context, audience segment, offer/news, links, facts, approvals, and send channel.
 - Outputs: Fan emails, newsletters, SMS/community updates, press pitches, collaborator asks, internal updates, send-readiness checklists, and approval packets.
+
+#### Community Agent (`community-agent`)
+
+- Description: Runs the artist's fan list: decides what is actually worth an email, drafts it in their voice, keeps segments honest, and protects the list from being talked to death.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: `artist-community-craft`
+- Sources: none
+- Optional sources: none
+- Trusted tools: `community_stats`, `community_list_contacts`, `community_job_status`, `community_draft_email`, `community_request_send`, `community_tag_contacts`, `list_workspace_context`, `get_workspace_context`
+- Tags: `community`, `email`, `fans`, `newsletter`, `retention`, `growth`
+- Signals: `approval-capable`, `external-action-boundary`, `memory-scope-instructions`, `trusted-worker-tools`
+- Inputs: A thing that happened, a release or show coming up, or an open question about the list.
+- Outputs: A drafted email waiting for your approval, an honest "not worth sending" with the reason, or a readout of the list.
 
 #### Industry Hunter (`industry-hunter`)
 
 - Description: Find the right A&Rs, label operators, managers, publishers, sync people, and industry connectors, then output an Outreach-ready target list.
 - Permission: `safe`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
-- Skills: `artist-industry-hunter`, `zero`
-- Sources: `zero`
-- Optional sources: none
+- Skills: `artist-industry-hunter`, `monid`, `zero`
+- Sources: none
+- Optional sources: `monid`, `zero`
 - Trusted tools: `start_deep_research`, `list_deep_research_runs`, `get_deep_research_run`, `create_output`
-- Tags: `industry`, `anr`, `outreach`, `labels`, `research`, `artist-development`, `zero`
-- Signals: `artifact-output-aware`, `external-action-boundary`, `requires-source-activation`, `safe-default`, `trusted-worker-tools`
+- Tags: `industry`, `anr`, `outreach`, `labels`, `research`, `artist-development`, `monid`, `zero`
+- Signals: `artifact-output-aware`, `external-action-boundary`, `optional-source-aware`, `safe-default`, `trusted-worker-tools`
 - Inputs: Artist HQ Profile, Voice, Branding, themes, music style, related artists, campaign/release goal, links, songs, lyrics, demos, and target market.
 - Outputs: A ranked Industry Hunter Target List with names, roles, likely LinkedIn/profile URLs, source links, fit rationale, outreach angles, confidence, missing info, and Outreach Agent handoff prompts.
 
 #### Outreach Agent (`outreach-agent`)
 
-- Description: Find anyone's email via LinkedIn URL, research the person for personalized outreach, draft and send high rapport email.
+- Description: Use saved Artist Network contacts or find an email from a LinkedIn URL, research the person, and draft approval-gated high-rapport outreach.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
-- Skills: `zero`, `artist-comms-strategist`, `magnetic-outreach`
-- Sources: `zero`
-- Optional sources: `gmail`
+- Skills: `monid`, `zero`, `artist-comms-strategist`, `magnetic-outreach`
+- Sources: none
+- Optional sources: `gmail`, `monid`, `zero`
 - Trusted tools: none
-- Tags: `outreach`, `email`, `linkedin`, `prospecting`, `rapport`, `gmail`, `zero`
-- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`, `requires-source-activation`
-- Inputs: Person name, LinkedIn profile URL, outreach goal, relationship context, offer/ask, sender identity, artist/team context, and approval to send.
+- Tags: `outreach`, `email`, `linkedin`, `prospecting`, `rapport`, `gmail`, `monid`, `zero`
+- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`
+- Inputs: Saved Artist Network person/email or person name and LinkedIn profile URL, outreach goal, relationship context, offer/ask, sender identity, artist/team context, and approval to send.
 - Outputs: Confirmed email lookup result, prospect intel brief, hook/angle options, polished outreach draft, subject lines, copy-paste packet, approval checklist, and Gmail send receipt when connected and approved.
+
+#### Signal Analyst (`signal-analyst-agent`)
+
+- Description: Connects weekly YouTube, platform, and industry findings into one artist-specific Signal Brief.
+- Permission: `safe`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: none
+- Sources: none
+- Optional sources: none
+- Trusted tools: none
+- Tags: `signals`, `analysis`, `synthesis`, `artist-strategy`, `weekly`, `reports`
+- Signals: `artifact-output-aware`, `context-doc-aware`, `external-action-boundary`, `safe-default`
+- Inputs: Bounded collector packets plus current Artist HQ, campaign, and release context.
+- Outputs: One concise Weekly Signal Brief with confidence, relevance, and concrete actions for this artist.
+
+#### Signal Scout (`signal-scout-agent`)
+
+- Description: Runs bounded weekly scans of official platform updates and selected music-industry sources.
+- Permission: `safe`; thinking: `medium`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: none
+- Sources: none
+- Optional sources: none
+- Trusted tools: `create_output`
+- Tags: `signals`, `research`, `platforms`, `music-business`, `weekly`, `cite`
+- Signals: `artifact-output-aware`, `external-action-boundary`, `safe-default`, `trusted-worker-tools`
+- Inputs: A named source lane, public URLs, lookback window, item limit, and the artist context that determines relevance.
+- Outputs: A compact, cited source packet separating confirmed changes, useful context, weak signals, and skipped sources.
 
 #### Triager (`triager`)
 
@@ -692,7 +873,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Plan, review, and run Meta, Google, Spotify ads.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
-- Skills: `meta-ads`, `google-ads`, `paid-ads-browser-operator`, `music-ad-conversion-protocol`
+- Skills: `meta-ads`, `google-ads`, `spotify-ads-manager`, `paid-ads-browser-operator`, `music-ad-conversion-protocol`
 - Sources: `meta-ads`, `google-ads`, `ads-operator`, `printing-press-social`
 - Optional sources: none
 - Trusted tools: none
@@ -785,6 +966,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Inputs: Mission/release context, promo budget, genre/reference lane, release target, streaming links or asset status, and notes.
 - Outputs: A concise playlisting inquiry email draft with subject, body, missing info, and send-readiness checklist.
 
+#### Song Director (`song-director`)
+
+- Description: Leads the Lab writing room and brings in the right songwriting specialist.
+- Permission: `safe`; thinking: `medium`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: none
+- Sources: none
+- Optional sources: none
+- Trusted tools: `message_agent`, `list_lab_songs`, `create_lab_song`, `save_lab_lyrics`
+- Tags: `lab`, `songwriting`, `direction`, `coordination`, `routing`
+- Signals: `artifact-output-aware`, `external-action-boundary`, `safe-default`, `trusted-worker-tools`
+- Inputs: Any songwriting goal, unfinished song, lyric section, reference, concept, hook problem, or request to coordinate the Lab team.
+- Outputs: Clear creative direction, the right specialist handoff, a synthesized result, and exact song updates when requested.
+
 #### Spotify Playlist Creator (`spotify-playlist-creator`)
 
 - Description: Create Spotify playlists that place your songs beside bigger artists.
@@ -798,6 +993,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Signals: `approval-capable`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
 - Inputs: Artist context, playlist theme, comparable artists/tracks, real Spotify track URLs or IDs, optional BPM/energy/key data, target length, feature ratio, visibility, and connected Spotify profile.
 - Outputs: Evidence-labeled strategy, deterministic playlist plan, title/description/cover package, approval contract, and verified Spotify playlist URL receipt.
+
+#### X Editorial (`x-editorial`)
+
+- Description: Turns the artist’s worldview and current culture into researched X posts, threads, and campaign-aware daily slates.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `hq-workers-default-visible`, `campaign-workers-default-visible`
+- Skills: `artist-x-editorial`, `artist-comms-strategist`
+- Sources: none
+- Optional sources: none
+- Trusted tools: `start_deep_research`, `list_deep_research_runs`, `get_deep_research_run`, `list_release_kit`, `get_release_kit_item`, `list_campaign_outputs`, `get_campaign_output`, `list_artist_vault`, `list_x_editorial_history`, `create_output`
+- Tags: `social`, `x`, `editorial`, `writing`, `research`, `campaigns`
+- Signals: `approval-capable`, `artifact-output-aware`, `external-action-boundary`, `trusted-worker-tools`
+- Inputs: Artist HQ Profile, Voice, Branding, beliefs, lyrics and themes, prior posts, current research, X profile, and optional active Campaign context.
+- Outputs: A cited, structured Daily X Slate with artist-specific posts, honest timing, campaign relevance, and exact review-ready candidates.
 
 ### Research
 
@@ -834,12 +1043,12 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Turns trusted YouTube channels and transcripts into weekly, evidence-backed artist intelligence.
 - Permission: `safe`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
-- Skills: `youtube-intelligence`, `youtube-research`, `customer-research`, `content-strategy`
-- Sources: `youtube-intelligence`, `youtube-research`
-- Optional sources: none
+- Skills: `youtube-intelligence`, `youtube-research`, `customer-research`, `content-strategy`, `monid`, `zero`
+- Sources: `youtube-intelligence`
+- Optional sources: `youtube-research`, `monid`, `zero`
 - Trusted tools: `create_output`
 - Tags: `youtube`, `intelligence`, `transcripts`, `research`, `reports`, `agents`
-- Signals: `artifact-output-aware`, `external-action-boundary`, `requires-source-activation`, `safe-default`, `trusted-worker-tools`
+- Signals: `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`, `requires-source-activation`, `safe-default`, `trusted-worker-tools`
 - Inputs: YouTube channels, videos, transcripts, or a weekly intelligence brief with configured trusted channels.
 - Outputs: A report Output with timestamped findings and categorized machine-readable intelligence nuggets.
 
@@ -848,12 +1057,12 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Find YouTube videos, comments, transcripts, and ideas for a campaign.
 - Permission: `safe`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
-- Skills: `youtube-research`, `create-viral-content`
-- Sources: `youtube-research`
-- Optional sources: none
+- Skills: `youtube-research`, `create-viral-content`, `monid`, `zero`
+- Sources: none
+- Optional sources: `youtube-research`, `monid`, `zero`
 - Trusted tools: none
 - Tags: `youtube`, `research`, `video`, `transcripts`, `comments`, `channels`, `seo`
-- Signals: `artifact-output-aware`, `external-action-boundary`, `requires-source-activation`, `safe-default`
+- Signals: `artifact-output-aware`, `external-action-boundary`, `optional-source-aware`, `safe-default`
 - Inputs: Campaign brief, song ethos, audience lane, YouTube topic, keyword list, channel handle, playlist URL, video ID, transcript request, comment research, or embed-candidate task.
 - Outputs: Ranked video candidates, transcript summaries, top comments, channel scans, related-video lists, campaign-adjacent cultural notes, and embed-ready recommendations.
 
@@ -875,7 +1084,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 #### Social Publisher (`social-publisher`)
 
-- Description: Plan social rollouts and route approved Finals through Artist OS, Postiz, or TryPost.
+- Description: Plan social rollouts and route approved Release Kit assets through Artist OS, Postiz, or TryPost.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
 - Skills: `social-publishing`, `instagram-growth-snapshot`
@@ -883,8 +1092,8 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Optional sources: `postiz`, `trypost`
 - Trusted tools: none
 - Tags: `social`, `posting`, `browser`, `marketing`
-- Signals: `approval-capable`, `artifact-output-aware`, `bounded-engagement-mandate`, `explicit-approval-required`, `external-action-boundary`, `memory-scope-instructions`, `optional-source-aware`, `requires-source-activation`
-- Inputs: Campaign Finals, release timing, target platforms and profiles, or a social post, reply, DM, login, or readiness request.
+- Signals: `approval-capable`, `artifact-output-aware`, `bounded-engagement-mandate`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`, `requires-source-activation`
+- Inputs: Release Kit assets, release timing, target platforms and profiles, or a social post, reply, DM, login, or readiness request.
 - Outputs: A launch-ready social rollout, validated drafts, exact approval packet, and provider or browser receipts after approved actions.
 
 #### TryPost (`trypost-agent`)

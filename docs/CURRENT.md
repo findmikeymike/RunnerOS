@@ -1,11 +1,18 @@
 ---
-status: active
+status: historical
 owner: agent
 last_verified: 2026-08-30
-source_of_truth: true
+source_of_truth: false
+superseded_by:
+  - ../HANDOFF1.md
+  - ../HANDOFF2.md
 ---
 
-# Current Status
+# Historical Status — August 30, 2026
+
+> **Superseded.** This file records the August 30 Release Kit state and is not
+> current trunk guidance. Use [HANDOFF1.md](../HANDOFF1.md) for architecture and
+> [HANDOFF2.md](../HANDOFF2.md) for verified current status.
 
 ## Snapshot
 

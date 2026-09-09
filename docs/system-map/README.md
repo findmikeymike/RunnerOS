@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-08-30
+last_verified: 2026-09-08
 source_of_truth: true
 ---
 
@@ -18,7 +18,7 @@ Files:
 Regenerate after changing starter agents, worker visibility, launch routing, Scheduled Work, Automations, Vault/Assets/Outputs/Release Kit, or permission/tool rules:
 
 ```bash
-node scripts/generate-runner-system-map.mjs
+bun run docs:system-map
 ```
 
 This map is derived from code. If it disagrees with the running app, inspect the source files listed in the generated JSON before editing docs by hand.

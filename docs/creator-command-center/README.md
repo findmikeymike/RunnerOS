@@ -63,7 +63,8 @@ Specs written but with no implementation in the tree. They live in
 
 Implementation and live acceptance tracking (spec files retained at their existing paths):
 
-- [48 Agent Task Modes And Focused Context Loading](./todo/48-agent-task-modes-spec.md) — Branding pilot implemented: persistent paired focus cards, stable active-turn context, and safe hidden starters; wider rollout and measured performance/quality gates remain
+- [48 Agent Task Modes And Focused Context Loading](./todo/48-agent-task-modes-spec.md) — shared rollout implemented across 27 agents with explicit recipes, tracked-work propagation, stable active-turn context, and bounded expansion; live provider performance/quality gates remain
+- [50 Built-in Skill Protection](./todo/50-built-in-skill-protection-spec.md) — managed cores/references, personal instructions, compatibility migration, and automated acceptance implemented; live Electron/provider acceptance remains
 
 - [38 Community Email Engine And The Community Agent](./todo/38-community-email-engine-spec.md) — sending, imports, approvals, and Community Agent implemented; live send/unsubscribe acceptance remains
 - [41 The Autonomous Website And Community Loop](./todo/41-autonomous-website-and-community-loop-spec.md) — publishing, capture, cadence, and routine implemented; live acceptance remains

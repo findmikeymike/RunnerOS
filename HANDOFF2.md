@@ -2,10 +2,20 @@
 status: active
 owner: agent
 last_verified: 2026-09-08
+verified_head: 5ce3c102db48f59dbab617a9a7b33c0f4e93de27
+verified_origin_main: 2477cc47909ba49fdb0f7a53efd914cf55420f59
 worktree: /Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os
 branch: main
 scope: state of the tree, what has been verified, what has not
 ---
+
+> September 9 landing update: the earlier snapshot below is historical. Main now
+> includes provider recovery hardening (`f4c604309`), manager/sidebar restoration
+> (`94b7cb56f`), ChatGPT Conversation support and automatic/manual connection
+> refresh (`d1fa9a604`), and validated Signals in State of Play (`1545cffb5`).
+> The voice opener is already on `origin/main`; physical voice acceptance remains
+> separate. Verify current remote state with Git. The running app was last built
+> before the Signals landing; this commit/push does not certify a new runtime build.
 
 # Handoff 2: Where Artist OS Actually Stands
 
@@ -23,6 +33,11 @@ out to make the picture look tidier.
 Trunk is `main`, in `/Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os`,
 with `origin/main` as its remote trunk. Verify the current local/remote SHA;
 this document is not proof that a later change has been pushed.
+
+At the 2026-09-08 documentation refresh, local `main` was `5ce3c102db48` and
+`origin/main` was `2477cc47909b`. The local-only delta at that earlier snapshot was the profile-aware voice
+opener `d1efa02bc` plus its merge commit. Do not call it pushed until remote state
+proves it.
 
 The root checkout at `/Users/michaelb.williams/RunnerOS` is on an old branch and
 has untracked files belonging to other agents. Do not build or land from there.
@@ -52,6 +67,28 @@ Feature checks are useful scope-specific evidence, not proof of the entire app:
 - Signals UX (`fc3a793fa`, landing `e9ab74b06`): shared setup and report navigation.
 - Messaging boundaries (landing `69dd15768`): delegated agents retain target
   capability/permission limits; internal jobs stay out of ordinary conversation lists.
+- Focus rollout (`296618103`, refresh `364ca573f`): 27 agents share compact,
+  mode-aware chat controls and installed stock recipes refresh without using the
+  user's current recipe as its own migration baseline.
+  [Rollout evidence](docs/audits/agent-focus-rollout-2026-09-08.md).
+- Helper refresh (`79b2822ae` through `1fa79c16d`): Setup Concierge and Artist OS
+  Guide discover the live capability catalog; exact stock migrations preserve
+  custom prompts and guidance.
+  [Helper evidence](docs/audits/helper-guide-refresh-2026-09-08.md).
+- Navigation/UI (`1f69a5f38` through `b01e34bbe`): top workspace controls, wider
+  sidebar, consistent section toggles, HQ-first startup, per-workspace return
+  destinations, both website workers, and the Artist Manager orb.
+- Managed built-in skills (`6a5780a30`, verified `905717c57`): private runtime
+  cores/references, bounded personal instructions, migration backups, and Runner
+  product isolation. Live Electron/provider acceptance remains open.
+  [Skill evidence](docs/audits/built-in-skill-protection-2026-09-08.md).
+- Scriptwriter (`2477cc479`): HQ/Campaign YouTube and Reels/TikTok modes with
+  bounded identity/voice/branding context and cross-video continuity rules.
+  [Scriptwriter evidence](docs/audits/scriptwriter-integration-2026-09-08.md).
+- Voice opener (local-only `d1efa02bc` at this refresh): one varied,
+  profile-aware greeting after Call becomes ready, no model round trip, and
+  user-first speech wins. Physical timing/interruption/lip-sync acceptance remains.
+  [Voice opener record](docs/tts-agent/11-mikey-call-openers.md).
 
 The user subsequently authorized installation and launch: the new canonical packaged
 app is running, and its Workers page visibly includes Website Agent. See the audit for
@@ -121,8 +158,9 @@ described as working.
 - **A signed macOS build.** No signing identity available, so notifications
   cannot be confirmed. Notification failures now log a warning naming signing
   as the likely cause, which is a diagnostic, not a fix.
-- **Packaged-app smoke testing.** A packaged build does not expose a remote
-  debugging port, so this is manual and has not been done end to end.
+- **Full packaged-app smoke testing.** The signed package was launched and its
+  Workers/Website Agent path was verified during consolidation. Provider flows,
+  migration behavior, and end-to-end product workflows remain manually unverified.
 - **macOS 12.** Dropped by Electron 44. Whether that is acceptable is a product
   call; Electron 43 keeps it and is a two-line change.
 

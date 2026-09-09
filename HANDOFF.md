@@ -1,13 +1,20 @@
 ---
-status: active
+status: historical
 owner: agent
 last_verified: 2026-08-30
-source_of_truth: true
+source_of_truth: false
+superseded_by:
+  - HANDOFF1.md
+  - HANDOFF2.md
 ---
 
-# Handoff: Artist OS Release Kit Integration
+# Historical Handoff: Artist OS Release Kit Integration
 
-## Start Here
+> **Superseded.** This preserves the August 30 Release Kit implementation
+> record. Do not use its worktree, branch, launch, or current-state directions.
+> Start with [HANDOFF1.md](HANDOFF1.md) and [HANDOFF2.md](HANDOFF2.md).
+
+## Historical Starting State
 
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/active/artist-os-release-kit`
 - Branch: `codex/artist-os-release-kit`

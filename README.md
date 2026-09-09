@@ -15,20 +15,29 @@ It must be on `main` and synchronized with `origin/main`. Do not launch Artist O
 from `/Users/michaelb.williams/RunnerOS` or an `active/` feature worktree; those
 can contain older code or a different product profile.
 
-Launch the latest main build with:
+For Michael's normal development-access app using the existing Artist OS data,
+build current main and launch the canonical Electron binary with the production
+Artist OS profile:
 
 ```bash
 cd /Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os
 git pull --ff-only
-bun run electron:dev:artist-os
+CRAFT_PRODUCT_VARIANT=artist-os CRAFT_CONFIG_DIR="$HOME/.artist-os" CRAFT_BUNDLED_ASSETS_ROOT="$PWD/apps/electron" node_modules/electron/dist/Electron.app/Contents/MacOS/Electron apps/electron
 ```
 
-Use `electron:dev:artist-os`, not the generic `electron:dev`, so the app uses the
-Artist OS product variant and `~/.artist-os-dev` profile.
+Build the affected Electron targets before launch. Use `bun run
+electron:dev:artist-os` only when an isolated `~/.artist-os-dev` profile is
+intended. Never use generic `electron:dev` for Artist OS.
 
 ## Current Creator Command Center Build
 
 Current focus: Artist HQ and Campaign execution, including the Release Kit asset architecture, Calendar/Automations scheduling, guarded social publishing, and delegated community engagement.
+
+- Focused agents: 27 multi-discipline workers now expose compact in-chat task modes with bounded skill/context loading, explicit comprehensive modes, and next-turn focus switching.
+- Setup Concierge and Artist OS Guide: current capability discovery replaces frozen roster assumptions; exact stock versions migrate without overwriting custom guidance.
+- Built-in skills: managed core/reference bodies stay private during normal app use while artists can add bounded personal instructions. Automated acceptance is complete; live provider acceptance remains.
+- Scriptwriter: an HQ/Campaign worker with YouTube and Reels/TikTok modes, grounded in Artist Profile, Voice, Branding, campaign context, and approved continuity memory.
+- Navigation: Artist OS opens at HQ Overview, remembers each workspace's last destination during use, and uses the wider sidebar/top workspace controls.
 
 - Calendars: Calendar is a first-class Plan page above Agenda. HQ owns global/HQ work; each campaign owns its execution calendar. Contextual day menus open a progressive Event or Job flow, and campaign release dates appear as `Release day` highlights.
 - Scheduled Work: HQ and Campaign calendars create typed Event, Agent Task, Workflow Run, Social Publish, and Review work; the runner tracks real completion, required Outputs, missed windows, attention states, approvals, and receipts.
@@ -55,7 +64,7 @@ Current packaging truth:
 - Mac arm64 transcription has bundled `whisper-cli` and LGPL FFmpeg with provenance under `tools/lyrics-transcriber/bin/darwin/arm64`.
 - Windows/Linux transcription builds are intentionally blocked until their platform binaries and provenance are added and smoked on those platforms.
 
-Start from [HANDOFF.md](./HANDOFF.md), [docs/CURRENT.md](./docs/CURRENT.md), [Release Kit spec 23](./docs/creator-command-center/23-release-kit-architecture-spec.md), and [docs/system-map](./docs/system-map/) before continuing this branch.
+Start from [HANDOFF1.md](./HANDOFF1.md), [HANDOFF2.md](./HANDOFF2.md), and the [Creator Command Center spec index](./docs/creator-command-center/README.md). `HANDOFF.md` and `docs/CURRENT.md` are preserved historical records, not current instructions. Regenerate the system map before relying on it.
 
 ## How it Works (Video)
 To understand what Runner does and how it works watch this video.

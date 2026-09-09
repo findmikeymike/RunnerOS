@@ -43,11 +43,16 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 ### Chat
 
 - [ ] **Live-smoke steering and Branding focus changes.** `NEXT`. Steering visibility and ordered pending updates shipped in `aa53a41ba`; persistent Branding focuses and selection hardening shipped in `25c636ba9` / `72d7791f2`. Automated/browser evidence exists; remaining acceptance is the updated Electron app and real provider paths. Multiple steers may be delivered together, not sequenced one per response. Sources: [Steering](./steer-feature.md), [Branding verification](../audits/branding-task-mode-hardening-2026-09-08.md).
-- [ ] **Complete task-mode rollout and performance gates.** `NEXT`. Branding pilot is implemented. Remaining: additional specialist/Manager routes, capability expansion, context-size and response-quality measurements. [Spec 48](../creator-command-center/todo/48-agent-task-modes-spec.md).
+- [ ] **Measure task-mode performance and finish live acceptance.** `NEXT`. The shared 27-agent rollout, specialist/Manager recipes, tracked-work propagation, and bounded capability expansion are implemented. Remaining: real-provider focus switching, context-size/latency measurements, response-quality comparison, and full-mode cost evidence. [Spec 48](../creator-command-center/todo/48-agent-task-modes-spec.md).
+- [ ] **Live-smoke Scriptwriter continuity.** `NEXT`. Registration, YouTube/Reels modes, HQ identity/voice/branding routing, protected skills, and automated verification shipped in `2477cc479`. Remaining: real-provider skill invocation, approved continuity save, format switching, and recall in a later chat. [Evidence](../audits/scriptwriter-integration-2026-09-08.md).
+
+### Voice
+
+- [ ] **Live-smoke Mikey's profile-aware opener.** `NEXT`. Local commit `d1efa02bc` adds one varied greeting after Call readiness without a model round trip; user-first speech suppresses it. Already integrated on main. Remaining: physical timing, interruption, TTS, and lip-sync acceptance. [Evidence](../tts-agent/11-mikey-call-openers.md).
 
 ### App Installation
 
-- [x] **Install and launch the verified main update.** User-authorized September8. The signed update is running from `release-artist-os/mac-arm64/Artist OS.app`; rendered Workers and Website Agent visibility confirmed. The old app is retained for rollback. [Installation evidence](../audits/artist-os-consolidation-2026-09-08.md).
+- [x] **Install and launch the verified consolidation update.** User-authorized September 8. The signed package launched and rendered Workers/Website Agent successfully; ongoing work then returned to the canonical unpackaged development-access app with the existing `~/.artist-os` profile. The old package is retained for rollback. [Installation evidence](../audits/artist-os-consolidation-2026-09-08.md).
 
 ### Campaign Lifecycle
 
@@ -60,7 +65,8 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 ### System Awareness
 
 - [ ] **Finish HNIC capability awareness.** Implemented: live built-in/user agent catalog routing, TryPost/Postiz visibility, and HNIC-only typed Calendar/Automation scheduling. Remaining: normalize readiness, required-source, approval, and output metadata for every agent; add drift tests; and smoke routing across unavailable/partially configured agents.
-- [ ] **Finish Setup Concierge / Artist OS Guide awareness.** Implemented: provider-agent connection paths, encrypted source guidance, Keys cards, and current service-key docs. Remaining: one verified walkthrough covering all agents, browser accounts, workflows, Outputs, Calendar, Automations, Team Mode, Creative Lab, recovery, and dependency locations.
+- [ ] **Finish Setup Concierge / Artist OS Guide live acceptance.** Implemented: live catalog discovery, current feature guidance, bounded reference loading, and exact-stock migration that preserves customization. Remaining: a real Electron walkthrough covering accounts, workflows, Outputs, Calendar, Automations, Team Mode, Creative Lab, recovery, and dependency locations. [Evidence](../audits/helper-guide-refresh-2026-09-08.md).
+- [ ] **Live-smoke managed built-in skills.** Automated migration, privacy, personal-instruction, product-boundary, browser-control, typecheck, build, and suite acceptance passed. Remaining: canonical Electron profile migration plus actual Claude/Pi/provider execution and recovery proof. [Evidence](../audits/built-in-skill-protection-2026-09-08.md).
 - [ ] **Automate capability-catalog freshness.** Derive HNIC and Setup guidance from agent/source metadata where practical, add drift tests, and avoid manually copying the roster into multiple prompts/docs.
 - [ ] **Finish existing-install migration proof.** Implemented migration coverage for new provider agents/sources, Social Publisher guidance, Scheduled Work ownership, HNIC prompts, and semantic intent. Remaining: packaged upgrade smoke from a representative older install without overwriting user customizations.
 
@@ -135,3 +141,9 @@ Exact consolidation, remote state, and fresh combined evidence are in the
 - [x] Shared Signals setup and clear report navigation (`fc3a793fa`, main `e9ab74b06`).
 - [x] Recovered delegated-agent and hidden-session boundaries (main `69dd15768`).
 - [x] CI config-mock isolation and bounded native watcher event assertions (`cab2ecde5`, `26f498ca6`); remote rerun tracked in consolidation audit.
+- [x] Shared focus recipes and chat controls across 27 agents (`296618103`, refresh `364ca573f`); live provider measurements remain above.
+- [x] Current Setup Concierge and Artist OS Guide with safe stock migration (`79b2822ae` through `1fa79c16d`).
+- [x] HQ-first startup, per-workspace return routing, workspace/sidebar polish, both website workers, and Artist Manager orb (`1f69a5f38` through `b01e34bbe`).
+- [x] Managed built-in skill cores/references and personal instructions (`6a5780a30`, verified `905717c57`); live provider acceptance remains above.
+- [x] Scriptwriter with YouTube/Reels modes and bounded continuity context (`2477cc479`); live continuity acceptance remains above.
+- [x] Profile-aware, no-model Mikey call opener committed locally (`d1efa02bc`); physical acceptance remains above.

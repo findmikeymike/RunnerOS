@@ -31,6 +31,29 @@ are not canceled by deleting a local campaign. The confirmation explains this.
 
 ## Verification and runtime status
 
+### Post-consolidation current-main addendum
+
+The original consolidation evidence below remains bound to its recorded SHAs.
+Subsequent pushed main work is tracked by feature-specific evidence rather than
+retroactively changing those historical totals. At the September 8 documentation
+refresh, local main was `5ce3c102db48` and `origin/main` was `2477cc47909b`.
+
+- Focus recipes/chat controls expanded across 27 agents in `296618103` and the
+  installed-recipe refresh was corrected in `364ca573f`.
+- Setup Concierge and Artist OS Guide refresh landed from `79b2822ae` through
+  `1fa79c16d`; its final combined suite recorded 9,163 passes, zero failures, one skip.
+- Workspace/sidebar/HQ navigation polish landed from `1f69a5f38` through
+  `b01e34bbe`, including HQ-first startup and per-workspace return routing.
+- Managed built-in skill protection landed in `6a5780a30` and was verified in
+  `905717c57`; live Electron/provider migration remains open.
+- Scriptwriter landed in `2477cc479`; its latest full local suite recorded 9,219
+  passes, zero failures, ten skips, plus Electron/server typechecks and main/renderer
+  builds. Live provider invocation and continuity recall remain open.
+- Profile-aware no-model voice openers are committed locally in `d1efa02bc`;
+  physical timing/interruption/lip-sync acceptance and remote push remain open.
+- Remote CI green evidence below remains tied to `b408373ba`; matching current
+  pushed SHA proves only that historical CI result, not the current local-only delta.
+
 - Campaign plus current main: **8,986 passed, 0 failed, 1 skipped**, 21 test processes.
 - Signals caught up after campaign landing: **8,986 passed, 0 failed, 1 skipped**, 21 processes.
 - Integrated Signals browser fixtures: **42 setup + 13 report checks passed**.

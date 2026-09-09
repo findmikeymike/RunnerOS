@@ -1,7 +1,8 @@
 {
-  "generatedAt": "2026-08-30",
+  "generatedAt": "2026-09-08",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
+    "scriptwriterAgent": "packages/shared/src/agent-definitions/scriptwriter.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
     "systemSkills": "packages/shared/src/skills/system.ts",
     "starterSkills": "packages/shared/src/skills/starter-templates.ts",
@@ -39,35 +40,42 @@
     "labWorkspaceHome": "apps/electron/src/renderer/components/app-shell/LabWorkspaceHome.tsx"
   },
   "summary": {
-    "agentCount": 49,
+    "agentCount": 61,
     "domains": {
-      "Command": 3,
-      "Content Creation": 9,
-      "Creative": 6,
+      "Command": 5,
+      "Content Creation": 10,
+      "Creative": 7,
       "Merch": 2,
       "Operators": 2,
-      "Other Workers": 6,
-      "Outreach": 5,
-      "Promotion": 9,
+      "Other Workers": 9,
+      "Outreach": 8,
+      "Promotion": 11,
       "Research": 4,
       "Socials": 3
     },
     "permissionModes": {
-      "ask": 41,
-      "safe": 8
+      "ask": 49,
+      "safe": 12
     },
     "hiddenWorkerHomeCount": 5,
     "hqDefaultWorkerSlugs": [
       "branding-agent",
+      "scriptwriter",
       "world-builder",
+      "site-builder",
       "college-radio-agent",
-      "spotify-playlist-creator"
+      "spotify-playlist-creator",
+      "x-editorial"
     ],
     "campaignDefaultWorkerSlugs": [
       "branding-agent",
+      "scriptwriter",
       "world-builder",
+      "site-builder",
       "college-radio-agent",
       "spotify-playlist-creator",
+      "x-editorial",
+      "artist-os-release-manager",
       "content-genius",
       "scroll-stopper",
       "anticipation-director",
@@ -90,24 +98,74 @@
       "reference-master",
       "record-doctor"
     ],
-    "workflowCount": 7,
+    "workflowCount": 12,
     "sharedIntelPromptWired": true,
     "finalsPromotionWired": true,
     "releaseKitWired": true,
     "scheduledWorkWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 127,
-    "bundledSkillCount": 91,
-    "systemSkillCount": 7,
-    "userGlobalSkillCount": 127,
-    "knownSourceCount": 27,
+    "knownSkillCount": 173,
+    "bundledSkillCount": 109,
+    "systemSkillCount": 8,
+    "userGlobalSkillCount": 173,
+    "knownSourceCount": 28,
     "missingSkills": [],
     "machineLocalOnlySkills": [],
     "missingSources": [],
     "agentsWithMissingRefs": []
   },
   "workflows": [
+    {
+      "slug": "social-comment-replies",
+      "name": "Social Comment Replies",
+      "description": "Inspect and answer eligible public comments and mentions across every verified artist social profile.",
+      "triggerType": "manual",
+      "inputCount": 2,
+      "stepCount": 1,
+      "agentRefs": [
+        "social-publisher"
+      ],
+      "missingAgentRefs": [],
+      "steps": [
+        {
+          "id": "reply",
+          "agent": "social-publisher"
+        }
+      ]
+    },
+    {
+      "slug": "weekly-signal-scan",
+      "name": "Weekly Signal Scan",
+      "description": "Collect YouTube, official platform, and music-industry intelligence, then synthesize one artist-specific weekly brief.",
+      "triggerType": "manual",
+      "inputCount": 2,
+      "stepCount": 4,
+      "agentRefs": [
+        "signal-analyst-agent",
+        "signal-scout-agent",
+        "youtube-intelligence-agent"
+      ],
+      "missingAgentRefs": [],
+      "steps": [
+        {
+          "id": "youtube-intel",
+          "agent": "youtube-intelligence-agent"
+        },
+        {
+          "id": "platform-watch",
+          "agent": "signal-scout-agent"
+        },
+        {
+          "id": "industry-desk",
+          "agent": "signal-scout-agent"
+        },
+        {
+          "id": "synthesize",
+          "agent": "signal-analyst-agent"
+        }
+      ]
+    },
     {
       "slug": "weekly-content-pipeline",
       "name": "Weekly Content Pipeline",
@@ -287,6 +345,75 @@
           "agent": "print-agent"
         }
       ]
+    },
+    {
+      "slug": "weekly-world-scan",
+      "name": "Your World Signal Scan",
+      "description": "Your World Signal Scan with host-scoped evidence and durable per-video coverage.",
+      "triggerType": "manual",
+      "inputCount": 6,
+      "stepCount": 2,
+      "agentRefs": [
+        "signal-analyst-agent",
+        "youtube-intelligence-agent"
+      ],
+      "missingAgentRefs": [],
+      "steps": [
+        {
+          "id": "youtube-intel",
+          "agent": "youtube-intelligence-agent"
+        },
+        {
+          "id": "synthesize",
+          "agent": "signal-analyst-agent"
+        }
+      ]
+    },
+    {
+      "slug": "signal-video-review",
+      "name": "Signal Video Review",
+      "description": "Signal Video Review with host-scoped evidence and durable per-video coverage.",
+      "triggerType": "manual",
+      "inputCount": 6,
+      "stepCount": 2,
+      "agentRefs": [
+        "signal-analyst-agent",
+        "youtube-intelligence-agent"
+      ],
+      "missingAgentRefs": [],
+      "steps": [
+        {
+          "id": "youtube-intel",
+          "agent": "youtube-intelligence-agent"
+        },
+        {
+          "id": "synthesize",
+          "agent": "signal-analyst-agent"
+        }
+      ]
+    },
+    {
+      "slug": "signals-industry-scan",
+      "name": "Industry Signal Scan",
+      "description": "Industry Signal Scan with host-scoped evidence and durable per-video coverage.",
+      "triggerType": "manual",
+      "inputCount": 6,
+      "stepCount": 2,
+      "agentRefs": [
+        "signal-analyst-agent",
+        "youtube-intelligence-agent"
+      ],
+      "missingAgentRefs": [],
+      "steps": [
+        {
+          "id": "youtube-intel",
+          "agent": "youtube-intelligence-agent"
+        },
+        {
+          "id": "synthesize",
+          "agent": "signal-analyst-agent"
+        }
+      ]
     }
   ],
   "scheduledWork": {
@@ -312,8 +439,8 @@
   "inferredRuntimeRules": [
     "Saved agents live in the global library and are activated per workspace.",
     "Workers page shows active agents, except system agents and hidden worker-home slugs.",
-    "Artist HQ default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator.",
-    "Campaign default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator, content-genius, scroll-stopper, anticipation-director, content-director, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
+    "Artist HQ default workers are currently branding-agent, scriptwriter, world-builder, site-builder, college-radio-agent, spotify-playlist-creator, x-editorial.",
+    "Campaign default workers are currently branding-agent, scriptwriter, world-builder, site-builder, college-radio-agent, spotify-playlist-creator, x-editorial, artist-os-release-manager, content-genius, scroll-stopper, anticipation-director, content-director, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
     "Lab workspaces can pass defaultVisibleSlugs, currently the-excavator, reverse-magic, hooker, legendary-writer, reference-master, record-doctor.",
     "run-agent drops missing skills/sources before session creation and includes a launch receipt.",
     "Concierge receives broad workspace context and an active-agent capability catalog for routing.",
@@ -334,8 +461,48 @@
   ],
   "agents": [
     {
+      "slug": "anything-agent",
+      "name": "Anything Agent",
+      "description": "Connects to thousands of tools, apps, and services to help you do almost anything — a Swiss Army knife for workflows.",
+      "domain": "Command",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "monid",
+        "zero"
+      ],
+      "sources": [],
+      "optionalSources": [
+        "monid",
+        "zero"
+      ],
+      "trustedWorkerTools": [],
+      "visualAgent": false,
+      "tags": [
+        "command",
+        "monid",
+        "zero",
+        "api",
+        "fallback",
+        "external-tools",
+        "paid"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "explicit-approval-required",
+        "external-action-boundary",
+        "memory-scope-instructions",
+        "optional-source-aware"
+      ],
+      "inputs": "A specific capability gap, desired result, constraints, sensitive-data limits, and any required external side effect.",
+      "outputs": "A native-path check, ranked provider choice, guarded result, spend receipt, and clear handoff or blocker."
+    },
+    {
       "slug": "concierge",
-      "name": "HNIC",
+      "name": "Artist Manager",
       "description": "Main work chat. Routes goals to the right workers, skills, automations, and workflows.",
       "domain": "Command",
       "permissionMode": "safe",
@@ -344,6 +511,7 @@
         "agent-creator",
         "automation-creator",
         "workflow-creator",
+        "skill-scout",
         "source-recipe",
         "artist-manager-operating-system",
         "artist-os-guide",
@@ -388,6 +556,7 @@
         "agent-creator",
         "automation-creator",
         "workflow-creator",
+        "skill-scout",
         "source-recipe"
       ],
       "sources": [],
@@ -409,6 +578,57 @@
       ],
       "inputs": "A goal or outcome you want to achieve.",
       "outputs": "A step-by-step plan with named owners, plus the executed result."
+    },
+    {
+      "slug": "artist-os-release-manager",
+      "name": "Release Manager",
+      "description": "Prepare and verify distributor delivery, pre-save links, metadata, rights and splits, DSP pitches, and final release QA.",
+      "domain": "Command",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "artist-os-release-operations",
+        "artist-os-rights-and-credits",
+        "artist-os-release-package-qa",
+        "artist-os-dsp-editorial-pitch"
+      ],
+      "sources": [],
+      "optionalSources": [
+        "printing-press-social",
+        "google-drive",
+        "gmail"
+      ],
+      "trustedWorkerTools": [
+        "list_release_kit",
+        "get_release_kit_item",
+        "list_campaign_assets",
+        "list_campaign_outputs",
+        "get_campaign_output",
+        "list_artist_vault",
+        "get_asset_record",
+        "create_output"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "release-ops",
+        "distribution",
+        "metadata",
+        "rights",
+        "qa"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "external-action-boundary",
+        "optional-source-aware",
+        "trusted-worker-tools"
+      ],
+      "inputs": "Campaign brief and date, Release Kit, Campaign Assets and Outputs, artist profile, master and artwork, contributors, rights facts, distributor or DSP account, and the exact release-ready item.",
+      "outputs": "Release delivery packets, metadata sheets, rights and splits packets, pre-save handoffs, DSP pitches, final QA reports, approval packets, and verified provider receipts when connected."
     },
     {
       "slug": "setup-concierge",
@@ -437,9 +657,9 @@
         "workspace-workers-when-active"
       ],
       "riskSignals": [
+        "agent-catalog-aware",
         "approval-capable",
         "artifact-output-aware",
-        "explicit-approval-required",
         "external-action-boundary"
       ],
       "inputs": "A setup goal, pasted credential, app-feature question, broken connection, or “what do I do next?” request.",
@@ -548,7 +768,7 @@
     {
       "slug": "lottie-animation-agent",
       "name": "Lottie Animation Agent",
-      "description": "Create lightweight web and app animations.",
+      "description": "Creates, edits, previews, and verifies production-ready Lottie JSON animations using the official diffusionstudio/lottie Skia player harness.",
       "domain": "Content Creation",
       "permissionMode": "ask",
       "thinkingLevel": "high",
@@ -631,7 +851,9 @@
       "permissionMode": "ask",
       "thinkingLevel": "high",
       "skills": [
-        "raw-video-editor"
+        "raw-video-editor",
+        "raw-video-edit-direction",
+        "social-video-repurposing"
       ],
       "sources": [
         "raw-video-editor",
@@ -659,8 +881,48 @@
         "external-action-boundary",
         "requires-source-activation"
       ],
-      "inputs": "A folder of existing video/audio files, desired platform/aspect ratio, target runtime, pacing direction, must-keep moments, must-cut moments, caption style, and brand/editing notes.",
-      "outputs": "An edit folder with inventory, packed transcript, EDL, preview/final MP4 paths, self-check notes, and clear limits when source media or transcription is missing."
+      "inputs": "Existing video/audio files, desired platform/aspect ratio, target runtime, pacing direction, must-keep and must-cut moments, caption style, brand/editing notes, and an optional clean song master for performance sync.",
+      "outputs": "An edit folder with inventory, packed transcript, EDL, preview/final MP4 paths, optional master-sync report and synchronized preview, self-check notes, and clear limits when source media or transcription is missing."
+    },
+    {
+      "slug": "scriptwriter",
+      "name": "Scriptwriter",
+      "description": "Write YouTube, Reels, and TikTok scripts that carry your voice, artist world, and continuity from one video to the next.",
+      "domain": "Content Creation",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "artist-script-dna",
+        "youtube-camera-script",
+        "reels-tiktok-script"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "create_output"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "creative",
+        "content",
+        "scripts",
+        "youtube",
+        "shortform"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "hq-workers-default-visible",
+        "campaign-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "external-action-boundary",
+        "memory-scope-instructions",
+        "trusted-worker-tools"
+      ],
+      "inputs": "An idea or draft, intended audience, platform and duration, approved artist voice and world, campaign context, references, or earlier scripts.",
+      "outputs": "Complete spoken scripts, opening options when useful, filming and delivery notes, honest runtime estimates, and an approved continuity record for future videos."
     },
     {
       "slug": "scroll-stopper",
@@ -787,11 +1049,13 @@
         "artist-typography-taste",
         "artist-visual-world-director",
         "ad-creative",
+        "monid",
         "zero"
       ],
       "sources": [],
       "optionalSources": [
         "media-generation",
+        "monid",
         "zero"
       ],
       "trustedWorkerTools": [
@@ -823,6 +1087,43 @@
       ],
       "inputs": "Artist HQ Profile, Voice, Branding, themes, similar artists, music style, song/release notes, lyrics, references, approved artist photos and face references, cover/merch mode, format, and generation approval.",
       "outputs": "Taste-led visual concepts, style-lane recommendations, album/single art prompts, merch graphic specs, reference-image requirements, typography/layout direction, SVG/PNG artwork composition exports, Canvas-visible artifacts, anti-slop checks, and approved image-generation/layout briefs."
+    },
+    {
+      "slug": "catalog-royalty-agent",
+      "name": "Catalog & Royalties",
+      "description": "Find likely royalty-registration gaps across PROs, MLC, SoundExchange, and copyright records, then prepare filing packets.",
+      "domain": "Creative",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "catalog-royalty-reconciliation"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "create_output"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "rights",
+        "royalties",
+        "catalog",
+        "bmi",
+        "soundexchange",
+        "mlc"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "external-action-boundary",
+        "memory-scope-instructions",
+        "trusted-worker-tools"
+      ],
+      "inputs": "Distributor exports, manual catalog rows, split sheets, Artist HQ rights data, and artist-confirmed BMI/ASCAP/SESAC, MLC, SoundExchange, or copyright evidence.",
+      "outputs": "A confirmed catalog, registration-status matrix, prioritized probable-gap list, evidence ledger, and blocked-or-ready filing packets."
     },
     {
       "slug": "content-genius",
@@ -931,7 +1232,7 @@
     {
       "slug": "record-doctor",
       "name": "Record Doctor",
-      "description": "Have your song reviewed by a Grammy-winning, multi-platinum producer and songwriter for an unbiased, credible expert perspective before release.",
+      "description": "Have your song reviewed by a Grammy-winning, multi-platinum producer and songwriter for an unbiased, credible perspective before release.",
       "domain": "Creative",
       "permissionMode": "ask",
       "thinkingLevel": "high",
@@ -1180,6 +1481,44 @@
       "outputs": "Hook candidates, chorus punch-ups, title-line options, diagnosis, setup fixes, and singability notes."
     },
     {
+      "slug": "legal-agent",
+      "name": "Legal & Deals",
+      "description": "Reviews music agreements, explains the real deal in plain English, and prepares negotiation priorities and questions for counsel.",
+      "domain": "Other Workers",
+      "permissionMode": "safe",
+      "thinkingLevel": "high",
+      "skills": [
+        "music-contract-review"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "create_output"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "legal",
+        "contracts",
+        "music-business",
+        "deals",
+        "negotiation",
+        "rights"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "artifact-output-aware",
+        "context-doc-aware",
+        "external-action-boundary",
+        "memory-scope-instructions",
+        "safe-default",
+        "trusted-worker-tools"
+      ],
+      "inputs": "A music-business agreement or readable contract text, the artist party/role, draft or signed status, deal context, and supplied exhibits or side letters.",
+      "outputs": "An evidence-backed deal brief, key-term table, missing protections, prioritized negotiation plan, suggested language, and questions for qualified music counsel."
+    },
+    {
       "slug": "open-slide-agent",
       "name": "Open Slide",
       "description": "Create clean slide decks and export them to HTML or PDF.",
@@ -1289,6 +1628,51 @@
       "outputs": "A new original song draft built from the reference psychology, with section notes and annotation-bait reasoning."
     },
     {
+      "slug": "site-builder",
+      "name": "Site Builder",
+      "description": "Builds and renders the artist website under website/: content, templates, theme. Builds, audits, and previews. Never publishes.",
+      "domain": "Other Workers",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "artist-website-builder",
+        "artist-website-playbook"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "website_get_manifest",
+        "website_create",
+        "website_set_content",
+        "website_build",
+        "website_preview",
+        "website_seo_audit"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "website",
+        "html",
+        "css",
+        "build",
+        "seo",
+        "preview"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "hq-workers-default-visible",
+        "campaign-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "external-action-boundary",
+        "memory-scope-instructions",
+        "trusted-worker-tools"
+      ],
+      "inputs": "A bounded brief: a new site, a page, a section, a theme change, new releases or shows, or a bug on the site.",
+      "outputs": "Edited content and templates under website/, a passing build with its hash and audit score, and a preview in the canvas."
+    },
+    {
       "slug": "the-excavator",
       "name": "The Excavator",
       "description": "Finds the buried song idea when the writer feels blocked or generic.",
@@ -1324,6 +1708,53 @@
       ],
       "inputs": "Writer block, loose life details, a flat draft, a vague theme, or a need for a song prompt.",
       "outputs": "One-question-at-a-time digs, song titles, first lines, charged concepts, and follow-up doors for writing."
+    },
+    {
+      "slug": "website-agent",
+      "name": "Website Agent",
+      "description": "Runs the artist website: keeps it current with releases and shows, pulls signups into the fan list, and watches search health.",
+      "domain": "Other Workers",
+      "permissionMode": "ask",
+      "thinkingLevel": "medium",
+      "skills": [
+        "artist-website-playbook"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "website_get_manifest",
+        "website_status",
+        "website_history",
+        "website_seo_audit",
+        "website_set_content",
+        "website_build",
+        "website_preview",
+        "website_capture_sync",
+        "website_deploy",
+        "website_domain_check",
+        "website_inspect_external",
+        "browser_tool"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "website",
+        "site",
+        "publish",
+        "seo",
+        "signup",
+        "routine"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "external-action-boundary",
+        "memory-scope-instructions",
+        "trusted-worker-tools"
+      ],
+      "inputs": "A goal: bring the site up to date, add a release or show, publish, roll back, connect a domain, or check how it is doing.",
+      "outputs": "A published or preview-ready site change with its URL, a plain summary of what changed and why, or a readout of what the site needs."
     },
     {
       "slug": "writer",
@@ -1423,8 +1854,51 @@
         "explicit-approval-required",
         "external-action-boundary"
       ],
-      "inputs": "Artist HQ Profile, Voice, Branding cards, Intel reports, release/campaign context, audience segment, offer/news, links, facts, approvals, and send channel.",
+      "inputs": "Artist HQ Profile, Voice, Branding cards, Artist Network people and emails, Intel reports, release/campaign context, audience segment, offer/news, links, facts, approvals, and send channel.",
       "outputs": "Fan emails, newsletters, SMS/community updates, press pitches, collaborator asks, internal updates, send-readiness checklists, and approval packets."
+    },
+    {
+      "slug": "community-agent",
+      "name": "Community Agent",
+      "description": "Runs the artist's fan list: decides what is actually worth an email, drafts it in their voice, keeps segments honest, and protects the list from being talked to death.",
+      "domain": "Outreach",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "artist-community-craft"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "community_stats",
+        "community_list_contacts",
+        "community_job_status",
+        "community_draft_email",
+        "community_request_send",
+        "community_tag_contacts",
+        "list_workspace_context",
+        "get_workspace_context"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "community",
+        "email",
+        "fans",
+        "newsletter",
+        "retention",
+        "growth"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "external-action-boundary",
+        "memory-scope-instructions",
+        "trusted-worker-tools"
+      ],
+      "inputs": "A thing that happened, a release or show coming up, or an open question about the list.",
+      "outputs": "A drafted email waiting for your approval, an honest \"not worth sending\" with the reason, or a readout of the list."
     },
     {
       "slug": "industry-hunter",
@@ -1435,12 +1909,14 @@
       "thinkingLevel": "high",
       "skills": [
         "artist-industry-hunter",
+        "monid",
         "zero"
       ],
-      "sources": [
+      "sources": [],
+      "optionalSources": [
+        "monid",
         "zero"
       ],
-      "optionalSources": [],
       "trustedWorkerTools": [
         "start_deep_research",
         "list_deep_research_runs",
@@ -1455,6 +1931,7 @@
         "labels",
         "research",
         "artist-development",
+        "monid",
         "zero"
       ],
       "launchSurfaces": [
@@ -1464,7 +1941,7 @@
       "riskSignals": [
         "artifact-output-aware",
         "external-action-boundary",
-        "requires-source-activation",
+        "optional-source-aware",
         "safe-default",
         "trusted-worker-tools"
       ],
@@ -1474,20 +1951,21 @@
     {
       "slug": "outreach-agent",
       "name": "Outreach Agent",
-      "description": "Find anyone's email via LinkedIn URL, research the person for personalized outreach, draft and send high rapport email.",
+      "description": "Use saved Artist Network contacts or find an email from a LinkedIn URL, research the person, and draft approval-gated high-rapport outreach.",
       "domain": "Outreach",
       "permissionMode": "ask",
       "thinkingLevel": "high",
       "skills": [
+        "monid",
         "zero",
         "artist-comms-strategist",
         "magnetic-outreach"
       ],
-      "sources": [
-        "zero"
-      ],
+      "sources": [],
       "optionalSources": [
-        "gmail"
+        "gmail",
+        "monid",
+        "zero"
       ],
       "trustedWorkerTools": [],
       "visualAgent": false,
@@ -1498,6 +1976,7 @@
         "prospecting",
         "rapport",
         "gmail",
+        "monid",
         "zero"
       ],
       "launchSurfaces": [
@@ -1508,11 +1987,76 @@
         "artifact-output-aware",
         "explicit-approval-required",
         "external-action-boundary",
-        "optional-source-aware",
-        "requires-source-activation"
+        "optional-source-aware"
       ],
-      "inputs": "Person name, LinkedIn profile URL, outreach goal, relationship context, offer/ask, sender identity, artist/team context, and approval to send.",
+      "inputs": "Saved Artist Network person/email or person name and LinkedIn profile URL, outreach goal, relationship context, offer/ask, sender identity, artist/team context, and approval to send.",
       "outputs": "Confirmed email lookup result, prospect intel brief, hook/angle options, polished outreach draft, subject lines, copy-paste packet, approval checklist, and Gmail send receipt when connected and approved."
+    },
+    {
+      "slug": "signal-analyst-agent",
+      "name": "Signal Analyst",
+      "description": "Connects weekly YouTube, platform, and industry findings into one artist-specific Signal Brief.",
+      "domain": "Outreach",
+      "permissionMode": "safe",
+      "thinkingLevel": "high",
+      "skills": [],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [],
+      "visualAgent": false,
+      "tags": [
+        "signals",
+        "analysis",
+        "synthesis",
+        "artist-strategy",
+        "weekly",
+        "reports"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "artifact-output-aware",
+        "context-doc-aware",
+        "external-action-boundary",
+        "safe-default"
+      ],
+      "inputs": "Bounded collector packets plus current Artist HQ, campaign, and release context.",
+      "outputs": "One concise Weekly Signal Brief with confidence, relevance, and concrete actions for this artist."
+    },
+    {
+      "slug": "signal-scout-agent",
+      "name": "Signal Scout",
+      "description": "Runs bounded weekly scans of official platform updates and selected music-industry sources.",
+      "domain": "Outreach",
+      "permissionMode": "safe",
+      "thinkingLevel": "medium",
+      "skills": [],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "create_output"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "signals",
+        "research",
+        "platforms",
+        "music-business",
+        "weekly",
+        "cite"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "artifact-output-aware",
+        "external-action-boundary",
+        "safe-default",
+        "trusted-worker-tools"
+      ],
+      "inputs": "A named source lane, public URLs, lookback window, item limit, and the artist context that determines relevance.",
+      "outputs": "A compact, cited source packet separating confirmed changes, useful context, weak signals, and skipped sources."
     },
     {
       "slug": "triager",
@@ -1592,6 +2136,7 @@
       "skills": [
         "meta-ads",
         "google-ads",
+        "spotify-ads-manager",
         "paid-ads-browser-operator",
         "music-ad-conversion-protocol"
       ],
@@ -1827,6 +2372,42 @@
       "outputs": "A concise playlisting inquiry email draft with subject, body, missing info, and send-readiness checklist."
     },
     {
+      "slug": "song-director",
+      "name": "Song Director",
+      "description": "Leads the Lab writing room and brings in the right songwriting specialist.",
+      "domain": "Promotion",
+      "permissionMode": "safe",
+      "thinkingLevel": "medium",
+      "skills": [],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "message_agent",
+        "list_lab_songs",
+        "create_lab_song",
+        "save_lab_lyrics"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "lab",
+        "songwriting",
+        "direction",
+        "coordination",
+        "routing"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "artifact-output-aware",
+        "external-action-boundary",
+        "safe-default",
+        "trusted-worker-tools"
+      ],
+      "inputs": "Any songwriting goal, unfinished song, lyric section, reference, concept, hook problem, or request to coordinate the Lab team.",
+      "outputs": "Clear creative direction, the right specialist handoff, a synthesized result, and exact song updates when requested."
+    },
+    {
       "slug": "spotify-playlist-creator",
       "name": "Spotify Playlist Creator",
       "description": "Create Spotify playlists that place your songs beside bigger artists.",
@@ -1862,6 +2443,54 @@
       ],
       "inputs": "Artist context, playlist theme, comparable artists/tracks, real Spotify track URLs or IDs, optional BPM/energy/key data, target length, feature ratio, visibility, and connected Spotify profile.",
       "outputs": "Evidence-labeled strategy, deterministic playlist plan, title/description/cover package, approval contract, and verified Spotify playlist URL receipt."
+    },
+    {
+      "slug": "x-editorial",
+      "name": "X Editorial",
+      "description": "Turns the artist’s worldview and current culture into researched X posts, threads, and campaign-aware daily slates.",
+      "domain": "Promotion",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "artist-x-editorial",
+        "artist-comms-strategist"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "start_deep_research",
+        "list_deep_research_runs",
+        "get_deep_research_run",
+        "list_release_kit",
+        "get_release_kit_item",
+        "list_campaign_outputs",
+        "get_campaign_output",
+        "list_artist_vault",
+        "list_x_editorial_history",
+        "create_output"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "social",
+        "x",
+        "editorial",
+        "writing",
+        "research",
+        "campaigns"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "hq-workers-default-visible",
+        "campaign-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "external-action-boundary",
+        "trusted-worker-tools"
+      ],
+      "inputs": "Artist HQ Profile, Voice, Branding, beliefs, lyrics and themes, prior posts, current research, X profile, and optional active Campaign context.",
+      "outputs": "A cited, structured Daily X Slate with artist-specific posts, honest timing, campaign relevance, and exact review-ready candidates."
     },
     {
       "slug": "researcher",
@@ -1938,13 +2567,18 @@
         "youtube-intelligence",
         "youtube-research",
         "customer-research",
-        "content-strategy"
+        "content-strategy",
+        "monid",
+        "zero"
       ],
       "sources": [
-        "youtube-intelligence",
-        "youtube-research"
+        "youtube-intelligence"
       ],
-      "optionalSources": [],
+      "optionalSources": [
+        "youtube-research",
+        "monid",
+        "zero"
+      ],
       "trustedWorkerTools": [
         "create_output"
       ],
@@ -1962,7 +2596,9 @@
       ],
       "riskSignals": [
         "artifact-output-aware",
+        "explicit-approval-required",
         "external-action-boundary",
+        "optional-source-aware",
         "requires-source-activation",
         "safe-default",
         "trusted-worker-tools"
@@ -1979,12 +2615,16 @@
       "thinkingLevel": "high",
       "skills": [
         "youtube-research",
-        "create-viral-content"
+        "create-viral-content",
+        "monid",
+        "zero"
       ],
-      "sources": [
-        "youtube-research"
+      "sources": [],
+      "optionalSources": [
+        "youtube-research",
+        "monid",
+        "zero"
       ],
-      "optionalSources": [],
       "trustedWorkerTools": [],
       "visualAgent": false,
       "tags": [
@@ -2002,7 +2642,7 @@
       "riskSignals": [
         "artifact-output-aware",
         "external-action-boundary",
-        "requires-source-activation",
+        "optional-source-aware",
         "safe-default"
       ],
       "inputs": "Campaign brief, song ethos, audience lane, YouTube topic, keyword list, channel handle, playlist URL, video ID, transcript request, comment research, or embed-candidate task.",
@@ -2046,7 +2686,7 @@
     {
       "slug": "social-publisher",
       "name": "Social Publisher",
-      "description": "Plan social rollouts and route approved Finals through Artist OS, Postiz, or TryPost.",
+      "description": "Plan social rollouts and route approved Release Kit assets through Artist OS, Postiz, or TryPost.",
       "domain": "Socials",
       "permissionMode": "ask",
       "thinkingLevel": "high",
@@ -2078,11 +2718,10 @@
         "bounded-engagement-mandate",
         "explicit-approval-required",
         "external-action-boundary",
-        "memory-scope-instructions",
         "optional-source-aware",
         "requires-source-activation"
       ],
-      "inputs": "Campaign Finals, release timing, target platforms and profiles, or a social post, reply, DM, login, or readiness request.",
+      "inputs": "Release Kit assets, release timing, target platforms and profiles, or a social post, reply, DM, login, or readiness request.",
       "outputs": "A launch-ready social rollout, validated drafts, exact approval packet, and provider or browser receipts after approved actions."
     },
     {

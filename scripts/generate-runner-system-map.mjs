@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 
 const ROOT = process.cwd();
 const OUT_DIR = join(ROOT, 'docs', 'system-map');
 const STARTER_AGENTS_FILE = join(ROOT, 'packages/shared/src/agent-definitions/starter-templates.ts');
+const SCRIPTWRITER_AGENT_FILE = join(ROOT, 'packages/shared/src/agent-definitions/scriptwriter.ts');
 const AGENT_TYPES_FILE = join(ROOT, 'packages/shared/src/agent-definitions/types.ts');
 const SYSTEM_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/system.ts');
 const STARTER_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/starter-templates.ts');
@@ -45,7 +47,8 @@ const ELECTRON_MAIN_FILE = join(ROOT, 'apps/electron/src/main/index.ts');
 const MISSION_BRIEF_FILE = join(ROOT, 'apps/electron/src/renderer/lib/mission-brief.ts');
 const USER_GLOBAL_SKILLS_DIR = '/Users/michaelb.williams/.agents/skills';
 
-const GENERATED_AT = process.env.SYSTEM_MAP_GENERATED_AT ?? new Date().toISOString().slice(0, 10);
+const GENERATED_AT = process.env.SYSTEM_MAP_GENERATED_AT
+  ?? new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
 function parseSource(filePath) {
   return ts.createSourceFile(
@@ -331,12 +334,16 @@ function workflowHealth(workflows, agents) {
   });
 }
 
-function main() {
+async function main() {
   const typeConstants = collectTopLevelConstants(AGENT_TYPES_FILE);
   const skillConstants = collectTopLevelConstants(SYSTEM_SKILLS_FILE);
   const constants = { ...typeConstants, ...skillConstants };
-  const starterAgents = findExportedConst(STARTER_AGENTS_FILE, 'STARTER_AGENTS', constants);
+  const [{ STARTER_AGENTS: starterAgents }, { STARTER_WORKFLOWS: starterWorkflows }] = await Promise.all([
+    import(pathToFileURL(STARTER_AGENTS_FILE).href),
+    import(pathToFileURL(STARTER_WORKFLOWS_FILE).href),
+  ]);
   if (!Array.isArray(starterAgents)) throw new Error('STARTER_AGENTS did not parse to an array');
+  if (!Array.isArray(starterWorkflows)) throw new Error('STARTER_WORKFLOWS did not parse to an array');
   const starterSkills = findExportedConst(STARTER_SKILLS_FILE, 'STARTER_SKILLS', constants);
   if (!Array.isArray(starterSkills)) throw new Error('STARTER_SKILLS did not parse to an array');
 
@@ -358,8 +365,6 @@ function main() {
     ...extractQuotedSlugs(BUILTIN_SOURCES_FILE, /const\s+[A-Z0-9_]+_SLUG\s*=\s*'([^']+)'/g),
     ...extractQuotedSlugs(BUILTIN_SOURCES_FILE, /slug:\s*'([^']+)'/g),
   ].filter((slug, index, arr) => arr.indexOf(slug) === index).sort();
-  const workflowConstants = collectTopLevelConstants(STARTER_WORKFLOWS_FILE, constants);
-  const starterWorkflows = findExportedConst(STARTER_WORKFLOWS_FILE, 'STARTER_WORKFLOWS', workflowConstants);
   const scheduledWorkWiring = {
     queueTypes: ['event', 'agent-task', 'workflow-run', 'social-publish', 'review'],
     campaignComposerWired: text(SCHEDULED_WORK_COMPOSER_FILE).includes('ScheduledWorkComposer')
@@ -413,6 +418,7 @@ function main() {
     generatedAt: GENERATED_AT,
     sourceFiles: {
       starterAgents: rel(STARTER_AGENTS_FILE),
+      scriptwriterAgent: rel(SCRIPTWRITER_AGENT_FILE),
       agentTypes: rel(AGENT_TYPES_FILE),
       systemSkills: rel(SYSTEM_SKILLS_FILE),
       starterSkills: rel(STARTER_SKILLS_FILE),
@@ -516,7 +522,7 @@ function rel(filePath) {
 }
 
 function renderReadme() {
-  return `---\nstatus: current\nowner: agent\nlast_verified: ${GENERATED_AT}\nsource_of_truth: true\n---\n\n# Runner System Map\n\nGenerated map of Runner-specific worker, context, artist asset, Release Kit, Scheduled Work, Automations, HNIC scheduling, and social-execution wiring that generic code graphs miss.\n\nFiles:\n\n- [runner-system-map.md](./runner-system-map.md) - human-readable worker/system wiring.\n- [runner-system-map.json](./runner-system-map.json) - machine-readable source for agents.\n- [runner-system-map.mmd](./runner-system-map.mmd) - Mermaid graph for quick visual scans.\n\nRegenerate after changing starter agents, worker visibility, launch routing, Scheduled Work, Automations, Vault/Assets/Outputs/Release Kit, or permission/tool rules:\n\n\`\`\`bash\nnode scripts/generate-runner-system-map.mjs\n\`\`\`\n\nThis map is derived from code. If it disagrees with the running app, inspect the source files listed in the generated JSON before editing docs by hand.\n`;
+  return `---\nstatus: current\nowner: agent\nlast_verified: ${GENERATED_AT}\nsource_of_truth: true\n---\n\n# Runner System Map\n\nGenerated map of Runner-specific worker, context, artist asset, Release Kit, Scheduled Work, Automations, HNIC scheduling, and social-execution wiring that generic code graphs miss.\n\nFiles:\n\n- [runner-system-map.md](./runner-system-map.md) - human-readable worker/system wiring.\n- [runner-system-map.json](./runner-system-map.json) - machine-readable source for agents.\n- [runner-system-map.mmd](./runner-system-map.mmd) - Mermaid graph for quick visual scans.\n\nRegenerate after changing starter agents, worker visibility, launch routing, Scheduled Work, Automations, Vault/Assets/Outputs/Release Kit, or permission/tool rules:\n\n\`\`\`bash\nbun run docs:system-map\n\`\`\`\n\nThis map is derived from code. If it disagrees with the running app, inspect the source files listed in the generated JSON before editing docs by hand.\n`;
 }
 
 function renderMarkdown(map) {
@@ -722,4 +728,4 @@ function renderMermaid(map) {
   return `${lines.join('\n')}\n`;
 }
 
-main();
+await main();

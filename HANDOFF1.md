@@ -3,10 +3,20 @@ status: active
 owner: agent
 last_verified: 2026-09-08
 verification_record: docs/audits/artist-os-consolidation-2026-09-08.md
+verified_head: 5ce3c102db48f59dbab617a9a7b33c0f4e93de27
+verified_origin_main: 2477cc47909ba49fdb0f7a53efd914cf55420f59
 worktree: /Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os
 branch: main
 scope: onboarding
 ---
+
+> September 9 landing update: the earlier snapshot below is historical. Main now
+> includes provider recovery hardening (`f4c604309`), manager/sidebar restoration
+> (`94b7cb56f`), ChatGPT Conversation support and automatic/manual connection
+> refresh (`d1fa9a604`), and validated Signals in State of Play (`1545cffb5`).
+> The voice opener is already on `origin/main`; physical voice acceptance remains
+> separate. Verify current remote state with Git. The running app was last built
+> before the Signals landing; this commit/push does not certify a new runtime build.
 
 # Handoff: Artist OS Onboarding
 
@@ -151,10 +161,9 @@ capability-loading slices are open. Specs 38 and 41 have implemented core workfl
 acceptance and the complete cross-agent loop still open. Some spec files remain under `todo/` to preserve links;
 that path is not a status claim. Verify symbols before trusting a status label.
 
-`HANDOFF.md` and `docs/CURRENT.md` both declare `source_of_truth: true` but were
-last verified 2026-08-30 and point at a **different worktree and branch**
-(`.worktrees/active/artist-os-release-kit`). Useful for architectural background,
-wrong about current state. Do not follow their "start here" instructions.
+`HANDOFF.md` and `docs/CURRENT.md` are preserved August 30 historical records.
+Their headers now point here and to HANDOFF2; their old worktree, branch, launch,
+and current-state directions are not authoritative.
 
 `docs/system-map/runner-system-map.md` is generated — regenerate with
 `bun run docs:system-map` rather than reading a stale copy.
@@ -241,8 +250,9 @@ importer survives real provider exports
 goes through `browser_tool`, never a REST API write (Elementor/Divi keep
 layout in postmeta — an API write silently breaks the page).
 
-What landed from 2026-09-04 through verified head `c82d4c6c9`: **179 commits
-(164 non-merge)**. This is the compact map; use `git log` for the ledger.
+The historical September 4–7 tranche below was verified through `c82d4c6c9`.
+The later consolidation and current-head additions follow it; use `git log` for
+the exact ledger.
 
 - **Voice / Mikey** (largest line, `codex/artist-os-voice-*`): voice call UX
   with **Mikey**, the Artist Manager voice persona. Focused context
@@ -254,8 +264,11 @@ What landed from 2026-09-04 through verified head `c82d4c6c9`: **179 commits
   focused replies on a verified Flash route; voice campaign advice grounded
   in the Release Kit. The modal now bundles the **Mikey GLB** (`e9b87972c`)
   with restrained motion. The later `0c3650bdc` update adds phoneme sync and
-  warmup readiness; a physical microphone/provider performance pass remains
-  separate from source/build verification. See `docs/tts-agent/09-mikey-call-avatar.md`.
+  warmup readiness. Local main `d1efa02bc` adds varied profile-aware opening
+  greetings without a model call; at this refresh it was not yet on
+  `origin/main`. A physical microphone/provider performance pass remains separate
+  from source/build verification. See `docs/tts-agent/09-mikey-call-avatar.md`
+  and `docs/tts-agent/11-mikey-call-openers.md`.
 - **Signals** (`codex/signals-your-world`, merged `57eaa8255`): spec
   `docs/creator-command-center/47-signals-your-world-spec.md` (audits in
   `docs/audits/`). Reviewed worker retrieval, idea handoffs, reviewed track
@@ -271,7 +284,9 @@ What landed from 2026-09-04 through verified head `c82d4c6c9`: **179 commits
   `ChatAgentTaskModeBar.tsx`, and SessionManager support. The later `25c636ba9`
   and `72d7791f2` changes persist focus cards, pair related Branding skills, and
   isolate active-turn context from later selections. Hidden starters do not enter
-  artist memory or conversation summaries; broader rollout remains open.
+  artist memory or conversation summaries. `296618103` extends the shared focus
+  system across 27 approved agents; live provider performance/quality acceptance
+  remains open.
 - **Conversation history** (`654050905`, `ad0cabed2`): the unprojected section
   is now **Conversations**, newest first, capped to a compact inner scroller.
   Rows use the stable generated/manual topic as the primary title and the agent
@@ -322,9 +337,25 @@ What landed from 2026-09-04 through verified head `c82d4c6c9`: **179 commits
   report navigation, and saved insights.
 - `69dd15768`: recovered historical delegate permission/capability limits and
   hidden-session boundaries while retaining legitimate background-job replies.
+- `79b2822ae` through `1fa79c16d`: refreshed Setup Concierge and the Artist OS
+  Guide around live capability discovery, repaired Signals focus fixtures, and
+  verified exact-stock migration without overwriting customized guidance.
+- `1f69a5f38` through `b01e34bbe`: refined the workspace/header/sidebar surfaces,
+  aligned People and Signals toggles, restored both website workers, starts at HQ
+  Overview, remembers per-workspace destinations, and adds the Artist Manager orb.
+- `6a5780a30` through `905717c57`: protects 106 built-in skill packages as managed
+  runtime material while preserving personal instructions, custom skills, legacy
+  behavior, product boundaries, and recovery records. Live provider acceptance is
+  still separate from automated verification.
+- `2477cc479`: adds Scriptwriter to HQ and campaigns with YouTube and Reels/TikTok
+  modes, bounded HQ identity/voice/branding context, and approval-aware continuity
+  memory. Live provider invocation and cross-session recall remain open.
 
 Use [the consolidation audit](docs/audits/artist-os-consolidation-2026-09-08.md)
 for exact landed SHAs, current checks, remote state, and remaining runtime gates.
+At this documentation refresh, local main was `5ce3c102db48` and `origin/main`
+was `2477cc47909b`; the only local-only feature was the profile-aware voice opener
+`d1efa02bc` plus its merge commit.
 Reconfirm `git status`, `git log -1`, and `origin/main` before acting. The user
 subsequently authorized installation and launch; the consolidation audit records the
 new process and rendered app evidence.

@@ -171,7 +171,7 @@ Unselected skills are awareness-only until explicitly loaded.
 Loading an adjacent skill cannot grant a new tool, source, permission, account, or budget.
 Cross-agent work is delegated; specialists do not absorb one another.
 The Artist Manager stays the front door and does not preload specialist skill bodies.
-Existing sessions keep the capabilities they launched with.
+Each admitted response keeps the capability snapshot it launched with; a later focus applies only to the next input.
 No mode selection counts as approval for an external action or spend.
 ```
 
@@ -185,7 +185,7 @@ Do not:
 - force Artist Manager users through a chooser before they can talk
 - make “Full” the hidden default
 - switch the user's configured model or provider because a mode was selected
-- rewrite a running session's system prompt when the topic changes
+- mutate an already-admitted response's prompt, fallback, or retry when the user selects a later focus
 - let an LLM claim that a mode or skill is active without host-owned state
 - silently connect, install, enable, or spend through an optional source
 - weaken existing approval, privacy, freshness, or workspace-scope rules
@@ -465,28 +465,28 @@ Delegation preserves the caller's approval ceiling. It cannot widen permissions,
 For agents with two or more modes:
 
 1. Clicking the worker opens its actual chat immediately; no launch modal or separate setup card appears.
-2. Directly under the agent header, show one slim horizontal row labeled **What are we doing?** with compact focus cards.
+2. Inside the transparent agent header, show one slim centered row of compact focus cards beneath the agent title; do not add a separate setup panel or redundant guide label.
 3. The composer remains visible, but Send is disabled until the user selects a card.
 4. The pending chat shell contains identity and model settings only. It loads no skills, sources, memory, or workspace context until selection.
-5. Selecting a card atomically composes and persists that exact mode before Send becomes active. Full mode appears last as the explicit `General / all` choice.
+5. Selecting the first card atomically composes and persists that exact mode, then starts one hidden host turn. Full mode appears last as the explicit comprehensive choice.
 6. Required unavailable dependencies disable only the affected card and explain the exact missing connection.
 7. Optional unavailable sources never disable a card; show `Works without X`.
 
-If a launch path already supplies a valid mode, bypass the picker and show the selected mode as a removable/editable chip before the first message.
+If a launch path already supplies a valid mode, render that card selected and continue with the same host-owned recipe.
 
 ### During a session
 
-After the first message, remove the choice row and show the immutable mode in session info:
+Keep the compact choice row visible throughout the session and show the selected focus clearly:
 
 ```text
 Branding Agent · Visual World
 ```
 
-Before the first user message, changing the chip simply rebuilds the unresolved launch options. After the first message:
+After the opening response, selecting another card persists the focus for the next user input. It does not generate a response by itself and cannot alter the prompt, provider fallback, authentication retry, or capability snapshot of a response already admitted. Then:
 
 - a closely related same-agent need can load an adjacent capability
 - a major change offers `Start focused session` and carries a bounded handoff
-- the original session's mode and receipt remain immutable
+- the session records the current focus while each already-admitted turn and receipt remain immutable
 
 Do not silently treat an unselected chat as general mode. `General / all` is an explicit card and maps to the comprehensive bundle; its description must make that scope clear.
 
@@ -974,14 +974,14 @@ Wall-clock timing is recorded but not used alone to certify the architecture.
 
 This spec is complete when:
 
-1. Branding Agent opens with the defined cards and a focused choice preloads only its primary capability.
+1. Branding Agent opens with the approved compact cards and a focused choice preloads only its declared primary capability or coherent focused bundle.
 2. The agent knows which adjacent capabilities exist and when to load/delegate them without reading them all.
 3. Same-session capability expansion is bounded, host-validated, idempotent, and cannot widen trust.
-4. Major topic changes create linked focused sessions rather than mutating the original prompt.
+4. Same-agent card changes apply only to the next input; different-owner or materially different work creates a linked focused session rather than mutating an admitted turn.
 5. Artist Manager remains immediately conversational and uses optional umbrella focuses to route/delegate.
 6. Every current starter agent has an explicit Tier 1, Tier 2, or no-picker decision.
 7. Direct, manager-chat, delegated, workflow, automation, Pulse, messaging, branch, and transfer paths share the same resolver.
-8. Existing sessions retain their original behavior and receipts.
+8. Legacy sessions retain their original behavior, while mode-enabled sessions preserve immutable per-turn receipts across later focus changes.
 9. Missing dependencies fail before expensive model work and never silently select Full.
 10. Prompt/context telemetry proves a material reduction without a material quality loss.
 

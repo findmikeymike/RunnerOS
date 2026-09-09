@@ -37,11 +37,16 @@ flowchart LR
   WorkRunner --> Attention["Done / Review / Needs Attention"]
   WorkRunner -. needs approval .-> SocialExecution["Guarded Social Executor"]
   SocialExecution --> SocialReceipt["External Receipt"]
-  Registry --> A_concierge["HNIC\nsafe\nCommand"]
+  Registry --> A_anything_agent["Anything Agent\nask\nCommand"]
+  Workers --> A_anything_agent
+  A_anything_agent --> S_monid["skill:monid"]
+  A_anything_agent --> S_zero["skill:zero"]
+  Registry --> A_concierge["Artist Manager\nsafe\nCommand"]
   Chat --> A_concierge
   A_concierge --> S_agent_creator["skill:agent-creator"]
   A_concierge --> S_automation_creator["skill:automation-creator"]
   A_concierge --> S_workflow_creator["skill:workflow-creator"]
+  A_concierge --> S_skill_scout["skill:skill-scout"]
   A_concierge --> S_source_recipe["skill:source-recipe"]
   A_concierge --> S_artist_manager_operating_system["skill:artist-manager-operating-system"]
   A_concierge --> S_artist_os_guide["skill:artist-os-guide"]
@@ -50,7 +55,15 @@ flowchart LR
   A_orchestrator --> S_agent_creator["skill:agent-creator"]
   A_orchestrator --> S_automation_creator["skill:automation-creator"]
   A_orchestrator --> S_workflow_creator["skill:workflow-creator"]
+  A_orchestrator --> S_skill_scout["skill:skill-scout"]
   A_orchestrator --> S_source_recipe["skill:source-recipe"]
+  Registry --> A_artist_os_release_manager["Release Manager\nask\nCommand"]
+  Workers --> A_artist_os_release_manager
+  A_artist_os_release_manager --> S_artist_os_release_operations["skill:artist-os-release-operations"]
+  A_artist_os_release_manager --> S_artist_os_rights_and_credits["skill:artist-os-rights-and-credits"]
+  A_artist_os_release_manager --> S_artist_os_release_package_qa["skill:artist-os-release-package-qa"]
+  A_artist_os_release_manager --> S_artist_os_dsp_editorial_pitch["skill:artist-os-dsp-editorial-pitch"]
+  Campaign["Campaign Workspace"] --> A_artist_os_release_manager
   Registry --> A_setup_concierge["Setup Concierge\nask\nCommand"]
   Workers --> A_setup_concierge
   A_setup_concierge --> S_artist_os_guide["skill:artist-os-guide"]
@@ -79,8 +92,16 @@ flowchart LR
   Registry --> A_raw_video_editor["Raw Video Editor\nask\nContent Creation"]
   Workers --> A_raw_video_editor
   A_raw_video_editor --> S_raw_video_editor["skill:raw-video-editor"]
+  A_raw_video_editor --> S_raw_video_edit_direction["skill:raw-video-edit-direction"]
+  A_raw_video_editor --> S_social_video_repurposing["skill:social-video-repurposing"]
   A_raw_video_editor --> T_raw_video_editor["source:raw-video-editor"]
   A_raw_video_editor --> T_video_studio["source:video-studio"]
+  Registry --> A_scriptwriter["Scriptwriter\nask\nContent Creation"]
+  Workers --> A_scriptwriter
+  A_scriptwriter --> S_artist_script_dna["skill:artist-script-dna"]
+  A_scriptwriter --> S_youtube_camera_script["skill:youtube-camera-script"]
+  A_scriptwriter --> S_reels_tiktok_script["skill:reels-tiktok-script"]
+  Campaign["Campaign Workspace"] --> A_scriptwriter
   Registry --> A_scroll_stopper["Scroll Stopper\nask\nContent Creation"]
   Workers --> A_scroll_stopper
   A_scroll_stopper --> S_scroll_stopper["skill:scroll-stopper"]
@@ -99,8 +120,12 @@ flowchart LR
   A_art_director --> S_artist_typography_taste["skill:artist-typography-taste"]
   A_art_director --> S_artist_visual_world_director["skill:artist-visual-world-director"]
   A_art_director --> S_ad_creative["skill:ad-creative"]
+  A_art_director --> S_monid["skill:monid"]
   A_art_director --> S_zero["skill:zero"]
   Campaign["Campaign Workspace"] --> A_art_director
+  Registry --> A_catalog_royalty_agent["Catalog & Royalties\nask\nCreative"]
+  Workers --> A_catalog_royalty_agent
+  A_catalog_royalty_agent --> S_catalog_royalty_reconciliation["skill:catalog-royalty-reconciliation"]
   Registry --> A_content_genius["Content Genius\nask\nCreative"]
   Workers --> A_content_genius
   A_content_genius --> S_contentgenuis["skill:contentgenuis"]
@@ -144,6 +169,9 @@ flowchart LR
   Registry --> A_hooker["Hooker\nask\nOther Workers"]
   Workers --> A_hooker
   A_hooker --> S_hook_writer["skill:hook-writer"]
+  Registry --> A_legal_agent["Legal & Deals\nsafe\nOther Workers"]
+  Workers --> A_legal_agent
+  A_legal_agent --> S_music_contract_review["skill:music-contract-review"]
   Registry --> A_open_slide_agent["Open Slide\nask\nOther Workers"]
   A_open_slide_agent --> S_open_slide_decks["skill:open-slide-decks"]
   A_open_slide_agent --> S_slide_design_taste["skill:slide-design-taste"]
@@ -154,9 +182,17 @@ flowchart LR
   A_reference_master --> S_reference_finder["skill:reference-finder"]
   Registry --> A_reverse_magic["Reverse Magic\nask\nOther Workers"]
   Workers --> A_reverse_magic
+  Registry --> A_site_builder["Site Builder\nask\nOther Workers"]
+  Workers --> A_site_builder
+  A_site_builder --> S_artist_website_builder["skill:artist-website-builder"]
+  A_site_builder --> S_artist_website_playbook["skill:artist-website-playbook"]
+  Campaign["Campaign Workspace"] --> A_site_builder
   Registry --> A_the_excavator["The Excavator\nask\nOther Workers"]
   Workers --> A_the_excavator
   A_the_excavator --> S_song_excavator["skill:song-excavator"]
+  Registry --> A_website_agent["Website Agent\nask\nOther Workers"]
+  Workers --> A_website_agent
+  A_website_agent --> S_artist_website_playbook["skill:artist-website-playbook"]
   Registry --> A_writer["Writer\nask\nOther Workers"]
   Workers --> A_writer
   Registry --> A_college_radio_agent["College Radio\nask\nOutreach"]
@@ -167,18 +203,25 @@ flowchart LR
   Registry --> A_comms_agent["Comms Agent\nask\nOutreach"]
   Workers --> A_comms_agent
   A_comms_agent --> S_artist_comms_strategist["skill:artist-comms-strategist"]
+  Registry --> A_community_agent["Community Agent\nask\nOutreach"]
+  Workers --> A_community_agent
+  A_community_agent --> S_artist_community_craft["skill:artist-community-craft"]
   Registry --> A_industry_hunter["Industry Hunter\nsafe\nOutreach"]
   Workers --> A_industry_hunter
   A_industry_hunter --> S_artist_industry_hunter["skill:artist-industry-hunter"]
+  A_industry_hunter --> S_monid["skill:monid"]
   A_industry_hunter --> S_zero["skill:zero"]
-  A_industry_hunter --> T_zero["source:zero"]
   Campaign["Campaign Workspace"] --> A_industry_hunter
   Registry --> A_outreach_agent["Outreach Agent\nask\nOutreach"]
   Workers --> A_outreach_agent
+  A_outreach_agent --> S_monid["skill:monid"]
   A_outreach_agent --> S_zero["skill:zero"]
   A_outreach_agent --> S_artist_comms_strategist["skill:artist-comms-strategist"]
   A_outreach_agent --> S_magnetic_outreach["skill:magnetic-outreach"]
-  A_outreach_agent --> T_zero["source:zero"]
+  Registry --> A_signal_analyst_agent["Signal Analyst\nsafe\nOutreach"]
+  Workers --> A_signal_analyst_agent
+  Registry --> A_signal_scout_agent["Signal Scout\nsafe\nOutreach"]
+  Workers --> A_signal_scout_agent
   Registry --> A_triager["Triager\nsafe\nOutreach"]
   Workers --> A_triager
   Registry --> A_ad_creative_agent["Ad Creative\nask\nPromotion"]
@@ -194,6 +237,7 @@ flowchart LR
   Workers --> A_ads_agent
   A_ads_agent --> S_meta_ads["skill:meta-ads"]
   A_ads_agent --> S_google_ads["skill:google-ads"]
+  A_ads_agent --> S_spotify_ads_manager["skill:spotify-ads-manager"]
   A_ads_agent --> S_paid_ads_browser_operator["skill:paid-ads-browser-operator"]
   A_ads_agent --> S_music_ad_conversion_protocol["skill:music-ad-conversion-protocol"]
   A_ads_agent --> T_meta_ads["source:meta-ads"]
@@ -228,12 +272,19 @@ flowchart LR
   Registry --> A_playlisting_power_up["Playlisting\nask\nPromotion"]
   Workers --> A_playlisting_power_up
   Campaign["Campaign Workspace"] --> A_playlisting_power_up
+  Registry --> A_song_director["Song Director\nsafe\nPromotion"]
+  Workers --> A_song_director
   Registry --> A_spotify_playlist_creator["Spotify Playlist Creator\nask\nPromotion"]
   Workers --> A_spotify_playlist_creator
   A_spotify_playlist_creator --> S_playlist_builder["skill:playlist-builder"]
   A_spotify_playlist_creator --> S_spotify_playlist_curator["skill:spotify-playlist-curator"]
   A_spotify_playlist_creator --> T_printing_press_social["source:printing-press-social"]
   Campaign["Campaign Workspace"] --> A_spotify_playlist_creator
+  Registry --> A_x_editorial["X Editorial\nask\nPromotion"]
+  Workers --> A_x_editorial
+  A_x_editorial --> S_artist_x_editorial["skill:artist-x-editorial"]
+  A_x_editorial --> S_artist_comms_strategist["skill:artist-comms-strategist"]
+  Campaign["Campaign Workspace"] --> A_x_editorial
   Registry --> A_researcher["Researcher\nsafe\nResearch"]
   A_researcher -. hidden .-> Workers
   Registry --> A_spotify_analyst["Spotify Analyst\nask\nResearch"]
@@ -248,13 +299,15 @@ flowchart LR
   A_youtube_intelligence_agent --> S_youtube_research["skill:youtube-research"]
   A_youtube_intelligence_agent --> S_customer_research["skill:customer-research"]
   A_youtube_intelligence_agent --> S_content_strategy["skill:content-strategy"]
+  A_youtube_intelligence_agent --> S_monid["skill:monid"]
+  A_youtube_intelligence_agent --> S_zero["skill:zero"]
   A_youtube_intelligence_agent --> T_youtube_intelligence["source:youtube-intelligence"]
-  A_youtube_intelligence_agent --> T_youtube_research["source:youtube-research"]
   Registry --> A_youtube_research_agent["YouTube Research Agent\nsafe\nResearch"]
   Workers --> A_youtube_research_agent
   A_youtube_research_agent --> S_youtube_research["skill:youtube-research"]
   A_youtube_research_agent --> S_create_viral_content["skill:create-viral-content"]
-  A_youtube_research_agent --> T_youtube_research["source:youtube-research"]
+  A_youtube_research_agent --> S_monid["skill:monid"]
+  A_youtube_research_agent --> S_zero["skill:zero"]
   Registry --> A_postiz_agent["Postiz\nask\nSocials"]
   Workers --> A_postiz_agent
   A_postiz_agent --> T_postiz["source:postiz"]
@@ -266,6 +319,13 @@ flowchart LR
   Registry --> A_trypost_agent["TryPost\nask\nSocials"]
   Workers --> A_trypost_agent
   A_trypost_agent --> T_trypost["source:trypost"]
+  Workflows["Starter Workflows"] --> W_social_comment_replies["workflow:Social Comment Replies"]
+  W_social_comment_replies --> A_social_publisher["social-publisher"]
+  Workflows["Starter Workflows"] --> W_weekly_signal_scan["workflow:Weekly Signal Scan"]
+  W_weekly_signal_scan --> A_youtube_intelligence_agent["youtube-intelligence-agent"]
+  W_weekly_signal_scan --> A_signal_scout_agent["signal-scout-agent"]
+  W_weekly_signal_scan --> A_signal_scout_agent["signal-scout-agent"]
+  W_weekly_signal_scan --> A_signal_analyst_agent["signal-analyst-agent"]
   Workflows["Starter Workflows"] --> W_weekly_content_pipeline["workflow:Weekly Content Pipeline"]
   W_weekly_content_pipeline --> A_researcher["researcher"]
   W_weekly_content_pipeline --> A_writer["writer"]
@@ -291,3 +351,12 @@ flowchart LR
   W_college_radio_campaign --> A_outreach_agent["outreach-agent"]
   Workflows["Starter Workflows"] --> W_merch_product_builder["workflow:Merch Product Builder"]
   W_merch_product_builder --> A_print_agent["print-agent"]
+  Workflows["Starter Workflows"] --> W_weekly_world_scan["workflow:Your World Signal Scan"]
+  W_weekly_world_scan --> A_youtube_intelligence_agent["youtube-intelligence-agent"]
+  W_weekly_world_scan --> A_signal_analyst_agent["signal-analyst-agent"]
+  Workflows["Starter Workflows"] --> W_signal_video_review["workflow:Signal Video Review"]
+  W_signal_video_review --> A_youtube_intelligence_agent["youtube-intelligence-agent"]
+  W_signal_video_review --> A_signal_analyst_agent["signal-analyst-agent"]
+  Workflows["Starter Workflows"] --> W_signals_industry_scan["workflow:Industry Signal Scan"]
+  W_signals_industry_scan --> A_youtube_intelligence_agent["youtube-intelligence-agent"]
+  W_signals_industry_scan --> A_signal_analyst_agent["signal-analyst-agent"]
