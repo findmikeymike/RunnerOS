@@ -49,3 +49,34 @@ test('malformed canon surfaces source health without crashing or claiming known 
   expect(result.releaseReadiness?.kit).toEqual({ status: 'malformed', categories: [] });
   expect(result.sourceHealth).toContainEqual(expect.objectContaining({ source: `${campaign.id}:release-kit`, status: 'malformed' }));
 });
+
+test('HQ release advice follows approved campaign files without requiring a populated HQ Vault', async () => {
+  const hq = config.addWorkspace({ name: 'Readiness HQ', rootPath: join(root, 'hq'), artistWorkspaceScope: 'hq' });
+  const campaign = config.addWorkspace({ name: 'Upcoming Single', rootPath: join(root, 'upcoming'), artistWorkspaceScope: 'campaign' });
+  context.upsertContextDoc(campaign.rootPath, {
+    slug: 'mission-brief',
+    metadata: { name: 'Mission Brief', enabled: true, routing: { mode: 'broadcast' } },
+    body: `\`\`\`json\n${JSON.stringify({ version: 1, id: 'mission-brief', workspaceId: campaign.id, status: 'full', completeness: 100, title: 'Upcoming Single', releaseDate: '2026-09-10', updatedAt: '2026-09-08T12:00:00.000Z' })}\n\`\`\``,
+  });
+  const { buildHqStateOfPlay } = await import('@craft-agent/shared/hq-state');
+  const { ReleaseKitService } = await import('../release-kit/ReleaseKitService');
+  const now = new Date('2026-09-08T12:00:00.000Z');
+  const before = buildHqStateOfPlay(snapshot.buildHqStateInput(hq.rootPath, now));
+  expect(before.nextMove.title).toContain('Upcoming Single');
+  expect(before.nextMove.why).toContain('Audio');
+  expect(before.nextMove.worker).toBe('concierge');
+
+  const kit = new ReleaseKitService();
+  for (const [category, file] of [['audio', 'master.wav'], ['artwork', 'cover.png'], ['video', 'clip.mp4'], ['images', 'photo.jpg']] as const) {
+    const uploadPath = join(root, file);
+    writeFileSync(uploadPath, `${category} fixture`);
+    kit.promote(campaign.id, {
+      category, subtype: category, makePrimary: true, uploadPath,
+      source: { type: 'upload', originalFileName: file },
+    }, 'user');
+  }
+  const after = buildHqStateOfPlay(snapshot.buildHqStateInput(hq.rootPath, now));
+  expect(after.nextMove.title).not.toContain('Upcoming Single');
+  expect(after.attention.some(item => item.text.includes('Upcoming Single') && item.text.includes('No usable'))).toBe(false);
+  expect(context.loadContextDoc(hq.rootPath, 'artist-vault')).toBeNull();
+});

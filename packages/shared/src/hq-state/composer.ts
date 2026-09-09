@@ -8,7 +8,9 @@ import { ARTIST_VAULT_CONTEXT_SLUG, type VaultManifest } from '../artist-vault/t
 import { isSharedIntelContextSlug, parseSharedIntelNote } from '../shared-intel/index.ts';
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts';
 import { hqIntentFingerprint, hqSemanticIntentId } from './intent.ts';
-import { buildManagerBrief } from './manager-brief.ts';
+import { missionReleaseDateKey } from '../artist-context/mission-brief.ts';
+import { addDaysToDateKey, dateKeyInTimezone, isTimelineDateKey } from './timeline.ts';
+import { buildManagerBrief, normalizeManagerReleaseReadiness } from './manager-brief.ts';
 import {
   HQ_SOURCE_CONTEXT_SLUGS,
   HQ_STATE_CONTEXT_FENCE,
@@ -68,6 +70,8 @@ interface HqInputState {
   sharedIntel: NonNullable<ReturnType<typeof parseSharedIntelNote>>[];
   goals: LoadedContextDoc[];
   operational?: HqOperationalSnapshot;
+  relatedCampaigns: BuildHqStateInput['relatedCampaigns'];
+  timezone?: string;
 }
 
 const SOURCE_SLUGS = new Set<string>([
@@ -118,6 +122,8 @@ export function buildHqStateOfPlay(args: BuildHqStateInput): HqStateOfPlayV2 {
       .filter((note): note is NonNullable<ReturnType<typeof parseSharedIntelNote>> => Boolean(note && !note.superseded)),
     goals: docs.filter(isGoalContextDoc),
     operational: args.operational,
+    relatedCampaigns: args.relatedCampaigns,
+    timezone: args.timezone,
   };
 
   const missing = buildMissing(input);
@@ -303,26 +309,46 @@ function withRoute(input: HqInputState, move: HqStateNextMove): HqStateNextMove 
   return { ...move, route: buildRouteHint(input, move) };
 }
 
+const REQUIRED_RELEASE_MEDIA = ['Audio', 'Single art / artwork', 'Content video', 'Content images'];
+
+function campaignReadinessIntent(workspaceId: string): string {
+  return `campaign-release-readiness-${Array.from(workspaceId, char => char.codePointAt(0)!.toString(16)).join('-')}`;
+}
+
+/** A count is inventory evidence, not a declaration that the whole release is ready. */
+function imminentCampaignReadinessMoves(input: HqInputState): HqStateNextMove[] {
+  const today = dateKeyInTimezone(input.now.toISOString(), input.timezone ?? 'UTC') ?? input.now.toISOString().slice(0, 10);
+  const horizon = addDaysToDateKey(today, 14);
+  return input.relatedCampaigns
+    .map(campaign => ({ campaign, date: campaign.mission ? missionReleaseDateKey(campaign.mission) : undefined }))
+    .filter((entry): entry is typeof entry & { date: string } => isTimelineDateKey(entry.date) && entry.date >= today && entry.date <= horizon)
+    .sort((left, right) => left.date.localeCompare(right.date) || left.campaign.workspaceId.localeCompare(right.campaign.workspaceId))
+    .flatMap(({ campaign, date }): HqStateNextMove[] => {
+      const kit = normalizeManagerReleaseReadiness(campaign.releaseReadiness)?.kit;
+      const categories = REQUIRED_RELEASE_MEDIA.map(label => kit?.categories.filter(category => category.label === label) ?? []);
+      const unknown = !kit || kit.status !== 'available' || categories.some(matches => matches.length !== 1);
+      const gaps = unknown ? [] : categories.flatMap(matches => matches[0]!.ready === 0 ? [matches[0]!.label] : []);
+      if (!unknown && gaps.length === 0) return [];
+      const name = clean(campaign.name) ?? 'Campaign';
+      return [{
+        title: `Review ${name} release readiness for ${date}`,
+        why: unknown
+          ? `${name} releases on ${date}, but its Release Kit inventory is incomplete or unavailable. Check the campaign before making readiness claims.`
+          : `${name} releases on ${date}. Its Release Kit has no usable approved files recorded for ${gaps.join(', ')}. Review what this release needs; other category counts do not prove completion.`,
+        worker: 'concierge',
+        action: 'review',
+        oneClick: false,
+        attentionRequired: true,
+        semanticIntentId: campaignReadinessIntent(campaign.workspaceId),
+      }];
+    });
+}
+
 function buildContextNextMove(input: HqInputState, missing: string[]): HqStateNextMove {
 
-  const urgentEvent = nextUpcomingEvent(input, 14);
-  const vault = summarizeVault(input.vault);
+  const releaseMove = imminentCampaignReadinessMoves(input)[0];
+  if (releaseMove) return releaseMove;
   const community = summarizeCommunity(input.community);
-
-  if (urgentEvent && (!vault.finalMaster || !vault.coverArt || !vault.pressPhoto)) {
-    const missingAssets = missingVaultLabels(vault);
-    return {
-      title: `Close asset gaps before ${urgentEvent.title}`,
-      why: `Calendar shows "${urgentEvent.title}" on ${urgentEvent.date}, but Vault is missing ${missingVaultLabels(vault).join(', ')}.`,
-      worker: 'art-director',
-      action: 'organize',
-      oneClick: false,
-      attentionRequired: true,
-      semanticIntentId: missingAssets.length === 1
-        ? hqSemanticIntentId({ title: missingAssets[0] ?? '' })
-        : 'release-assets-general',
-    };
-  }
 
   if (!clean(input.profile?.artistName) || !clean(input.profile?.sound) || !clean(input.profile?.audience)) {
     return {
@@ -386,7 +412,7 @@ function buildRouteHint(input: HqInputState, nextMove: HqStateNextMove): HqState
   return {
     target: agentSlug ? 'agent' : 'manual',
     action,
-    prompt: buildRoutePrompt(nextMove, contextDocSlugs),
+    prompt: buildRoutePrompt(input, nextMove, contextDocSlugs),
     confidence: routeConfidence(nextMove, blockedReason),
     agentSlug: agentSlug || undefined,
     taskModeId: agentSlug === 'spotify-analyst' && action === 'refresh'
@@ -447,12 +473,19 @@ function routeConfidence(nextMove: HqStateNextMove, blockedReason: string | unde
   return nextMove.oneClick ? 'high' : 'medium';
 }
 
-function buildRoutePrompt(nextMove: HqStateNextMove, contextDocSlugs: string[]): string {
+function buildRoutePrompt(input: HqInputState, nextMove: HqStateNextMove, contextDocSlugs: string[]): string {
+  const campaign = input.relatedCampaigns.find(candidate => campaignReadinessIntent(candidate.workspaceId) === nextMove.semanticIntentId);
   const sources = contextDocSlugs.length ? contextDocSlugs.map((slug) => `@${slug}`).join(', ') : 'the available Artist HQ context';
   return [
     `Run this Artist HQ next move: ${nextMove.title}.`,
     `Reason: ${nextMove.why}`,
-    `Use these context docs as source of truth: ${sources}.`,
+    ...(campaign ? [
+      `Inspect the Release Kit and readiness for campaign workspace ID ${JSON.stringify(campaign.workspaceId)}.`,
+      'Use the campaign manager tools to read that exact campaign before recommending action. HQ Vault assets are reusable source material, not proof of approved campaign readiness.',
+    ] : []),
+    campaign
+      ? `Use these HQ docs as supporting artist context only: ${sources}. The campaign Release Kit is the source for approved release inventory.`
+      : `Use these context docs as source of truth: ${sources}.`,
     'Return the concrete next action, any blockers, and the exact artifact or update the artist should approve.',
   ].join('\n');
 }
@@ -463,8 +496,6 @@ const MAX_ATTENTION_ITEMS = 8;
 function buildAttention(input: HqInputState): HqStateAttentionItem[] {
   const items: HqStateAttentionItem[] = [];
   const urgentEvent = nextUpcomingEvent(input, 21);
-  const vault = summarizeVault(input.vault);
-
   const degradedSource = input.operational?.sourceHealth.find((source) => source.status !== 'fresh');
   if (degradedSource) {
     items.push({
@@ -503,18 +534,13 @@ function buildAttention(input: HqInputState): HqStateAttentionItem[] {
   if (urgentEvent) {
     items.push({
       kind: 'calendar',
-      text: `${urgentEvent.title} is on ${urgentEvent.date}; check assets and messaging now.`,
+      text: `${urgentEvent.title} is on ${urgentEvent.date}; review any preparation needed.`,
       source: HQ_SOURCE_CONTEXT_SLUGS.calendar,
     });
   }
 
-  const missingVault = missingVaultLabels(vault);
-  if (urgentEvent && missingVault.length > 0) {
-    items.push({
-      kind: 'vault',
-      text: `Vault is missing ${missingVault.join(', ')} for agent-ready campaign execution.`,
-      source: HQ_SOURCE_CONTEXT_SLUGS.vault,
-    });
+  for (const move of imminentCampaignReadinessMoves(input)) {
+    items.push({ kind: 'release-readiness', text: move.why, source: move.semanticIntentId! });
   }
 
   if (input.spotify?.partial || asArray(input.spotify?.errors).length > 0) {

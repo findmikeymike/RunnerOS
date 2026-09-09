@@ -47,9 +47,10 @@ describe('HQ State of Play composer', () => {
     expect(state.sources['artist-profile']).toBe('2026-07-04T00:00:00.000Z');
   });
 
-  test('prioritizes urgent calendar dates with missing vault assets', () => {
+  test('prioritizes imminent campaign Release Kit gaps', () => {
     const state = buildHqStateOfPlay({
       now,
+      relatedCampaigns: [releaseCampaign()],
       docs: [
         profileDoc(),
         doc('artist-calendar', 'Artist Calendar', {
@@ -68,19 +69,20 @@ describe('HQ State of Play composer', () => {
       ],
     });
 
-    expect(state.nextMove.title).toBe('Close asset gaps before Single release');
-    expect(state.nextMove.worker).toBe('art-director');
+    expect(state.nextMove.title).toBe('Review Single release release readiness for 2026-07-10');
+    expect(state.nextMove.worker).toBe('concierge');
     expect(state.nextMove.attentionRequired).toBe(true);
     expect(state.nextMove.route?.target).toBe('agent');
-    expect(state.nextMove.route?.agentSlug).toBe('art-director');
+    expect(state.nextMove.route?.agentSlug).toBe('concierge');
     expect(state.nextMove.route?.contextDocSlugs).toEqual(['artist-calendar', 'artist-profile', 'artist-vault']);
     expect(state.attention.some((item) => item.kind === 'calendar')).toBe(true);
-    expect(state.attention.some((item) => item.kind === 'vault')).toBe(true);
+    expect(state.attention.some((item) => item.kind === 'release-readiness')).toBe(true);
   });
 
   test('puts urgent release blockers ahead of incomplete profile setup', () => {
     const state = buildHqStateOfPlay({
       now,
+      relatedCampaigns: [releaseCampaign()],
       docs: [
         doc('artist-profile', 'Artist Profile', {
           version: 1,
@@ -101,7 +103,7 @@ describe('HQ State of Play composer', () => {
       ],
     });
 
-    expect(state.nextMove.title).toBe('Close asset gaps before Single release');
+    expect(state.nextMove.title).toBe('Review Single release release readiness for 2026-07-10');
     expect(state.nextMove.title).not.toBe('Complete Artist Profile');
   });
 
@@ -349,9 +351,10 @@ describe('HQ State of Play composer', () => {
     expect(state.attention[0]?.kind).toBe('failure');
   });
 
-  test('does not recommend duplicate asset work when Art Director is already running it', () => {
+  test('does not recommend duplicate review work for the same campaign', () => {
     const state = buildHqStateOfPlay({
       now,
+      relatedCampaigns: [releaseCampaign()],
       docs: [
         profileDoc(),
         doc('artist-calendar', 'Artist Calendar', {
@@ -371,8 +374,8 @@ describe('HQ State of Play composer', () => {
           ...operationalItem('work-1', 'Close release asset gaps', 'scheduled-work', 'running'),
           worker: 'art-director',
           intent: 'Organize the missing release assets.',
-          semanticIntentId: 'release-assets-general',
-          fingerprint: 'v2:hq:release-assets-general',
+          semanticIntentId: campaignIntent(),
+          fingerprint: `v2:hq:${campaignIntent()}`,
         }],
       }),
     });
@@ -385,6 +388,7 @@ describe('HQ State of Play composer', () => {
   test('does not treat a different release deliverable as duplicate work', () => {
     const state = buildHqStateOfPlay({
       now,
+      relatedCampaigns: [releaseCampaign()],
       docs: [
         profileDoc(),
         doc('artist-calendar', 'Artist Calendar', {
@@ -409,7 +413,7 @@ describe('HQ State of Play composer', () => {
       }),
     });
 
-    expect(state.nextMove.title).toBe('Close asset gaps before Single release');
+    expect(state.nextMove.title).toBe('Review Single release release readiness for 2026-07-10');
   });
 
   test('surfaces degraded operational sources instead of treating them as empty', () => {
@@ -654,3 +658,82 @@ function textDoc(slug: string, name: string, body: string, metadata: Partial<Con
     workspaceRootPath: '/tmp',
   };
 }
+
+function campaignIntent(id = 'release-1'): string {
+  return `campaign-release-readiness-${Array.from(id, char => char.codePointAt(0)!.toString(16)).join('-')}`;
+}
+
+function releaseCampaign(id = 'release-1', date = '2026-07-10', ready = 0): BuildHqStateInput['relatedCampaigns'][number] {
+  return {
+    workspaceId: id, name: 'Single release', primary: false, sourceHealth: [],
+    mission: { id, workspaceId: id, status: 'full', completeness: 100, releaseDate: date, updatedAt: now.toISOString() },
+    releaseReadiness: {
+      kit: { status: 'available', categories: ['Audio', 'Single art / artwork', 'Content video', 'Content images', 'Plans'].map(label => ({ label, ready, missing: 0, needsReview: 0, restricted: 0 })) },
+      essentials: { status: 'available', done: 0, total: 0, items: [], omitted: 0 },
+    },
+  };
+}
+
+describe('campaign-grounded release advice', () => {
+  test('ordinary calendar events never invent release asset gaps', () => {
+    const state = buildHqStateOfPlay({ now, docs: [profileDoc(), doc('artist-calendar', 'Calendar', { events: [{ title: 'Dentist', date: '2026-07-05' }] })] });
+    expect(state.nextMove.title).toBe('Add a Spotify snapshot');
+    expect(state.attention.some(item => item.kind === 'vault' || item.kind === 'release-readiness')).toBe(false);
+    expect(state.attention.find(item => item.kind === 'calendar')?.text).not.toContain('assets');
+  });
+
+  test('global Vault assets never satisfy a campaign kit and the route identifies the exact campaign', () => {
+    const state = buildHqStateOfPlay({ now, relatedCampaigns: [releaseCampaign()], docs: [profileDoc(), doc('artist-vault', 'Vault', { assets: [vaultAsset('master-final'), vaultAsset('cover-art'), vaultAsset('artist-photo')] })] });
+    expect(state.nextMove.why).toContain('no usable approved files recorded for Audio');
+    expect(state.nextMove.route?.prompt).toContain('campaign workspace ID "release-1"');
+    expect(state.nextMove.route?.prompt).toContain('not proof of approved campaign readiness');
+    expect(state.nextMove.entityRef).toBeUndefined();
+  });
+
+  test('an earlier supplied kit does not hide a second upcoming release with gaps', () => {
+    const state = buildHqStateOfPlay({ now, docs: [profileDoc()], relatedCampaigns: [releaseCampaign('first', '2026-07-05', 1), releaseCampaign('second', '2026-07-08')] });
+    expect(state.nextMove.route?.prompt).toContain('"second"');
+    expect(state.nextMove.title).toContain('2026-07-08');
+  });
+
+  test('past and distant releases are not imminent blockers, and Plans alone is not a media gap', () => {
+    const supplied = releaseCampaign('supplied', '2026-07-05', 1);
+    supplied.releaseReadiness!.kit.categories.find(category => category.label === 'Plans')!.ready = 0;
+    const state = buildHqStateOfPlay({ now, docs: [profileDoc()], relatedCampaigns: [releaseCampaign('past', '2026-07-03'), releaseCampaign('later', '2026-07-19'), supplied] });
+    expect(state.nextMove.title).toBe('Add a Spotify snapshot');
+    expect(state.attention.some(item => item.kind === 'release-readiness')).toBe(false);
+  });
+
+  test('restricted and unverified files do not count as usable approved media', () => {
+    const campaign = releaseCampaign('restricted', '2026-07-05', 1);
+    campaign.releaseReadiness!.kit.categories[0] = { label: 'Audio', ready: 0, restricted: 1, needsReview: 1, missing: 1 };
+    const state = buildHqStateOfPlay({ now, docs: [profileDoc()], relatedCampaigns: [campaign] });
+    expect(state.nextMove.why).toContain('no usable approved files recorded for Audio.');
+  });
+
+  for (const issue of ['missing', 'malformed', 'unavailable', 'partial', 'duplicate'] as const) {
+    test(`${issue} inventory asks for verification without asserting missing files`, () => {
+      const campaign = releaseCampaign();
+      if (issue === 'missing') campaign.releaseReadiness = undefined;
+      else if (issue === 'malformed' || issue === 'unavailable') campaign.releaseReadiness!.kit.status = issue;
+      else if (issue === 'partial') campaign.releaseReadiness!.kit.categories.shift();
+      else campaign.releaseReadiness!.kit.categories[0] = campaign.releaseReadiness!.kit.categories[1]!;
+      const state = buildHqStateOfPlay({ now, docs: [profileDoc()], relatedCampaigns: [campaign] });
+      expect(state.nextMove.why).toContain('inventory is incomplete or unavailable');
+      expect(state.nextMove.why).not.toContain('no usable');
+    });
+  }
+
+  test('release today stays imminent at UTC midnight in the artist timezone', () => {
+    const state = buildHqStateOfPlay({ now: new Date('2026-07-05T01:00:00Z'), timezone: 'America/Chicago', docs: [profileDoc()], relatedCampaigns: [releaseCampaign('today', '2026-07-04')] });
+    expect(state.nextMove.title).toContain('2026-07-04');
+  });
+
+  test('each campaign has a distinct stable intent, even IDs differing only in case', () => {
+    const first = buildHqStateOfPlay({ now, docs: [profileDoc()], relatedCampaigns: [releaseCampaign('A')] }).nextMove;
+    const second = buildHqStateOfPlay({ now, docs: [profileDoc()], relatedCampaigns: [releaseCampaign('a')] }).nextMove;
+    expect(first.semanticIntentId).not.toBe(second.semanticIntentId);
+    const state = buildHqStateOfPlay({ now, docs: [profileDoc()], relatedCampaigns: [releaseCampaign('a')], operational: operational({ active: [{ ...operationalItem('other', 'Review other release', 'scheduled-work', 'running'), fingerprint: `v2:hq:${first.semanticIntentId}` }] }) });
+    expect(state.nextMove.semanticIntentId).toBe(second.semanticIntentId);
+  });
+});
