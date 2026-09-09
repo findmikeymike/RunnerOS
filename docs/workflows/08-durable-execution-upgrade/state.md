@@ -17,3 +17,5 @@ Small authority slice: a current host-authentication/workspace resolver and real
 Small Electron storage slice: main-process host factory now supplies Electron safeStorage and canonical data root. Readiness, plaintext fallback and locked-keychain refusal covered by focused tests. [Evidence](evidence/T-06-electron-storage-slice.md). Included in this commit; startup registration and real OS keychain certification remain pending.
 
 Small shutdown slice: pending host startup and drainage now precede app cleanup; repeated quit cannot bypass the wait, failed drainage is retryable, and update installation aborts when cleanup fails. [Evidence](evidence/T-06-shutdown-slice.md). Included in this commit. Production host startup and live quit/update verification remain pending.
+
+After commit `a12a12ba4`, a small startup prerequisite adds authenticated live-connection lookup to the RPC server. [Evidence](evidence/T-06-live-connection-slice.md). This connection-check slice is included in this commit; stable identity/membership wiring and host startup remain pending.

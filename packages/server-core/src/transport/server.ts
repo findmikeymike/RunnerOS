@@ -7,7 +7,7 @@
  * Same class used locally (127.0.0.1, no auth) and remotely (0.0.0.0, auth).
  */
 
-import { WebSocketServer, type WebSocket } from 'ws'
+import { WebSocketServer, WebSocket } from 'ws'
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http'
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https'
 import { randomUUID } from 'node:crypto'
@@ -846,6 +846,17 @@ export class WsRpcServer implements RpcServer {
       default:
         return false
     }
+  }
+
+  /**
+   * Host-only connection check. Authenticated handshakes are required; retained
+   * reconnect records and caller-provided window/workspace claims grant nothing.
+   * This does not identify a user or replace current membership/revocation checks.
+   */
+  isAuthenticatedClientConnected(clientId: string): boolean {
+    if (!this.requireAuth) return false
+    const client = this.clients.get(clientId)
+    return client?.ws.readyState === WebSocket.OPEN
   }
 
   /** Update a client's workspaceId (called after SWITCH_WORKSPACE so push routing stays correct). */

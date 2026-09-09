@@ -14,6 +14,7 @@ const TEST_TOKEN = 'test-token-with-enough-entropy-to-pass'
 
 function createServer(opts?: {
   maxClients?: number
+  onClientDisconnected?: (clientId: string) => void
   requireAuth?: boolean
   validateToken?: (token: string) => Promise<boolean>
   productVariant?: 'runner' | 'artist-os'
@@ -24,6 +25,7 @@ function createServer(opts?: {
     requireAuth: opts?.requireAuth ?? true,
     validateToken: opts?.validateToken ?? (async (t) => t === TEST_TOKEN),
     maxClients: opts?.maxClients,
+    onClientDisconnected: opts?.onClientDisconnected,
     serverId: 'test',
     productVariant: opts?.productVariant,
   })
@@ -85,6 +87,27 @@ describe('WsRpcServer lifecycle', () => {
     openSockets.length = 0
     server?.close()
     server = null
+  })
+
+  it('reports only authenticated live clients, never disconnected reconnect records', async () => {
+    let onDisconnected!: () => void
+    const disconnected = new Promise<void>(resolve => onDisconnected = resolve)
+    server = createServer({ onClientDisconnected: () => onDisconnected() })
+    await server.listen()
+    expect(server.isAuthenticatedClientConnected('unknown')).toBe(false)
+    const { ws, clientId } = await handshake(`ws://127.0.0.1:${server.port}`, TEST_TOKEN)
+    openSockets.push(ws)
+    expect(server.isAuthenticatedClientConnected(clientId)).toBe(true)
+    ws.close(); await disconnected
+    expect(server.isAuthenticatedClientConnected(clientId)).toBe(false)
+  })
+
+  it('does not elevate a connection accepted with authentication disabled', async () => {
+    server = createServer({ requireAuth: false })
+    await server.listen()
+    const { ws, clientId } = await handshake(`ws://127.0.0.1:${server.port}`, TEST_TOKEN)
+    openSockets.push(ws)
+    expect(server.isAuthenticatedClientConnected(clientId)).toBe(false)
   })
 
   // -- Auth tests --
