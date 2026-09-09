@@ -40,7 +40,7 @@ function isNormalWebSocketCloseError(message: string): boolean {
  * - message_end → text_complete
  * - tool_execution_start → tool_start
  * - tool_execution_end → tool_result
- * - agent_end → complete
+ * - agent_settled → complete (after retries and compaction)
  * - compaction_start → status (with "Compacting" keyword)
  * - compaction_end → info/error
  * - auto_retry_start → status
@@ -48,6 +48,7 @@ function isNormalWebSocketCloseError(message: string): boolean {
  * - queue_update → ignored (no current UI consumer)
  */
 export class PiEventAdapter extends BaseEventAdapter {
+  private pendingMessageError: CraftAgentEvent | null = null;
   // Track tool names from execution_start for proper tool_result correlation
   private toolNames: Map<string, string> = new Map();
 
@@ -103,6 +104,7 @@ export class PiEventAdapter extends BaseEventAdapter {
   }
 
   protected onTurnStart(): void {
+    this.pendingMessageError = null;
     this.toolNames.clear();
     this.hasStreamedDeltas = false;
     this.hasEmittedFinalText = false;
@@ -125,6 +127,14 @@ export class PiEventAdapter extends BaseEventAdapter {
         break;
 
       case 'agent_end':
+        // An individual run ended; the SDK may still retry or compact.
+        break;
+
+      case 'agent_settled':
+        if (this.pendingMessageError) {
+          yield this.pendingMessageError;
+          this.pendingMessageError = null;
+        }
         if (this.lastUsage) {
           const inputTokens = this.lastUsage.input + (this.lastUsage.cacheRead || 0);
           yield {
@@ -153,7 +163,7 @@ export class PiEventAdapter extends BaseEventAdapter {
         break;
 
       case 'turn_end':
-        // Don't emit 'complete' here — agent_end handles it.
+        // Don't emit 'complete' here — agent_settled handles it.
         // Emitting from both causes duplicate messages in session persistence.
         this.currentTurnId = null;
         this.hasStreamedDeltas = false;
@@ -200,17 +210,19 @@ export class PiEventAdapter extends BaseEventAdapter {
             break;
           }
 
-          // Classify the error — auth/billing errors should be typed so SessionManager
-          // can trigger its auth-retry pipeline (refresh token + resend).
+          // The SDK may recover after this message. Surface the error only at
+          // settled, preserving its type for the auth/fallback pipeline.
           const parsed = parseError(new Error(msg.errorMessage));
           const isClassified = parsed.code !== 'unknown_error';
           if (isClassified) {
-            yield { type: 'typed_error', error: parsed };
+            this.pendingMessageError = { type: 'typed_error', error: parsed };
           } else {
-            yield { type: 'error', message: msg.errorMessage };
+            this.pendingMessageError = { type: 'error', message: msg.errorMessage };
           }
           break;
         }
+
+        this.pendingMessageError = null;
 
         // Extract text content from the final assistant message
         const textContent = this.extractTextFromMessage(event.message);
@@ -416,7 +428,7 @@ export class PiEventAdapter extends BaseEventAdapter {
       case 'auto_retry_end': {
         const retryEndEvent = event as Extract<AgentSessionEvent, { type: 'auto_retry_end' }>;
         if (!retryEndEvent.success && retryEndEvent.finalError) {
-          yield { type: 'error', message: `Retry failed: ${retryEndEvent.finalError}` };
+          this.pendingMessageError ??= { type: 'error', message: `Retry failed: ${retryEndEvent.finalError}` };
         }
         break;
       }

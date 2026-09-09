@@ -43,8 +43,8 @@ describe('PiEventAdapter', () => {
       expect(events).toHaveLength(0);
     });
 
-    it('should emit complete for agent_end', () => {
-      const events = collect(adapter.adaptEvent({ type: 'agent_end' } as any));
+    it('should emit complete for agent_settled', () => {
+      const events = collect(adapter.adaptEvent({ type: 'agent_settled' } as any));
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({ type: 'complete' });
     });
@@ -470,6 +470,8 @@ describe('PiEventAdapter', () => {
           errorMessage: 'Something went wrong internally',
         },
       } as any));
+      expect(events).toHaveLength(0);
+      events.push(...collect(adapter.adaptEvent({ type: 'agent_settled' } as any)).filter(event => event.type !== 'complete'));
 
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({
@@ -487,6 +489,8 @@ describe('PiEventAdapter', () => {
           errorMessage: 'WebSocket closed 1000',
         },
       } as any));
+      expect(events).toHaveLength(0);
+      events.push(...collect(adapter.adaptEvent({ type: 'agent_settled' } as any)).filter(event => event.type !== 'complete'));
 
       expect(events).toHaveLength(0);
     });
@@ -500,6 +504,8 @@ describe('PiEventAdapter', () => {
           errorMessage: '<html><head><title>400 Bad Request</title></head><body><center><h1>400 Bad Request</h1></center><hr><center>cloudflare</center></body></html>',
         },
       } as any));
+      expect(events).toHaveLength(0);
+      events.push(...collect(adapter.adaptEvent({ type: 'agent_settled' } as any)).filter(event => event.type !== 'complete'));
 
       expect(events).toHaveLength(1);
       expect(events[0].type).toBe('typed_error');
@@ -516,6 +522,8 @@ describe('PiEventAdapter', () => {
           errorMessage: 'Provided authentication token is expired. Please try signing in again.',
         },
       } as any));
+      expect(events).toHaveLength(0);
+      events.push(...collect(adapter.adaptEvent({ type: 'agent_settled' } as any)).filter(event => event.type !== 'complete'));
 
       expect(events).toHaveLength(1);
       expect(events[0].type).toBe('typed_error');
@@ -531,6 +539,8 @@ describe('PiEventAdapter', () => {
           errorMessage: '401 Unauthorized',
         },
       } as any));
+      expect(events).toHaveLength(0);
+      events.push(...collect(adapter.adaptEvent({ type: 'agent_settled' } as any)).filter(event => event.type !== 'complete'));
 
       expect(events).toHaveLength(1);
       expect(events[0].type).toBe('typed_error');
@@ -546,6 +556,8 @@ describe('PiEventAdapter', () => {
           errorMessage: '402 Payment required',
         },
       } as any));
+      expect(events).toHaveLength(0);
+      events.push(...collect(adapter.adaptEvent({ type: 'agent_settled' } as any)).filter(event => event.type !== 'complete'));
 
       expect(events).toHaveLength(1);
       expect(events[0].type).toBe('typed_error');
@@ -561,6 +573,8 @@ describe('PiEventAdapter', () => {
           errorMessage: '429 Too many requests - rate limit exceeded',
         },
       } as any));
+      expect(events).toHaveLength(0);
+      events.push(...collect(adapter.adaptEvent({ type: 'agent_settled' } as any)).filter(event => event.type !== 'complete'));
 
       expect(events).toHaveLength(1);
       expect(events[0].type).toBe('typed_error');
@@ -1039,6 +1053,8 @@ describe('PiEventAdapter', () => {
         success: false,
         finalError: 'Max retries exceeded',
       } as any));
+      expect(events).toHaveLength(0);
+      events.push(...collect(adapter.adaptEvent({ type: 'agent_settled' } as any)).filter(event => event.type !== 'complete'));
 
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({

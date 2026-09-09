@@ -1648,6 +1648,8 @@ interface ManagedSession {
   authRetryAttempted?: boolean
   // Flag indicating auth retry is in progress (to prevent complete handler from interfering)
   authRetryInProgress?: boolean
+  // Invalidated by Stop or a newer admitted turn, including retries waiting for admission.
+  authRetryToken?: { generation: number }
   // Whether this session is hidden from session list (e.g., mini edit sessions)
   hidden?: boolean
   branchFromMessageId?: string
@@ -12379,7 +12381,7 @@ user a clickable link to where the thing now lives.`
       // Update agent model if it already exists (takes effect on next query)
       if (managed.agent) {
         // Fallback chain: session model > workspace default > connection default
-        const effectiveModel = modelToPersist ?? wsConfig?.defaults?.model ?? sessionConn?.defaultModel!
+        const effectiveModel = resolveModelForProvider(provider, modelToPersist ?? wsConfig?.defaults?.model, sessionConn)
         sessionLog.info(`[updateSessionModel] Calling agent.setModel(${effectiveModel}) [agent exists=${!!managed.agent}, connectionLocked=${managed.connectionLocked}]`)
         managed.agent.setModel(effectiveModel)
       } else {
@@ -12872,6 +12874,7 @@ user a clickable link to where the thing now lives.`
      */
     onAck?: (messageId: string) => void,
     goalAdmission?: ChatGoalSendAdmission,
+    authRetryToken?: { generation: number },
   ): Promise<void> {
     this.assertPaidExecutionAuthorized()
     const releaseAdmissionLock = await this.acquireSendMessageAdmissionLock(sessionId)
@@ -12885,6 +12888,12 @@ user a clickable link to where the thing now lives.`
     if (!managed) {
       releaseAdmissionLockOnce()
       throw new Error(`Session ${sessionId} not found`)
+    }
+    const cancelledAuthRetry = () => authRetryToken !== undefined
+      && (managed.authRetryToken !== authRetryToken || managed.stopRequested)
+    if (cancelledAuthRetry()) {
+      releaseAdmissionLockOnce()
+      return
     }
     if (this.workspaceMigrationLocks.has(managed.workspace.id)) {
       releaseAdmissionLockOnce()
@@ -13283,6 +13292,10 @@ user a clickable link to where the thing now lives.`
       managed.activeHumanMessageId = userMessage.inputOrigin === 'human' && !userMessage.hidden
         ? userMessage.id
         : undefined
+      if (cancelledAuthRetry()) {
+        releaseAdmissionLockOnce()
+        return
+      }
       this.setProcessing(managed, true)
       managed.activeChatGoalTurn = admittedTurn ?? {
         origin: 'human',
@@ -13316,6 +13329,9 @@ user a clickable link to where the thing now lives.`
     managed.pendingModelAttempts = []
     managed.activeModelFallbackMessageId = undefined
     managed.processingGeneration++
+    if (authRetryToken) authRetryToken.generation = managed.processingGeneration
+    managed.authRetryToken = authRetryToken
+    managed.authRetryInProgress = false
     managed.turnStartFinalMessageId = this.getLastFinalAssistantMessageId(managed.messages)
 
     // Reset auth retry flag for this new message (allows one retry per message)
@@ -13395,6 +13411,7 @@ user a clickable link to where the thing now lives.`
         }
       } catch (e) {
         sessionLog.warn(`Failed to pre-enable skill sources for session ${sessionId}:`, e)
+        await this.onProcessingStopped(sessionId, 'error', myGeneration)
         throw e
       }
     }
@@ -13406,6 +13423,11 @@ user a clickable link to where the thing now lives.`
     // streaming try/catch below, so it needs its own cleanup boundary.
     let agent: AgentInstance
     try {
+      if (managed.processingGeneration !== myGeneration || managed.stopRequested || !managed.isProcessing) {
+        sendSpan.end()
+        if (managed.stopRequested) await this.onProcessingStopped(sessionId, 'interrupted', myGeneration)
+        return
+      }
       agent = await this.getOrCreateAgent(managed, turnContext)
       if (turnContext.launchReceipt?.taskMode) {
         agent.setAgentContext({
@@ -13422,97 +13444,106 @@ user a clickable link to where the thing now lives.`
         // the current processing turn and enter the human queue before teardown.
         const releaseFailureCleanupGate = await this.acquireSendMessageAdmissionLock(sessionId)
         releaseFailureCleanupGate()
-        await this.onProcessingStopped(sessionId, 'error')
       }
+      await this.onProcessingStopped(sessionId, 'error', myGeneration)
       throw error
     }
     sendSpan.mark('agent.ready')
-
-    // Always set all sources for context (even if none are enabled), including built-ins
-    const workspaceRootPath = managed.workspace.rootPath
-    const allSources = loadAllSources(workspaceRootPath)
-    agent.setAllSources(allSources)
-    sendSpan.mark('sources.loaded')
-
-    const turnSourceSlugs = turnContext.launchReceipt?.taskMode
-      ? turnContext.enabledSourceSlugs
-      : managed.enabledSourceSlugs
-    // Apply source servers if any are enabled
-    if (turnSourceSlugs?.length) {
-      // Always build server configs fresh (no caching - single source of truth)
-      const sources = getSourcesBySlugs(workspaceRootPath, turnSourceSlugs)
-      // Pass session path so large API responses can be saved to session folder
-      const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
-      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback())
-      if (errors.length > 0) {
-        const message = `Failed to build enabled source tools: ${formatSourceBuildErrors(errors)}`
-        sessionLog.warn(message, errors)
-
-        const failedSlugs = new Set(errors.map(error => error.sourceSlug))
-        if (failedSlugs.size > 0) {
-          managed.enabledSourceSlugs = (managed.enabledSourceSlugs || []).filter(slug => !failedSlugs.has(slug))
-          try {
-            await cleanupSourceRuntimeArtifacts(workspaceRootPath, Array.from(failedSlugs))
-          } catch (err) {
-            sessionLog.warn(`Failed to clean up failed source runtime artifacts: ${err}`)
-          }
-          this.persistSession(managed)
-          this.sendEvent({
-            type: 'sources_changed',
-            sessionId,
-            enabledSourceSlugs: managed.enabledSourceSlugs,
-          }, managed.workspace.id)
-        }
-
-        this.sendEvent({ type: 'error', sessionId, error: message }, managed.workspace.id)
-        sendSpan.mark('sources.build_failed')
-        sendSpan.setMetadata('error', message)
-        sendSpan.end()
-        this.onProcessingStopped(sessionId, 'error')
-        return
-      }
-
-      // Proactive OAuth token refresh before applying servers to agent.
-      // This ensures tokens are fresh BEFORE the agent sees source state, avoiding a race
-      // where the agent receives a stale "needs_auth" status and triggers unnecessary re-auth
-      // even though the refresh succeeds moments later.
-      let tokensRefreshed = false
-      if (managed.tokenRefreshManager) {
-        const refreshResult = await refreshOAuthTokensIfNeeded(
-          agent,
-          sources,
-          sessionPath,
-          managed.tokenRefreshManager,
-          { sessionId, workspaceRootPath, poolServerUrl: managed.poolServer?.url }
-        )
-        if (refreshResult.failedSources.length > 0) {
-          sessionLog.warn('[OAuth] Some sources failed token refresh:', refreshResult.failedSources.map(f => f.slug))
-        }
-        if (refreshResult.tokensRefreshed) {
-          tokensRefreshed = true
-          sendSpan.mark('oauth.refreshed')
-        }
-      }
-
-      // Apply source servers to the agent.
-      // If tokens were refreshed, refreshOAuthTokensIfNeeded already rebuilt servers and
-      // called setSourceServers with fresh credentials — skip the duplicate call to avoid
-      // overwriting the post-refresh state with stale build results.
-      if (!tokensRefreshed) {
-        const mcpCount = Object.keys(mcpServers).length
-        const apiCount = Object.keys(apiServers).length
-        if (mcpCount > 0 || apiCount > 0 || turnSourceSlugs.length > 0) {
-          const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
-          const usableSources = sources.filter(isSourceUsable)
-          await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
-          await applyBridgeUpdates(agent, sessionPath, usableSources, mcpServers, sessionId, workspaceRootPath, 'send message', managed.poolServer?.url)
-          sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
-        }
-      }
-      sendSpan.mark('servers.applied')
+    if (managed.processingGeneration !== myGeneration || managed.stopRequested || !managed.isProcessing) {
+      sendSpan.end()
+      if (managed.stopRequested) await this.onProcessingStopped(sessionId, 'interrupted', myGeneration)
+      return
     }
 
     try {
+      // Always set all sources for context (even if none are enabled), including built-ins
+      const workspaceRootPath = managed.workspace.rootPath
+      const allSources = loadAllSources(workspaceRootPath)
+      agent.setAllSources(allSources)
+      sendSpan.mark('sources.loaded')
+
+      const turnSourceSlugs = turnContext.launchReceipt?.taskMode
+        ? turnContext.enabledSourceSlugs
+        : managed.enabledSourceSlugs
+      // Apply source servers if any are enabled
+      if (turnSourceSlugs?.length) {
+        // Always build server configs fresh (no caching - single source of truth)
+        const sources = getSourcesBySlugs(workspaceRootPath, turnSourceSlugs)
+        // Pass session path so large API responses can be saved to session folder
+        const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
+        const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback())
+        if (managed.processingGeneration !== myGeneration || managed.stopRequested || !managed.isProcessing) return
+        if (errors.length > 0) {
+          const message = `Failed to build enabled source tools: ${formatSourceBuildErrors(errors)}`
+          sessionLog.warn(message, errors)
+
+          const failedSlugs = new Set(errors.map(error => error.sourceSlug))
+          if (failedSlugs.size > 0) {
+            managed.enabledSourceSlugs = (managed.enabledSourceSlugs || []).filter(slug => !failedSlugs.has(slug))
+            try {
+              await cleanupSourceRuntimeArtifacts(workspaceRootPath, Array.from(failedSlugs))
+              if (managed.processingGeneration !== myGeneration || managed.stopRequested || !managed.isProcessing) return
+            } catch (err) {
+              sessionLog.warn(`Failed to clean up failed source runtime artifacts: ${err}`)
+            }
+            this.persistSession(managed)
+            this.sendEvent({
+              type: 'sources_changed',
+              sessionId,
+              enabledSourceSlugs: managed.enabledSourceSlugs,
+            }, managed.workspace.id)
+          }
+
+          this.sendEvent({ type: 'error', sessionId, error: message }, managed.workspace.id)
+          sendSpan.mark('sources.build_failed')
+          sendSpan.setMetadata('error', message)
+          sendSpan.end()
+          this.onProcessingStopped(sessionId, 'error', myGeneration)
+          return
+        }
+
+        // Proactive OAuth token refresh before applying servers to agent.
+        // This ensures tokens are fresh BEFORE the agent sees source state, avoiding a race
+        // where the agent receives a stale "needs_auth" status and triggers unnecessary re-auth
+        // even though the refresh succeeds moments later.
+        let tokensRefreshed = false
+        if (managed.tokenRefreshManager) {
+          const refreshResult = await refreshOAuthTokensIfNeeded(
+            agent,
+            sources,
+            sessionPath,
+            managed.tokenRefreshManager,
+            { sessionId, workspaceRootPath, poolServerUrl: managed.poolServer?.url }
+          )
+          if (managed.processingGeneration !== myGeneration || managed.stopRequested || !managed.isProcessing) return
+          if (refreshResult.failedSources.length > 0) {
+            sessionLog.warn('[OAuth] Some sources failed token refresh:', refreshResult.failedSources.map(f => f.slug))
+          }
+          if (refreshResult.tokensRefreshed) {
+            tokensRefreshed = true
+            sendSpan.mark('oauth.refreshed')
+          }
+        }
+
+        // Apply source servers to the agent.
+        // If tokens were refreshed, refreshOAuthTokensIfNeeded already rebuilt servers and
+        // called setSourceServers with fresh credentials — skip the duplicate call to avoid
+        // overwriting the post-refresh state with stale build results.
+        if (!tokensRefreshed) {
+          const mcpCount = Object.keys(mcpServers).length
+          const apiCount = Object.keys(apiServers).length
+          if (mcpCount > 0 || apiCount > 0 || turnSourceSlugs.length > 0) {
+            const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
+            const usableSources = sources.filter(isSourceUsable)
+            await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+            if (managed.processingGeneration !== myGeneration || managed.stopRequested || !managed.isProcessing) return
+            await applyBridgeUpdates(agent, sessionPath, usableSources, mcpServers, sessionId, workspaceRootPath, 'send message', managed.poolServer?.url)
+            sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
+          }
+        }
+        sendSpan.mark('servers.applied')
+      }
+
       sessionLog.info('Starting chat for session:', sessionId)
       sessionLog.info('Workspace:', JSON.stringify(managed.workspace, null, 2))
       sessionLog.info('Message:', options?.hidden ? '[hidden internal message]' : message)
@@ -13560,6 +13591,7 @@ user a clickable link to where the thing now lives.`
         sessionLog.warn(`Omitting ${attachmentFilter.omittedImages.length} image attachment(s) for text-only model ${messageBackendContext.resolvedModel} on connection ${managed.llmConnection ?? 'unknown'}`)
       }
 
+      if (managed.processingGeneration !== myGeneration || managed.stopRequested || !managed.isProcessing) return
       const chatIterator = agent.chat(effectiveMessage, attachmentFilter.attachments, {
         managedSkillRunId: managed.managedSkillRunId ?? managed.lastSentInputMessageId,
         resumeManagedSkillRun: resumeSkillRun,
@@ -13568,6 +13600,7 @@ user a clickable link to where the thing now lives.`
       sessionLog.info('Got chat iterator, starting iteration...')
 
       for await (const event of chatIterator) {
+        if (managed.processingGeneration !== myGeneration) return
         // Log events (skip noisy text_delta)
         if (event.type !== 'text_delta') {
           if (event.type === 'tool_start') {
@@ -13581,6 +13614,7 @@ user a clickable link to where the thing now lives.`
 
         // Process the event first
         await this.processEvent(managed, event)
+        if (managed.processingGeneration !== myGeneration) return
 
         // Fallback: Capture SDK session ID if the onSdkSessionIdUpdate callback didn't fire.
         // Primary capture happens in getOrCreateAgent() via onSdkSessionIdUpdate callback,
@@ -13635,7 +13669,7 @@ user a clickable link to where the thing now lives.`
               sessionLog.warn(`Canvas visual review completed without assistant response for session ${sessionId}`)
               sendSpan.mark('chat.complete.canvas_review_no_response')
               sendSpan.end()
-              this.onProcessingStopped(sessionId, 'complete')
+              this.onProcessingStopped(sessionId, 'complete', myGeneration)
               return
             }
 
@@ -13684,7 +13718,7 @@ user a clickable link to where the thing now lives.`
 
           sendSpan.mark('chat.complete')
           sendSpan.end()
-          this.onProcessingStopped(sessionId, 'complete')
+          this.onProcessingStopped(sessionId, 'complete', myGeneration)
           return  // Exit function, skip finally block (onProcessingStopped handles cleanup)
         }
 
@@ -13701,11 +13735,12 @@ user a clickable link to where the thing now lives.`
         sendSpan.end()
       } else if (managed.stopRequested) {
         sessionLog.info('Chat loop completed after stop request - events drained successfully')
-        this.onProcessingStopped(sessionId, 'interrupted')
+        this.onProcessingStopped(sessionId, 'interrupted', myGeneration)
       } else {
         sessionLog.info('Chat loop exited unexpectedly')
       }
     } catch (error) {
+      if (managed.processingGeneration !== myGeneration) return
       // Check if this is an abort error (expected when interrupted)
       const isAbortError = error instanceof Error && (
         error.name === 'AbortError' ||
@@ -13726,7 +13761,7 @@ user a clickable link to where the thing now lives.`
         // by setting isProcessing = false directly. All other abort reasons route
         // through onProcessingStopped for queue draining.
         if (reason === AbortReason.UserStop || reason === AbortReason.Redirect || reason === undefined) {
-          this.onProcessingStopped(sessionId, 'interrupted')
+          this.onProcessingStopped(sessionId, 'interrupted', myGeneration)
         }
       } else {
         sessionLog.error('Error in chat:', error)
@@ -13745,7 +13780,7 @@ user a clickable link to where the thing now lives.`
           error: error instanceof Error ? error.message : 'Unknown error'
         }, managed.workspace.id)
         // Handle error via centralized handler
-        this.onProcessingStopped(sessionId, 'error')
+        this.onProcessingStopped(sessionId, 'error', myGeneration)
       }
     } finally {
       // Only handle cleanup for unexpected exits (loop break without complete event)
@@ -13755,14 +13790,18 @@ user a clickable link to where the thing now lives.`
         sessionLog.info('Finally block cleanup - unexpected exit')
         sendSpan.mark('chat.unexpected_exit')
         sendSpan.end()
-        this.onProcessingStopped(sessionId, 'interrupted')
+        this.onProcessingStopped(sessionId, 'interrupted', myGeneration)
       }
     }
   }
 
   async cancelProcessing(sessionId: string, silent = false): Promise<void> {
     const managed = this.sessions.get(sessionId)
-    if (managed) managed.pendingSourceRetry = undefined
+    if (managed) {
+      managed.pendingSourceRetry = undefined
+      managed.authRetryToken = undefined
+      managed.authRetryInProgress = false
+    }
     if (!managed?.isProcessing) {
       return // Not processing, nothing to cancel
     }
@@ -13827,10 +13866,11 @@ user a clickable link to where the thing now lives.`
 
     // Safety timeout: if event loop doesn't complete within 5 seconds, force cleanup
     // This handles cases where the generator gets stuck
+    const stoppedGeneration = managed.processingGeneration
     setTimeout(() => {
-      if (managed.stopRequested && managed.isProcessing) {
+      if (managed.processingGeneration === stoppedGeneration && managed.stopRequested && managed.isProcessing) {
         sessionLog.warn('Generator did not complete after stop request, forcing cleanup')
-        this.onProcessingStopped(sessionId, 'timeout')
+        this.onProcessingStopped(sessionId, 'timeout', stoppedGeneration)
       }
     }, 5000)
 
@@ -13849,11 +13889,14 @@ user a clickable link to where the thing now lives.`
     workspaceId: string,
     failureErrorCode?: string,
   ): boolean {
-    if (managed.authRetryAttempted || !managed.lastSentMessage) return false
+    if (managed.authRetryAttempted || managed.stopRequested || !managed.lastSentMessage) return false
 
     sessionLog.info(`Auth error detected, attempting token refresh and retry for session ${sessionId}`)
     managed.authRetryAttempted = true
     managed.authRetryInProgress = true
+    const retryGeneration = managed.processingGeneration
+    const retryToken = { generation: retryGeneration }
+    managed.authRetryToken = retryToken
 
     // Emit lightweight info so the user sees progress instead of a scary red error
     this.sendEvent({
@@ -13864,6 +13907,8 @@ user a clickable link to where the thing now lives.`
     }, workspaceId)
 
     setImmediate(async () => {
+      if (this.sessions.get(sessionId) !== managed || managed.authRetryToken !== retryToken
+        || managed.processingGeneration !== retryGeneration || managed.stopRequested) return
       try {
         // 1. Reset summarization client so it picks up fresh credentials
         sessionLog.info(`[auth-retry] Resetting summarization client for session ${sessionId}`)
@@ -13871,6 +13916,7 @@ user a clickable link to where the thing now lives.`
 
         // 2. Destroy the agent — the new agent's postInit() will refresh auth
         sessionLog.info(`[auth-retry] Destroying agent for session ${sessionId}`)
+        managed.agent?.dispose()
         managed.agent = null
 
         // 3. Retry the message
@@ -13908,13 +13954,17 @@ user a clickable link to where the thing now lives.`
             retryStoredAttachments,
             retryOptions,
             retryMessageId,
-            true        // _isAuthRetry - prevents infinite retry loop
+            true,       // _isAuthRetry - prevents infinite retry loop
+            undefined,
+            undefined,
+            retryToken,
           )
           sessionLog.info(`[auth-retry] Retry completed for session ${sessionId}`)
         } else {
           managed.authRetryInProgress = false
         }
       } catch (retryError) {
+        if (managed.authRetryToken !== retryToken || managed.processingGeneration !== retryToken.generation || managed.stopRequested) return
         managed.authRetryInProgress = false
         sessionLog.error(`[auth-retry] Failed to retry after auth refresh for session ${sessionId}:`, retryError)
         sessionRuntimeHooks.captureException(retryError, { errorSource: 'auth-retry', sessionId })
@@ -13932,7 +13982,9 @@ user a clickable link to where the thing now lives.`
           error: 'Authentication failed. Please check your credentials.',
           timestamp: failedMessage.timestamp,
         }, workspaceId)
-        this.onProcessingStopped(sessionId, 'error')
+        this.onProcessingStopped(sessionId, 'error', retryToken.generation)
+      } finally {
+        if (managed.authRetryToken === retryToken) managed.authRetryToken = undefined
       }
     })
 
@@ -13948,15 +14000,17 @@ user a clickable link to where the thing now lives.`
    */
   private async onProcessingStopped(
     sessionId: string,
-    reason: 'complete' | 'interrupted' | 'error' | 'timeout'
+    reason: 'complete' | 'interrupted' | 'error' | 'timeout',
+    expectedGeneration?: number,
   ): Promise<void> {
     const managed = this.sessions.get(sessionId)
-    if (!managed) return
+    if (!managed || (expectedGeneration !== undefined && managed.processingGeneration !== expectedGeneration)) return
 
     if (managed.lastSettledProcessingGeneration === managed.processingGeneration && !managed.isProcessing) {
       return
     }
-    managed.lastSettledProcessingGeneration = managed.processingGeneration
+    const settledGeneration = managed.processingGeneration
+    managed.lastSettledProcessingGeneration = settledGeneration
 
     sessionLog.info(`Processing stopped for session ${sessionId}: ${reason}`)
 
@@ -13975,6 +14029,7 @@ user a clickable link to where the thing now lives.`
     // Full unbind happens below when the queue is empty (session truly done).
     if (this.browserPaneManager) {
       await this.browserPaneManager.clearVisualsForSession(sessionId)
+      if (managed.processingGeneration !== settledGeneration) return
     }
 
     // 2. Handle unread state based on whether user is viewing this session
@@ -14008,6 +14063,8 @@ user a clickable link to where the thing now lives.`
       await this.setSessionStatus(sessionId, 'done')
     }
 
+    if (managed.processingGeneration !== settledGeneration) return
+
     // 4. Apply deferred external metadata updates captured while processing.
     if (managed.pendingExternalMetadata) {
       const pendingHeader = managed.pendingExternalMetadata
@@ -14028,6 +14085,7 @@ user a clickable link to where the thing now lives.`
       // On the next turn, getOrCreateForSession() will re-bind it.
       if (this.browserPaneManager) {
         await this.browserPaneManager.clearVisualsForSession(sessionId)
+      if (managed.processingGeneration !== settledGeneration) return
         this.browserPaneManager.unbindAllForSession(sessionId)
       }
 
@@ -14039,7 +14097,7 @@ user a clickable link to where the thing now lives.`
       let reservation: ChatGoalReservation | undefined
       await this.withSessionAdmissionLock(sessionId, async () => {
         // A human message may have won the admission lock after processing stopped.
-        if (managed.isProcessing || managed.messageQueue.length > 0) return
+        if (managed.processingGeneration !== settledGeneration || managed.isProcessing || managed.messageQueue.length > 0) return
         reservation = await this.settleChatGoalAtIdle(
           managed,
           reason,
@@ -14064,6 +14122,8 @@ user a clickable link to where the thing now lives.`
         this.dispatchChatGoalContinuation(reservation)
       }
     }
+
+    if (managed.processingGeneration !== settledGeneration) return
 
     // 6. Always persist
     this.persistSession(managed)

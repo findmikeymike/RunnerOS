@@ -21,7 +21,7 @@ function createConfig(): BackendConfig {
 }
 
 describe('PiAgent subprocess error handling', () => {
-  it('completes the event queue when Pi 0.84 emits agent_end', () => {
+  it('completes the event queue when Pi 0.84 emits agent_settled', () => {
     const agent = new PiAgent(createConfig())
     let completionCount = 0
     ;(agent as any).eventQueue.complete = () => {
@@ -30,7 +30,7 @@ describe('PiAgent subprocess error handling', () => {
 
     ;(agent as any).handleLine(JSON.stringify({
       type: 'event',
-      event: { type: 'agent_end', messages: [], willRetry: false },
+      event: { type: 'agent_settled' },
     }))
 
     expect(completionCount).toBe(1)
@@ -103,6 +103,7 @@ describe('PiAgent subprocess error handling', () => {
     ;(agent as any).handleLine(JSON.stringify({
       type: 'error',
       code: 'mini_completion_error',
+      id: 'mini-1',
       message: '<html><head><title>400 Bad Request</title></head><body><center><h1>400 Bad Request</h1></center><hr><center>cloudflare</center></body></html>',
     }))
 

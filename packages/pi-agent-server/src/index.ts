@@ -188,7 +188,7 @@ interface OutboundSetAutoCompactionResult {
   errorMessage?: string;
 }
 interface OutboundSessionIdUpdate { type: 'session_id_update'; sessionId: string }
-interface OutboundError { type: 'error'; message: string; code?: string }
+interface OutboundError { type: 'error'; message: string; code?: string; id?: string }
 
 type OutboundMessage =
   | OutboundReady
@@ -1097,6 +1097,10 @@ function extractToolExecutionMetadata(args: Record<string, unknown> | undefined)
 }
 
 function handleSessionEvent(event: AgentSessionEvent): void {
+  // The SDK emits settled from a finally block before a rejected prompt
+  // reaches handlePrompt's error handler. Let the RPC finish first so its
+  // error/recovery is delivered before the single terminal event.
+  if (event.type === 'agent_settled' && activePromptRequests > 0) return;
   let forwardedEvent: OutboundAgentEvent = event;
 
   // Log API errors for debugging and attach provider-native turn anchor for branch cutoffs.
@@ -1254,7 +1258,10 @@ async function waitForCompaction(session: { isCompacting: boolean }, timeoutMs =
   }
 }
 
+let activePromptRequests = 0;
+
 async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): Promise<void> {
+  activePromptRequests++;
   currentUserMessage = msg.message;
 
   try {
@@ -1318,15 +1325,18 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
           message: `Prompt overflow recovery failed: ${retryMsg}`,
           code: 'prompt_overflow_recovery_failed',
         });
-        send({ type: 'event', event: { type: 'agent_end', messages: [], willRetry: false } });
         return;
       }
     }
 
     debugLog(`Prompt failed: ${errorMsg}`);
     send({ type: 'error', message: errorMsg, code: 'prompt_error' });
-    // Send synthetic agent_end so the main process event queue unblocks
-    send({ type: 'event', event: { type: 'agent_end', messages: [], willRetry: false } });
+  } finally {
+    // Queued follow-up RPCs return before the owning prompt is settled.
+    // Keep the stream open until that owning request (including recovery)
+    // finishes, and emit exactly once even when prompt() rejects.
+    activePromptRequests--;
+    if (activePromptRequests === 0) send({ type: 'event', event: { type: 'agent_settled' } });
   }
 }
 
@@ -1396,7 +1406,7 @@ async function handleMiniCompletion(msg: Extract<InboundMessage, { type: 'mini_c
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     debugLog(`[handleMiniCompletion] Error: ${errorMsg}`);
-    send({ type: 'error', message: errorMsg, code: 'mini_completion_error' });
+    send({ type: 'error', message: errorMsg, code: 'mini_completion_error', id: msg.id });
   }
 }
 
@@ -1414,7 +1424,7 @@ async function handleLlmQuery(msg: Extract<InboundMessage, { type: 'llm_query' }
     // Dual-emit: the generic `error` channel drives main-process OAuth
     // auth-refresh detection (centralized in PiAgent), while the targeted
     // `llm_query_result` rejects the pending promise for this specific call.
-    send({ type: 'error', message: errorMsg, code: 'llm_query_error' });
+    send({ type: 'error', message: errorMsg, code: 'llm_query_error', id: msg.id });
     send({ type: 'llm_query_result', id: msg.id, result: null, errorMessage: errorMsg, errorCode: 'llm_query_error' });
   }
 }

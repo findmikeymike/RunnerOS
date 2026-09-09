@@ -164,7 +164,12 @@ async function captureAuthRetry(session: ReturnType<typeof draft>) {
   try {
     const retry = manager as unknown as { attemptAuthRetry: (id: string, managed: typeof session, workspaceId: string) => boolean };
     expect(retry.attemptAuthRetry(session.id, session, 'campaign')).toBe(true);
-    return await next;
+    const args = await next;
+    // This harness replays the captured payload after the retry callback has
+    // finished. Its per-dispatch cancellation token has expired by then;
+    // cancellation itself is covered by provider-recovery-cancellation tests.
+    args[9] = undefined;
+    return args;
   } finally { manager.sendMessage = original; }
 }
 

@@ -157,33 +157,32 @@ describe('sendMessage durability', () => {
     const managed = buildSession(sessionId)
     const acked: string[] = []
 
-    await Promise.allSettled([
-      sm.sendMessage(
-        sessionId,
-        'first',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        (messageId) => { acked.push(messageId) },
-      ),
-      sm.sendMessage(
-        sessionId,
-        'second',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        (messageId) => { acked.push(messageId) },
-      ),
-    ])
-
-    expect(acked).toHaveLength(2)
-    expect(managed.messages.filter((message) => message.role === 'user')).toHaveLength(2)
-    expect(managed.messageQueue).toHaveLength(1)
-    expect(managed.messageQueue[0]!.message).toBe('second')
+    // Hold initialization open so this tests admission while a request is
+    // actually running, rather than relying on a failed init remaining stuck.
+    let releaseInitialization!: () => void
+    const initialization = new Promise<void>(resolve => { releaseInitialization = resolve })
+    ;(sm as unknown as { getOrCreateAgent: () => Promise<never> }).getOrCreateAgent = async () => {
+      await initialization
+      throw new Error('controlled initialization end')
+    }
+    const first = sm.sendMessage(
+      sessionId, 'first', undefined, undefined, undefined, undefined, undefined,
+      messageId => { acked.push(messageId) },
+    ).catch(() => {})
+    try {
+      await sm.sendMessage(
+        sessionId, 'second', undefined, undefined, undefined, undefined, undefined,
+        messageId => { acked.push(messageId) },
+      )
+      expect(acked).toHaveLength(2)
+      expect(managed.messages.filter(message => message.role === 'user')).toHaveLength(2)
+      expect(managed.messageQueue).toHaveLength(1)
+      expect(managed.messageQueue[0]!.message).toBe('second')
+    } finally {
+      managed.messageQueue = []
+      releaseInitialization()
+      await first
+    }
   })
 
   it('persists the host-provided origin and defaults internal sends to system', async () => {

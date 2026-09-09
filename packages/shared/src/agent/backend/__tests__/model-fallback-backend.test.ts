@@ -81,6 +81,170 @@ async function collect(backend: AgentBackend, message = 'hello'): Promise<AgentE
 }
 
 describe('model fallback backend', () => {
+  test('seeds conversation when a cooling primary is skipped', async () => {
+    modelCooldownRegistry.markFailure({ connectionSlug: 'primary', model: 'model-a', reason: 'service_error' });
+    const fallback = fakeBackend([{ type: 'text_complete', text: 'ok' }]);
+    const backend = createModelFallbackBackend({
+      primary: fakeBackend([]), primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      getRecoveryMessages: () => [{ type: 'user', content: 'Keep the release called RED PLAN.' }],
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fallback }],
+    });
+    await collect(backend, 'continue');
+    expect(fallback.prompts[0]).toContain('RED PLAN');
+  });
+
+  test.each(['abort', 'forceAbort', 'interruptForHandoff', 'redirect'] as const)('%s prevents failover after a normally terminated stream', async (method) => {
+    let release!: () => void;
+    const stopped = new Promise<void>(resolve => { release = resolve; });
+    const primary = fakeBackend([]);
+    primary.chat = async function* () { yield { type: 'text_delta', text: 'working' }; await stopped; };
+    primary.abort = async () => release();
+    primary.forceAbort = () => release();
+    primary.interruptForHandoff = () => release();
+    primary.redirect = () => { release(); return false; };
+    const fallback = fakeBackend([{ type: 'text_complete', text: 'must not run' }]);
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fallback }],
+    });
+    const iterator = backend.chat('hello');
+    await iterator.next();
+    await backend[method]('user_stop' as never);
+    expect(await iterator.next()).toEqual({ done: true, value: undefined });
+    expect(fallback.prompts).toHaveLength(0);
+    expect(modelCooldownRegistry.isCoolingDown('primary', 'model-a')).toBe(false);
+  });
+
+  test.each(['resolve', 'init'] as const)('stop during async %s prevents a later provider call', async (phase) => {
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>(resolve => { release = resolve; });
+    const ready = new Promise<void>(resolve => { entered = resolve; });
+    const primary = fakeBackend([{ type: 'error', message: '503 service unavailable' }]);
+    const fallback = fakeBackend([{ type: 'text_complete', text: 'must not run' }]);
+    if (phase === 'init') fallback.postInit = async () => { entered(); await waiting; return { authInjected: true }; };
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      resolveCandidates: async () => {
+        if (phase === 'resolve') { entered(); await waiting; }
+        return [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fallback }];
+      },
+    });
+    const output = collect(backend);
+    await ready;
+    backend.forceAbort('user_stop' as never);
+    release();
+    await output;
+    expect(fallback.prompts).toHaveLength(0);
+    if (phase === 'resolve') expect(primary.prompts).toHaveLength(0);
+    else expect(fallback.destroyCalls).toBe(1);
+  });
+
+
+  test('destroy during candidate initialization prevents work and cleans up once', async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>(resolve => { release = resolve; });
+    const ready = new Promise<void>(resolve => { entered = resolve; });
+    const primary = fakeBackend([{ type: 'error', message: '503 service unavailable' }]);
+    const fallback = fakeBackend([{ type: 'text_complete', text: 'must not run' }]);
+    fallback.postInit = async () => { entered(); await waiting; return { authInjected: true }; };
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fallback }],
+    });
+    const output = collect(backend);
+    await ready;
+    backend.destroy();
+    release();
+    await output;
+    expect(fallback.prompts).toHaveLength(0);
+    expect(fallback.destroyCalls).toBe(1);
+    expect(primary.destroyCalls).toBe(1);
+    await collect(backend);
+    expect(primary.prompts).toHaveLength(1);
+  });
+
+  test('closing a fallback stream releases its temporary backend', async () => {
+    const fallback = fakeBackend([{ type: 'text_delta', text: 'live' }, { type: 'text_complete', text: 'done' }]);
+    const backend = createModelFallbackBackend({
+      primary: fakeBackend([{ type: 'error', message: '503 service unavailable' }]),
+      primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fallback }],
+    });
+    const iterator = backend.chat('hello');
+    expect((await iterator.next()).value).toEqual({ type: 'text_delta', text: 'live' });
+    await iterator.return(undefined);
+    expect(fallback.destroyCalls).toBe(1);
+  });
+
+  test.each(['mini', 'query'] as const)('stop during %s initialization cancels without trying another model', async (operation) => {
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>(resolve => { release = resolve; });
+    const ready = new Promise<void>(resolve => { entered = resolve; });
+    const primary = fakeBackend([]);
+    primary.runMiniCompletion = async () => { throw new Error('503 service unavailable'); };
+    primary.queryLlm = async () => { throw new Error('503 service unavailable'); };
+    const fallback = fakeBackend([]);
+    let calls = 0;
+    fallback.runMiniCompletion = async () => { calls++; return 'bad'; };
+    fallback.queryLlm = async () => { calls++; return { text: 'bad' }; };
+    fallback.postInit = async () => { entered(); await waiting; return { authInjected: true }; };
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fallback }],
+    });
+    const result = operation === 'mini' ? backend.runMiniCompletion('hello')
+      : (backend as FakeBackend).queryLlm({ prompt: 'hello' });
+    const rejected = result.then(() => null, error => error);
+    await ready;
+    backend.forceAbort('user_stop' as never);
+    release();
+    expect((await rejected)?.message).toContain('aborted');
+    expect(calls).toBe(0);
+    expect(fallback.destroyCalls).toBe(1);
+  });
+
+  test('replays source and runtime setters before initializing a candidate', async () => {
+    const primary = fakeBackend([{ type: 'error', message: '503 service unavailable' }]);
+    const fallback = fakeBackend([{ type: 'text_complete', text: 'ok' }]);
+    const calls: string[] = [];
+    fallback.setAllSources = () => { calls.push('all-sources'); };
+    fallback.setSourceServers = async () => { await Promise.resolve(); calls.push('source-servers'); };
+    fallback.setThinkingLevel = () => { calls.push('thinking'); };
+    fallback.setPermissionMode = () => { calls.push('permission'); };
+    fallback.postInit = async () => { calls.push('init'); return { authInjected: true }; };
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fallback }],
+    });
+    backend.setAllSources([]);
+    await backend.setSourceServers({}, {}, ['gmail']);
+    backend.setThinkingLevel('off');
+    backend.setPermissionMode('ask');
+    await collect(backend);
+    expect(calls).toEqual(['all-sources', 'source-servers', 'thinking', 'permission', 'init']);
+  });
+
+  test('keeps shell inputs and results in receipts even when a command looks like a read', async () => {
+    const command = 'echo confirmation >> /tmp/a';
+    const primary = fakeBackend([
+      { type: 'tool_start', toolUseId: 'shell-1', toolName: 'Bash', input: { command } },
+      { type: 'tool_result', toolUseId: 'shell-1', toolName: 'Bash', result: '', isError: false },
+      { type: 'error', message: '503 service unavailable' },
+    ]);
+    const fallback = fakeBackend([{ type: 'text_complete', text: 'ok' }]);
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fallback }],
+    });
+    await collect(backend);
+    expect(fallback.prompts[0]).toContain('confirmation');
+    expect(fallback.prompts[0]).toContain('"toolUseId":"shell-1"');
+    expect(fallback.prompts[0]).not.toContain('no retained work');
+  });
+
   beforeEach(() => modelCooldownRegistry.clearAll());
 
   test('propagates a focus change to the primary and any later fallback attempt', async () => {
@@ -531,7 +695,7 @@ describe('model fallback backend', () => {
 
     expect((await collect(backend))[0]).toEqual({ type: 'text_complete', text: 'fallback' });
     expect(primaryCalls).toBe(0);
-    expect(fallback.prompts[0]).toBe('hello');
+    expect(fallback.prompts[0]).toContain('hello');
     expect(fallback.prompts[0]).not.toContain('primary model failed');
     const retried: AgentEvent[] = [];
     for await (const event of backend.chat('again', undefined, { isRetry: true })) retried.push(event);

@@ -142,6 +142,7 @@ describe('PiAgent.queryLlm — subprocess RPC round-trip', () => {
     (agent as any).handleLine(JSON.stringify({
       type: 'error',
       code: 'llm_query_error',
+      id: sent[0]!.id,
       message: 'HTTP 401: Unauthorized',
     }));
 
