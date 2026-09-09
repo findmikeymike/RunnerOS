@@ -10,6 +10,7 @@ export type ManagerSourceSurface =
   | { kind: 'campaign'; workspaceId: string }
 
 export function managerSourceSurface(source: string): ManagerSourceSurface | null {
+  if (source === 'signals-industry' || source === 'signals-your-world') return { kind: 'hq', tab: 'signals' }
   const campaignMatch = source.match(/^([^:]+):(.+)$/)
   if (campaignMatch) {
     const [, workspaceId] = campaignMatch

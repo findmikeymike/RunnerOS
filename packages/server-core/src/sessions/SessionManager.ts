@@ -3509,6 +3509,7 @@ export class SessionManager implements ISessionManager {
   }
   getSignalService(): SignalService {
     return this.signalService ??= new SignalService({
+      reportPublished: workspace => this.refreshManagerStateAndBroadcast(workspace.rootPath),
       admitRetry: (original, retry, orderIds) => this.getScheduledWorkRunner().admitSignalWorkflowRetry(getWorkspaceByNameOrId(original.workspaceId)!.rootPath, original, retry, orderIds),
       wake: workspace => { void this.getScheduledWorkRunner().scanWorkspace(workspace.id, workspace.rootPath).catch(() => {}) },
       changed: workspaceId => { this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId) },

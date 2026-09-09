@@ -6,6 +6,8 @@ describe('ManagerKnowledgePanel helpers', () => {
     expect(managerSourceSurface('artist-profile')).toEqual({ kind: 'hq', tab: 'profile' })
     expect(managerSourceSurface('artist-spotify-snapshot')).toEqual({ kind: 'hq', tab: 'home' })
     expect(managerSourceSurface('shared-intel-weekly')).toEqual({ kind: 'hq', tab: 'signals' })
+    expect(managerSourceSurface('signals-industry')).toEqual({ kind: 'hq', tab: 'signals' })
+    expect(managerSourceSurface('signals-your-world')).toEqual({ kind: 'hq', tab: 'signals' })
     expect(managerSourceSurface('campaign-1:mission-brief')).toEqual({ kind: 'campaign', workspaceId: 'campaign-1' })
     expect(managerSourceSurface('artist-vault')).toEqual({ kind: 'vault' })
     expect(managerSourceSurface('unknown-source')).toBeNull()
