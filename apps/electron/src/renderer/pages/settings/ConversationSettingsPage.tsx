@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Button } from '@/components/ui/button'
-import { SettingsMenuSelectRow, SettingsSection } from '@/components/settings'
+import { SettingsCard, SettingsRow, SettingsMenuSelectRow, SettingsSection } from '@/components/settings'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { ARTIST_MANAGER_VOICE_STYLES } from '@/lib/artist-manager-voice-style'
 import { navigate, routes } from '@/lib/navigate'
@@ -22,7 +21,6 @@ const HEARING_OPTIONS = [
 export default function ConversationSettingsPage() {
   const { t } = useTranslation()
   const { llmConnections, refreshLlmConnections } = useAppShellContext()
-  const [saved, setSaved] = useState<ArtistManagerVoiceSettings | null>(null)
   const [draft, setDraft] = useState<ArtistManagerVoiceSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -59,7 +57,7 @@ export default function ConversationSettingsPage() {
     setLoading(true); setError(null)
     void window.electronAPI.artistManagerVoiceSettings.get().then(value => {
       const settings = parseArtistManagerVoiceSettings(value)
-      if (!cancelled) { setSaved(settings); setDraft(settings) }
+      if (!cancelled) { setDraft(settings) }
     }).catch(() => {
       if (!cancelled) setError('Conversation settings could not be loaded. Your saved settings have not been changed.')
     }).finally(() => { if (!cancelled) setLoading(false) })
@@ -96,24 +94,22 @@ export default function ConversationSettingsPage() {
   const models = useMemo(() => buildVoiceModelOptions(connections, catalogs), [connections, catalogs])
   const modelValue = draft?.connectionSlug && draft.model ? voiceModelOptionValue(draft.connectionSlug, draft.model) : ''
   const selectedModel = models.find(model => model.value === modelValue)
-  const dirty = Boolean(draft && saved && JSON.stringify(draft) !== JSON.stringify(saved))
   const unavailableRoute = !selectedModel
-  const hearingSupported = HEARING_OPTIONS.some(option => option.value === draft?.sttSelection)
   const disabled = loading || saving || !draft
-  const change = (patch: Partial<ArtistManagerVoiceSettings>) => {
-    if (savingRef.current || loading) return
-    setDraft(current => current ? { ...current, ...patch } : current)
-    setNotice(''); setError(null)
-  }
-  const save = async () => {
-    if (!draft || savingRef.current || !dirty || !hearingSupported || unavailableRoute) return
-    const submitted = { ...draft }
+  const change = async (patch: Partial<ArtistManagerVoiceSettings>) => {
+    if (!draft || savingRef.current || loading) return
+    const previous = draft
+    const submitted = { ...draft, ...patch }
     savingRef.current = true; setSaving(true); setError(null); setNotice('')
+    setDraft(submitted)
     try {
       const result = parseArtistManagerVoiceSettings(await window.electronAPI.artistManagerVoiceSettings.update(submitted))
-      if (mounted.current) { setSaved(result); setDraft(result); setNotice('Saved. Applies to your next conversation.') }
+      if (mounted.current) { setDraft(result); setNotice('Saved') }
     } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause.message : 'Conversation settings could not be saved. Please try again.')
+      if (mounted.current) {
+        setDraft(previous)
+        setError(cause instanceof Error ? `Not saved: ${cause.message}` : 'Change could not be saved. Please try again.')
+      }
     } finally {
       savingRef.current = false
       if (mounted.current) setSaving(false)
@@ -129,43 +125,36 @@ export default function ConversationSettingsPage() {
     <div className="flex h-full flex-col">
       <PanelHeader />
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto max-w-4xl space-y-6 px-6 pb-8 pt-10">
-          <div>
-            <h1 className="text-base font-medium tracking-tight">{t('settings.conversation.title')}</h1>
-            <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">Talk music, career, and what’s on your mind. Move agreed work to Command when you’re ready.</p>
-          </div>
-          {loading ? <p role="status" className="text-sm text-muted-foreground">Loading conversation settings…</p> : draft ? <>
-            <SettingsSection title="Conversation" description="Separate from Command’s model and permissions.">
-              <div className="divide-y divide-white/[0.06]">
-                <SettingsMenuSelectRow inCard={false} label="Voice model" value={modelValue}
-                  description={selectedModel?.description ?? 'Fast models from your connected providers'}
-                  placeholder={modelsLoading ? 'Loading models…' : 'Choose a supported model'} disabled={disabled || modelsLoading}
+        <div className="mx-auto max-w-[1600px] space-y-6 px-6 pb-8 pt-10 text-white/80">
+          {loading ? <p role="status" className="text-xs text-white/55">Loading…</p> : draft ? <>
+            <SettingsSection title={t('settings.conversation.title')} description="Saves automatically. Applies to your next call."
+              action={<div className="flex items-center gap-4">
+                <button type="button" className="text-xs text-white/55 transition-colors hover:text-white" onClick={() => navigate(routes.view.settings('ai'))}>Models</button>
+                <button type="button" className="text-xs text-white/55 transition-colors hover:text-white disabled:opacity-40" disabled={refreshingConnections || modelsLoading || saving} onClick={() => void refreshModels()}>{refreshingConnections || modelsLoading ? 'Refreshing…' : 'Refresh'}</button>
+              </div>}>
+              <SettingsCard>
+                <SettingsMenuSelectRow label="Voice model" value={modelValue}
+                  description={selectedModel?.description}
+                  placeholder={modelsLoading ? 'Loading models…' : 'Choose a model'} disabled={disabled || modelsLoading}
                   onValueChange={value => {
                     const model = models.find(option => option.value === value)
                     if (model) change({ connectionSlug: model.connectionSlug, model: model.model })
                   }} options={models} searchable />
-                <SettingsMenuSelectRow inCard={false} label="Reasoning" value={draft.thinking} disabled={disabled}
+                <SettingsMenuSelectRow label="Reasoning" value={draft.thinking} disabled={disabled}
                   onValueChange={value => change({ thinking: value as ArtistManagerVoiceSettings['thinking'] })}
                   options={[{ value: 'low', label: 'Low', description: 'A little reasoning for practical decisions' }, { value: 'off', label: 'Off', description: 'Respond directly, when supported by the model' }]} />
-                <SettingsMenuSelectRow inCard={false} label="Manager" value={draft.style} disabled={disabled}
-                  description={ARTIST_MANAGER_VOICE_STYLES.find(style => style.id === draft.style)?.description}
+                <SettingsMenuSelectRow label="Manager" value={draft.style} disabled={disabled}
                   onValueChange={value => change({ style: value as ArtistManagerVoiceSettings['style'] })}
                   options={ARTIST_MANAGER_VOICE_STYLES.map(style => ({ value: style.id, label: style.label, description: style.description }))} />
-              </div>
-              {unavailableRoute && !modelsLoading && !modelError ? <p className="text-xs text-muted-foreground">{draft.model ? 'Choose a supported fast model before saving. Your saved model has not been changed.' : models.length ? 'Choose a voice model to get started.' : 'Sign in to ChatGPT or connect an API-key provider in Models to choose a fast voice model.'}</p> : null}
-              {llmConnections.some(connection => connection.isAuthenticated && connection.authType === 'oauth' && (connection.providerType === 'anthropic' || connection.piAuthProvider === 'anthropic')) ? <p className="text-xs text-muted-foreground">Claude sign-in is connected for Command. To use Haiku in Conversation, add an Anthropic API key in Models.</p> : null}
-              {selectedModel && connections.find(connection => connection.slug === selectedModel.connectionSlug)?.piAuthProvider === 'openai-codex' ? <p className="text-xs text-muted-foreground">Uses your ChatGPT connection. Model access and usage limits depend on your plan.</p> : null}
+              </SettingsCard>
+              {unavailableRoute && !modelsLoading && !modelError ? <p className="text-xs text-white/55">{draft.model ? 'Your saved voice model is unavailable. Choose a supported fast model.' : models.length ? 'Choose a voice model to get started.' : 'Sign in to ChatGPT or connect an API-key provider in Models to choose a fast voice model.'}</p> : null}
+              {unavailableRoute && !modelsLoading && llmConnections.some(connection => connection.isAuthenticated && connection.authType === 'oauth' && (connection.providerType === 'anthropic' || connection.piAuthProvider === 'anthropic')) ? <p className="text-xs text-white/55">Claude voice requires an Anthropic API key.</p> : null}
               {modelError ? <p className="text-xs text-destructive">Some model choices could not be loaded. <button type="button" className="underline" onClick={() => setModelRetry(value => value + 1)}>Retry</button></p> : null}
               {connectionError ? <p role="alert" className="text-xs text-destructive">Connections could not be refreshed. Please try again.</p> : null}
-              <div className="flex items-center gap-4">
-                <Button variant="link" className="h-auto p-0 text-xs" onClick={() => navigate(routes.view.settings('ai'))}>Manage models</Button>
-                <Button variant="link" className="h-auto p-0 text-xs" disabled={refreshingConnections || modelsLoading || saving} onClick={() => void refreshModels()}>{refreshingConnections || modelsLoading ? 'Refreshing…' : 'Refresh models'}</Button>
-              </div>
             </SettingsSection>
             <SettingsSection title="Audio">
-              <div className="divide-y divide-white/[0.06]">
-                <div className="flex items-center justify-between gap-4 py-3">
-                  <span className="text-[13px] text-white/80">Speaking</span>
+              <SettingsCard>
+                <SettingsRow label="Speaking">
                   <div className="flex items-center gap-3">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] text-white/65">
                       <span className={`size-1.5 rounded-full ${cloud?.inworld ? 'bg-emerald-400' : 'bg-white/30'}`} />
@@ -173,23 +162,19 @@ export default function ConversationSettingsPage() {
                     </span>
                     <button type="button" className="text-xs text-white/65 underline underline-offset-4" onClick={() => navigate(routes.view.settings('secrets'))}>{cloud?.inworld ? 'Manage' : 'Set up'}</button>
                   </div>
-                </div>
-                <SettingsMenuSelectRow inCard={false} label="Hearing" value={draft.sttSelection} disabled={disabled}
+                </SettingsRow>
+                <SettingsMenuSelectRow label="Hearing" value={draft.sttSelection} disabled={disabled}
+                  description={hearingStatus === 'Installed and ready on this computer.' || hearingStatus === 'AssemblyAI is connected.' ? undefined : hearingStatus}
                   placeholder="Choose hearing" onValueChange={value => change({ sttSelection: value })} options={HEARING_OPTIONS} />
-              </div>
-              <p className="text-xs leading-5 text-muted-foreground">{hearingSupported ? hearingStatus : 'Choose Moonshine Balanced or AssemblyAI before saving.'}</p>
-              <p className="text-xs leading-5 text-muted-foreground">Microphone and speaker controls are in Call settings.</p>
+              </SettingsCard>
             </SettingsSection>
           </> : null}
+          <div className="text-xs text-white/55" role={error ? 'alert' : 'status'}>
+            {error ? <span className="text-destructive">{error}</span> : saving ? 'Saving…' : notice}
+            {!draft && !loading ? <button type="button" className="ml-2 underline" onClick={() => setReload(value => value + 1)}>Retry</button> : null}
+          </div>
         </div>
       </ScrollArea>
-      <div className="flex items-center justify-between gap-4 border-t border-white/[0.06] px-6 py-4">
-        <div className="min-w-0 text-xs leading-5">
-          {error ? <p role="alert" className="text-destructive">{error}</p> : <p role="status" className="text-muted-foreground">{saving ? 'Saving…' : notice || (dirty ? 'Unsaved changes' : draft ? 'Changes apply to your next conversation.' : '')}</p>}
-          {!draft && !loading ? <button type="button" className="mt-1 underline" onClick={() => setReload(value => value + 1)}>Retry loading settings</button> : null}
-        </div>
-        <Button disabled={disabled || !dirty || !hearingSupported || unavailableRoute || modelsLoading} onClick={() => void save()}>{saving ? 'Saving…' : 'Save'}</Button>
-      </div>
     </div>
   )
 }

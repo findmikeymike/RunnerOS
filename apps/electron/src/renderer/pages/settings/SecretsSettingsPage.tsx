@@ -16,6 +16,8 @@ export const meta: DetailsPageMeta = {
   slug: 'secrets',
 }
 
+const serviceControlClass = 'inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/60 transition-colors hover:bg-white/[0.07] hover:text-white/85 disabled:opacity-40'
+
 function InfoExplainer({ text }: { text: string }) {
   return (
     <Tooltip>
@@ -676,7 +678,7 @@ export const SERVICES: SecretService[] = [
   },
   {
     id: 'zero',
-    group: 'Essential',
+    group: 'General',
     title: 'Zero',
     description: 'Lets agents securely use extra services when you need them.',
     presetNames: ['ZERO_PRIVATE_KEY'],
@@ -684,10 +686,11 @@ export const SERVICES: SecretService[] = [
   },
 ]
 
-const ESSENTIAL_SERVICE_IDS = ['google-workspace', 'inworld-tts', 'zero'] as const
+const ESSENTIAL_SERVICE_IDS = ['google-workspace', 'inworld-tts'] as const
 const SECRET_GROUPS = [
   'Essential',
-  ...Array.from(new Set(SERVICES.map((service) => service.group))).filter((group) => group !== 'Essential'),
+  'General',
+  ...Array.from(new Set(SERVICES.map((service) => service.group))).filter((group) => group !== 'Essential' && group !== 'General'),
 ]
 const PRESET_BY_NAME = new Map(SECRET_PRESETS.map((preset) => [preset.name, preset]))
 
@@ -712,6 +715,8 @@ export default function SecretsSettingsPage() {
   const [zeroAction, setZeroAction] = React.useState<string | null>(null)
   const [zeroBudgetDraft, setZeroBudgetDraft] = React.useState('')
   const [zeroDetailsOpen, setZeroDetailsOpen] = React.useState(false)
+  const [monidLimitsOpen, setMonidLimitsOpen] = React.useState(false)
+  const [zeroSpendOpen, setZeroSpendOpen] = React.useState(false)
   const [zeroImportOpen, setZeroImportOpen] = React.useState(false)
   const [canManageSecrets, setCanManageSecrets] = React.useState<boolean | null>(null)
   const [accessMessage, setAccessMessage] = React.useState('Only the workspace Owner can view or change saved keys and connected service credentials.')
@@ -1230,7 +1235,7 @@ export default function SecretsSettingsPage() {
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto w-full max-w-[1600px] space-y-2 px-6 pb-8 pt-2">
           <div className="flex justify-end">
-            <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            <Button variant="ghost" size="sm" className="!h-7 !rounded-lg !border !border-white/10 !bg-gradient-to-b !from-white/10 !to-white/[0.035] !px-2.5 !text-[11px] !text-white/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)] hover:!text-white/85" onClick={load} disabled={loading}>
               {loading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="mr-2 h-3.5 w-3.5" />}
               Refresh
             </Button>
@@ -1276,7 +1281,7 @@ export default function SecretsSettingsPage() {
                 {selectedGroup === 'Essential' ? (
                   <SettingsCard className="!border-0 bg-[#111113] shadow-none">
                     <div className="p-3">
-                      <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <Globe2 className="h-4 w-4 text-[#f68245]" />
@@ -1287,30 +1292,34 @@ export default function SecretsSettingsPage() {
                             <span className="rounded-full bg-[#f05a28]/12 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#ff9a62]">Primary agent tool</span>
                           </div>
                           <p className="mt-1 max-w-3xl text-xs leading-4 text-white/38">
-                            One connected account gives agents external search, social, enrichment, media, and structured data tools. In-budget calls run automatically.
+                            Search, social, data, and media tools for your agents.
                           </p>
                         </div>
                         <div className="flex shrink-0 gap-2">
+                          <button type="button" className={serviceControlClass} aria-expanded={monidLimitsOpen} aria-controls="monid-limits" onClick={() => setMonidLimitsOpen(open => !open)}>
+                            Limits <ChevronDown className={`h-3.5 w-3.5 transition-transform ${monidLimitsOpen ? 'rotate-180' : ''}`} />
+                          </button>
                           {monid?.hasEffectiveCredential ? (
                             <>
-                              <Button variant="outline" size="sm" onClick={connectMonid} disabled={connectingMonid || disconnectingMonid}>
+                              <Button variant="ghost" size="sm" className={serviceControlClass} onClick={connectMonid} disabled={connectingMonid || disconnectingMonid}>
                                 {connectingMonid ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
                                 Reconnect
                               </Button>
-                              <Button variant="ghost" size="sm" onClick={disconnectMonid} disabled={connectingMonid || disconnectingMonid}>
+                              <Button variant="ghost" size="sm" className={serviceControlClass} onClick={disconnectMonid} disabled={connectingMonid || disconnectingMonid}>
                                 {disconnectingMonid ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
                                 Disconnect
                               </Button>
                             </>
                           ) : (
-                            <Button size="sm" onClick={connectMonid} disabled={connectingMonid}>
+                            <Button variant="ghost" size="sm" className={serviceControlClass} onClick={connectMonid} disabled={connectingMonid}>
                               {connectingMonid ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
                               Connect Monid
                             </Button>
                           )}
                         </div>
                       </div>
-                      <div className="mt-4 flex flex-wrap items-end gap-3 rounded-[10px] bg-white/[0.025] px-3 py-3">
+                      <AnimateServiceFields open={monidLimitsOpen}>
+                      <div id="monid-limits" className="flex flex-wrap items-end gap-3 rounded-[10px] bg-white/[0.025] px-3 py-3">
                         <label className="space-y-1 text-[11px] text-white/45">
                           <span>Single call max</span>
                           <div className="flex h-8 w-28 items-center rounded-[8px] border border-white/[0.07] bg-black/20 px-2.5 focus-within:border-[#fb923c]/45">
@@ -1325,12 +1334,13 @@ export default function SecretsSettingsPage() {
                             <input type="number" min="0" step="0.01" value={monidWeeklyCap} onChange={(event) => setMonidWeeklyCap(event.target.value)} className="min-w-0 flex-1 bg-transparent px-1.5 text-right text-sm text-white/82 outline-none" />
                           </div>
                         </label>
-                        <Button variant="outline" size="sm" className="h-8" onClick={saveMonidBudget} disabled={savingMonidBudget}>
+                        <Button variant="outline" size="sm" className={serviceControlClass} onClick={saveMonidBudget} disabled={savingMonidBudget}>
                           {savingMonidBudget ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-2 h-3.5 w-3.5" />}
                           Save limits
                         </Button>
                         {monidBudget ? <span className="pb-2 text-[11px] text-white/35">${monidBudget.spentLast7DaysUsd.toFixed(2)} spent · ${monidBudget.remainingWeeklyUsd.toFixed(2)} left</span> : null}
                       </div>
+                      </AnimateServiceFields>
                     </div>
                   </SettingsCard>
                 ) : null}
@@ -1375,7 +1385,12 @@ export default function SecretsSettingsPage() {
                                 Disconnect
                               </button>
                             </div>
-                          ) : null : managedPreset ? (
+                          ) : (
+                            <button type="button" onClick={() => void connectGmail()} disabled={busy} className={serviceControlClass}>
+                              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+                              Connect Google
+                            </button>
+                          ) : managedPreset ? (
                             <div className="flex shrink-0 items-center gap-2">
                               <button
                                 type="button"
@@ -1412,31 +1427,27 @@ export default function SecretsSettingsPage() {
                               {status === 'ready' ? 'Keys' : 'Add key'}
                               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
                             </button>
-                          ) : null}
+                          ) : (
+                            <button type="button" className={serviceControlClass} disabled={zero === null} aria-expanded={zeroSpendOpen} aria-controls="zero-spend" onClick={() => setZeroSpendOpen(open => !open)}>
+                              {zero === null ? 'Checking…' : zero.installed ? 'Spend & setup' : 'Install'} <ChevronDown className={`h-3.5 w-3.5 transition-transform ${zeroSpendOpen ? 'rotate-180' : ''}`} />
+                            </button>
+                          )}
                         </div>
 
                         {service.id === 'google-workspace' ? !gmailScope?.hasEffectiveCredential ? (
-                          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] bg-white/[0.025] px-4 py-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm text-white/52">Connect once, then Artist OS can use Gmail when you ask.</p>
-                              {gmailConnectionError ? (
-                                <p className="mt-1.5 text-xs leading-5 text-amber-300/80">{gmailConnectionError}</p>
-                              ) : null}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void connectGmail()}
-                                disabled={busy}
-                                className="inline-flex h-9 items-center gap-2 rounded-[9px] bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-white/90 disabled:opacity-40"
-                              >
-                                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                                Connect Google
-                              </button>
-                            </div>
-                          </div>
+                          gmailConnectionError ? <p role="alert" className="mt-2 text-xs text-amber-300/80">{gmailConnectionError}</p> : null
                         ) : null : service.id === 'zero' ? (
-                          <div className="mt-4 space-y-3">
+                          <AnimateServiceFields open={zeroSpendOpen}>
+                          <div id="zero-spend" className="space-y-3">
+                            {!zero?.installed ? (
+                              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-white/[0.025] px-3 py-3">
+                                <p className="text-xs text-white/55">Install the Zero CLI on this computer to connect services.</p>
+                                <button type="button" className={serviceControlClass} onClick={installZero} disabled={installing || zeroAction !== null || !activeWorkspaceId}>
+                                  {installing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WalletCards className="h-3.5 w-3.5" />}
+                                  {installing ? 'Installing…' : 'Install Zero CLI'}
+                                </button>
+                              </div>
+                            ) : <>
                             <div className="flex flex-wrap items-end justify-between gap-3 rounded-[10px] bg-white/[0.025] px-3 py-3">
                               <div>
                                 <label htmlFor="zero-weekly-limit" className="text-xs font-medium text-white/72">Weekly spending limit</label>
@@ -1492,17 +1503,7 @@ export default function SecretsSettingsPage() {
                                 <div className="space-y-3 px-3 pb-3">
                                   {zero?.error && !zero.installed ? <p className="text-[11px] text-amber-300/75">Zero needs to be installed before setup.</p> : null}
                                   <div className="flex flex-wrap gap-2">
-                                    {!zero?.installed ? (
-                                      <button
-                                        type="button"
-                                        onClick={installZero}
-                                        disabled={installing || zeroAction !== null}
-                                        className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/72 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
-                                      >
-                                        {installing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WalletCards className="h-3.5 w-3.5" />}
-                                        Install Zero
-                                      </button>
-                                    ) : !zero.walletConfigured ? (
+                                    {!zero.walletConfigured ? (
                                       <button
                                         type="button"
                                         onClick={initZero}
@@ -1570,7 +1571,9 @@ export default function SecretsSettingsPage() {
                                 </div>
                               </AnimateServiceFields>
                             </div>
+                            </>}
                           </div>
+                          </AnimateServiceFields>
                         ) : managedPreset ? null : (
                           <AnimateServiceFields open={expanded}>
                             <div className="grid gap-3 md:grid-cols-2">
@@ -1707,7 +1710,7 @@ export default function SecretsSettingsPage() {
 
 function AnimateServiceFields({ open, children }: { open: boolean; children: React.ReactNode }) {
   return (
-    <div className={`overflow-hidden transition-all duration-150 ${open ? 'mt-3 max-h-[900px] opacity-100' : 'max-h-0 opacity-0'}`}>
+    <div hidden={!open} aria-hidden={!open} className={`overflow-hidden transition-all duration-150 ${open ? 'mt-3 max-h-[900px] opacity-100' : 'max-h-0 opacity-0'}`}>
       {children}
     </div>
   )

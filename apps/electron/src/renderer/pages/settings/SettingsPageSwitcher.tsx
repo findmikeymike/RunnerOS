@@ -154,7 +154,7 @@ export function SettingsGroupTabs({ activeSubpage }: SettingsPageSwitcherProps) 
 
   return (
     <div className="relative z-[100] mt-8 -mb-12 pointer-events-auto">
-      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-[11px] bg-white/[0.035] p-1 font-sans normal-case tracking-normal">
+      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-[12px] border border-white/[0.075] bg-gradient-to-b from-white/[0.045] to-white/[0.015] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] font-sans normal-case tracking-normal">
         {activeGroup.pages.map((page) => {
           const selected = page.id === activeSubpage
           return (
@@ -163,9 +163,9 @@ export function SettingsGroupTabs({ activeSubpage }: SettingsPageSwitcherProps) 
               type="button"
               onClick={() => navigate(routes.view.settings(page.id))}
               className={cn(
-                'h-8 rounded-[8px] px-3 text-[12px] font-semibold transition-colors',
+                'h-8 rounded-[8px] border border-transparent px-3 text-[12px] font-medium transition-colors',
                 selected
-                  ? 'bg-[#e65320]/45 text-white shadow-minimal'
+                  ? 'border-white/[0.08] bg-white/[0.08] text-white/85 shadow-minimal'
                   : 'text-white/52 hover:bg-white/[0.05] hover:text-white/82',
               )}
             >

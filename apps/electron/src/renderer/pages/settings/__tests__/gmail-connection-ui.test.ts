@@ -34,12 +34,15 @@ describe('Google Gmail connection UI', () => {
     expect(settings).toContain('className="!border-0 bg-[#111113] shadow-none"')
   })
 
-  it('puts core services in a first, orange Essential group and exposes the Zero weekly limit', () => {
-    expect(settings).toContain("const ESSENTIAL_SERVICE_IDS = ['google-workspace', 'inworld-tts', 'zero']")
+  it('keeps core services in Essential and Zero installation and spending in General', () => {
+    expect(settings).toContain("const ESSENTIAL_SERVICE_IDS = ['google-workspace', 'inworld-tts']")
     expect(settings).toContain("id: 'youtube-research',\n    group: 'Promotion'")
     expect(settings).toContain('Intel can use Zero when this is not connected.')
     expect(settings).toContain("const SECRET_GROUPS = [\n  'Essential'")
     expect(settings).toContain("group === 'Essential' ? 'bg-[#f05a28]/14 text-[#ff9a62]'")
+    expect(settings).toContain("id: 'zero',\n    group: 'General'")
+    expect(settings).toContain("zero.installed ? 'Spend & setup' : 'Install'")
+    expect(settings).toContain('Install Zero CLI')
     expect(settings).toContain('Weekly spending limit')
     expect(settings).toContain('configureZeroBudget(activeWorkspaceId, weeklyLimitUsd)')
     expect(settings).toContain('Wallet & setup')
