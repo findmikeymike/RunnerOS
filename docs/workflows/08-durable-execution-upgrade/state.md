@@ -23,3 +23,5 @@ After commit `a12a12ba4`, a small startup prerequisite adds authenticated live-c
 Local owner slice: Electron authority factory now combines stable installation identity, authenticated live connections and current configured workspaces; shared-server/external bindings fail closed. [Evidence](evidence/T-06-local-owner-slice.md). Included in this commit. Host activation remains separate.
 
 Startup composition slice: a default-off entry point now joins authority and protected host creation, with local-only policy checks before/after identity loading. [Evidence](evidence/T-06-startup-gate-slice.md). Included in this commit; bootstrap invocation, production runner binding resolution and live verification remain pending.
+
+Binding slice: production read-binding resolver now uses host workspace/connection configuration and API-key fingerprints, rejecting fallback routes and configuration changes during credential lookup. [Evidence](evidence/T-06-binding-slice.md). Included in this commit; conservative API-key-only scope and no activation.
