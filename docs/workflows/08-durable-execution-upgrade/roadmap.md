@@ -1,6 +1,6 @@
 # Workflow hardening roadmap
 
-Revision r2. Graph/status authority: [plan.json](plan.json). Technical contract and acceptance IDs: [specification.md](specification.md).
+Revision r4. Graph/status authority: [plan.json](plan.json). Technical contract and acceptance IDs: [specification.md](specification.md).
 
 ## Dependency backbone
 
@@ -32,7 +32,7 @@ Exit: independent reviewer sees actual subprocess kill/restart traces and packag
 
 Recovery: leave production runner untouched; discard only disposable fixture data. Update this plan if the selected engine changes.
 
-### P-02 — Journal and durable agent turns (outlined)
+### P-02 — Journal and durable agent turns (accepted internal read-only foundation)
 
 **Observable outcome:** a supported read-only workflow can be interrupted inside an agent step, restart, and reuse completed model/tool results.
 
@@ -49,11 +49,13 @@ Exit: independent fault evidence, typechecks and packaged main-process smoke. St
 
 ## Act II — Recover whole agent chains
 
-### P-03 — Approvals, effects and child agents (outlined)
+### P-03 — Approvals, effects and child agents (control slice accepted; phase remains open)
 
 **Observable outcome:** a workflow can wait for a decision or required child across restart, and can reconcile an uncertain effect without repeating it.
 
 Entry: P-02 complete; expand adapter and approval integration packets.
+
+- **T-06A, controls owner, accepted:** durable Pause/Resume/Cancel receipts and revision fences. Real SDK and packaged restart evidence in [T-06A controls](evidence/T-06A-controls.md). This prerequisite does not implement approvals, steering or effects.
 
 - **T-06, runtime owner:** exact approval commands, durable waits, permission/account revalidation, cancellation and steering revisions. Own escalation integration and relevant SessionManager control paths. Acceptance A-08/11/15/16.
 - **T-07, integration owner:** effect-policy registry, persistent retry/budget reservations, provider status reconciliation and nonreplayable fallback. Own adapter contracts and provider fixture coverage. Also prepare and execute one safe, private/test-mode real adapter proof (T-07-LIVE), after checking any missing action authorization; no paid/public operation is implied. Durable budget/attempt enforcement precedes paid dispatch; child identity precedes delegation regardless of table layout. Acceptance A-06/07/17.

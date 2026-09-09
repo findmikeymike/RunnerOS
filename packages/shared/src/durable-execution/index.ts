@@ -4,6 +4,8 @@ import { dirname, join, resolve } from 'node:path';
 import type { DurableCheckpoint, DurableCheckpointReply, DurableExecutionBridge, DurableExecutionDescriptor, DurableJson } from '../protocol/durable-execution.ts';
 import { DURABLE_RUNTIME_MANIFEST } from '../protocol/durable-execution.ts';
 import { privateDurableDirectory } from './key-provider.ts';
+import type { DurableControlCommand, DurableControlReceipt, DurableRunStatus } from '../protocol/durable-execution.ts';
+export type { DurableControlCommand, DurableControlReceipt } from '../protocol/durable-execution.ts';
 export { loadDurableKey, type DurableSafeStorage } from './key-provider.ts';
 
 interface Statement { run(...args: any[]): unknown; get(...args: any[]): any; all(...args: any[]): any[] }
@@ -37,12 +39,13 @@ export interface DurableRunSpec extends DurableExecutionDescriptor {
   maxModelAttempts: number;
   costPolicy: { maxTotalUnits: number; maxUnitsPerAttempt: number; unit: 'verified-free' | 'trusted-upper-bound' };
 }
-export interface DurableClaim { runId: string; workspaceId: string; ownerId: string; epoch: number }
+export interface DurableClaim { runId: string; workspaceId: string; ownerId: string; epoch: number; controlRevision: number }
 interface Call { id: string; tool: string; inputDigest?: string; attempts: number; result?: DurableJson }
 interface Turn { contextDigest: string; message?: DurableJson; calls: Call[] }
 export interface DurableRunSnapshot {
   spec: DurableRunSpec;
-  status: 'running' | 'succeeded' | 'cancelled' | 'failed';
+  status: DurableRunStatus;
+  controlRevision: number;
   version: number;
   modelAttempts: number;
   reservedUnits: number;
@@ -72,10 +75,10 @@ export class DurableJournal {
       this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;');
       if (this.db.prepare('PRAGMA journal_mode').get().journal_mode !== 'wal' || this.db.prepare('PRAGMA synchronous').get().synchronous !== 2 || this.db.prepare('PRAGMA foreign_keys').get().foreign_keys !== 1) throw new Error('unsafe-sqlite-settings');
       const version = this.db.prepare('PRAGMA user_version').get().user_version;
-      if (version !== 0 && version !== 1) throw new Error('unsupported-durable-schema');
+      if (![0, 1, 2].includes(version)) throw new Error('unsupported-durable-schema');
       this.db.exec('BEGIN IMMEDIATE');
       try {
-        this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, command TEXT NOT NULL, spec_digest TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT, pid INTEGER, payload TEXT NOT NULL, UNIQUE(workspace,command)); CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), version INTEGER NOT NULL, kind TEXT NOT NULL, UNIQUE(run_id,version)); CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES events(sequence), acknowledged INTEGER NOT NULL DEFAULT 0); PRAGMA user_version=1;');
+        this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, command TEXT NOT NULL, spec_digest TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT, pid INTEGER, payload TEXT NOT NULL, UNIQUE(workspace,command)); CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), version INTEGER NOT NULL, kind TEXT NOT NULL, UNIQUE(run_id,version)); CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES events(sequence), acknowledged INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS control_commands (workspace TEXT NOT NULL, id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(id), payload TEXT NOT NULL, PRIMARY KEY(workspace,id)); PRAGMA user_version=2;');
         const keyCheck = this.db.prepare("SELECT value FROM metadata WHERE key='key-check'").get();
         if (keyCheck) { if (this.decrypt(keyCheck.value, 'key-check') !== 'artist-os-durable-v1') throw new Error('invalid-key-check'); }
         else this.db.prepare('INSERT INTO metadata VALUES (?,?)').run('key-check', this.encrypt('artist-os-durable-v1', 'key-check'));
@@ -129,44 +132,93 @@ export class DurableJournal {
       if (old.length) { if (old.length !== 1 || old[0].id !== spec.runId || old[0].workspace !== spec.workspaceId || old[0].spec_digest !== digest(spec)) throw new Error('durable-command-conflict'); return this.decrypt(old[0].payload, spec.runId); }
       if (spec.deadlineAt <= Date.now()) throw new Error('invalid-durable-admission');
       if (digest(spec.runtimeManifest) !== digest(DURABLE_RUNTIME_MANIFEST)) throw new Error('durable-runtime-manifest-changed');
-      const state: DurableRunSnapshot = { spec: JSON.parse(canonical(spec)), status: 'running', version: 0, modelAttempts: 0, reservedUnits: 0, turns: [] };
+      const state: DurableRunSnapshot = { spec: JSON.parse(canonical(spec)), status: 'running', controlRevision: 0, version: 0, modelAttempts: 0, reservedUnits: 0, turns: [] };
       this.db.prepare('INSERT INTO runs(id,workspace,command,spec_digest,payload) VALUES (?,?,?,?,?)').run(spec.runId, spec.workspaceId, spec.commandId, digest(spec), this.encrypt(state, spec.runId));
       this.save(state, 'admitted'); return state;
     });
   }
-  get(runId: string, workspaceId: string): DurableRunSnapshot { return this.decrypt(this.row(runId, workspaceId).payload, runId); }
+  get(runId: string, workspaceId: string): DurableRunSnapshot { const state = this.decrypt(this.row(runId, workspaceId).payload, runId); state.controlRevision ??= 0; return state; }
   listInternal(workspaceId: string): DurableRunSnapshot[] { return this.db.prepare('SELECT id,payload FROM runs WHERE workspace=? ORDER BY rowid').all(workspaceId).map(row => this.decrypt(row.payload, row.id)); }
   list(workspaceId: string): Array<{ runId: string; status: DurableRunSnapshot['status']; version: number; modelAttempts: number; reservedUnits: number }> { return this.listInternal(workspaceId).map(state => ({runId: state.spec.runId, status: state.status, version: state.version, modelAttempts: state.modelAttempts, reservedUnits: state.reservedUnits})); }
   claim(runId: string, workspaceId: string): DurableClaim {
     return this.transaction(() => {
       const row = this.row(runId, workspaceId);
       if (row.owner && this.alive(row.pid)) throw new Error('durable-run-owned');
-      if (this.decrypt(row.payload, runId).status !== 'running') throw new Error('durable-run-terminal');
+      const state = this.get(runId, workspaceId);
+      if (state.status === 'paused') throw new Error('durable-run-paused');
+      if (state.status !== 'running') throw new Error('durable-run-terminal');
       const epoch = row.epoch + 1;
       this.db.prepare('UPDATE runs SET owner=?,pid=?,epoch=? WHERE id=?').run(this.ownerId, process.pid, epoch, runId);
-      return { runId, workspaceId, ownerId: this.ownerId, epoch };
+      return { runId, workspaceId, ownerId: this.ownerId, epoch, controlRevision: state.controlRevision };
     });
   }
   private fenced(claim: DurableClaim): DurableRunSnapshot {
     const row = this.row(claim.runId, claim.workspaceId);
     if (row.owner !== claim.ownerId || row.epoch !== claim.epoch || claim.ownerId !== this.ownerId) throw new Error('durable-stale-owner');
-    return this.decrypt(row.payload, claim.runId);
+    return this.get(claim.runId, claim.workspaceId);
   }
   release(claim: DurableClaim): void { this.transaction(() => { this.fenced(claim); this.db.prepare('UPDATE runs SET owner=NULL,pid=NULL WHERE id=?').run(claim.runId); }); }
   cancel(runId: string, workspaceId: string): void { this.control(runId, workspaceId, 'cancelled'); }
   fail(runId: string, workspaceId: string, _reason: string): void { this.control(runId, workspaceId, 'failed'); }
-  private control(runId: string, workspaceId: string, status: 'cancelled' | 'failed'): void { this.transaction(() => { const state = this.get(runId, workspaceId); if (state.status === 'running') { state.status = status; this.save(state, status); } }); }
+  private control(runId: string, workspaceId: string, status: 'cancelled' | 'failed'): void { this.transaction(() => { const state = this.get(runId, workspaceId); if (state.status === 'running' || status === 'cancelled' && state.status === 'paused') { state.status = status; state.controlRevision++; this.save(state, status); } }); }
+
+  command(command: DurableControlCommand): DurableControlReceipt {
+    canonical(command);
+    if (!command.commandId || !command.runId || !command.workspaceId || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1 || !['pause', 'resume', 'cancel'].includes(command.action)) throw new Error('invalid-durable-control-command');
+    return this.transaction(() => {
+      // Resolve workspace/run authority before disclosing any old command receipt.
+      const state = this.get(command.runId, command.workspaceId);
+      const identity = canonical([command.workspaceId, command.commandId]);
+      const prior = this.db.prepare('SELECT payload FROM control_commands WHERE workspace=? AND id=?').get(command.workspaceId, command.commandId);
+      if (prior) {
+        const saved = this.decrypt(prior.payload, identity);
+        if (digest(saved.command) !== digest(command)) throw new Error('durable-command-conflict');
+        return saved.receipt;
+      }
+      if (state.version !== command.expectedVersion) throw new Error('durable-control-version-conflict');
+      const terminal = !['running', 'paused'].includes(state.status);
+      if (terminal && command.action !== 'cancel') throw new Error('durable-run-terminal');
+      if (command.action === 'resume' && Date.now() >= state.spec.deadlineAt) throw new Error('durable-dispatch-blocked');
+      if (command.action === 'resume' && digest(state.spec.runtimeManifest) !== digest(DURABLE_RUNTIME_MANIFEST)) throw new Error('durable-runtime-manifest-changed');
+      const next: DurableRunStatus = command.action === 'pause' ? 'paused' : command.action === 'resume' ? 'running' : 'cancelled';
+      if (!terminal && state.status !== next) {
+        state.status = next;
+        state.controlRevision++;
+        this.save(state, command.action);
+      }
+      const receipt: DurableControlReceipt = { runId: command.runId, workspaceId: command.workspaceId, commandId: command.commandId, action: command.action, version: state.version, status: state.status, controlRevision: state.controlRevision };
+      this.db.prepare('INSERT INTO control_commands(workspace,id,run_id,payload) VALUES (?,?,?,?)').run(command.workspaceId, command.commandId, command.runId, this.encrypt({ command, receipt }, identity));
+      return receipt;
+    });
+  }
   bridge(claim: DurableClaim): DurableExecutionBridge {
     const spec = this.fenced(claim).spec;
     const descriptor: DurableExecutionDescriptor = { credentialIdentity: spec.credentialIdentity, runtimeManifest: Object.freeze({...spec.runtimeManifest}), engine: spec.engine, runId: spec.runId, workspaceId: spec.workspaceId, createdAt: spec.createdAt, allowedTools: [...spec.allowedTools], model: spec.model, maxOutputTokens: spec.maxOutputTokens };
     Object.freeze(descriptor.allowedTools); Object.freeze(descriptor);
-    return Object.freeze({ descriptor, checkpoint: async (request: DurableCheckpoint) => this.checkpoint(claim, request), cancel: async () => { this.fenced(claim); this.cancel(claim.runId, claim.workspaceId); }, fail: async (reason: string) => { this.fenced(claim); this.fail(claim.runId, claim.workspaceId, reason); } });
+    return Object.freeze({ descriptor, checkpoint: async (request: DurableCheckpoint) => this.checkpoint(claim, request),
+      cancel: async () => this.transaction(() => {
+        const state = this.fenced(claim);
+        if (state.status === 'cancelled') return;
+        if (state.controlRevision !== claim.controlRevision) throw new Error('durable-control-changed');
+        if (state.status === 'running') { state.status = 'cancelled'; state.controlRevision++; this.save(state, 'cancelled'); }
+      }),
+      fail: async (_reason: string) => this.transaction(() => {
+        const state = this.fenced(claim);
+        // An old execution cannot turn a later Pause/Resume/Cancel into a failure.
+        if (state.status === 'running' && state.controlRevision === claim.controlRevision) { state.status = 'failed'; this.save(state, 'failed'); }
+      }),
+    });
   }
   private checkpoint(claim: DurableClaim, request: DurableCheckpoint): DurableCheckpointReply {
     return this.transaction(() => {
       const state = this.fenced(claim);
       if (digest(state.spec.runtimeManifest) !== digest(DURABLE_RUNTIME_MANIFEST)) throw new Error('durable-runtime-manifest-changed');
-      if (state.status !== 'running' || Date.now() >= state.spec.deadlineAt) throw new Error('durable-dispatch-blocked');
+      const isResult = request.kind === 'model-result' || request.kind === 'tool-result';
+      if (!isResult) {
+        if (state.status === 'paused') throw new Error('durable-run-paused');
+        if (state.status !== 'running' || Date.now() >= state.spec.deadlineAt) throw new Error('durable-dispatch-blocked');
+        if (state.controlRevision !== claim.controlRevision) throw new Error('durable-control-changed');
+      } else if (!['running', 'paused', 'cancelled'].includes(state.status)) throw new Error('durable-dispatch-blocked');
       const priorDone = (turn: Turn) => turn.message !== undefined && turn.calls.every(call => call.result !== undefined);
       if (request.kind === 'complete') {
         if (!state.turns.length || !state.turns.every(priorDone) || state.turns[state.turns.length - 1]!.calls.length) throw new Error('durable-incomplete');

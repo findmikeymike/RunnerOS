@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "revision": "r3",
+  "revision": "r4",
   "sources": [
     {
       "id": "S-USER",
@@ -365,6 +365,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-entry.md",
+          "revision": "r4",
+          "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -402,6 +410,14 @@
           "path": "evidence/P-02-entry.md",
           "revision": "r3",
           "environment": "Carry-forward only: committed P01 implementation and historical r2 evidence reviewed unchanged; not a new test execution",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-entry.md",
+          "revision": "r4",
+          "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -457,6 +473,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-entry.md",
+          "revision": "r4",
+          "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -505,6 +529,14 @@
           "path": "evidence/P-02-entry.md",
           "revision": "r3",
           "environment": "Carry-forward only: committed P01 implementation and historical r2 evidence reviewed unchanged; not a new test execution",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-entry.md",
+          "revision": "r4",
+          "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -561,6 +593,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-entry.md",
+          "revision": "r4",
+          "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -592,6 +632,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-entry.md",
+          "revision": "r4",
+          "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -610,6 +658,14 @@
           "path": "evidence/P-02-entry.md",
           "revision": "r3",
           "environment": "Canonical main at dfac3d512; local installed Pi SDK 0.84.3 and accepted P01 proof",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-entry.md",
+          "revision": "r4",
+          "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -654,6 +710,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "automated"
+        },
+        {
+          "path": "evidence/P-03-entry.md",
+          "revision": "r4",
+          "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -696,6 +760,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "automated"
+        },
+        {
+          "path": "evidence/P-03-entry.md",
+          "revision": "r4",
+          "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -718,6 +790,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-03-entry.md",
+          "revision": "r4",
+          "environment": "Historical P01/P02 acceptance carried forward by independent review; affected code recertified separately by T06A; not a historical test rerun",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -729,16 +809,69 @@
       "depends_on": [
         "G-02-EXIT"
       ],
-      "status": "planned",
-      "gate_type": "review"
+      "status": "accepted",
+      "gate_type": "review",
+      "evidence": [
+        {
+          "path": "evidence/P-03-entry.md",
+          "revision": "r4",
+          "environment": "Internal durable read-only control slice; real Pi/native reads and copied packaged Electron; public rollout and remaining P03 work excluded",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        }
+      ]
+    },
+    {
+      "id": "T-06A",
+      "kind": "task",
+      "title": "Persist pause resume and cancellation with revision fences",
+      "owner": "controls-owner",
+      "depends_on": [
+        "G-03"
+      ],
+      "status": "accepted",
+      "phase": "P-03",
+      "requirements": [
+        "R-02",
+        "R-03",
+        "R-08",
+        "R-11",
+        "R-13"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-06A.md",
+      "resources": [
+        "packages/shared/src/durable-execution",
+        "packages/shared/src/protocol/durable-execution.ts",
+        "packages/server-core/src/workflows/durable-read-runner.ts"
+      ],
+      "verification": [
+        {
+          "method": "Run journal atomic-command tests, host control races, real SDK process pause/cancel recovery and packaged journal probe; independent rival then fixes",
+          "expected": "Duplicate receipts never reverse newer decisions; paused/cancelled states survive restart; old revisions cannot dispatch successors; original failures and dispatched late results remain visible",
+          "environment": "Disposable configuration, actual installed Pi SDK/native read, independent local simulator and copied packaged Electron"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/T-06A-controls.md",
+          "revision": "r4",
+          "environment": "Internal durable read-only control slice; real Pi/native reads and copied packaged Electron; public rollout and remaining P03 work excluded",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "automated"
+        }
+      ]
     },
     {
       "id": "T-06",
       "kind": "task",
-      "title": "Persist approvals cancellation and steering",
+      "title": "Persist exact approvals and ordered steering after durable controls",
       "owner": "runtime-owner",
       "depends_on": [
-        "G-03"
+        "G-03",
+        "T-06A"
       ],
       "status": "planned",
       "phase": "P-03",

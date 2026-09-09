@@ -92,7 +92,7 @@ test('cancel during asynchronous factory prevents even the first chat dispatch',
   } });
   const running = runner.start(input); await started;
   await runner.cancel(input.runId, input.workspaceId); factoryContinue();
-  await expect(running).rejects.toThrow('durable-read-dispatch-blocked');
+  expect((await running).status).toBe('cancelled');
   expect(chats).toBe(0); expect(destroyed).toBe(1);
 });
 
@@ -168,3 +168,157 @@ test('streamed checkpoint error survives missing completion and poisoned cleanup
   try { await expect(runner.start(input)).rejects.toThrow('SQLITE_FULL at model-result'); }
   finally { journal.fail = originalFail; journal.release = originalRelease; }
 });
+
+function latch() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(yes => { resolve = yes; });
+  return { promise, resolve };
+}
+
+test('pause is durable and cooperative: issued model result saves, next checkpoint stops', async () => {
+  const { input, base, journal } = fixture();
+  const started = latch(), finish = latch();
+  let aborts = 0;
+  const runner = new DurableReadRunner({ ...base, createBackend: args => ({ async *chat() {
+    const bridge = args.coreConfig.durableExecution!;
+    await bridge.checkpoint({ kind: 'model-start', turn: 0, context: { messages: [] } });
+    started.resolve(); await finish.promise;
+    await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', content: [{ type: 'text', text: 'issued result' }], stopReason: 'stop' } });
+    await bridge.checkpoint({ kind: 'complete' });
+  }, async abort() { aborts++; }, destroy() {} }) });
+  const running = runner.start(input); await started.promise;
+  const { receipt } = await runner.control({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'pause' });
+  expect(receipt.status).toBe('paused'); expect(journal.get(input.runId, input.workspaceId).status).toBe('paused');
+  expect(aborts).toBe(0); finish.resolve();
+  const stopped = await running;
+  expect(stopped.status).toBe('paused'); expect(stopped.turns[0]!.message).toBeDefined();
+});
+
+test('pause then resume drains old claim before fresh backend reuses saved model result', async () => {
+  const { input, base, journal } = fixture();
+  const started = latch(), finish = latch();
+  let creations = 0, destroyed = 0;
+  const runner = new DurableReadRunner({ ...base, createBackend: args => {
+    const attempt = ++creations;
+    if (attempt === 2) expect(destroyed).toBe(1);
+    return { async *chat() {
+      const bridge = args.coreConfig.durableExecution!;
+      const reply = await bridge.checkpoint({ kind: 'model-start', turn: 0, context: { messages: [] } });
+      if (attempt === 1) {
+        started.resolve(); await finish.promise;
+        await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', content: [{ type: 'text', text: 'issued result' }], stopReason: 'stop' } });
+      } else expect(reply.cached).toBeDefined();
+      await bridge.checkpoint({ kind: 'complete' });
+    }, async abort() { throw new Error('pause must not abort'); }, destroy() { destroyed++; } };
+  } });
+  const original = runner.start(input); await started.promise;
+  await runner.control({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'pause' });
+  const resumed = await runner.control({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'resume' });
+  expect(resumed.receipt.status).toBe('running'); expect(creations).toBe(1);
+  finish.resolve();
+  expect((await original).status).toBe('running');
+  expect((await resumed.execution!).status).toBe('succeeded');
+  expect(creations).toBe(2); expect(journal.get(input.runId, input.workspaceId).modelAttempts).toBe(1);
+});
+
+test('duplicate resume receipt never reverses a later pause while old execution drains', async () => {
+  const { input, base, journal } = fixture();
+  const started = latch(), finish = latch();
+  let creations = 0;
+  const runner = new DurableReadRunner({ ...base, createBackend: args => {
+    creations++;
+    return { async *chat() { started.resolve(); await finish.promise; await complete(args); }, async abort() {}, destroy() {} };
+  } });
+  const running = runner.start(input); await started.promise;
+  const control = (action: 'pause' | 'resume') => ({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action });
+  await runner.control(control('pause'));
+  const resumeCommand = control('resume');
+  const resumed = await runner.control(resumeCommand);
+  const lastPause = await runner.control(control('pause'));
+  const duplicate = await runner.control(resumeCommand);
+  expect(duplicate.receipt).toEqual(resumed.receipt);
+  expect(journal.get(input.runId, input.workspaceId).controlRevision).toBe(lastPause.receipt.controlRevision);
+  finish.resolve();
+  expect((await running).status).toBe('paused');
+  expect((await resumed.execution!).status).toBe('paused');
+  expect((await duplicate.execution!).status).toBe('paused');
+  expect(creations).toBe(1);
+});
+
+test('cancel command commits before abort and late backend error cannot revive the run', async () => {
+  const { input, base, journal } = fixture();
+  const started = latch(), finish = latch();
+  const runner = new DurableReadRunner({ ...base, createBackend: args => ({ async *chat() {
+    started.resolve(); await finish.promise;
+    await args.coreConfig.durableExecution!.fail('late provider error');
+    yield { type: 'error' as const, message: 'late provider error' };
+  }, async abort() { expect(journal.get(input.runId, input.workspaceId).status).toBe('cancelled'); finish.resolve(); }, destroy() {} }) });
+  const running = runner.start(input); await started.promise;
+  const cancelled = await runner.control({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'cancel' });
+  expect(cancelled.receipt.status).toBe('cancelled'); expect((await running).status).toBe('cancelled');
+});
+
+test('failed command commit never aborts or acknowledges a cancelled state', async () => {
+  const { input, base, journal } = fixture();
+  const started = latch(), finish = latch();
+  let aborts = 0;
+  const runner = new DurableReadRunner({ ...base, createBackend: args => ({ async *chat() {
+    started.resolve(); await finish.promise; await complete(args);
+  }, async abort() { aborts++; }, destroy() {} }) });
+  const running = runner.start(input); await started.promise;
+  const originalCommand = journal.command.bind(journal);
+  const primary = new Error('SQLITE_FULL command commit');
+  journal.command = () => { throw primary; };
+  try {
+    await expect(runner.control({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'cancel' })).rejects.toBe(primary);
+    expect(aborts).toBe(0); expect(journal.get(input.runId, input.workspaceId).status).toBe('running');
+  } finally { journal.command = originalCommand; finish.resolve(); }
+  expect((await running).status).toBe('succeeded');
+});
+
+for (const breakFreshClaim of [false, true]) {
+  test(`explicit resume after late provider error ${breakFreshClaim ? 'preserves both errors if fresh claim fails' : 'uses a fresh backend and saved model result'}`, async () => {
+    const { input, base, journal } = fixture();
+    const started = latch(), finish = latch();
+    const oldFailure = new Error('old provider stream failed');
+    const claimFailure = new Error('SQLITE_FULL on resumed claim');
+    const originalClaim = journal.claim.bind(journal);
+    let creations = 0;
+    const runner = new DurableReadRunner({ ...base, createBackend: args => {
+      const attempt = ++creations;
+      return { async *chat() {
+        const bridge = args.coreConfig.durableExecution!;
+        const reply = await bridge.checkpoint({ kind: 'model-start', turn: 0, context: { messages: [] } });
+        if (attempt === 1) {
+          await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', content: [{ type: 'text', text: 'saved answer' }], stopReason: 'stop' } });
+          started.resolve(); await finish.promise;
+          await bridge.fail(oldFailure.message);
+          throw oldFailure;
+        }
+        expect(reply.cached).toBeDefined();
+        await bridge.checkpoint({ kind: 'complete' });
+      }, async abort() {}, destroy() {} };
+    } });
+    const original = runner.start(input); await started.promise;
+    const command = (action: 'pause' | 'resume') => ({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action });
+    await runner.control(command('pause'));
+    const resumed = await runner.control(command('resume'));
+    if (breakFreshClaim) journal.claim = () => { throw claimFailure; };
+    finish.resolve();
+    try {
+      await expect(original).rejects.toBe(oldFailure);
+      if (breakFreshClaim) {
+        let caught: unknown;
+        try { await resumed.execution; } catch (error) { caught = error; }
+        expect(caught).toBeInstanceOf(AggregateError);
+        expect((caught as AggregateError).cause).toBe(oldFailure);
+        expect((caught as AggregateError).errors).toEqual([oldFailure, claimFailure]);
+        expect(creations).toBe(1);
+      } else {
+        expect((await resumed.execution!).status).toBe('succeeded');
+        expect(journal.get(input.runId, input.workspaceId).modelAttempts).toBe(1);
+        expect(creations).toBe(2);
+      }
+    } finally { journal.claim = originalClaim; }
+  });
+}

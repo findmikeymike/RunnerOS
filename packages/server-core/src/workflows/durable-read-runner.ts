@@ -3,7 +3,7 @@ import type { AgentEvent, Workspace } from '@craft-agent/core/types';
 import type { AgentBackend, BackendHostRuntimeContext, CoreBackendConfig } from '../../../shared/src/agent/backend/types.ts';
 import type { ResolvedBackendContext } from '../../../shared/src/agent/backend/factory.ts';
 import { canonical, digest, type DurableJournal, type DurableRunSnapshot, type DurableRunSpec } from '../../../shared/src/durable-execution/index.ts';
-import { DURABLE_RUNTIME_MANIFEST, type DurableJson } from '../../../shared/src/protocol/durable-execution.ts';
+import { DURABLE_RUNTIME_MANIFEST, type DurableControlCommand, type DurableControlReceipt, type DurableJson } from '../../../shared/src/protocol/durable-execution.ts';
 import type { LoadedWorkflow } from '../../../shared/src/workflows/types.ts';
 
 export interface DurableReadBinding {
@@ -30,6 +30,11 @@ export interface DurableReadRunnerOptions {
   resolveBinding(workspaceId: string, connectionSlug: string, model: string): Promise<DurableReadBinding> | DurableReadBinding;
   createBackend?: (args: DurableReadBackendArgs) => Promise<ReadBackend> | ReadBackend;
   onEvent?: (runId: string, event: AgentEvent) => void;
+}
+export interface DurableReadControlResult {
+  receipt: DurableControlReceipt;
+  /** Host-owned execution handle, not an RPC value. Observe failures independently from command acknowledgement. */
+  execution?: Promise<DurableRunSnapshot>;
 }
 interface FrozenReadContext {
   prompt: string; systemPrompt: string; connectionSlug: string; workspaceRoot: string; bindingDigest: string;
@@ -117,6 +122,34 @@ export class DurableReadRunner {
     await this.active.get(canonical([workspaceId, runId]))?.backend?.abort('durable-run-cancelled');
   }
 
+  async control(command: DurableControlCommand): Promise<DurableReadControlResult> {
+    command = JSON.parse(canonical(command)) as DurableControlCommand;
+    const receipt = Object.freeze(this.options.journal.command(command));
+    const key = canonical([command.workspaceId, command.runId]);
+    const previous = this.active.get(key);
+    if (command.action === 'cancel') {
+      if (this.options.journal.get(command.runId, command.workspaceId).status === 'cancelled') await previous?.backend?.abort('durable-run-cancelled');
+      return { receipt };
+    }
+    if (command.action !== 'resume') return { receipt };
+    const execution = (async () => {
+      // A resumed owner must not race the still-draining model/tool response of the preceding claim.
+      let previousFailure: unknown;
+      let previouslyFailed = false;
+      try { await previous?.promise; } catch (error) { previouslyFailed = true; previousFailure = error; }
+      try {
+        const current = this.options.journal.get(command.runId, command.workspaceId);
+        if (current.status !== 'running' || current.controlRevision !== receipt.controlRevision) return current;
+        return await this.resume(command.runId, command.workspaceId);
+      } catch (error) {
+        if (previouslyFailed) throw new AggregateError([previousFailure, error], 'Durable resume failed after the previous execution failed', { cause: previousFailure });
+        throw error;
+      }
+    })();
+    void execution.catch(() => { /* The receipt can be observed alone; execution remains reject-observable to callers. */ });
+    return { receipt, execution };
+  }
+
   private checkBinding(binding: DurableReadBinding, workspaceId: string, connectionSlug: string, model: string): void {
     if (binding.workspace.id !== workspaceId || binding.context.connection?.slug !== connectionSlug || binding.context.resolvedModel !== model) throw new Error('durable-read-binding-mismatch');
     bindingDigest(binding);
@@ -126,7 +159,14 @@ export class DurableReadRunner {
     const { journal } = this.options, initial = journal.get(runId, workspaceId);
     if (initial.status !== 'running') return initial;
     const claim = journal.claim(runId, workspaceId), journalBridge = journal.bridge(claim);
+    const assertDispatch = () => {
+      const state = journal.get(runId, workspaceId);
+      if (state.controlRevision !== claim.controlRevision) throw new Error('durable-control-changed');
+      if (state.status === 'paused') throw new Error('durable-run-paused');
+      if (state.status !== 'running' || Date.now() >= state.spec.deadlineAt) throw new Error('durable-read-dispatch-blocked');
+    };
     const bridge: typeof journalBridge = { ...journalBridge, checkpoint: async request => {
+      if (request.kind === 'complete') assertDispatch();
       if (request.kind === 'complete' && frozenContext(initial.spec).requireNonEmptyOutput) {
         const turns = journal.get(runId, workspaceId).turns;
         const message = turns[turns.length - 1]?.message as { content?: Array<{ type?: string; text?: string }> } | undefined;
@@ -141,14 +181,14 @@ export class DurableReadRunner {
       const binding = JSON.parse(JSON.stringify(await this.options.resolveBinding(workspaceId, frozen.connectionSlug, spec.model))) as DurableReadBinding;
       this.checkBinding(binding, workspaceId, frozen.connectionSlug, spec.model);
       if (bindingDigest(binding) !== frozen.bindingDigest) throw new Error('durable-read-binding-changed');
-      if (journal.get(runId, workspaceId).status !== 'running' || Date.now() >= spec.deadlineAt) throw new Error('durable-read-dispatch-blocked');
+      assertDispatch();
       entry.backend = await (this.options.createBackend ?? createDurableReadBackend)({ context: binding.context, hostRuntime: this.options.hostRuntime,
         coreConfig: { workspace: { ...binding.workspace, rootPath: frozen.workspaceRoot }, model: spec.model, customSystemPrompt: frozen.systemPrompt,
           thinkingLevel: 'off', isHeadless: true, skipConfigWatcher: true, agentSkillSlugs: [], modelFallback: { enabled: false },
           durableExecution: bridge, session: { id: spec.runId, workspaceRootPath: frozen.workspaceRoot,
             workingDirectory: frozen.workspaceRoot, sdkCwd: frozen.workspaceRoot, createdAt: spec.createdAt, lastUsedAt: spec.createdAt,
             model: spec.model, llmConnection: frozen.connectionSlug, permissionMode: 'safe', enabledSourceSlugs: [], hidden: true } } });
-      if (journal.get(runId, workspaceId).status !== 'running' || Date.now() >= spec.deadlineAt) throw new Error('durable-read-dispatch-blocked');
+      assertDispatch();
       let streamError: Error | undefined;
       for await (const event of entry.backend.chat(frozen.prompt)) {
         if (event.type === 'error') streamError ??= new Error(event.message);
@@ -160,9 +200,14 @@ export class DurableReadRunner {
         try { cancelled = journal.get(runId, workspaceId).status === 'cancelled'; } catch { /* Retain the earlier stream failure if storage also fails. */ }
         if (!cancelled) throw streamError;
       }
-      if (journal.get(runId, workspaceId).status === 'running') throw new Error('durable-read-missing-completion-checkpoint');
-      return journal.get(runId, workspaceId);
+      const finalState = journal.get(runId, workspaceId);
+      if (finalState.status === 'running' && finalState.controlRevision === claim.controlRevision) throw new Error('durable-read-missing-completion-checkpoint');
+      return finalState;
     } catch (error) {
+      if (error instanceof Error && /durable-(?:run-paused|control-changed)/.test(error.message)) {
+        const current = journal.get(runId, workspaceId);
+        if (current.status === 'paused' || current.status === 'cancelled' || current.controlRevision !== claim.controlRevision) return current;
+      }
       failed = true;
       try { await bridge.fail('durable-read-execution-failed'); } catch { /* Preserve the original storage/execution failure. */ }
       throw error;

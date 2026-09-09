@@ -5,8 +5,26 @@ export interface DurableRuntimeManifest {
 }
 /** Bump adapterRevision whenever replay/normalization/authorization semantics change. */
 export const DURABLE_RUNTIME_MANIFEST: Readonly<DurableRuntimeManifest> = Object.freeze({
-  piAgentCore: '0.84.3', piAi: '0.84.3', piCodingAgent: '0.84.3', adapterRevision: 'pi-readonly-1',
+  piAgentCore: '0.84.3', piAi: '0.84.3', piCodingAgent: '0.84.3', adapterRevision: 'pi-readonly-2',
 });
+export type DurableRunStatus = 'running' | 'paused' | 'succeeded' | 'cancelled' | 'failed';
+export interface DurableControlCommand {
+  runId: string;
+  workspaceId: string;
+  commandId: string;
+  expectedVersion: number;
+  action: 'pause' | 'resume' | 'cancel';
+}
+/** The immutable receipt describes when this command was applied, not the current projection. */
+export interface DurableControlReceipt {
+  runId: string;
+  workspaceId: string;
+  commandId: string;
+  action: DurableControlCommand['action'];
+  version: number;
+  status: DurableRunStatus;
+  controlRevision: number;
+}
 /** Exact API-key/bearer transport identity. Rotation requires a new admitted run. */
 export async function durableCredentialIdentity(transport: { provider: string; credential: { type: 'api_key'; key: string } }): Promise<string> {
   if (!transport.provider || transport.credential.type !== 'api_key' || !transport.credential.key) throw new Error('durable-credential-unsupported');
