@@ -1,3 +1,4 @@
+import { electronDurableWorkflowLifetime } from './durable-workflow-lifetime'
 import { artistStartupWindow } from './artist-startup-window'
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
@@ -1468,7 +1469,8 @@ app.whenReady().then(async () => {
     setBeforeUpdateInstallHook(async () => {
       isQuitting = true
       windowManager?.setAppQuitting(true)
-      await performQuitCleanup()
+      try { await performQuitCleanup() }
+      catch (error) { isQuitting = false; windowManager?.setAppQuitting(false); throw error }
     })
     setInstallQuitFailedHook(() => {
       mainLog.error('[auto-update] install handoff failed after cleanup — relaunching')
@@ -1554,11 +1556,22 @@ function captureAndSaveWindowState(reason: 'before-quit' | 'pre-update'): number
 }
 
 let quitCleanupRan = false
-async function performQuitCleanup(): Promise<void> {
+let quitCleanupComplete = false
+let quitCleanupAttempt: Promise<void> | undefined
+function performQuitCleanup(): Promise<void> {
+  if (quitCleanupAttempt) return quitCleanupAttempt
+  const attempt = runQuitCleanup()
+  quitCleanupAttempt = attempt
+  void attempt.catch(() => { if (quitCleanupAttempt === attempt) quitCleanupAttempt = undefined })
+  return attempt
+}
+async function runQuitCleanup(): Promise<void> {
   if (quitCleanupRan) {
     mainLog.info('Quit cleanup already ran, skipping')
     return
   }
+  // Do not tear down execution dependencies until the durable journal drains.
+  await electronDurableWorkflowLifetime.close()
   quitCleanupRan = true
 
   if (artistManagerMoonshine) {
@@ -1616,21 +1629,29 @@ async function performQuitCleanup(): Promise<void> {
   const { cleanup: cleanupPowerManager } = await import('./power-manager')
   cleanupPowerManager()
   releaseServerLock()
+  quitCleanupComplete = true
 }
 
 // Save window state and clean up resources before quitting
 app.on('before-quit', async (event) => {
   // Avoid re-entry when we call app.exit()
-  if (isQuitting) return
+  if (isQuitting && quitCleanupComplete) return
   event.preventDefault()
+  if (isQuitting) return
   isQuitting = true
 
   // Ensure Cmd+Q/app quit bypasses layered window close interception (Cmd+W behavior).
   windowManager?.setAppQuitting(true)
 
   captureAndSaveWindowState('before-quit')
-  await performQuitCleanup()
-  app.exit(0)
+  try {
+    await performQuitCleanup()
+    app.exit(0)
+  } catch (error) {
+    mainLog.error('Quit cleanup failed; quit can be retried:', error)
+    isQuitting = false
+    windowManager?.setAppQuitting(false)
+  }
 })
 
 // Handle uncaught exceptions — forward to Sentry explicitly since registering

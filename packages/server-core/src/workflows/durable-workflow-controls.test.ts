@@ -1,3 +1,4 @@
+import { createDurableWorkflowAuthority } from './durable-workflow-authority.ts';
 import {afterEach, expect, test, spyOn} from 'bun:test';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -132,4 +133,15 @@ test('selected updates remain pending until their successor model is reserved',a
  await bridge.checkpoint({kind:'model-start',turn:1,context:{messages:['new direction']}});
  expect((await service.control('w','r',command,actor)).state.pendingUpdates).toBe(0);
  f.journal.release(claim);
+});
+
+
+test('host authority revocation blocks approval and controls without changing the journal', async () => {
+ const f = await fixture(); let permitted = true;
+ const resolve = createDurableWorkflowAuthority({getAuthenticatedPrincipal: id => id === actor.clientId ? 'alice' : null, canAccessWorkspace: (_principal, workspace) => permitted && workspace === 'w'});
+ const service = f.service(resolve), item = (await service.listAttention('w', actor))[0]!;
+ const before = f.snapshot(); permitted = false;
+ await expect(service.resolveAttention('w', item.id, 'approved', {commandId:'revoked', expectedVersion:before.version}, actor)).rejects.toThrow('access-denied');
+ await expect(service.control('w', 'r', {commandId:'revoked-control', expectedVersion:before.version, action:'cancel'}, actor)).rejects.toThrow('access-denied');
+ expect(f.snapshot()).toEqual(before);
 });

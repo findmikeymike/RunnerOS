@@ -9,3 +9,11 @@ The new trusted host factory opens the protected journal and owns the read runne
 Evidence: [host lifecycle](evidence/T-06F-lifecycle.md), [independent review and fixes](evidence/T-06F-rival.md), [task packet](tasks/T-06F.md).
 
 The factory is not registered in Electron bootstrap. Next task: production host/actor/key and quit wiring with public admission still gated, followed by run-view projections. Effects/reconciliation, safe provider proof, children, schedules, migration and full rollout remain ahead. Runtime manifest stays pi-readonly-5.
+
+Small follow-up after `43172a1ff`: real Pi now verified through the new host factory, including native read, close/reopen and completed-result reuse. [Evidence](evidence/T-06F-real-host-followup.md). Test-only follow-up remains included in this commit; production wiring is still next.
+
+Small authority slice: a current host-authentication/workspace resolver and real-journal denial tests are implemented, included in this commit. [Evidence and integration contract](evidence/T-06-authority-slice.md). Trusted authentication/membership sources must be supplied during startup wiring; no live activation claimed.
+
+Small Electron storage slice: main-process host factory now supplies Electron safeStorage and canonical data root. Readiness, plaintext fallback and locked-keychain refusal covered by focused tests. [Evidence](evidence/T-06-electron-storage-slice.md). Included in this commit; startup registration and real OS keychain certification remain pending.
+
+Small shutdown slice: pending host startup and drainage now precede app cleanup; repeated quit cannot bypass the wait, failed drainage is retryable, and update installation aborts when cleanup fails. [Evidence](evidence/T-06-shutdown-slice.md). Included in this commit. Production host startup and live quit/update verification remain pending.

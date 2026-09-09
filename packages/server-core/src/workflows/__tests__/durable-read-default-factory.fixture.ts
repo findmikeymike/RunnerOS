@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { DurableWorkflowHost } from '../durable-workflow-host.ts';
 import { DurableJournal } from '../../../../shared/src/durable-execution/index.ts';
 import { durableCredentialIdentity } from '../../../../shared/src/protocol/durable-execution.ts';
 import { getCredentialManager } from '../../../../shared/src/credentials/manager.ts';
@@ -30,6 +31,8 @@ const server = createServer(async (request, response) => {
   response.end('data: [DONE]\n\n');
 });
 let journal: DurableJournal | undefined;
+let host: DurableWorkflowHost | undefined;
+const lifecycle = process.env.DURABLE_HOST_LIFECYCLE === '1';
 try {
   await new Promise<void>((yes, no) => { server.once('error', no); server.listen(0, '127.0.0.1', yes); });
   const serverFolder = join(root, 'app', 'packages', 'pi-agent-server', 'dist');
@@ -41,14 +44,31 @@ try {
     context: { provider: 'pi', resolvedModel: 'host-fixture-model', authType: 'api_key', capabilities: { needsHttpPoolServer: false },
       connection: { slug: 'host-fixture', name: 'Fixture', providerType: 'pi_compat', authType: 'api_key', piAuthProvider: 'openai',
         baseUrl: `http://127.0.0.1:${(server.address() as { port: number }).port}/v1`, customEndpoint: { api: 'openai-completions' }, models: ['host-fixture-model'], createdAt: 1 } } };
-  journal = new DurableJournal({ configRoot: join(root, 'config'), key: randomBytes(32) });
-  const runner = new DurableReadRunner({ journal, hostRuntime: { appRootPath: join(root, 'app'), isPackaged: false, nodeRuntimePath: process.execPath }, resolveBinding: () => binding });
-  const result = await runner.startWorkflow({ slug: 'fixture', source: 'global', path: root, body: '', metadata: { name: 'Fixture', description: '', trigger: { type: 'manual' }, outputs: { mode: 'none' }, steps: [{ id: 'read', agent: 'reader', input: 'Read the fixture file.' }] } },
-    { runId: randomUUID(), commandId: randomUUID(), workspaceId: binding.workspace.id, connectionSlug: 'host-fixture', model: 'host-fixture-model', resolvedAgentSlug: 'reader',
+  const runnerOptions = { hostRuntime: { appRootPath: join(root, 'app'), isPackaged: false, nodeRuntimePath: process.execPath }, resolveBinding: () => binding };
+  const openHost = () => DurableWorkflowHost.open({ configRoot: join(root, 'config'),
+    // Synthetic envelope, not OS protection certification.
+    protection: { isEncryptionAvailable: () => true, encryptString: value => Buffer.from(value), decryptString: value => value.toString() },
+    runnerOptions, resolvePrincipal: () => 'fixture-principal' });
+  const workflow: Parameters<DurableReadRunner['startWorkflow']>[0] = { slug: 'fixture', source: 'global', path: root, body: '', metadata: { name: 'Fixture', description: '', trigger: { type: 'manual' }, outputs: { mode: 'none' }, steps: [{ id: 'read', agent: 'reader', input: 'Read the fixture file.' }] } };
+  const input: Parameters<DurableReadRunner['startWorkflow']>[1] = { runId: randomUUID(), commandId: randomUUID(), workspaceId: binding.workspace.id, connectionSlug: 'host-fixture', model: 'host-fixture-model', resolvedAgentSlug: 'reader',
       systemPrompt: 'Read the supplied local fixture with the read tool, then report completion.', allowedTools: ['read'], maxOutputTokens: 256, maxModelAttempts: 3,
-      deadlineAt: Date.now() + 30000, costPolicy: { unit: 'verified-free', maxTotalUnits: 0, maxUnitsPerAttempt: 0 } });
+      deadlineAt: Date.now() + 30000, costPolicy: { unit: 'verified-free' as const, maxTotalUnits: 0, maxUnitsPerAttempt: 0 } };
+  let result;
+  if (lifecycle) {
+    host = openHost();
+    const admission = { ...input, prompt: 'Read the fixture file.' };
+    result = await host.start(admission);
+    await host.close();
+    host = openHost();
+    const replayed = await host.start(admission);
+    if (replayed.status !== 'succeeded' || replayed.modelAttempts !== result.modelAttempts || requests.length !== 2) throw new Error('host-reopen-repeated-work');
+    await host.close();
+  } else {
+    journal = new DurableJournal({ configRoot: join(root, 'config'), key: randomBytes(32) });
+    result = await new DurableReadRunner({ journal, ...runnerOptions }).startWorkflow(workflow, input);
+  }
   if (result.status !== 'succeeded' || requests.length !== 2 || !JSON.stringify(requests[1]).includes('REAL_HOST_NATIVE_READ')) throw new Error(`host-fixture-incomplete:${result.status}:${requests.length}`);
   console.log('DURABLE_HOST_RESULT:' + JSON.stringify({ status: result.status, providerRequests: requests.length, modelAttempts: result.modelAttempts, nativeReadRecorded: JSON.stringify(result.turns).includes('REAL_HOST_NATIVE_READ') }));
 } finally {
-  journal?.close(); server.closeAllConnections(); await new Promise<void>(done => server.close(() => done()));
+  await host?.close(); journal?.close(); server.closeAllConnections(); await new Promise<void>(done => server.close(() => done()));
 }
