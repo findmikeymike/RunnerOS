@@ -11,12 +11,12 @@ import {
   type UpdateReleaseKitUsageInput,
 } from '@craft-agent/shared/release-kit'
 import type { ReleaseKitItemUseSummary } from '@craft-agent/shared/scheduled-work'
-import { loadAllContextDocs } from '@craft-agent/shared/workspace-context'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import {
   requestClientOpenFileDialog,
   requestClientOpenPath,
 } from '@craft-agent/server-core/transport'
+import { refreshAndBroadcastArtistManagerState } from '../../hq-state/refresh-and-broadcast'
 import { ReleaseKitService } from '../../release-kit/ReleaseKitService'
 import type { HandlerDeps } from '../handler-deps'
 
@@ -36,18 +36,17 @@ export const HANDLED_CHANNELS = [
 
 export function registerReleaseKitHandlers(server: RpcServer, deps: HandlerDeps): void {
   const service = new ReleaseKitService({
-    onChanged: (workspaceId, manifest) => {
+    onChanged: (workspaceId, manifest, contextChanged) => {
       const workspace = getWorkspaceByNameOrId(workspaceId)
       const wsServerLike = deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } }
-      wsServerLike.wsServer?.push?.(RPC_CHANNELS.releaseKit.CHANGED, { to: 'all' }, workspaceId, manifest)
       if (workspace?.rootPath) {
-        wsServerLike.wsServer?.push?.(
-          RPC_CHANNELS.workspaceContext.CHANGED,
-          { to: 'all' },
-          workspaceId,
-          loadAllContextDocs(workspace.rootPath),
-        )
+        if (contextChanged) {
+          refreshAndBroadcastArtistManagerState(workspace.rootPath, (id, docs) => {
+            wsServerLike.wsServer?.push?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, id, docs)
+          })
+        }
       }
+      wsServerLike.wsServer?.push?.(RPC_CHANNELS.releaseKit.CHANGED, { to: 'all' }, workspaceId, manifest)
     },
   })
 

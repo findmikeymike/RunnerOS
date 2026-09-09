@@ -206,6 +206,7 @@ import {
 import { listDeepResearchRuns, readDeepResearchRun, profileDeepResearchSource } from '@craft-agent/shared/deep-research'
 import { createLabSong, loadLabSongs, saveLabLyrics } from '@craft-agent/shared/lab'
 import { OutputService } from '../outputs/OutputService'
+import { refreshAndBroadcastArtistManagerState } from '../hq-state/refresh-and-broadcast'
 import { refreshCampaignStateContextDocBestEffort, refreshHqStateContextDocBestEffort, scheduleHqStateContextRefresh } from '../hq-state/refresh'
 import {
   getArtistContextDetail,
@@ -2156,10 +2157,29 @@ export class SessionManager implements ISessionManager {
    */
   private async withArtistHqCommunity(
     run: (workspaceRootPath: string) => CommunityMailResult | Promise<CommunityMailResult>,
+    mutates = false,
   ): Promise<CommunityMailResult> {
     const hq = findArtistHqWorkspace()
     if (!hq) return { ok: false, error: 'Artist HQ workspace is not configured.' }
-    return run(hq.rootPath)
+    try {
+      return await run(hq.rootPath)
+    } finally {
+      if (mutates) {
+        try {
+          const { loadCommunityState } = await import('@craft-agent/shared/community')
+          loadCommunityState(hq.rootPath, this.resolveMachineId(hq.rootPath))
+          this.refreshManagerStateAndBroadcast(hq.rootPath)
+        } catch (error) {
+          sessionLog.warn('Failed to refresh community context after mutation:', error)
+        }
+      }
+    }
+  }
+
+  private refreshManagerStateAndBroadcast(rootPath: string): void {
+    refreshAndBroadcastArtistManagerState(rootPath, (workspaceId, docs) => {
+      this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'workspace', workspaceId }, workspaceId, docs)
+    })
   }
 
   private resolveMachineId(workspaceRootPath: string): string {
@@ -9064,17 +9084,10 @@ user a clickable link to where the thing now lives.`
       }
 
       const releaseKitService = new ReleaseKitService({
-        onChanged: (workspaceId, manifest) => {
-          this.eventSink?.(RPC_CHANNELS.releaseKit.CHANGED, { to: 'workspace', workspaceId }, workspaceId, manifest)
+        onChanged: (workspaceId, manifest, contextChanged) => {
           const target = getWorkspaceByNameOrId(workspaceId)
-          if (target) {
-            this.eventSink?.(
-              RPC_CHANNELS.workspaceContext.CHANGED,
-              { to: 'workspace', workspaceId },
-              workspaceId,
-              loadAllContextDocs(target.rootPath),
-            )
-          }
+          if (target && contextChanged) this.refreshManagerStateAndBroadcast(target.rootPath)
+          this.eventSink?.(RPC_CHANNELS.releaseKit.CHANGED, { to: 'workspace', workspaceId }, workspaceId, manifest)
         },
       })
       const resolveReleaseKitTarget = (requestedWorkspaceId?: string) => {
@@ -9209,12 +9222,14 @@ user a clickable link to where the thing now lives.`
             agentSlug: managed.spawnedFromAgent?.agentSlug,
             sessionId: managed.id,
           }),
+          true,
         ),
         communityRequestSendFn: async (input) => this.withArtistHqCommunity(
           root => this.communityTools.requestSend(root, input.jobId),
         ),
         communityTagContactsFn: async (input) => this.withArtistHqCommunity(
           root => this.communityTools.tagContacts(root, this.resolveMachineId(root), input as never),
+          true,
         ),
         websiteCaptureSyncFn: async (input) => this.withArtistHqWebsite(
           website => website.service.syncCapture(website.rootPath, {

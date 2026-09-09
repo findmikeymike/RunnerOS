@@ -53,7 +53,7 @@ import { OutputService } from '../outputs/OutputService'
 import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock'
 
 export interface ReleaseKitServiceOptions {
-  onChanged?: (workspaceId: string, manifest: ReleaseKitManifest) => void
+  onChanged?: (workspaceId: string, manifest: ReleaseKitManifest, contextChanged: boolean) => void
   getWorkspaceByNameOrId?: typeof getWorkspaceByNameOrId
   assertWritePermission?: (workspaceRootPath: string) => void
 }
@@ -348,8 +348,13 @@ export class ReleaseKitService {
   }
 
   private commitContext(workspaceId: string, workspaceRootPath: string, manifest: ReleaseKitManifest): boolean {
+    const contextChanged = loadContextDoc(workspaceRootPath, releaseKitContextSlug())?.body !== serializeReleaseKitContext(manifest)
     const contextPersisted = this.syncContext(workspaceRootPath, manifest)
-    this.options.onChanged?.(workspaceId, manifest)
+    try {
+      this.options.onChanged?.(workspaceId, manifest, contextChanged)
+    } catch (error) {
+      console.warn('[release-kit] Failed to notify observers after commit:', error)
+    }
     return contextPersisted
   }
 
@@ -367,11 +372,14 @@ export class ReleaseKitService {
   private syncContext(workspaceRootPath: string, manifest: ReleaseKitManifest): boolean {
     const marker = contextSyncMarkerPath(workspaceRootPath)
     try {
-      upsertContextDoc(workspaceRootPath, {
-        slug: releaseKitContextSlug(),
-        metadata: releaseKitContextMetadata(),
-        body: serializeReleaseKitContext(manifest),
-      })
+      const body = serializeReleaseKitContext(manifest)
+      if (loadContextDoc(workspaceRootPath, releaseKitContextSlug())?.body !== body) {
+        upsertContextDoc(workspaceRootPath, {
+          slug: releaseKitContextSlug(),
+          metadata: releaseKitContextMetadata(),
+          body,
+        })
+      }
       rmSync(marker, { force: true })
       return true
     } catch (error) {

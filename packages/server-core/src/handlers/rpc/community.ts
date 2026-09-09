@@ -1,4 +1,6 @@
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import { loadCommunityState } from '@craft-agent/shared/community'
+import { refreshAndBroadcastArtistManagerState } from '../../hq-state/refresh-and-broadcast'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type {
@@ -35,7 +37,19 @@ function normalizeMachineId(machineId: string): string {
   return machineId.trim() || 'local-machine'
 }
 
-export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps): void {
+export function registerCommunityHandlers(server: RpcServer, deps: HandlerDeps): void {
+  const refreshCommunity = (rootPath: string, machineId: string) => {
+    try {
+      loadCommunityState(rootPath, machineId)
+      refreshAndBroadcastArtistManagerState(rootPath, (workspaceId, docs) => {
+        const wsServerLike = deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } }
+        wsServerLike.wsServer?.push?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
+      })
+    } catch (error) {
+      console.warn('[hq-state] Failed to refresh community context:', error)
+    }
+  }
+
   server.handle(RPC_CHANNELS.community.GET, async (_ctx, workspaceId: string) => {
     const workspace = resolveWorkspace(workspaceId)
     const [{ evaluateTeamPermission, getTeamModeStatus }, { loadCommunityState, readCommunityState }] = await Promise.all([
@@ -58,6 +72,7 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
     assertTeamPermission(workspace.rootPath, 'records.write')
     const machineId = normalizeMachineId(getTeamModeStatus(workspace.rootPath).machine.machineId)
     upsertCommunityContact(workspace.rootPath, machineId, input)
+    refreshCommunity(workspace.rootPath, machineId)
     return loadCommunityState(workspace.rootPath, machineId)
   })
 
@@ -73,6 +88,7 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
       ...input,
       assertedBy: machineId,
     })
+    refreshCommunity(workspace.rootPath, machineId)
     return loadCommunityState(workspace.rootPath, machineId)
   })
 
@@ -85,6 +101,7 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
     assertTeamPermission(workspace.rootPath, 'community.email.draft')
     const machineId = normalizeMachineId(getTeamModeStatus(workspace.rootPath).machine.machineId)
     createCommunityEmailJob(workspace.rootPath, machineId, input)
+    refreshCommunity(workspace.rootPath, machineId)
     return loadCommunityState(workspace.rootPath, machineId)
   })
 
@@ -97,6 +114,7 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
     assertTeamPermission(workspace.rootPath, 'records.write')
     const machineId = normalizeMachineId(getTeamModeStatus(workspace.rootPath).machine.machineId)
     suppressCommunityContact(workspace.rootPath, machineId, email, reason)
+    refreshCommunity(workspace.rootPath, machineId)
     return loadCommunityState(workspace.rootPath, machineId)
   })
 
@@ -182,6 +200,7 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
     if ('ok' in result && result.ok === false) {
       return { ok: false, error: result.message, failure: result.failure }
     }
+    refreshCommunity(workspace.rootPath, machineId)
     return { ok: true, job: result }
   })
 
@@ -204,15 +223,20 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
     if ('error' in provider) return { ok: false, error: provider.error, failure: 'no-provider' }
 
     const mail = new CommunityMailService()
-    const approved = mail.approve(workspace.rootPath, machineId, jobId)
-    if (!approved.ok) return approved
+    try {
+      const approved = mail.approve(workspace.rootPath, machineId, jobId)
+      if (!approved.ok) return approved
 
-    const result = await mail.send(workspace.rootPath, machineId, jobId, provider, { kind: 'user' })
-    // Stop the mirrored Output asking for attention once the decision is made.
-    if (result.ok) {
-      settleEmailJobOutput(workspace.rootPath, jobId, 'approved', 'Sent to the fan list.')
+      const result = await mail.send(workspace.rootPath, machineId, jobId, provider, { kind: 'user' })
+      // Stop the mirrored Output asking for attention once the decision is made.
+      if (result.ok) {
+        settleEmailJobOutput(workspace.rootPath, jobId, 'approved', 'Sent to the fan list.')
+      }
+      return result
+    } finally {
+      // Approval, partial delivery, and failure states can change even when sending fails.
+      refreshCommunity(workspace.rootPath, machineId)
     }
-    return result
   })
 
   server.handle(RPC_CHANNELS.community.CANCEL_EMAIL_JOB, async (_ctx, workspaceId: string, jobId: string) => {
@@ -225,6 +249,7 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
     const result = new CommunityMailService().cancel(workspace.rootPath, machineId, jobId)
     if (result.ok) {
       settleEmailJobOutput(workspace.rootPath, jobId, 'changes_requested', 'The artist discarded this draft.')
+      refreshCommunity(workspace.rootPath, machineId)
     }
     return result
   })

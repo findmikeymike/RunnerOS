@@ -408,3 +408,52 @@ describe('ReleaseKitService source trust', () => {
     expect(readFileSync(join(campaignRoot, 'context', 'release-kit', 'CONTEXT.md'), 'utf8')).toContain('needsRightsClearance')
   })
 })
+
+test('observer failure does not turn a persisted Release Kit promotion into failure', () => {
+  const root = mkdtempSync(join(tmpdir(), 'release-kit-observer-'))
+  try {
+    const kit = new ReleaseKitService({
+      getWorkspaceByNameOrId: () => ({ id: 'campaign', name: 'Campaign', rootPath: root, artistWorkspaceScope: 'campaign' }) as never,
+      assertWritePermission: () => {},
+      onChanged: () => { throw new Error('renderer disconnected') },
+    })
+    const source = join(root, 'master.wav')
+    writeFileSync(source, 'audio fixture')
+    const result = kit.promote('campaign', {
+      source: { type: 'upload', originalFileName: 'master.wav' }, uploadPath: source,
+      category: 'audio', subtype: 'master',
+    }, 'user')
+    expect(result.item.status).toBe('ready')
+    expect(loadContextDoc(root, 'release-kit')?.body).toContain(result.item.id)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('unchanged kit reads do not refresh briefs but missing files do', () => {
+  const root = mkdtempSync(join(tmpdir(), 'release-kit-refresh-'))
+  try {
+    const changes: boolean[] = []
+    const kit = new ReleaseKitService({
+      getWorkspaceByNameOrId: () => ({ id: 'campaign', name: 'Campaign', rootPath: root, artistWorkspaceScope: 'campaign' }) as never,
+      assertWritePermission: () => {},
+      onChanged: (_id, _manifest, changed) => changes.push(changed),
+    })
+    const source = join(root, 'master.wav')
+    writeFileSync(source, 'audio fixture')
+    const result = kit.promote('campaign', {
+      source: { type: 'upload', originalFileName: 'master.wav' }, uploadPath: source,
+      category: 'audio', subtype: 'master',
+    }, 'user')
+    kit.get('campaign')
+    kit.get('campaign')
+    expect(changes).toEqual([true, false, false])
+    rmSync(resolveReleaseKitItemPath(root, result.item.relativePath))
+    expect(kit.get('campaign').items[0]?.status).toBe('missing')
+    expect(changes).toEqual([true, false, false, true])
+    kit.get('campaign')
+    expect(changes.at(-1)).toBe(false)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
