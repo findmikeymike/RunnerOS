@@ -15,6 +15,9 @@
  */
 
 import http from 'node:http';
+import { DurableTurnController } from './durable-turn-controller.ts';
+import { durableCredentialIdentity } from '../../shared/src/protocol/durable-execution.ts';
+import type { DurableExecutionDescriptor, DurableCheckpoint, DurableCheckpointReply } from '../../shared/src/protocol/durable-execution.ts';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import { mkdirSync, readdirSync, statSync, existsSync } from 'node:fs';
@@ -23,6 +26,8 @@ import { homedir } from 'node:os';
 // Pi SDK
 import {
   createAgentSession,
+  DefaultResourceLoader,
+  SettingsManager,
   SessionManager as PiSessionManager,
   ModelRuntime as PiModelRuntime,
   ModelRegistry as PiModelRegistry,
@@ -86,6 +91,7 @@ import { applySystemPromptOverride } from './system-prompt-override.ts';
 /** Init message from main process — configures the Pi agent server */
 interface InitMessage {
   type: 'init';
+  durableExecution?: DurableExecutionDescriptor;
   apiKey: string;
   model: string;
   cwd: string;
@@ -112,6 +118,7 @@ interface InitMessage {
 /** Messages from main process (stdin) */
 type InboundMessage =
   | InitMessage
+  | { type: 'durable_checkpoint_response'; requestId: string; reply?: DurableCheckpointReply; error?: string }
   | { type: 'prompt'; id: string; message: string; systemPrompt: string; images?: Array<{ type: 'image'; data: string; mimeType: string }> }
   | { type: 'register_tools'; tools: ProxyToolDef[] }
   | { type: 'tool_execute_response'; requestId: string; result: { content: string; isError: boolean } }
@@ -193,6 +200,7 @@ interface OutboundError { type: 'error'; message: string; code?: string; id?: st
 type OutboundMessage =
   | OutboundReady
   | OutboundEvent
+  | { type: 'durable_checkpoint_request'; requestId: string; checkpoint: DurableCheckpoint }
   | OutboundPreToolUseReq
   | OutboundToolExecReq
   | OutboundSessionToolCompleted
@@ -209,6 +217,20 @@ type OutboundMessage =
 // ============================================================
 
 let piSession: AgentSession | null = null;
+let durableController: DurableTurnController | undefined;
+let durableRequestSequence = 0;
+const durablePending = new Map<string, { resolve: (reply: DurableCheckpointReply) => void; reject: (error: Error) => void }>();
+function durableCheckpoint(checkpoint: DurableCheckpoint): Promise<DurableCheckpointReply> {
+  const requestId = `durable-${++durableRequestSequence}`;
+  return new Promise((resolve, reject) => {
+    durablePending.set(requestId, { resolve, reject });
+    send({ type: 'durable_checkpoint_request', requestId, checkpoint });
+  });
+}
+function rejectDurablePending(reason: string): void {
+  for (const pending of durablePending.values()) pending.reject(new Error(reason));
+  durablePending.clear();
+}
 let piModelRegistry: PiModelRegistry | null = null;
 let moduleAuthStorage: InMemoryCredentialStore | null = null;
 let moduleModelRuntime: PiModelRuntime | null = null;
@@ -505,6 +527,7 @@ async function ensureSession(): Promise<AgentSession> {
   if (!initConfig) throw new Error('Cannot create session: init not received');
 
   const cwd = resolvedCwd();
+  if (initConfig.durableExecution && initConfig.durableExecution.model !== initConfig.model) throw new Error('Durable model descriptor mismatch');
 
   const { modelRuntime, modelRegistry } = await createAuthenticatedRegistry();
   // Store at module scope for set_model handler
@@ -551,8 +574,11 @@ async function ensureSession(): Promise<AgentSession> {
     createFindToolDefinition(cwd),
     createLsToolDefinition(cwd),
   ];
-  const proxyTools = buildProxyTools();
-  const wrappedAll = wrapToolsWithHooks([...builtinDefs, ...webTools, ...proxyTools]);
+  const proxyTools = initConfig.durableExecution ? [] : buildProxyTools();
+  const permitted = initConfig.durableExecution
+    ? builtinDefs.filter(tool => initConfig!.durableExecution!.allowedTools.includes(tool.name as 'read'))
+    : [...builtinDefs, ...webTools, ...proxyTools];
+  const wrappedAll = wrapToolsWithHooks(permitted);
   const toolAllowlist = wrappedAll.map(t => t.name);
   debugLog(`Session tools: ${builtinDefs.length} builtin + ${webTools.length} web + ${proxyTools.length} proxy = ${wrappedAll.length} total`);
 
@@ -566,7 +592,16 @@ async function ensureSession(): Promise<AgentSession> {
 
   // Extension isolation: set agentDir to a temp directory under session path
   // to prevent loading global Pi extensions from ~/.pi/agent
-  if (initConfig.sessionPath) {
+  if (initConfig.durableExecution) {
+    if (initConfig.branchFromSessionPath || initConfig.branchFromSdkTurnId || initConfig.branchFromSdkSessionId) throw new Error('Durable execution cannot branch');
+    sessionOptions.sessionManager = PiSessionManager.inMemory(cwd);
+    sessionOptions.settingsManager = SettingsManager.inMemory();
+    const loader = new DefaultResourceLoader({ cwd, agentDir: initConfig.sessionPath || cwd,
+      settingsManager: sessionOptions.settingsManager, noExtensions: true, noSkills: true,
+      noPromptTemplates: true, noThemes: true, noContextFiles: true });
+    await loader.reload();
+    sessionOptions.resourceLoader = loader;
+  } else if (initConfig.sessionPath) {
     const agentDir = initConfig.agentDir || join(initConfig.sessionPath, '.pi-agent');
     mkdirSync(agentDir, { recursive: true });
     sessionOptions.agentDir = agentDir;
@@ -639,6 +674,8 @@ async function ensureSession(): Promise<AgentSession> {
     setInterceptorApiHints(undefined);
   }
 
+  if (initConfig.durableExecution && !sessionOptions.model) throw new Error('Pinned durable model could not be resolved');
+
   // Set thinking level
   const piThinkingLevel = THINKING_TO_PI[initConfig.thinkingLevel as keyof typeof THINKING_TO_PI];
   if (piThinkingLevel) {
@@ -648,6 +685,11 @@ async function ensureSession(): Promise<AgentSession> {
   // Create the session — tools flow through customTools + allowlist (see comment above).
   const { session } = await createAgentSession(sessionOptions);
   piSession = session;
+  if (initConfig.durableExecution) {
+    session.setAutoRetryEnabled(false);
+    session.setAutoCompactionEnabled(false);
+    durableController = new DurableTurnController(initConfig.durableExecution, durableCheckpoint);
+  }
 
   toolsChanged = false;
   debugLog(`Created Pi session: ${session.sessionId} (${wrappedAll.length} tools)`);
@@ -742,7 +784,10 @@ function wrapSingleTool(tool: ToolDefinition<any, any>): ToolDefinition<any, any
     inputObj = stripCraftMetadata(inputObj);
 
     // Execute original tool with (potentially modified) input
-    const result = await originalExecute(toolCallId, inputObj, signal, onUpdate, ctx);
+    const result = durableController
+      ? await durableController.tool(toolCallId, tool.name, inputObj, () => originalExecute(toolCallId, inputObj, signal, onUpdate, ctx))
+      : await originalExecute(toolCallId, inputObj, signal, onUpdate, ctx);
+    if (durableController) return result;
 
     // --- Post-execute: large response summarization ---
 
@@ -1126,7 +1171,7 @@ function handleSessionEvent(event: AgentSessionEvent): void {
       // fire all requests to the main process in parallel NOW, before executeToolCalls
       // iterates sequentially. Each proxy tool's execute() will hit the cache.
       const content = (msg as { content?: Array<{ type: string; id?: string; name?: string; arguments?: unknown }> }).content;
-      if (Array.isArray(content)) {
+      if (!initConfig?.durableExecution && Array.isArray(content)) {
         const prefetchableToolCalls = content.filter(
           (c): c is { type: string; id: string; name: string; arguments?: unknown } =>
             c.type === 'toolCall' && !!c.id && !!c.name && isPrefetchableTool(c.name),
@@ -1207,6 +1252,13 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
     debugLog('Cleaned up existing session for re-init');
   }
 
+  if (msg.durableExecution) {
+    if (msg.authType === 'environment' || msg.authType === 'iam_credentials' || msg.piAuth && msg.piAuth.credential.type !== 'api_key') throw new Error('Durable credential transport unsupported');
+    const provider = msg.customEndpoint ? 'custom-endpoint' : msg.piAuth?.provider;
+    const key = msg.piAuth?.credential.type === 'api_key' ? msg.piAuth.credential.key : msg.apiKey || (msg.customEndpoint && msg.baseUrl && isLocalhostUrl(msg.baseUrl) ? 'not-needed' : '');
+    if (!provider || !key || await durableCredentialIdentity({ provider, credential: { type: 'api_key', key } }) !== msg.durableExecution.credentialIdentity) throw new Error('Durable credential identity mismatch');
+    new DurableTurnController(msg.durableExecution, durableCheckpoint); // validate runtime before readiness or provider setup
+  }
   initConfig = msg;
 
   // Azure OpenAI requires a tenant-specific endpoint URL.
@@ -1217,7 +1269,7 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
   }
 
   // Start callback server for call_llm (idempotent — skips if already running)
-  await startCallbackServer();
+  if (!msg.durableExecution) await startCallbackServer();
 
   send({
     type: 'ready',
@@ -1296,6 +1348,11 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
 
     // Fire prompt — use followUp when session is already streaming so the
     // message is queued instead of throwing "Agent is already processing".
+    if (durableController) {
+      if (msg.images?.length) throw new Error('Durable execution does not support image attachments');
+      await durableController.run(session.agent, msg.message, msg.systemPrompt);
+      return;
+    }
     await session.prompt(msg.message, {
       images: msg.images && msg.images.length > 0 ? msg.images : undefined,
       streamingBehavior: 'followUp',
@@ -1305,7 +1362,7 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
 
     // Fallback hardening: if the provider surfaced a context-overflow error,
     // force a manual compact and retry this prompt once.
-    if (isContextOverflowErrorMessage(errorMsg)) {
+    if (!initConfig?.durableExecution && isContextOverflowErrorMessage(errorMsg)) {
       debugLog(`Prompt overflow detected, attempting compact+retry: ${errorMsg}`);
       try {
         const session = await ensureSession();
@@ -1378,6 +1435,10 @@ function handlePreToolUseResponse(msg: Extract<InboundMessage, { type: 'pre_tool
 }
 
 async function handleAbort(): Promise<void> {
+  if (initConfig?.durableExecution) {
+    for (const pending of pendingPreToolUse.values()) pending.resolve({ action: 'block', reason: 'Durable execution aborted' });
+    pendingPreToolUse.clear();
+  }
   if (piSession) {
     try {
       await piSession.abort();
@@ -1580,7 +1641,22 @@ function handleShutdown(): void {
 // ============================================================
 
 async function processMessage(msg: InboundMessage): Promise<void> {
+  if (initConfig?.durableExecution && ['init', 'register_tools', 'mini_completion', 'llm_query', 'set_model', 'set_thinking_level', 'compact', 'set_auto_compaction', 'steer', 'token_update'].includes(msg.type)) {
+    rejectDurablePending(`Unsupported durable command: ${msg.type}`);
+    piSession?.agent.abort();
+    if (durableController) durableController.fail(new Error(`Unsupported durable command: ${msg.type}`));
+    throw new Error(`Unsupported durable command: ${msg.type}`);
+  }
   switch (msg.type) {
+    case 'durable_checkpoint_response': {
+      const pending = durablePending.get(msg.requestId);
+      if (pending) {
+        durablePending.delete(msg.requestId);
+        if (msg.error || !msg.reply) pending.reject(new Error(msg.error || 'Missing durable checkpoint reply'));
+        else pending.resolve(msg.reply);
+      }
+      break;
+    }
     case 'init':
       await handleInit(msg);
       break;
@@ -1602,6 +1678,7 @@ async function processMessage(msg: InboundMessage): Promise<void> {
       break;
 
     case 'abort':
+      rejectDurablePending('Durable execution aborted');
       await handleAbort();
       break;
 

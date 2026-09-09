@@ -12,6 +12,7 @@
     "./outputs": "./src/outputs/OutputService.ts",
     "./release-kit": "./src/release-kit/index.ts",
     "./runtime": "./src/runtime/index.ts",
+    "./workflows/durable-read-runner": "./src/workflows/durable-read-runner.ts",
     "./handlers": "./src/handlers/index.ts",
     "./bootstrap": "./src/bootstrap/index.ts",
     "./model-fetchers": "./src/model-fetchers/index.ts",

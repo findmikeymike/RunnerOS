@@ -14,6 +14,7 @@ import { isPrivateSkillLoaderTool, privateSkillActivityStatus } from './core/pri
  * and passed to the subprocess during initialization.
  */
 
+import { durableCredentialIdentity } from '../protocol/durable-execution.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
 import type { AgentEvent } from '@craft-agent/core/types';
@@ -419,6 +420,8 @@ export class PiAgent extends BaseAgent {
     // Resolve credentials before spawning so we can derive AWS env vars
     // from the same fetch that produces piAuth (single source of truth).
 
+    if (this.config.durableExecution && (this.config.authType === 'environment' || this.config.authType === 'iam_credentials' || this.config.authType === 'oauth' && ['openai-codex', 'github-copilot'].includes(runtime.piAuthProvider ?? ''))) throw new Error('Durable execution supports pinned API-key/bearer credentials only');
+
     // For Copilot OAuth: preemptively refresh the short-lived Copilot token
     // before fetching credentials, so getPiAuth() picks up a fresh token.
     // refreshAndPushTokens guards this.subprocess internally — safe to call pre-spawn.
@@ -435,10 +438,17 @@ export class PiAgent extends BaseAgent {
     // Custom endpoint mode must NOT fall back to global API keys — keyless local endpoints
     // are valid, and non-local endpoints should fail explicitly instead of using unrelated creds.
     const piAuth = await this.getPiAuth();
+    if (this.config.durableExecution && (this.config.authType === 'environment' || this.config.authType === 'iam_credentials' || piAuth && piAuth.credential.type !== 'api_key')) throw new Error('Durable execution supports pinned API-key/bearer credentials only');
     const isCustomEndpointMode = !!runtime.customEndpoint;
     const legacyApiKey = (!piAuth && !isCustomEndpointMode) ? await this.getApiKey() : undefined;
     if (isCustomEndpointMode && !piAuth) {
       this.debug('Custom endpoint mode: no provider credential configured, sending empty API key');
+    }
+
+    if (this.config.durableExecution) {
+      const provider = isCustomEndpointMode ? 'custom-endpoint' : piAuth?.provider;
+      const key = piAuth?.credential.type === 'api_key' ? piAuth.credential.key : legacyApiKey || (isCustomEndpointMode && runtime.baseUrl && ['localhost', '127.0.0.1', '[::1]'].includes(new URL(runtime.baseUrl).hostname) ? 'not-needed' : '');
+      if (!provider || !key || await durableCredentialIdentity({ provider, credential: { type: 'api_key', key } }) !== this.config.durableExecution.descriptor.credentialIdentity) throw new Error('Durable credential identity changed; a new run is required');
     }
 
     // Derive AWS env vars from the piAuth credential (single fetch, no race).
@@ -512,6 +522,7 @@ export class PiAgent extends BaseAgent {
     // Send init command (flat structure matching subprocess InboundMessage type)
     this.send({
       type: 'init',
+      durableExecution: this.config.durableExecution?.descriptor,
       apiKey: legacyApiKey || '',
       model: this._model,
       cwd,
@@ -543,7 +554,7 @@ export class PiAgent extends BaseAgent {
     // Ensure auto-compaction is explicitly enabled for embedded sessions.
     // PI defaults this to enabled, but we set it proactively for clarity and resilience.
     try {
-      const enabled = await this.requestSetAutoCompaction(true);
+      const enabled = this.config.durableExecution ? false : await this.requestSetAutoCompaction(true);
       this.debug(`PI auto-compaction enabled: ${enabled}`);
     } catch (error) {
       this.debug(`Failed to configure PI auto-compaction (continuing): ${error instanceof Error ? error.message : String(error)}`);
@@ -577,7 +588,7 @@ export class PiAgent extends BaseAgent {
       }
     }
 
-    this.send({
+    if (!this.config.durableExecution) this.send({
       type: 'register_tools',
       tools: sessionToolDefs,
     });
@@ -591,7 +602,7 @@ export class PiAgent extends BaseAgent {
    * Send pool's proxy tool defs to subprocess for model visibility.
    */
   private registerPoolToolsWithSubprocess(): void {
-    if (!this.mcpPool) return;
+    if (this.config.durableExecution || !this.mcpPool) return;
     const proxyDefs = this.mcpPool.getProxyToolDefs();
     if (proxyDefs.length > 0) {
       this.send({
@@ -867,6 +878,23 @@ export class PiAgent extends BaseAgent {
     }
 
     switch (type) {
+      case 'durable_checkpoint_request': {
+        const requestId = String(msg.requestId);
+        const child = this.subprocess;
+        const bridge = this.config.durableExecution;
+        void (async () => {
+          try {
+            if (!bridge) throw new Error('No durable execution bridge');
+            const reply = await bridge.checkpoint(msg.checkpoint as import('../protocol/durable-execution.ts').DurableCheckpoint);
+            if (child === this.subprocess) this.send({ type: 'durable_checkpoint_response', requestId, reply });
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            try { await bridge?.fail(reason); } catch { /* original checkpoint failure remains terminal */ }
+            if (child === this.subprocess) this.send({ type: 'durable_checkpoint_response', requestId, error: reason });
+          }
+        })();
+        break;
+      }
       case 'ready':
         // Subprocess initialized, callback server listening
         this.callbackPort = (msg.callbackPort as number) || 0;
@@ -955,6 +983,14 @@ export class PiAgent extends BaseAgent {
       case 'error': {
         const errorCode = typeof msg.code === 'string' ? msg.code : undefined;
         const rawMessage = String(msg.message || 'Unknown subprocess error');
+        if (this.config.durableExecution) {
+          this.subprocessReadyReject?.(new Error(rawMessage));
+          this.subprocessStartupReject?.(new Error(rawMessage));
+          void this.config.durableExecution.fail(rawMessage).catch(() => {});
+          this.eventQueue.enqueue({ type: 'error', message: rawMessage });
+          this.eventQueue.complete();
+          break;
+        }
         if (this.subprocessReadyReject) {
           this.subprocessReadyReject(new Error(rawMessage));
           this.subprocessStartupReject?.(new Error(rawMessage));
@@ -1112,7 +1148,7 @@ export class PiAgent extends BaseAgent {
       }
 
       // Fire PostToolUse / PostToolUseFailure hook events (fire-and-forget)
-      if (agentEvent.type === 'tool_result') {
+      if (!this.config.durableExecution && agentEvent.type === 'tool_result') {
         const hookEvent = agentEvent.isError ? 'PostToolUseFailure' : 'PostToolUse';
         const hookResult = isPrivateSkillLoaderTool(agentEvent.toolName ?? event.toolName)
           ? privateSkillActivityStatus(agentEvent.isError) : agentEvent.result;
@@ -1163,8 +1199,12 @@ export class PiAgent extends BaseAgent {
       this.debug(`Captured pre-tool metadata for ${toolName} (${toolCallId}, sessionId=${debugSessionId}): intent=${!!preIntent}, displayName=${!!preDisplayName}`);
     }
 
-    // Fire PreToolUse automation event — await so automations run before tool executes
-    await this.emitAutomationEvent('PreToolUse', {
+    if (this.config.durableExecution && !({ Read: 'read', Grep: 'grep', Find: 'find', Ls: 'ls', Glob: 'find', LS: 'ls', read: 'read', grep: 'grep', find: 'find', ls: 'ls' } as Record<string, string>)[toolName]) {
+      this.send({ type: 'pre_tool_use_response', requestId, action: 'block', reason: 'Tool is unsupported for durable execution' });
+      return;
+    }
+    // Durable execution excludes automation hooks: even a read hook can dispatch writes.
+    if (!this.config.durableExecution) await this.emitAutomationEvent('PreToolUse', {
       hook_event_name: 'PreToolUse',
       tool_name: toolName,
       tool_input: input,
@@ -1361,6 +1401,10 @@ export class PiAgent extends BaseAgent {
     toolName: string;
     args: Record<string, unknown>;
   }): Promise<void> {
+    if (this.config.durableExecution) {
+      this.send({ type: 'tool_execute_response', requestId: request.requestId, result: { content: 'Proxy tools are unsupported for durable execution', isError: true } });
+      return;
+    }
     // Prerequisite check: block source tools until guide.md is read
     const prereqResult = this.prerequisiteManager.checkPrerequisites(request.toolName);
     if (!prereqResult.allowed) {
@@ -1844,6 +1888,30 @@ export class PiAgent extends BaseAgent {
   // Chat (AsyncGenerator with event queue -- mirrors CopilotAgent)
   // ============================================================
 
+  /** Host supplies the complete frozen prompt; skip ordinary volatile context/skill injection. */
+  override async *chat(message: string, attachments?: FileAttachment[], options?: ChatOptions): AsyncGenerator<AgentEvent> {
+    if (!this.config.durableExecution) {
+      yield* super.chat(message, attachments, options);
+      return;
+    }
+    const bridge = this.config.durableExecution;
+    if (attachments?.length || options && Object.keys(options).length) throw new Error('Durable execution requires a frozen text-only prompt');
+    if (this._model !== bridge.descriptor.model || this.config.workspace.id !== bridge.descriptor.workspaceId) throw new Error('Durable model/workspace descriptor mismatch');
+    if (this._isProcessing) throw new Error('Durable execution is already running');
+    this._isProcessing = true;
+    this.eventQueue.reset();
+    this.adapter.startTurn();
+    try {
+      await this.ensureSubprocess();
+      this.send({ type: 'prompt', id: `durable-${bridge.descriptor.runId}`, message,
+        systemPrompt: this.config.customSystemPrompt || 'Execute the supplied read-only workflow using only available certified tools.' });
+      for await (const event of this.eventQueue.drain()) yield event;
+    } catch (error) {
+      try { await bridge.fail(error instanceof Error ? error.message : String(error)); } catch { /* Preserve the primary execution error if the journal is unavailable. */ }
+      throw error;
+    } finally { this._isProcessing = false; }
+  }
+
   protected async *chatImpl(
     messageParam: string,
     attachments?: FileAttachment[],
@@ -2066,6 +2134,7 @@ export class PiAgent extends BaseAgent {
   // ============================================================
 
   override setModel(model: string): void {
+    if (this.config.durableExecution) throw new Error('Durable execution model is frozen');
     const previousModel = this.getModel();
     super.setModel(model);
     // Forward to subprocess so it uses the new model on next turn
@@ -2078,6 +2147,7 @@ export class PiAgent extends BaseAgent {
   }
 
   override setThinkingLevel(level: ThinkingLevel): void {
+    if (this.config.durableExecution) throw new Error('Durable execution thinking level is frozen');
     const previousLevel = this.getThinkingLevel();
     super.setThinkingLevel(level);
     // Forward to subprocess so it uses the new thinking level on next turn
@@ -2116,8 +2186,9 @@ export class PiAgent extends BaseAgent {
   }
 
   async abort(reason?: string): Promise<void> {
+    if (this.config.durableExecution) await this.config.durableExecution.cancel();
     // Fire Stop hook event (fire-and-forget)
-    this.emitAutomationEvent('Stop', { hook_event_name: 'Stop' });
+    if (!this.config.durableExecution) this.emitAutomationEvent('Stop', { hook_event_name: 'Stop' });
 
     // Deny all pending permissions
     for (const [, pending] of this.pendingPermissions) {
@@ -2135,8 +2206,14 @@ export class PiAgent extends BaseAgent {
   }
 
   forceAbort(reason: AbortReason): void {
+    if (this.config.durableExecution) {
+      void this.abort(String(reason)).catch(error => {
+        this.killSubprocess(error instanceof Error ? error : new Error(String(error)));
+      });
+      return;
+    }
     // Fire Stop hook event (fire-and-forget)
-    this.emitAutomationEvent('Stop', { hook_event_name: 'Stop' });
+    if (!this.config.durableExecution) this.emitAutomationEvent('Stop', { hook_event_name: 'Stop' });
 
     this.abortReason = reason;
     if (this.subprocessStartup) this.killSubprocess();
@@ -2176,6 +2253,7 @@ export class PiAgent extends BaseAgent {
    * Events flow through the existing generator — no abort needed.
    */
   override redirect(message: string): boolean {
+    if (this.config.durableExecution) return false;
     if (!this._isProcessing || !this.subprocess) {
       // Not streaming or no subprocess — fall back to abort
       this.forceAbort(AbortReason.Redirect);

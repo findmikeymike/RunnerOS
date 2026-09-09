@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "revision": "r2",
+  "revision": "r3",
   "sources": [
     {
       "id": "S-USER",
@@ -357,6 +357,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-02-entry.md",
+          "revision": "r3",
+          "environment": "Carry-forward only: committed P01 implementation and historical r2 evidence reviewed unchanged; not a new test execution",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -386,6 +394,14 @@
           "path": "evidence/T-01-boundaries.md",
           "revision": "r2",
           "environment": "Synthetic disposable P-01 fixture; Bun plus packaged Electron44.2 main-process proof; product/provider behavior unchanged",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        },
+        {
+          "path": "evidence/P-02-entry.md",
+          "revision": "r3",
+          "environment": "Carry-forward only: committed P01 implementation and historical r2 evidence reviewed unchanged; not a new test execution",
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
@@ -433,6 +449,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "automated"
+        },
+        {
+          "path": "evidence/P-02-entry.md",
+          "revision": "r3",
+          "environment": "Carry-forward only: committed P01 implementation and historical r2 evidence reviewed unchanged; not a new test execution",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -476,6 +500,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "automated"
+        },
+        {
+          "path": "evidence/P-02-entry.md",
+          "revision": "r3",
+          "environment": "Carry-forward only: committed P01 implementation and historical r2 evidence reviewed unchanged; not a new test execution",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -521,6 +553,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "automated"
+        },
+        {
+          "path": "evidence/P-02-entry.md",
+          "revision": "r3",
+          "environment": "Carry-forward only: committed P01 implementation and historical r2 evidence reviewed unchanged; not a new test execution",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -544,6 +584,14 @@
           "reviewer": "rival_phase1",
           "result": "pass",
           "kind": "manual"
+        },
+        {
+          "path": "evidence/P-02-entry.md",
+          "revision": "r3",
+          "environment": "Carry-forward only: committed P01 implementation and historical r2 evidence reviewed unchanged; not a new test execution",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
         }
       ]
     },
@@ -555,8 +603,18 @@
       "depends_on": [
         "G-01-EXIT"
       ],
-      "status": "planned",
-      "gate_type": "review"
+      "status": "accepted",
+      "gate_type": "review",
+      "evidence": [
+        {
+          "path": "evidence/P-02-entry.md",
+          "revision": "r3",
+          "environment": "Canonical main at dfac3d512; local installed Pi SDK 0.84.3 and accepted P01 proof",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        }
+      ]
     },
     {
       "id": "T-04",
@@ -566,7 +624,7 @@
       "depends_on": [
         "G-02"
       ],
-      "status": "planned",
+      "status": "accepted",
       "phase": "P-02",
       "requirements": [
         "R-02",
@@ -576,18 +634,26 @@
         "R-11",
         "R-14"
       ],
-      "detail": "outlined",
-      "packet": "roadmap.md",
+      "detail": "executable",
+      "packet": "tasks/T-04.md",
       "resources": [
-        "packages/shared/src/durable-execution",
-        "packages/shared/src/workflows/run-storage.ts",
-        "db/schema"
+        "packages/shared/src/durable-execution"
       ],
       "verification": [
         {
           "method": "Execute A-02/03/04/10/14/15 as defined in specification section 15 and task packet/phase expansion",
           "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
           "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/P-02-verification.md",
+          "revision": "r3",
+          "environment": "Internal single-step read-only route; production journal, actual Pi SDK/default backend, local provider simulator and copied packaged Electron; public rollout disabled",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "automated"
         }
       ]
     },
@@ -600,7 +666,7 @@
         "G-02",
         "T-04"
       ],
-      "status": "planned",
+      "status": "accepted",
       "phase": "P-02",
       "requirements": [
         "R-01",
@@ -608,17 +674,28 @@
         "R-04",
         "R-05"
       ],
-      "detail": "outlined",
-      "packet": "roadmap.md",
+      "detail": "executable",
+      "packet": "tasks/T-05.md",
       "resources": [
-        "packages/server-core/src/workflows/runner.ts",
-        "packages/server-core/src/sessions/SessionManager.ts"
+        "packages/shared/src/agent/pi-agent.ts",
+        "packages/pi-agent-server/src",
+        "packages/server-core/src/workflows/durable-read-runner.ts"
       ],
       "verification": [
         {
           "method": "Execute A-01/03/04/05/07 as defined in specification section 15 and task packet/phase expansion",
           "expected": "Recorded observable outcomes satisfy each mapped acceptance; no skipped boundary counted as pass",
           "environment": "Disposable local config and separate-process provider simulator; actual packaged Electron where specified"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/P-02-verification.md",
+          "revision": "r3",
+          "environment": "Internal single-step read-only route; production journal, actual Pi SDK/default backend, local provider simulator and copied packaged Electron; public rollout disabled",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "automated"
         }
       ]
     },
@@ -631,8 +708,18 @@
         "T-04",
         "T-05"
       ],
-      "status": "planned",
-      "gate_type": "review"
+      "status": "accepted",
+      "gate_type": "review",
+      "evidence": [
+        {
+          "path": "evidence/P-02-rival-fix.md",
+          "revision": "r3",
+          "environment": "Internal single-step read-only route; production journal, actual Pi SDK/default backend, local provider simulator and copied packaged Electron; public rollout disabled",
+          "reviewer": "rival_phase1",
+          "result": "pass",
+          "kind": "manual"
+        }
+      ]
     },
     {
       "id": "G-03",

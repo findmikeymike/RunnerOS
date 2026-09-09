@@ -160,6 +160,8 @@ export interface BackendHostRuntimeContext {
  * Provider-specific runtime details are resolved by backend drivers internally.
  */
 export interface CoreBackendConfig {
+  /** Trusted host-only journal bridge; never derived from renderer options. */
+  durableExecution?: import('../../protocol/durable-execution.ts').DurableExecutionBridge;
   /** Workspace configuration */
   workspace: Workspace;
 

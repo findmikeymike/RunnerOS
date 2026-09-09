@@ -40,6 +40,7 @@
     "./community/list-export": "./src/community/list-export.ts",
     "./credentials": "./src/credentials/index.ts",
     "./deep-research": "./src/deep-research/index.ts",
+    "./durable-execution": "./src/durable-execution/index.ts",
     "./deep-research/source-profile": "./src/deep-research/source-profile.ts",
     "./hq-state": "./src/hq-state/index.ts",
     "./hq-state/recommendation-storage": "./src/hq-state/recommendation-storage.ts",
