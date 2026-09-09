@@ -19,3 +19,7 @@ Small Electron storage slice: main-process host factory now supplies Electron sa
 Small shutdown slice: pending host startup and drainage now precede app cleanup; repeated quit cannot bypass the wait, failed drainage is retryable, and update installation aborts when cleanup fails. [Evidence](evidence/T-06-shutdown-slice.md). Included in this commit. Production host startup and live quit/update verification remain pending.
 
 After commit `a12a12ba4`, a small startup prerequisite adds authenticated live-connection lookup to the RPC server. [Evidence](evidence/T-06-live-connection-slice.md). This connection-check slice is included in this commit; stable identity/membership wiring and host startup remain pending.
+
+Local owner slice: Electron authority factory now combines stable installation identity, authenticated live connections and current configured workspaces; shared-server/external bindings fail closed. [Evidence](evidence/T-06-local-owner-slice.md). Included in this commit. Host activation remains separate.
+
+Startup composition slice: a default-off entry point now joins authority and protected host creation, with local-only policy checks before/after identity loading. [Evidence](evidence/T-06-startup-gate-slice.md). Included in this commit; bootstrap invocation, production runner binding resolution and live verification remain pending.
