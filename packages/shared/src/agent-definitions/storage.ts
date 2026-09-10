@@ -508,12 +508,13 @@ export function readActivatedAgents(workspaceRootPath: string): ActivatedAgentsM
   try {
     const raw = readFileSync(path, 'utf-8');
     const parsed = JSON.parse(raw) as Partial<ActivatedAgentsManifest>;
-    const active = Array.isArray(parsed.active)
-      ? Array.from(new Set(parsed.active.filter((s): s is string => typeof s === 'string')))
-      : [];
+    const deactivated = normalizeActivationSlugs(parsed.deactivated);
+    // Explicit off wins if an edited or older manifest contains both states.
+    const active = normalizeActivationSlugs(parsed.active).filter(slug => !deactivated.includes(slug));
     return {
       version: 1,
       active,
+      ...(deactivated.length > 0 ? { deactivated } : {}),
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
     };
   } catch {
@@ -521,12 +522,18 @@ export function readActivatedAgents(workspaceRootPath: string): ActivatedAgentsM
   }
 }
 
-/** Write a workspace's activation manifest. Creates the workspace dir if needed. */
-export function writeActivatedAgents(workspaceRootPath: string, slugs: string[]): ActivatedAgentsManifest {
-  const dedup = Array.from(new Set(slugs.filter(isValidAgentSlug)));
+/** Retain valid entries even when another field or array entry is malformed. */
+function normalizeActivationSlugs(value: unknown): string[] {
+  return Array.isArray(value)
+    ? Array.from(new Set(value.filter((slug): slug is string => typeof slug === 'string' && isValidAgentSlug(slug))))
+    : [];
+}
+
+function persistActivatedAgents(workspaceRootPath: string, active: string[], deactivated: string[]): ActivatedAgentsManifest {
   const manifest: ActivatedAgentsManifest = {
     version: 1,
-    active: dedup,
+    active,
+    ...(deactivated.length > 0 ? { deactivated } : {}),
     updatedAt: new Date().toISOString(),
   };
   const path = getActivatedAgentsManifestPath(workspaceRootPath);
@@ -535,13 +542,31 @@ export function writeActivatedAgents(workspaceRootPath: string, slugs: string[])
   return manifest;
 }
 
-/** Convenience: toggle a single slug's activation in a workspace. */
+/**
+ * Replace active slugs, preserving explicit off choices for all other agents.
+ * Including a slug is an explicit activation and clears its off marker.
+ */
+export function writeActivatedAgents(workspaceRootPath: string, slugs: string[]): ActivatedAgentsManifest {
+  const active = normalizeActivationSlugs(slugs);
+  const current = readActivatedAgents(workspaceRootPath);
+  const deactivated = (current.deactivated ?? []).filter(slug => !active.includes(slug));
+  return persistActivatedAgents(workspaceRootPath, active, deactivated);
+}
+
+/** Convenience: toggle a single slug's activation and persist explicit off choices. */
 export function setAgentActive(workspaceRootPath: string, slug: string, active: boolean): ActivatedAgentsManifest {
   const current = readActivatedAgents(workspaceRootPath);
-  const set = new Set(current.active);
-  if (active) set.add(slug);
-  else set.delete(slug);
-  return writeActivatedAgents(workspaceRootPath, [...set]);
+  if (!isValidAgentSlug(slug)) return current;
+  const enabled = new Set(current.active);
+  const deactivated = new Set(current.deactivated ?? []);
+  if (active) {
+    enabled.add(slug);
+    deactivated.delete(slug);
+  } else {
+    enabled.delete(slug);
+    deactivated.add(slug);
+  }
+  return persistActivatedAgents(workspaceRootPath, [...enabled], [...deactivated]);
 }
 
 /**
@@ -781,9 +806,11 @@ export function seedGlobalLibraryIfEmpty(
   const marker = join(globalAgentsDir, '.seeded');
   if (existsSync(marker)) return { seeded: 0 };
 
+  const deleted = readDeletedAgentSlugs(options);
   let seeded = 0;
   for (const starter of starters) {
     if (!isValidAgentSlug(starter.slug)) continue;
+    if (deleted.has(starter.slug)) continue;
     const dir = getGlobalAgentDir(starter.slug, options);
     const file = join(dir, AGENT_FILE);
     if (existsSync(file)) continue; // never overwrite

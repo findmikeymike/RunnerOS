@@ -93,22 +93,22 @@ classes in `packages/shared/src/agent/`, which is a real source of confusion.
   A tool not listed there does not exist for it.
 - Agents live in a **global** library and are activated **per workspace**.
 
-**Defining a persona does not make it appear.** There are four separate registration steps,
-and time has been lost to this:
+**Availability and activation are separate.** `starter-templates.ts` owns definitions;
+`packages/shared/src/agent-definitions/registration.ts` owns built-in recovery,
+worker presentation groups, initial activation groups, and scope eligibility.
+`defaults.ts` and renderer `worker-defaults.ts` derive their lists from that registry.
 
-1. `BUILTIN_VISIBLE_AGENT_SLUGS` in `apps/electron/src/renderer/hooks/useAgents.ts`
-   — shows an agent in both HQ and Campaign. Computed per load, so existing
-   workspaces pick it up with no migration. This is usually the one you want.
-2. `apps/electron/src/renderer/lib/worker-defaults.ts` — separate BASE / HQ /
-   Campaign display lists.
-3. `packages/shared/src/agent-definitions/defaults.ts` — activates agents when a
-   workspace is **created**. Returns `[]` for existing roots, so it will not fix
-   anything retroactively.
-4. Required startup agents in `packages/server-core/src/sessions/SessionManager.ts`
-   — passes selected `STARTER_AGENTS` to `ensureRequiredAgents`. This adds
-   missing built-ins to already-seeded libraries while preserving customizations
-   and explicit deletion tombstones. Website Agent was added here in `48608a694`:
-   visibility lists alone cannot show a definition absent from the global library.
+- Artist OS Workers and delegation catalogs use saved workspace activation plus a
+  readable definition and scope eligibility. Adding a definition never makes it active.
+- Fresh workspaces retain their six initial workers; existing roots retain their
+  saved choices, including empty manifests. Manage Library enables other workers.
+- Artist OS startup recovers required definitions but does not reapply legacy agent
+  or skill activation backfills. Explicit deletion tombstones remain respected.
+  The separate Runner variant retains its legacy migrations.
+- Creative Lab excludes unrelated known built-ins from active routing; custom
+  workers retain their existing eligibility. Reads do not rewrite old manifests.
+- Explicit workflow/Pulse launches retain their existing launch semantics; saved
+  activation controls Workers/catalog discovery and `message_agent` delegation.
 
 Workspace kinds: **Artist HQ** (career-wide, one), **Campaign** (per release,
 many), **Creative Lab** (songwriting, one).

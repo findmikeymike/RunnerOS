@@ -1812,7 +1812,6 @@ function launchpadAgentRank(slug: string): number {
     'postiz-agent',
     'shopify-agent',
     'print-agent',
-    'gaygent-master',
     'persona-agent',
     'youtube-intelligence-agent',
     'youtube-research-agent',

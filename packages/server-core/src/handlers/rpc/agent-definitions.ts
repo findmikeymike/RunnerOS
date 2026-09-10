@@ -1,3 +1,4 @@
+import { loadActiveAgentsForWorkspace } from '../../sessions/agent-registration'
 /**
  * RPC handlers for the agent definitions library.
  *
@@ -84,9 +85,7 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
   server.handle(RPC_CHANNELS.agentDefinitions.LIST_ACTIVE_IN_WORKSPACE, async (_ctx, workspaceId: string): Promise<string[]> => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) return []
-    return readActivatedAgents(workspace.rootPath).active.filter(
-      slug => isAgentAllowedInArtistWorkspace(slug, workspace.artistWorkspaceScope),
-    )
+    return loadActiveAgentsForWorkspace(workspace).map(agent => agent.slug)
   })
 
   server.handle(RPC_CHANNELS.agentDefinitions.GET, async (_ctx, slug: string): Promise<LoadedAgent | null> => {
@@ -153,14 +152,15 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
     return withAgentDefinitionsLibraryMutex(async () => {
       const workspace = getWorkspaceByNameOrId(workspaceId)
       if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+      if (active && !loadGlobalAgent(slug)) throw new Error(`Agent not found: ${slug}`)
       if (active && !isAgentAllowedInArtistWorkspace(slug, workspace.artistWorkspaceScope)) {
         throw new Error(`Agent "${slug}" is not available in this workspace.`)
       }
       const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
       assertTeamPermission(workspace.rootPath, 'team.settings.update')
-      const manifest = setAgentActive(workspace.rootPath, slug, active)
+      setAgentActive(workspace.rootPath, slug, active)
       broadcastAgentDefinitionsChanged(deps, workspaceId)
-      return { active: manifest.active }
+      return { active: loadActiveAgentsForWorkspace(workspace).map(agent => agent.slug) }
     })
   })
 }

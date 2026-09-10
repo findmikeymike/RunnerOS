@@ -377,6 +377,56 @@ describe('activation manifest', () => {
     expect(readActivatedAgents(workspace).active).toEqual([])
   })
 
+  test('persists explicit off choices through rereads and unrelated activations', () => {
+    writeActivatedAgents(workspace, ['writer', 'research'])
+    setAgentActive(workspace, 'writer', false)
+    setAgentActive(workspace, 'editor', true)
+    expect(readActivatedAgents(workspace).deactivated).toEqual(['writer'])
+    writeActivatedAgents(workspace, ['research', 'editor'])
+    expect(readActivatedAgents(workspace).deactivated).toEqual(['writer'])
+    setAgentActive(workspace, 'writer', true)
+    expect(readActivatedAgents(workspace).active).toContain('writer')
+    expect(readActivatedAgents(workspace).deactivated ?? []).toEqual([])
+  })
+
+  test('explicit bulk activation clears only matching off choices', () => {
+    setAgentActive(workspace, 'writer', false)
+    setAgentActive(workspace, 'research', false)
+    writeActivatedAgents(workspace, ['writer'])
+    expect(readActivatedAgents(workspace).active).toEqual(['writer'])
+    expect(readActivatedAgents(workspace).deactivated).toEqual(['research'])
+  })
+
+  test('older version-one manifests retain choices when first recording a deactivation', () => {
+    writeFileSync(join(workspace, 'activated-agents.json'), JSON.stringify({
+      version: 1, active: ['writer', 'research'], updatedAt: '2026-01-01T00:00:00Z',
+    }))
+    expect(readActivatedAgents(workspace).active).toEqual(['writer', 'research'])
+    setAgentActive(workspace, 'writer', false)
+    expect(readActivatedAgents(workspace).active).toEqual(['research'])
+    expect(readActivatedAgents(workspace).deactivated).toEqual(['writer'])
+  })
+
+  test('malformed fields retain valid choices and explicit off wins conflicting entries', () => {
+    writeFileSync(join(workspace, 'activated-agents.json'), JSON.stringify({
+      active: ['writer', 'research', null, '../bad'],
+      deactivated: ['writer', null, 'editor', 'editor', '../bad'],
+    }))
+    expect(readActivatedAgents(workspace).active).toEqual(['research'])
+    expect(readActivatedAgents(workspace).deactivated).toEqual(['writer', 'editor'])
+    setAgentActive(workspace, 'helper', true)
+    expect(readActivatedAgents(workspace).deactivated).toEqual(['writer', 'editor'])
+    writeFileSync(join(workspace, 'activated-agents.json'), JSON.stringify({
+      active: 'invalid', deactivated: ['writer'],
+    }))
+    expect(readActivatedAgents(workspace).deactivated).toEqual(['writer'])
+    writeFileSync(join(workspace, 'activated-agents.json'), JSON.stringify({
+      active: ['research'], deactivated: { invalid: true },
+    }))
+    expect(readActivatedAgents(workspace).active).toEqual(['research'])
+    expect(readActivatedAgents(workspace).deactivated ?? []).toEqual([])
+  })
+
   test('survives a malformed manifest by returning empty', () => {
     const path = join(workspace, 'activated-agents.json')
     writeFileSync(path, '{not valid json', 'utf-8')
@@ -454,6 +504,17 @@ body
     expect(deleteGlobalAgent('writer', [workspace], { globalAgentsDir })).toBe(true)
     expect(existsSync(join(globalAgentsDir, 'writer'))).toBe(false)
     expect(readActivatedAgents(workspace).active).toEqual(['researcher'])
+  })
+
+  test('losing the seed marker never resurrects an explicitly deleted agent', () => {
+    const starter = { slug: 'writer', metadata: { name: 'Writer', description: 'Writes.' }, systemPrompt: 'Write.' }
+    seedGlobalLibraryIfEmpty([starter], { globalAgentsDir })
+    writeActivatedAgents(workspace, ['writer'])
+    deleteGlobalAgent('writer', [workspace], { globalAgentsDir })
+    rmSync(join(globalAgentsDir, '.seeded'))
+    expect(seedGlobalLibraryIfEmpty([starter], { globalAgentsDir }).seeded).toBe(0)
+    expect(loadGlobalAgent('writer', { globalAgentsDir })).toBeNull()
+    expect(readActivatedAgents(workspace).deactivated).toEqual(['writer'])
   })
 
   test('loadActivatedAgents preserves shared activation entries that are missing only on this machine', () => {

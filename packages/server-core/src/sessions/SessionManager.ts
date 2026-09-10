@@ -1,3 +1,4 @@
+import { loadActiveAgentsForWorkspace, shouldBackfillLegacyAgentActivation } from './agent-registration'
 import { createDurableWorkflowStart } from '../workflows/durable-workflow-start'
 import { DurableWorkflowStartupGate } from '../workflows/durable-workflow-startup-gate'
 import { assertDurableWorkflowAgentMetadata, assertDurableWorkflowSourcesBeforeComposition, resolveDurableWorkflowBundle } from '../workflows/durable-workflow-bundle'
@@ -291,7 +292,7 @@ import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntr
 import type { PulseAction } from '@craft-agent/shared/pulses'
 import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
-import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, isAgentAllowedInArtistWorkspace, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, isAgentAllowedInArtistWorkspace, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@craft-agent/shared/agent-prompt'
 import { buildAgentTaskModeStarterPrompt, resolveAgentTaskMode, selectTaskModeSourceSlugs } from '@craft-agent/shared/agent-definitions/task-modes'
 import { filterAttachmentsForModelInput } from './runtime-config'
@@ -3150,8 +3151,7 @@ export class SessionManager implements ISessionManager {
     // onward. Recursion stays bounded by the agent-message depth limit.
     const agentCatalog = taskMode && agent.slug !== CONCIERGE_SLUG
       ? []
-      : loadActivatedAgents(ws.rootPath)
-        .filter(entry => isAgentAllowedInArtistWorkspace(entry.slug, ws.artistWorkspaceScope))
+      : loadActiveAgentsForWorkspace(ws)
         .map((entry) => ({
       slug: entry.slug,
       name: entry.metadata.name,
@@ -3892,7 +3892,7 @@ export class SessionManager implements ISessionManager {
 
     await withWorkspaceContextLock(workspace.rootPath, async () => {
       signal.throwIfAborted()
-      const activeAgents = loadActivatedAgents(workspace.rootPath)
+      const activeAgents = loadActiveAgentsForWorkspace(workspace)
       const agentCatalog: SharedIntelAgentCatalogEntry[] = activeAgents.map((agent) => ({
         slug: agent.slug,
         name: agent.metadata.name,
@@ -4005,7 +4005,9 @@ export class SessionManager implements ISessionManager {
 
     return withWorkspaceContextLock(input.workspaceRootPath, async () => {
       input.signal?.throwIfAborted()
-      const activeAgents = loadActivatedAgents(input.workspaceRootPath)
+      const catalogWorkspace = getWorkspaceByNameOrId(input.workspaceId)
+      if (!catalogWorkspace) throw new Error('Workspace not found while routing YouTube Intelligence results.')
+      const activeAgents = loadActiveAgentsForWorkspace(catalogWorkspace)
       const agentCatalog: SharedIntelAgentCatalogEntry[] = activeAgents.map((agent) => ({
         slug: agent.slug,
         name: agent.metadata.name,
@@ -4296,66 +4298,12 @@ export class SessionManager implements ISessionManager {
         if (seeded > 0) {
           sessionLog.info(`[agent-definitions] Seeded ${seeded} starter agent(s) into global library`)
         }
-        // Load-bearing agents must exist on every startup: Orchestrator
-        // (sidebar pin + future Rooms coordinator), Concierge (top-level
-        // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Postiz, Hypermotion, Video Director, Lottie Animation,
-        // Video Editor, Lyric Video, Content Genius, Scroll Stopper, Anticipation Director, Content Director, promotion helpers, Shopify, Print Agent,
-        // Release Manager, Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
-        // Song Director, Reverse Magic, Legendary Writer, Reference Master, Update System Agent,
-        // and Catalog & Royalties.
-        const required = STARTER_AGENTS.filter(
-          (a) => a.slug === ORCHESTRATOR_SLUG
-            || a.slug === CONCIERGE_SLUG
-            || a.slug === SETUP_CONCIERGE_SLUG
-            || a.slug === SOCIAL_PUBLISHER_SLUG
-            || a.slug === SONG_DIRECTOR_SLUG
-            || a.slug === ANYTHING_AGENT_SLUG
-            || a.slug === 'trypost-agent'
-            || a.slug === 'postiz-agent'
-            || a.slug === 'hypermotion-agent'
-            || a.slug === 'video-director'
-            || a.slug === 'lottie-animation-agent'
-            || a.slug === 'video-editor-agent'
-            || a.slug === 'lyric-video-agent'
-            || a.slug === 'content-genius'
-            || a.slug === 'scriptwriter'
-            || a.slug === 'scroll-stopper'
-            || a.slug === 'anticipation-director'
-            || a.slug === 'content-director'
-            || a.slug === 'ads-strategist'
-            || a.slug === 'ad-creative-agent'
-            || a.slug === 'ads-agent'
-            || a.slug === 'ig-trending-power-up'
-            || a.slug === 'influencer-campaign-power-up'
-            || a.slug === 'playlisting-power-up'
-            || a.slug === 'spotify-analyst'
-            || a.slug === 'spotify-playlist-creator'
-            || a.slug === 'youtube-intelligence-agent'
-            || a.slug === 'signal-scout-agent'
-            || a.slug === 'signal-analyst-agent'
-            || a.slug === 'shopify-agent'
-            || a.slug === 'print-agent'
-            || a.slug === 'branding-agent'
-            || a.slug === RELEASE_MANAGER_AGENT_SLUG
-            || a.slug === 'comms-agent'
-            || a.slug === 'x-editorial'
-            || a.slug === 'outreach-agent'
-            || a.slug === 'industry-hunter'
-            || a.slug === 'college-radio-agent'
-            || a.slug === 'art-director'
-            || a.slug === 'world-builder'
-            || a.slug === 'record-doctor'
-            || a.slug === 'reverse-magic'
-            || a.slug === 'hooker'
-            || a.slug === 'legendary-writer'
-            || a.slug === 'reference-master'
-            || a.slug === 'the-excavator'
-            || a.slug === 'update-system-agent'
-            || a.slug === 'catalog-royalty-agent'
-            || a.slug === 'legal-agent'
-            || a.slug === 'site-builder'
-            || a.slug === 'website-agent',
-        )
+        // The registry owns definition recovery. Recovery never activates a worker.
+        const { REQUIRED_BUILTIN_AGENT_SLUGS } = await import('@craft-agent/shared/agent-definitions/registration')
+        const requiredSlugs = new Set(REQUIRED_BUILTIN_AGENT_SLUGS)
+        const required = STARTER_AGENTS.filter(agent => requiredSlugs.has(agent.slug))
+        // Keep legacy Runner migrations isolated; Artist OS preserves saved choices.
+        const allowLegacyAgentActivation = shouldBackfillLegacyAgentActivation(resolveRuntimeIdentity().variant)
         const { ensured } = ensureRequiredAgents(required)
         if (ensured > 0) {
           sessionLog.info(`[agent-definitions] Ensured ${ensured} required agent(s)`)
@@ -4440,7 +4388,7 @@ export class SessionManager implements ISessionManager {
           // migration above upgrades this bundle without restoring removed skills.
           const anythingAgent = loadGlobalAgent(ANYTHING_AGENT_SLUG)
           const missingAnythingAgentSkills = anythingAgentSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
-          if (anythingAgent && missingAnythingAgentSkills.length === 0) {
+          if (allowLegacyAgentActivation && anythingAgent && missingAnythingAgentSkills.length === 0) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             const workspaces = getWorkspaces()
@@ -4481,7 +4429,7 @@ export class SessionManager implements ISessionManager {
           )
           const releaseManagerIdentityValid = isReleaseManagerDefinition(installedReleaseManager)
           const missingReleaseManagerSkills = releaseManagerSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
-          if (releaseManagerAgent && releaseManagerIdentityValid && missingReleaseManagerSkills.length === 0) {
+          if (allowLegacyAgentActivation && releaseManagerAgent && releaseManagerIdentityValid && missingReleaseManagerSkills.length === 0) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             const artistWorkspaces = getWorkspaces()
@@ -4516,7 +4464,7 @@ export class SessionManager implements ISessionManager {
             sessionLog.error('[agent-definitions] Reserved Artist OS Release Manager identity is occupied; existing workspaces were not modified')
           } else if (releaseManagerActivationPending && installedReleaseManager && missingReleaseManagerSkills.length > 0) {
             sessionLog.warn(`[agent-definitions] Release Manager skill bundle incomplete: ${missingReleaseManagerSkills.join(', ')}`)
-          } else if (releaseManagerActivationPending && !installedReleaseManager) {
+          } else if (allowLegacyAgentActivation && releaseManagerActivationPending && !installedReleaseManager) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             preserveReleaseManagerActivationChoices(
               releaseManagerActivationState,
@@ -4524,7 +4472,7 @@ export class SessionManager implements ISessionManager {
             )
             sessionLog.debug('[agent-definitions] Release Manager is not installed; preserved current workspace activation choices')
           }
-          if (anticipationEngineWasMissing && loadGlobalSkillBySlug('anticipation-engine')) {
+          if (allowLegacyAgentActivation && anticipationEngineWasMissing && loadGlobalSkillBySlug('anticipation-engine')) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             for (const ws of getWorkspaces()) {
               if (ws.remoteServer) continue
@@ -4548,7 +4496,7 @@ export class SessionManager implements ISessionManager {
                 scopes: new Set(['hq', 'campaign']),
               })),
           ]
-          for (const { agentSlug, scopes } of artistDefaultAgentTargets) {
+          for (const { agentSlug, scopes } of allowLegacyAgentActivation ? artistDefaultAgentTargets : []) {
             const installedAgent = loadGlobalAgent(agentSlug)
             const starterAgent = STARTER_AGENTS.find(candidate => candidate.slug === agentSlug)
             const skillSlugs = starterAgent?.metadata.skills ?? installedAgent?.metadata.skills ?? []
@@ -4720,7 +4668,7 @@ export class SessionManager implements ISessionManager {
             }).updated) sessionLog.info(`[agent-definitions] Updated focus recipes for ${starter.slug}`)
           }
           const missingBrandingSkills = brandingSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
-          if (brandingAgent && missingBrandingSkills.length === 0) {
+          if (allowLegacyAgentActivation && brandingAgent && missingBrandingSkills.length === 0) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             let updatedWorkspaces = 0
@@ -4751,7 +4699,7 @@ export class SessionManager implements ISessionManager {
           const setupConciergeAgent = STARTER_AGENTS.find(agent => agent.slug === SETUP_CONCIERGE_SLUG)
           const setupConciergeSkillSlugs = setupConciergeAgent?.metadata.skills ?? []
           const missingSetupConciergeSkills = setupConciergeSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
-          if (setupConciergeAgent && missingSetupConciergeSkills.length === 0) {
+          if (allowLegacyAgentActivation && setupConciergeAgent && missingSetupConciergeSkills.length === 0) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             let updatedWorkspaces = 0
@@ -4782,7 +4730,7 @@ export class SessionManager implements ISessionManager {
           const artDirectorAgent = STARTER_AGENTS.find(agent => agent.slug === 'art-director')
           const artDirectorSkillSlugs = artDirectorAgent?.metadata.skills ?? []
           const missingArtDirectorSkills = artDirectorSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
-          if (artDirectorAgent && loadGlobalAgent('art-director') && missingArtDirectorSkills.length === 0
+          if (allowLegacyAgentActivation && artDirectorAgent && loadGlobalAgent('art-director') && missingArtDirectorSkills.length === 0
             && !marketplaceWorkersPreviouslyInstalled.has('art-director')) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
@@ -4811,7 +4759,7 @@ export class SessionManager implements ISessionManager {
           } else if (missingArtDirectorSkills.length > 0) {
             sessionLog.warn(`[agent-definitions] Art Director skill bundle incomplete: ${missingArtDirectorSkills.join(', ')}`)
           }
-          for (const agentSlug of DEFAULT_ACTIVATED_AGENT_SLUGS) {
+          for (const agentSlug of allowLegacyAgentActivation ? DEFAULT_ACTIVATED_AGENT_SLUGS : []) {
             // Existing marketplace workers retain deliberate activation/skill
             // choices; never re-enable Monid merely because a starter changed.
             if (agentSlug === 'youtube-intelligence-agent'
@@ -4858,7 +4806,7 @@ export class SessionManager implements ISessionManager {
           )
           const contentGeniusSkillSlugs = contentGeniusAgent?.metadata.skills ?? []
           const missingContentGeniusSkills = contentGeniusSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
-          if (contentGeniusAgent && missingContentGeniusSkills.length === 0) {
+          if (allowLegacyAgentActivation && contentGeniusAgent && missingContentGeniusSkills.length === 0) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             let updatedWorkspaces = 0
@@ -4889,7 +4837,7 @@ export class SessionManager implements ISessionManager {
           const worldBuilderAgent = STARTER_AGENTS.find(agent => agent.slug === 'world-builder')
           const worldBuilderSkillSlugs = worldBuilderAgent?.metadata.skills ?? []
           const missingWorldBuilderSkills = worldBuilderSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
-          if (worldBuilderAgent && missingWorldBuilderSkills.length === 0) {
+          if (allowLegacyAgentActivation && worldBuilderAgent && missingWorldBuilderSkills.length === 0) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             let updatedWorkspaces = 0
@@ -9923,7 +9871,7 @@ user a clickable link to where the thing now lives.`
           }
         },
         listAgentsFn: (options) => {
-          const activeSlugs = new Set(loadActivatedAgents(managed.workspace.rootPath).map(agent => agent.slug))
+          const activeSlugs = new Set(loadActiveAgentsForWorkspace(managed.workspace).map(agent => agent.slug))
           const sourceCandidates = loadAllSources(managed.workspace.rootPath).map(source => ({
             slug: source.config.slug,
             enabled: source.config.enabled,
@@ -10309,7 +10257,7 @@ user a clickable link to where the thing now lives.`
               const workspace = getWorkspaceByNameOrId(workspaceId)
               if (!workspace) return false
               if (!isAgentAllowedInArtistWorkspace(agentSlug, workspace.artistWorkspaceScope)) return false
-              return loadActivatedAgents(workspace.rootPath).some((agent) => agent.slug === agentSlug)
+              return loadActiveAgentsForWorkspace(workspace).some((agent) => agent.slug === agentSlug)
             },
             deliverPassiveMessage: async (sessionId, message, agentMessage) => {
               const target = this.sessions.get(sessionId)
@@ -10361,6 +10309,10 @@ user a clickable link to where the thing now lives.`
           }
           if (slug === CONCIERGE || slug === ORCHESTRATOR) {
             return { ok: false, error: `"${slug}" is a built-in agent and cannot be overwritten.` }
+          }
+
+          if (input.activateInWorkspace !== false && !isAgentAllowedInArtistWorkspace(slug, managed.workspace.artistWorkspaceScope)) {
+            return { ok: false, error: `Agent "${slug}" is not available in this workspace.` }
           }
 
           return withAgentDefinitionsLibraryMutex(async () => {
@@ -12791,7 +12743,7 @@ user a clickable link to where the thing now lives.`
       || (slug === 'content-genius' && current.artistWorkspaceScope !== 'campaign')
       || (slug === CONCIERGE_SLUG && current.artistWorkspaceScope !== 'hq')
       || !isAgentAllowedInArtistWorkspace(slug, current.artistWorkspaceScope)
-      || !loadActivatedAgents(current.rootPath).some(agent => agent.slug === slug)) {
+      || !loadActiveAgentsForWorkspace(current).some(agent => agent.slug === slug)) {
       throw new Error('This worker is not active in the selected workspace. Choose an available worker in Signals.')
     }
     assertTeamPermission(current.rootPath, 'agent.chat')

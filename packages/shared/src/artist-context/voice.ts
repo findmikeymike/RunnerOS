@@ -12,6 +12,7 @@ export const ARTIST_VOICE_TARGET_AGENT_SLUGS = [
   'video-editor-agent',
   'ad-creative-agent',
   'ads-agent',
+  // Legacy installed/custom worker compatibility; not a bundled registration.
   'gaygent-master',
   'persona-agent',
   'branding-agent',

@@ -320,7 +320,8 @@ describe('Artist OS persistent shell chrome', () => {
     expect(workers).toContain("return 'Socials'")
     expect(workers).toContain('text-white/72')
     expect(workers).not.toContain('<MessageSquare')
-    expect(useAgents).toContain("'lottie-animation-agent'")
+    expect(useAgents).toContain('listActiveAgentDefinitions(activeWorkspaceId)')
+    expect(useAgents).not.toContain('BUILTIN_VISIBLE_AGENT_SLUGS')
     expect(workers).not.toContain('onClick={() => setSelectedAgent(agent)}')
   })
 

@@ -115,6 +115,7 @@
     "./x-editorial": "./src/x-editorial/index.ts",
     "./automations/resolve-config-path": "./src/automations/resolve-config-path.ts",
     "./agent-definitions": "./src/agent-definitions/index.ts",
+    "./agent-definitions/registration": "./src/agent-definitions/registration.ts",
     "./agent-definitions/defaults": "./src/agent-definitions/defaults.ts",
     "./agent-definitions/canvas-guidance": "./src/agent-definitions/canvas-guidance.ts",
     "./agent-definitions/types": "./src/agent-definitions/types.ts",
