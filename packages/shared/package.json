@@ -118,6 +118,7 @@
     "./agent-definitions/defaults": "./src/agent-definitions/defaults.ts",
     "./agent-definitions/canvas-guidance": "./src/agent-definitions/canvas-guidance.ts",
     "./agent-definitions/types": "./src/agent-definitions/types.ts",
+    "./agent-definitions/references": "./src/agent-definitions/references.ts",
     "./agent-definitions/task-modes": "./src/agent-definitions/task-modes.ts",
     "./workflows": "./src/workflows/index.ts",
     "./workflows/parser": "./src/workflows/parser.ts",

@@ -2,6 +2,7 @@ import { createDurableWorkflowStart } from '../workflows/durable-workflow-start'
 import { DurableWorkflowStartupGate } from '../workflows/durable-workflow-startup-gate'
 import { assertDurableWorkflowAgentMetadata, assertDurableWorkflowSourcesBeforeComposition, resolveDurableWorkflowBundle } from '../workflows/durable-workflow-bundle'
 import type { DurableWorkflowHost } from '../workflows/durable-workflow-host'
+import { resolveAgentReferences, assertAgentReferences, selectDeclaredSkillsToEnable } from '@craft-agent/shared/agent-definitions/references'
 import { resolveRuntimeIdentity } from '@craft-agent/shared/config/runtime-identity'
 import { sanitizePrivateSkillActivityInput, sanitizePrivateSkillResultPaths, isPrivateSkillLoaderTool } from '@craft-agent/shared/agent/core/private-skill-activity'
 import { inheritHostAgentFocus, createPendingAgentFocusState, createAgentFocusTransferIntent, validateTransferredAgentFocus, parseAgentFocusTransferIntent } from '@craft-agent/shared/sessions'
@@ -158,7 +159,6 @@ import { type Session, type SessionEvent, type FileAttachment, type SendMessageO
 import { messageToStored, storedToMessage, type AgentMessageNoticeMetadata, type Message, type SessionTaskEventMetadata, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
 import { toSkillDescriptors, getOrphanedPersonalSkillDescriptors, resolveRunLegacySkillReferences, loadAllSkills, loadGlobalSkills, loadGlobalSkillBySlug, loadSkillBySlug, setGlobalSkillEnabled, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
-import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { assertOutputAssetPath, listOutputManifests, readOutput } from '@craft-agent/shared/outputs'
@@ -169,7 +169,6 @@ import {
   vaultAssetForAgentList,
 } from '@craft-agent/shared/artist-vault'
 import {
-  refreshVerifiedTrackContextForAgents,
   verifiedArtistVaultManifestForAgents,
   verifiedMissionAssetManifestForAgents,
 } from '../track-intelligence/agent-visibility'
@@ -211,7 +210,7 @@ import { listDeepResearchRuns, readDeepResearchRun, profileDeepResearchSource } 
 import { createLabSong, loadLabSongs, saveLabLyrics } from '@craft-agent/shared/lab'
 import { OutputService } from '../outputs/OutputService'
 import { refreshAndBroadcastArtistManagerState } from '../hq-state/refresh-and-broadcast'
-import { refreshCampaignStateContextDocBestEffort, refreshHqStateContextDocBestEffort, scheduleHqStateContextRefresh } from '../hq-state/refresh'
+import { scheduleHqStateContextRefresh } from '../hq-state/refresh'
 import {
   getArtistContextDetail,
   getAuthorizedWorkspaceContext,
@@ -220,7 +219,7 @@ import {
   getLiveManagerBrief,
   listAuthorizedWorkspaceContext,
 } from '../hq-state/manager-tools'
-import { withScriptwriterArtistContext } from '../hq-state/scriptwriter-context'
+import { prepareAgentLaunchContext } from '../agent-launch/context'
 import { findArtistHqWorkspace } from '../hq-state/snapshot'
 import { WebsiteService, type WebsiteToolResult } from '../website/WebsiteService'
 import { loadWebsiteManifest, type ApprovalBinding } from '@craft-agent/shared/website'
@@ -294,7 +293,7 @@ import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, isAgentAllowedInArtistWorkspace, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@craft-agent/shared/agent-prompt'
-import { buildAgentTaskModeStarterPrompt, filterContextDocsForTaskMode, resolveAgentTaskMode, selectTaskModeSourceSlugs } from '@craft-agent/shared/agent-definitions/task-modes'
+import { buildAgentTaskModeStarterPrompt, resolveAgentTaskMode, selectTaskModeSourceSlugs } from '@craft-agent/shared/agent-definitions/task-modes'
 import { filterAttachmentsForModelInput } from './runtime-config'
 import { inferScheduledWorkScope, persistHnicScheduleWork } from '../scheduled-work/HnicScheduledWork'
 import { supplyScheduledWorkInputs } from '../scheduled-work/ScheduledWorkInputSupply'
@@ -1808,13 +1807,10 @@ export function ensureDeclaredGlobalSkillsEnabledForAgent(
     loadAllSkills?: typeof loadAllSkills
   } = {},
 ): LoadedSkill[] {
-  const skillBySlug = new Map(skills.flatMap(skill => [skill.slug, ...(skill.aliases ?? [])].map(slug => [slug, skill] as const)))
   const loadGlobalSkill = deps.loadGlobalSkillBySlug ?? loadGlobalSkillBySlug
   const enableGlobalSkill = deps.setGlobalSkillEnabled ?? setGlobalSkillEnabled
   const reloadSkills = deps.loadAllSkills ?? loadAllSkills
-  const missingDeclaredGlobalSkills = declaredSkillSlugs.filter((slug) => (
-    !skillBySlug.has(slug) && loadGlobalSkill(slug) !== null
-  ))
+  const missingDeclaredGlobalSkills = selectDeclaredSkillsToEnable(declaredSkillSlugs, skills, slug => loadGlobalSkill(slug) !== null)
 
   if (missingDeclaredGlobalSkills.length === 0) return skills
 
@@ -3106,7 +3102,6 @@ export class SessionManager implements ISessionManager {
     if (!isAgentAllowedInArtistWorkspace(agentSlug, ws.artistWorkspaceScope)) {
       throw new Error(`Agent "${agentSlug}" is not available in this workspace.`)
     }
-    const { loadPromptContextDocsForAgent, loadAuthorizedContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
     const agent = loadGlobalAgent(agentSlug)
     if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
     if (!options.taskModeId && agent.slug !== CONCIERGE_SLUG && (agent.metadata.taskModes?.length ?? 0) > 1) {
@@ -3126,77 +3121,25 @@ export class SessionManager implements ISessionManager {
       : agent.slug === CONCIERGE_SLUG
         ? { ...agent, metadata: { ...agent.metadata, skills: ['artist-manager-operating-system'] } }
         : agent
-    if (agent.slug === CONCIERGE_SLUG && ws.artistWorkspaceScope === 'hq') {
-      refreshHqStateContextDocBestEffort(ws.rootPath)
-    } else if (agent.slug === CONCIERGE_SLUG && ws.artistWorkspaceScope === 'campaign') {
-      refreshCampaignStateContextDocBestEffort(ws.rootPath)
-    }
     const declaredSkillSlugs = launchAgent.metadata.skills ?? []
     const skills = ensureDeclaredGlobalSkillsEnabledForAgent(ws.rootPath, declaredSkillSlugs, loadAllSkills(ws.rootPath))
-    const skillBySlug = new Map(skills.flatMap(skill => [skill.slug, ...(skill.aliases ?? [])].map(slug => [slug, skill] as const)))
-    const canUseSystemSkills = agent.slug === CONCIERGE_SLUG || agent.slug === ORCHESTRATOR_SLUG
-    const resolvedSkillSlugs = declaredSkillSlugs.filter((slug) => (
-      skillBySlug.has(slug) || (canUseSystemSkills && isSystemGlobalSkillSlug(slug.replace(/^legacy:/, '')))
-    ))
-    const missingSkillSlugs = declaredSkillSlugs.filter((slug) => !resolvedSkillSlugs.includes(slug))
-    if (strict && missingSkillSlugs.length > 0) {
-      throw new Error(`Agent "${agentSlug}" references unavailable skills in this workspace: ${missingSkillSlugs.join(', ')}`)
-    }
-    const declaredSourceSlugs = launchAgent.metadata.sources ?? []
-    const declaredOptionalSourceSlugs = (launchAgent.metadata.optionalSources ?? [])
-      .filter((slug) => !declaredSourceSlugs.includes(slug))
-    const sources = getSourcesBySlugs(ws.rootPath, [
-      ...declaredSourceSlugs,
-      ...declaredOptionalSourceSlugs,
-    ])
-    const sourceBySlug = new Map(sources.map((s) => [s.config.slug, s]))
-    const missingSourceSlugs = declaredSourceSlugs.filter((slug) => !sourceBySlug.has(slug))
-    const unusableSourceSlugs = declaredSourceSlugs.filter((slug) => {
-      const source = sourceBySlug.get(slug)
-      return source ? !isSourceUsable(source) : false
-    })
-    const sourceProblems = [
-      ...missingSourceSlugs.map((slug) => `${slug} (not active in this workspace)`),
-      ...unusableSourceSlugs.map((slug) => `${slug} (disabled or unauthenticated)`),
-    ]
-    if (strict && sourceProblems.length > 0) {
-      throw new Error(`Agent "${agentSlug}" references unavailable sources in this workspace: ${sourceProblems.join(', ')}`)
-    }
-    const availableSources = sources.filter(isSourceUsable)
+    const sources = getSourcesBySlugs(ws.rootPath, [...new Set([
+      ...(launchAgent.metadata.sources ?? []),
+      ...(launchAgent.metadata.optionalSources ?? []),
+    ])])
+    const references = resolveAgentReferences(launchAgent, skills, sources)
+    assertAgentReferences(launchAgent, references, strict ? 'strict' : 'lenient', taskMode?.label)
+    const resolvedSkillSlugs = references.resolvedSkills
+    const usableSourceSlugs = new Set([...references.resolvedSources, ...references.resolvedOptionalSources])
+    const availableSources = sources.filter(source => usableSourceSlugs.has(source.config.slug))
     const selectedSourceSlugs = taskMode
       ? new Set(selectTaskModeSourceSlugs(taskMode, availableSources.map(source => source.config.slug)))
       : new Set(availableSources.map(source => source.config.slug))
     const usableSources = availableSources.filter(source => selectedSourceSlugs.has(source.config.slug))
     const resolvedSourceSlugs = usableSources.map((s) => s.config.slug)
-    const unsafePersistedContextSlugs = new Set<string>()
-    if (ws.artistWorkspaceScope === 'campaign' || ws.artistWorkspaceScope === 'hq') {
-      const refresh = refreshVerifiedTrackContextForAgents(ws.rootPath, ws.id, ws.artistWorkspaceScope)
-      if (!refresh.ok) {
-        if (refresh.unsafePersistedSlug) unsafePersistedContextSlugs.add(refresh.unsafePersistedSlug)
-        CONSOLE_LOGGER.warn('[track-intelligence] Injected safe empty context after refresh failure', {
-          workspaceId: ws.id,
-          error: refresh.error,
-        })
-      }
-    }
-    if (ws.artistWorkspaceScope === 'campaign') {
-      try {
-        const releaseKitRefresh = new ReleaseKitService().refreshAgentContext(ws.id)
-        if (!releaseKitRefresh.contextPersisted) unsafePersistedContextSlugs.add('release-kit')
-      } catch (error) {
-        unsafePersistedContextSlugs.add('release-kit')
-        CONSOLE_LOGGER.warn('[release-kit] Could not refresh verified context before agent launch', {
-          workspaceId: ws.id,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }
-    const contextDocs = filterContextDocsForTaskMode(
-      withScriptwriterArtistContext(ws.rootPath, agent.slug,
-        taskMode ? loadAuthorizedContextDocsForAgent(ws.rootPath, agent.slug) : loadPromptContextDocsForAgent(ws.rootPath, agent.slug))
-        .filter((doc) => !unsafePersistedContextSlugs.has(doc.slug)),
-      taskMode,
-    )
+    const contextDocs = prepareAgentLaunchContext(ws, agent.slug, taskMode, {
+      warn: (message, details) => CONSOLE_LOGGER.warn(message, details),
+    })
     const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
       loadUserMemoryEntries(),
       loadAgentMemoryEntries(agent.slug),
@@ -7100,10 +7043,8 @@ user a clickable link to where the thing now lives.`
     await sessionPersistenceQueue.flushAll()
   }
 
-  // ============================================
-  // Unified Auth Request Helpers
-  // ============================================
-
+  // =====================================  // Unified Auth Request Helpers
+  // =====================================
   /**
    * Get human-readable description for auth request
    */
@@ -8142,10 +8083,8 @@ user a clickable link to where the thing now lives.`
       // Set up agentReady promise so title generation can await agent creation
       managed.agentReady = new Promise<void>(r => { managed.agentReadyResolve = r })
 
-      // ============================================================
-      // Common setup: sources, MCP pool, session config
-      // ============================================================
-
+      // =====================================================      // Common setup: sources, MCP pool, session config
+      // =====================================================
       const sessionPath = getSessionStoragePath(managed.workspace.rootPath, managed.id)
       const enabledSlugs = turnContext.enabledSourceSlugs || []
       const allSources = loadAllSources(managed.workspace.rootPath)
@@ -8178,10 +8117,8 @@ user a clickable link to where the thing now lives.`
       }
       managed.envOverrides = envOverrides
 
-      // ============================================================
-      // Common session + callback config (identical for all backends)
-      // ============================================================
-
+      // =====================================================      // Common session + callback config (identical for all backends)
+      // =====================================================
       const sessionConfig = {
         id: managed.id,
         workspaceRootPath: managed.workspace.rootPath,
@@ -8290,10 +8227,8 @@ user a clickable link to where the thing now lives.`
         })
       }
 
-      // ============================================================
-      // Construct backend via factory
-      // ============================================================
-
+      // =====================================================      // Construct backend via factory
+      // =====================================================
       managed.agent = createBackendFromResolvedContext({
         context: backendContext,
         hostRuntime: buildBackendHostRuntimeContext(),
@@ -8419,10 +8354,8 @@ user a clickable link to where the thing now lives.`
 
       sessionLog.info(`Created ${provider} agent for session ${managed.id} (model: ${backendContext.resolvedModel})${managed.sdkSessionId ? ' (resuming)' : ''}`)
 
-      // ============================================================
-      // Post-construction: debug callback, auth callback, postInit()
-      // ============================================================
-
+      // =====================================================      // Post-construction: debug callback, auth callback, postInit()
+      // =====================================================
       managed.agent.onDebug = (msg: string) => {
         const marker = '__PERMISSION_BLOCK__'
         if (msg.includes(marker)) {
@@ -11500,10 +11433,8 @@ user a clickable link to where the thing now lives.`
     }, managed.workspace.id)
   }
 
-  // ============================================
-  // Pending Plan Execution (Accept & Compact)
-  // ============================================
-
+  // =====================================  // Pending Plan Execution (Accept & Compact)
+  // =====================================
   /**
    * Set pending plan execution state.
    * Called when user clicks "Accept & Compact" to persist the plan path
@@ -11587,10 +11518,8 @@ user a clickable link to where the thing now lives.`
     await this.sendMessage(sessionId, PLAN_APPROVAL_MESSAGE)
   }
 
-  // ============================================
-  // Session Sharing
-  // ============================================
-
+  // =====================================  // Session Sharing
+  // =====================================
   /**
    * Share session to the web viewer
    * Uploads session data and returns shareable URL
@@ -11755,10 +11684,8 @@ user a clickable link to where the thing now lives.`
     }
   }
 
-  // ============================================
-  // Session Sources
-  // ============================================
-
+  // =====================================  // Session Sources
+  // =====================================
   /**
    * Update session's enabled sources
    * If agent exists, builds and applies servers immediately.
@@ -16019,10 +15946,8 @@ user a clickable link to where the thing now lives.`
     return (sourceSlugs.length > 0 || skillSlugs.length > 0) ? { sourceSlugs, skillSlugs } : undefined
   }
 
-  // ============================================
-  // Export / Import / Dispatch
-  // ============================================
-
+  // =====================================  // Export / Import / Dispatch
+  // =====================================
   private async generateRemoteTransferSummary(managed: ManagedSession): Promise<string | null> {
     await this.ensureMessagesLoaded(managed)
 

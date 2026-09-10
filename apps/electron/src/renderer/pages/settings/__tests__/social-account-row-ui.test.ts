@@ -77,7 +77,7 @@ describe('connection account settings', () => {
     expect(mainContentSource).toContain('<SettingsGroupTabs activeSubpage={navState.subpage} />')
     expect(switcherSource).not.toContain('border-t border-white/[0.055]')
     expect(switcherSource).toContain('relative z-[100] mt-8 -mb-12 pointer-events-auto')
-    expect(switcherSource).toContain('bg-[#e65320]/45 text-white')
+    expect(switcherSource).toContain('border-white/[0.08] bg-white/[0.08] text-white/85 shadow-minimal')
     expect(switcherSource).not.toContain('bg-gradient-to-br')
   })
 

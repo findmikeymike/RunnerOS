@@ -1,7 +1,7 @@
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
-import { isSourceUsable } from '@craft-agent/shared/sources/availability'
+import { assertAgentReferences, selectDeclaredSkillsToEnable } from '@craft-agent/shared/agent-definitions/references'
 import { buildAgentTaskModePromptSection, filterContextDocsForTaskMode, resolveAgentTaskMode, selectTaskModeSourceSlugs } from '@craft-agent/shared/agent-definitions/task-modes'
 import type { MemoryEntry, LoadedMemoryFile } from '@craft-agent/shared/memory/types'
 import type { SessionLogEntry } from '@craft-agent/shared/sessions-log'
@@ -41,16 +41,14 @@ export async function ensureAgentDeclaredSkillsEnabled(params: {
   const declaredSkillSlugs = params.agent.metadata.skills ?? []
   if (declaredSkillSlugs.length === 0) return params.activeSkills
 
-  const activeSlugs = new Set(params.activeSkills.flatMap(skill => [skill.slug, ...(skill.aliases ?? [])]))
-  const missingSlugs = declaredSkillSlugs.filter((slug) => !activeSlugs.has(slug))
-  if (missingSlugs.length === 0) return params.activeSkills
+  if (selectDeclaredSkillsToEnable(declaredSkillSlugs, params.activeSkills, () => true).length === 0) return params.activeSkills
 
   const listGlobalSkills = params.listGlobalSkills ?? window.electronAPI.listGlobalSkills
   const setGlobalSkillEnabled = params.setGlobalSkillEnabled ?? window.electronAPI.setGlobalSkillEnabled
   const getSkills = params.getSkills ?? window.electronAPI.getSkills
   const globalSkills = await listGlobalSkills(params.workspaceId)
   const installedGlobalSlugs = new Set(globalSkills.flatMap(skill => [skill.slug, ...(skill.aliases ?? [])]))
-  const installedMissingSlugs = missingSlugs.filter((slug) => installedGlobalSlugs.has(slug))
+  const installedMissingSlugs = selectDeclaredSkillsToEnable(declaredSkillSlugs, params.activeSkills, slug => installedGlobalSlugs.has(slug))
   if (installedMissingSlugs.length === 0) return params.activeSkills
 
   // Write sequentially because each update reads and rewrites the workspace's
@@ -64,16 +62,7 @@ export async function ensureAgentDeclaredSkillsEnabled(params: {
 
 function assertFocusedAgentReferences(agent: AgentDefinitionDTO, label: string, skills: SkillDescriptor[], sources: LoadedSource[]): void {
   const resolution = resolveAgentReferences(agent, skills, sources)
-  const unusable = (agent.metadata.sources ?? []).filter(slug => {
-    const source = sources.find(source => source.config.slug === slug)
-    return source && !isSourceUsable(source)
-  })
-  const problems = [
-    ...resolution.missingSkills.map(slug => `missing skill @${slug}`),
-    ...resolution.missingSources.map(slug => `missing connection @${slug}`),
-    ...unusable.map(slug => `disabled or disconnected @${slug}`),
-  ]
-  if (problems.length) throw new Error(`${agent.metadata.name} — ${label} needs ${problems.join(', ')}. Fix the listed Skills or Connections, then retry this focus.`)
+  assertAgentReferences(agent, resolution, 'strict', label)
 }
 
 export function buildAgentCreateSessionOptions(
@@ -137,6 +126,7 @@ export function buildAgentCreateSessionOptions(
 
   if (context) {
     const resolution = resolveAgentReferences(promptAgent, context.skills, context.sources)
+    assertAgentReferences(promptAgent, resolution, taskMode ? 'strict' : 'lenient', taskMode?.label)
     skillSlugs = resolution.resolvedSkills
     sourceSlugs = [...resolution.resolvedSources, ...resolution.resolvedOptionalSources]
     const includedSourceSlugs = new Set(sourceSlugs)
@@ -336,8 +326,8 @@ export async function openAgentSessionComposer(params: {
   skills?: SkillDescriptor[]
   sources?: LoadedSource[]
   /**
-   * Workspace context docs already filtered by routing for this agent. When
-   * omitted, the composer asks the server for the source-of-truth filtered set.
+   * Legacy caller snapshot, retained for API compatibility. Actual launches
+   * always refresh and route context on the server before composing.
    */
   contextDocs?: ContextDocDTO[]
   /**
@@ -413,9 +403,7 @@ export async function openAgentSessionComposer(params: {
   if (taskMode) assertFocusedAgentReferences(launchAgent, taskMode.label, launchSkills!, launchSources!)
 
   assertCurrent()
-  const contextDocs = taskMode
-    ? await window.electronAPI.listWorkspaceContextDocsForAgent(params.workspaceId, params.agent.slug, taskMode.id)
-    : params.contextDocs ?? await window.electronAPI.listWorkspaceContextDocsForAgent(params.workspaceId, params.agent.slug)
+  const contextDocs = await window.electronAPI.listWorkspaceContextDocsForAgent(params.workspaceId, params.agent.slug, taskMode?.id)
   const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
     loadUserMemoryEntries(),
     loadAgentMemoryEntries(params.agent.slug),

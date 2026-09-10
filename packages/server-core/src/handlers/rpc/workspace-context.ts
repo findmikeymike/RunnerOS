@@ -6,25 +6,20 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   loadAllContextDocs,
   loadContextDoc,
-  loadPromptContextDocsForAgent,
-  loadAuthorizedContextDocsForAgent,
-  canAgentAccessContextDoc,
-  shouldInjectContextDoc,
   upsertContextDoc,
   deleteContextDoc,
   type UpsertContextDocInput,
   type LoadedContextDoc,
 } from '@craft-agent/shared/workspace-context'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { CONCIERGE_SLUG, loadGlobalAgent, resolveAgentTaskMode, filterContextDocsForTaskMode, isAgentAllowedInArtistWorkspace, type ResolvedAgentTaskMode } from '@craft-agent/shared/agent-definitions'
+import { loadGlobalAgent, resolveAgentTaskMode, isAgentAllowedInArtistWorkspace, type ResolvedAgentTaskMode } from '@craft-agent/shared/agent-definitions'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
-import { withScriptwriterArtistContext } from '../../hq-state/scriptwriter-context'
+import { prepareAgentLaunchContext } from '../../agent-launch/context'
+export { selectContextDocsForAgentLaunch } from '../../agent-launch/context'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 import {
   refreshArtistManagerStateForWorkspaceBestEffort,
-  refreshCampaignStateContextDocBestEffort,
-  refreshHqStateContextDocBestEffort,
   shouldRefreshHqStateForContextSlug,
 } from '../../hq-state/refresh'
 
@@ -70,18 +65,6 @@ function resolveRootPath(workspaceId: string): string {
   return workspace.rootPath
 }
 
-/** A chosen focus changes delivery, never the artist's access or disabled rules. */
-export function selectContextDocsForAgentLaunch(
-  docs: LoadedContextDoc[],
-  agentSlug: string | null,
-  taskMode?: ResolvedAgentTaskMode,
-): LoadedContextDoc[] {
-  const authorized = docs.filter(doc => canAgentAccessContextDoc(doc, agentSlug))
-  return taskMode
-    ? filterContextDocsForTaskMode(authorized, taskMode)
-    : authorized.filter(doc => shouldInjectContextDoc(doc, agentSlug))
-}
-
 export function registerWorkspaceContextHandlers(server: RpcServer, deps: HandlerDeps): void {
   server.handle(RPC_CHANNELS.workspaceContext.LIST, async (_ctx, workspaceId: string): Promise<LoadedContextDoc[]> => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
@@ -111,32 +94,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
       if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
       taskMode = resolveAgentTaskMode(agent, taskModeId)
     }
-    if (agentSlug?.trim().toLowerCase() === CONCIERGE_SLUG && workspace.artistWorkspaceScope === 'hq') {
-      refreshHqStateContextDocBestEffort(workspace.rootPath)
-    } else if (agentSlug?.trim().toLowerCase() === CONCIERGE_SLUG && workspace.artistWorkspaceScope === 'campaign') {
-      refreshCampaignStateContextDocBestEffort(workspace.rootPath)
-    }
-    const docs = selectContextDocsForAgentLaunch(
-      withScriptwriterArtistContext(workspace.rootPath, agentSlug, taskMode
-        ? loadAuthorizedContextDocsForAgent(workspace.rootPath, agentSlug)
-        : loadPromptContextDocsForAgent(workspace.rootPath, agentSlug)),
-      agentSlug,
-      taskMode,
-    )
-    if (workspace.artistWorkspaceScope !== 'hq' && workspace.artistWorkspaceScope !== 'campaign' && workspace.artistWorkspaceScope !== 'lab') return docs
-    return [{
-      slug: 'artist-os-workspace',
-      metadata: {
-        name: 'Artist OS Workspace',
-        description: 'Compact product-scope marker used for shared Artist OS operating rules.',
-        routing: { mode: 'broadcast' as const },
-        delivery: 'always' as const,
-        enabled: true,
-      },
-      body: `Artist OS workspace scope: ${workspace.artistWorkspaceScope}.`,
-      path: workspace.rootPath,
-      workspaceRootPath: workspace.rootPath,
-    }, ...docs]
+    return prepareAgentLaunchContext(workspace, agentSlug, taskMode)
   })
 
   server.handle(RPC_CHANNELS.workspaceContext.UPSERT, async (_ctx, workspaceId: string, payload: UpsertContextDocPayload): Promise<LoadedContextDoc> => {
