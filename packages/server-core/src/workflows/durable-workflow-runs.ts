@@ -1,7 +1,15 @@
 import { canonical, type DurableJournal, type DurableRunSnapshot } from '../../../shared/src/durable-execution/index.ts';
+import { durableStepOutput } from './durable-workflow-output-schema';
 import type { WorkflowRunSnapshot, WorkflowRunStep } from '../../../shared/src/workflows/run-types.ts';
 import type { LoadedWorkflow } from '../../../shared/src/workflows/types.ts';
 import type { DurableWorkflowActor, DurableWorkflowControlsOptions } from './durable-workflow-controls.ts';
+
+const publicationRemedies = {
+  authorization: 'The result is saved. Restore access to this workspace, then Resume to publish its Output.',
+  workspace: 'The result is saved. Restore the original workspace folder, then Resume to publish its Output.',
+  conflict: 'The result is saved. Its Output location contains changed or conflicting files. Preserve those files and restore the original Output bundle or move the conflict before resuming.',
+  storage: 'The result is saved. Its Output could not be written. Check available disk space and folder access, then Resume.',
+};
 
 export interface DurableWorkflowRunsOptions {
   journal: DurableJournal;
@@ -71,7 +79,7 @@ export class DurableWorkflowRuns {
     const state = waiting ? 'paused' : status === 'running' ? active ? 'running' : 'interrupted' : status;
     const stepState = waiting ? 'awaiting-human' : state === 'paused' || state === 'cancelled' ? 'interrupted' : state;
     const message = snapshot.turns.at(-1)?.message as unknown as { content?: Array<{ type?: string; text?: string }> } | undefined;
-    const output = snapshot.publication?.content ?? (status === 'succeeded' ? message?.content?.filter(part => part.type === 'text' && typeof part.text === 'string').map(part => part.text).join('\n') ?? '' : undefined);
+    const output = snapshot.publication?.content ?? (status === 'succeeded' ? message?.content?.filter(part => part.type === 'text' && typeof part.text === 'string').map(part => part.text).join(definition.outputSchema ? '' : '\n') ?? '' : undefined);
     const firstIncomplete = snapshot.workflowSteps?.findIndex(step => step.endTurn === undefined) ?? -1;
     const currentStep = firstIncomplete >= 0 ? firstIncomplete : snapshot.workflowSteps?.length ?? 0;
     const steps: WorkflowRunStep[] = multi ? workflow.metadata.steps.map((step, index) => {
@@ -81,11 +89,11 @@ export class DurableWorkflowRuns {
       const projectedState = completed ? 'succeeded' : index === currentStep ? stepState : terminal ? 'skipped' : 'queued';
       const turns = saved ? snapshot.turns.slice(saved.startTurn, saved.endTurn) : [];
       return { id: step.id, state: projectedState, attempts: turns.length > 0 ? 1 : 0,
-        ...(completed && typeof saved.output === 'string' ? { output: saved.output, completion: { outputChars: saved.output.length, toolUseCount: turns.flatMap(turn => turn.calls).filter(call => call.result !== undefined).length, satisfied: true } } : {}),
+        ...(completed && typeof saved.output === 'string' ? { output: durableStepOutput(saved.output, step.outputSchema), completion: { outputChars: saved.output.length, toolUseCount: turns.flatMap(turn => turn.calls).filter(call => call.result !== undefined).length, satisfied: true } } : {}),
         ...(projectedState === 'failed' ? { error: { code: 'durable-execution-failed', message: 'The durable workflow could not complete.' } } : {}),
       };
     }) : [{ id: definition.id, state: snapshot.publication ? 'succeeded' : stepState, attempts: snapshot.modelAttempts > 0 ? 1 : 0,
-      ...(output !== undefined ? { output, completion: { outputChars: output.length, toolUseCount: snapshot.turns.flatMap(turn => turn.calls).filter(call => call.result !== undefined).length, satisfied: true } } : {}),
+      ...(output !== undefined ? { output: durableStepOutput(output, definition.outputSchema), completion: { outputChars: output.length, toolUseCount: snapshot.turns.flatMap(turn => turn.calls).filter(call => call.result !== undefined).length, satisfied: true } } : {}),
       ...(status === 'failed' ? { error: { code: 'durable-execution-failed', message: 'The durable workflow could not complete.' } } : {}),
     }];
     // The journal currently has no wall-clock mutation timestamps. Do not invent completion times.
@@ -97,7 +105,7 @@ export class DurableWorkflowRuns {
       workflowSnapshot: JSON.parse(canonical({ metadata: workflow.metadata, body: workflow.body })),
       steps, createdAt, updatedAt: createdAt,
       ...(snapshot.publication?.status === 'published' ? { finalOutputId: snapshot.publication.outputId, outputIds: [snapshot.publication.outputId] } : {}),
-      ...(snapshot.publication?.status === 'pending' && ['paused', 'interrupted'].includes(state) ? { outputError: 'The result is saved, but its final Output still needs to be published. Resume to retry without repeating the model work.' } : {}),
+      ...(snapshot.publication?.status === 'pending' && ['paused', 'interrupted'].includes(state) ? { outputError: snapshot.publication.error ? publicationRemedies[snapshot.publication.error] : 'The result is saved, but its final Output still needs to be published. Resume to retry without repeating the model work.' } : {}),
       ...(state === 'interrupted' ? { interruptionReason: 'No worker is currently executing this saved run. Resume to continue.' } : {}),
       durable: { engine: spec.engine, version: snapshot.version, status, controlRevision: snapshot.controlRevision, continuationRevision: snapshot.continuationRevision ?? 0 },
     };

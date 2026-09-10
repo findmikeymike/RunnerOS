@@ -16,6 +16,7 @@ import { registerWorkflowRunsHandlers } from '../handlers/rpc/workflow-runs';
 import type { HandlerDeps } from '../handlers/handler-deps';
 import type { HandlerFn, RpcServer } from '../transport/types';
 import type { DurableReadRunnerOptions } from './durable-read-runner';
+import { DurableWorkflowStartupGate } from './durable-workflow-startup-gate';
 
 const cleanup: Array<() => unknown | Promise<unknown>> = [];
 afterEach(async () => { for (const fn of cleanup.splice(0).reverse()) await fn(); });
@@ -39,7 +40,7 @@ function fixture() {
   const open = () => DurableWorkflowHost.open({ configRoot: root, protection, runnerOptions, resolvePrincipal: () => 'alice', resolveScheduledPrincipal: () => scheduledPrincipal });
   const host = open(); cleanup.push(async () => { release(); await host.close(); });
   const input: WorkflowStartInput = { workspaceId: 'w', workflow, triggerInputs: {}, invocation: 'manual-ui', actor: { clientId: 'c', workspaceId: 'w' } };
-  const createStart = (resolveBundle: () => Promise<DurableStartBundle | null> = async () => bundle) => createDurableWorkflowStart({ host, resolveBundle, getWorkspaceRootPath: () => root });
+  const createStart = (resolveBundle: Parameters<typeof createDurableWorkflowStart>[0]['resolveBundle'] = async () => bundle) => createDurableWorkflowStart({ host, resolveBundle, getWorkspaceRootPath: () => root });
   const createRunner = (durableStart = createStart()) => new WorkflowRunner({ durableStart, getWorkspaceRootPath: () => root,
     assertWorkflowAdmissionAvailable: async (workspaceId, workflowSlug) => { if (await host.hasUnfinishedWorkflow(workspaceId, workflowSlug)) throw new Error('This workflow has unfinished work.'); },
     createSession: async () => { legacyCalls++; return { id: 'legacy' }; }, sendMessage: async () => {}, getLastAssistantText: () => 'legacy output', abortSession: async () => {} });
@@ -107,6 +108,24 @@ test('explicit durable workflow cannot fall back when the host is unavailable', 
   const f = fixture(); let legacy = 0;
   const runner = new WorkflowRunner({ getWorkspaceRootPath: () => f.root, createSession: async () => { legacy++; return { id: 'bad' }; }, sendMessage: async () => {}, getLastAssistantText: () => '', abortSession: async () => {} });
   await expect(runner.start(f.input)).rejects.toThrow(); expect(legacy).toBe(0);
+});
+
+test('unavailable recovery storage blocks manual legacy starts and reruns until a host opens', async () => {
+  const f = fixture(), gate = new DurableWorkflowStartupGate(); let legacy = 0;
+  expect(() => gate.assertAdmissionAvailable()).not.toThrow();
+  gate.defer(); expect(gate.finish(false)).toBe(false);
+  const runner = new WorkflowRunner({ getWorkspaceRootPath: () => f.root, assertWorkflowAdmissionAvailable: () => gate.assertAdmissionAvailable(),
+    createSession: async () => { legacy++; return { id: 'legacy' }; }, sendMessage: async () => {}, getLastAssistantText: () => 'done', abortSession: async () => {} });
+  const oldId = '11111111-1111-4111-8111-111111111111', now = new Date().toISOString();
+  const metadata = { ...f.workflow.metadata, execution: undefined };
+  writeRun(f.root, { id: oldId, workflowSlug: f.workflow.slug, workspaceId: 'w', state: 'failed',
+    trigger: { type: 'manual', inputs: {}, firedAt: now }, createdAt: now, updatedAt: now,
+    workflowSnapshot: { metadata, body: '' }, steps: [{ id: 'read', state: 'failed', attempts: 1 }] });
+  const original = readFileSync(getRunFile(f.root, oldId));
+  await expect(runner.start({ ...f.input, workflow: { ...f.workflow, metadata } })).rejects.toThrow('recovery is unavailable');
+  await expect(runner.rerunFromStep({ workspaceId: 'w', runId: oldId, stepId: 'read' })).rejects.toThrow('recovery is unavailable');
+  expect(legacy).toBe(0); expect(readFileSync(getRunFile(f.root, oldId))).toEqual(original);
+  expect(gate.finish(true)).toBe(true); expect(() => gate.assertAdmissionAvailable()).not.toThrow();
 });
 
 
@@ -307,4 +326,31 @@ test.each(['manual-ui', 'scheduled-work'] as const)('normal %s final-step output
     expect((await replayRunner.start(input)).id).toBe(saved.id);
   }
   expect(f.modelCalls()).toBe(2); expect(listOutputs(f.root).map(output => output.id)).toEqual([outputId]);
+});
+
+
+test('same agent with different explicit task modes resolves and pins distinct bundles', async () => {
+  const f = fixture();
+  f.input.workflow.metadata.steps = [
+    { id: 'one', agent: 'reader', taskModeId: 'scan', input: 'Read first' },
+    { id: 'two', agent: 'reader', taskModeId: 'summarize', input: '{{steps.one.output}}' },
+    { id: 'three', agent: 'reader', taskModeId: 'scan', input: 'Read again' },
+  ];
+  const resolved: Array<string | undefined> = [];
+  const start = f.createStart(async (_workspaceId, _agentSlug, taskModeId) => {
+    resolved.push(taskModeId); return { ...f.bundle, systemPrompt: `Pinned ${taskModeId}` };
+  });
+  const admit = f.host.admitWorkflowForActor.bind(f.host);
+  let steps: unknown;
+  const spy = spyOn(f.host, 'admitWorkflowForActor').mockImplementation((workflow, input, actor) => { steps = input.resolvedSteps; return admit(workflow, input, actor); });
+  cleanup.push(() => spy.mockRestore());
+  const result = await f.createRunner(start).start(f.input);
+  expect(result.durable).toBeDefined();
+  expect(resolved).toEqual(['scan', 'summarize']);
+  expect(steps).toEqual([
+    { id: 'one', agent: 'reader', taskModeId: 'scan', systemPrompt: 'Pinned scan' },
+    { id: 'two', agent: 'reader', taskModeId: 'summarize', systemPrompt: 'Pinned summarize' },
+    { id: 'three', agent: 'reader', taskModeId: 'scan', systemPrompt: 'Pinned scan' },
+  ]);
+  f.release();
 });

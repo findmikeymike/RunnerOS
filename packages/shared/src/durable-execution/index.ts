@@ -1,3 +1,4 @@
+import { readProcessIdentity, processIdentityProvesReplacement } from './process-identity.ts';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { chmodSync, closeSync, existsSync, fsyncSync, linkSync, lstatSync, openSync, unlinkSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -65,7 +66,7 @@ export interface DurableRunSnapshot {
   reservedUnits: number;
   turns: Turn[];
   workflowSteps?: Array<{ id: string; startTurn: number; inputDigest: string; endTurn?: number; output?: string }>;
-  publication?: { status: 'pending' | 'published'; content: string; outputId: string };
+  publication?: { status: 'pending' | 'published'; content: string; outputId: string; error?: 'authorization' | 'workspace' | 'conflict' | 'storage' };
   approvals?: DurableApproval[];
   steering?: DurableSteeringEntry[];
   continuationRevision?: number;
@@ -94,13 +95,14 @@ function validateControlInput(command: DurableControlCommand | DurableSteeringCo
   const fields = ['runId', 'workspaceId', 'commandId', 'expectedVersion', 'action', ...(command.action === 'steer' ? ['text'] : [])];
   if (Object.keys(command).some(key => !fields.includes(key)) || ['runId', 'workspaceId', 'commandId'].some(key => typeof (command as any)[key] !== 'string' || !(command as any)[key].trim()) || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1 || !['pause', 'resume', 'cancel', 'steer'].includes(command.action) || command.action === 'steer' && (typeof command.text !== 'string' || !command.text.trim())) throw new Error('invalid-durable-control-command');
 }
-export interface DurableJournalOptions { configRoot: string; key: Buffer; ownerId?: string; isProcessAlive?: (pid: number) => boolean; maxPayloadBytes?: number }
+export interface DurableJournalOptions { configRoot: string; key: Buffer; ownerId?: string; isProcessAlive?: (pid: number) => boolean; processIdentity?: (pid: number) => string | null; maxPayloadBytes?: number }
 export class DurableJournal {
   readonly path: string;
   private db: Database;
   private readonly ownerId: string;
   private readonly key: Buffer;
   private readonly alive: (pid: number) => boolean;
+  private readonly processIdentity: (pid: number) => string | null;
   private readonly maxBytes: number;
   private poisoned = false;
   private readonly observationEpochs = new Set<string>();
@@ -109,6 +111,7 @@ export class DurableJournal {
     this.key = Buffer.from(options.key);
     this.ownerId = options.ownerId ?? randomUUID();
     this.alive = options.isProcessAlive ?? (pid => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code !== 'ESRCH'; } });
+    this.processIdentity = options.processIdentity ?? readProcessIdentity;
     this.maxBytes = options.maxPayloadBytes ?? 16 * 1024 * 1024;
     this.path = join(privateDurableDirectory(options.configRoot), 'journal.sqlite');
     for (const suffix of ['', '-wal', '-shm']) if (existsSync(this.path + suffix) && lstatSync(this.path + suffix).isSymbolicLink()) throw new Error('unsafe-journal-path');
@@ -118,10 +121,11 @@ export class DurableJournal {
       this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;');
       if (this.db.prepare('PRAGMA journal_mode').get().journal_mode !== 'wal' || this.db.prepare('PRAGMA synchronous').get().synchronous !== 2 || this.db.prepare('PRAGMA foreign_keys').get().foreign_keys !== 1) throw new Error('unsafe-sqlite-settings');
       const version = this.db.prepare('PRAGMA user_version').get().user_version;
-      if (![0, 1, 2].includes(version)) throw new Error('unsupported-durable-schema');
+      if (![0, 1, 2, 3].includes(version)) throw new Error('unsupported-durable-schema');
       this.db.exec('BEGIN IMMEDIATE');
       try {
-        this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, command TEXT NOT NULL, spec_digest TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT, pid INTEGER, payload TEXT NOT NULL, UNIQUE(workspace,command)); CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), version INTEGER NOT NULL, kind TEXT NOT NULL, UNIQUE(run_id,version)); CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES events(sequence), acknowledged INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS control_commands (workspace TEXT NOT NULL, id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(id), payload TEXT NOT NULL, PRIMARY KEY(workspace,id)); PRAGMA user_version=2;');
+        this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, command TEXT NOT NULL, spec_digest TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT, pid INTEGER, payload TEXT NOT NULL, UNIQUE(workspace,command)); CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), version INTEGER NOT NULL, kind TEXT NOT NULL, UNIQUE(run_id,version)); CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES events(sequence), acknowledged INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS control_commands (workspace TEXT NOT NULL, id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(id), payload TEXT NOT NULL, PRIMARY KEY(workspace,id)); PRAGMA user_version=3;');
+        if (!this.db.prepare('PRAGMA table_info(runs)').all().some((column: any) => column.name === 'process_identity')) this.db.exec('ALTER TABLE runs ADD COLUMN process_identity TEXT');
         const keyCheck = this.db.prepare("SELECT value FROM metadata WHERE key='key-check'").get();
         if (keyCheck) { if (this.decrypt(keyCheck.value, 'key-check') !== 'artist-os-durable-v1') throw new Error('invalid-key-check'); }
         else this.db.prepare('INSERT INTO metadata VALUES (?,?)').run('key-check', this.encrypt('artist-os-durable-v1', 'key-check'));
@@ -201,17 +205,34 @@ export class DurableJournal {
   get(runId: string, workspaceId: string): DurableRunSnapshot { const state = this.decrypt(this.row(runId, workspaceId).payload, runId); state.controlRevision ??= 0; state.approvals ??= []; state.steering ??= []; state.continuationRevision ??= 0; state.boundaries ??= []; return state; }
   listInternal(workspaceId: string): DurableRunSnapshot[] { return this.db.prepare('SELECT id,payload FROM runs WHERE workspace=? ORDER BY rowid').all(workspaceId).map(row => { const state = this.decrypt(row.payload, row.id); state.controlRevision ??= 0; state.approvals ??= []; state.steering ??= []; state.continuationRevision ??= 0; state.boundaries ??= []; return state; }); }
   list(workspaceId: string): Array<{ runId: string; status: DurableRunSnapshot['status']; version: number; modelAttempts: number; reservedUnits: number }> { return this.listInternal(workspaceId).map(state => ({runId: state.spec.runId, status: state.status, version: state.version, modelAttempts: state.modelAttempts, reservedUnits: state.reservedUnits})); }
+  recordPublicationFailure(claim: DurableClaim, category: 'authorization' | 'workspace' | 'conflict' | 'storage'): void {
+    this.assertExecutionClaim(claim);
+    if (!['authorization', 'workspace', 'conflict', 'storage'].includes(category)) throw new Error('durable-publication-error-invalid');
+    this.transaction(() => {
+      const state = this.fenced(claim);
+      if (state.status !== 'running' || state.controlRevision !== claim.controlRevision || state.publication?.status !== 'pending') return;
+      state.publication.error = category;
+      state.status = 'paused'; state.controlRevision++;
+      this.save(state, 'publication-blocked');
+    });
+  }
+  private assertOwnerAvailable(row: { owner?: string; pid: number; process_identity?: string }): void {
+    if (!row.owner || !this.alive(row.pid)) return;
+    let current: string | null = null;
+    try { current = this.processIdentity(row.pid); } catch { /* Fail closed on identity lookup failures. */ }
+    if (!processIdentityProvesReplacement(row.process_identity ?? null, current)) throw new Error('durable-run-owned');
+  }
   claim(runId: string, workspaceId: string): DurableClaim {
     return this.transaction(() => {
       const row = this.row(runId, workspaceId);
-      if (row.owner && this.alive(row.pid)) throw new Error('durable-run-owned');
+      this.assertOwnerAvailable(row);
       const state = this.get(runId, workspaceId);
       if (state.status === 'waiting-approval') throw new Error('durable-approval-required');
       if (state.status === 'paused') throw new Error('durable-run-paused');
       if (state.status !== 'running') throw new Error('durable-run-terminal');
       this.assertChildParent(state);
       const epoch = row.epoch + 1;
-      this.db.prepare('UPDATE runs SET owner=?,pid=?,epoch=? WHERE id=?').run(this.ownerId, process.pid, epoch, runId);
+      this.db.prepare('UPDATE runs SET owner=?,pid=?,epoch=?,process_identity=? WHERE id=?').run(this.ownerId, process.pid, epoch, this.processIdentity(process.pid), runId);
       return { runId, workspaceId, ownerId: this.ownerId, epoch, controlRevision: state.controlRevision };
     });
   }
@@ -219,11 +240,11 @@ export class DurableJournal {
   claimObservation(runId: string, workspaceId: string): DurableClaim {
     return this.transaction(() => {
       const row = this.row(runId, workspaceId);
-      if (row.owner && this.alive(row.pid)) throw new Error('durable-run-owned');
+      this.assertOwnerAvailable(row);
       const state = this.get(runId, workspaceId);
       if (!['paused', 'cancelled', 'failed'].includes(state.status)) throw new Error('durable-observation-state-invalid');
       const epoch = row.epoch + 1;
-      this.db.prepare('UPDATE runs SET owner=?,pid=?,epoch=? WHERE id=?').run(this.ownerId, process.pid, epoch, runId);
+      this.db.prepare('UPDATE runs SET owner=?,pid=?,epoch=?,process_identity=? WHERE id=?').run(this.ownerId, process.pid, epoch, this.processIdentity(process.pid), runId);
       this.observationEpochs.add(canonical([runId, workspaceId, epoch]));
       return { runId, workspaceId, ownerId: this.ownerId, epoch, controlRevision: state.controlRevision, observationOnly: true };
     });
@@ -236,7 +257,7 @@ export class DurableJournal {
     if (row.owner !== claim.ownerId || row.epoch !== claim.epoch || claim.ownerId !== this.ownerId) throw new Error('durable-stale-owner');
     return this.get(claim.runId, claim.workspaceId);
   }
-  release(claim: DurableClaim): void { this.transaction(() => { this.fenced(claim); this.db.prepare('UPDATE runs SET owner=NULL,pid=NULL WHERE id=?').run(claim.runId); }); }
+  release(claim: DurableClaim): void { this.transaction(() => { this.fenced(claim); this.db.prepare('UPDATE runs SET owner=NULL,pid=NULL,process_identity=NULL WHERE id=?').run(claim.runId); }); }
   cancel(runId: string, workspaceId: string): void { this.control(runId, workspaceId, 'cancelled'); }
   fail(runId: string, workspaceId: string, _reason: string): void { this.control(runId, workspaceId, 'failed'); }
   private control(runId: string, workspaceId: string, status: 'cancelled' | 'failed'): void { this.transaction(() => { const state = this.get(runId, workspaceId); if (state.status === 'running' || status === 'cancelled' && ['paused', 'waiting-approval'].includes(state.status)) { state.status = status; state.controlRevision++; this.save(state, status); } }); }
@@ -444,7 +465,7 @@ export class DurableJournal {
       if (request.kind === 'output-published') {
         if (!state.spec.publication || !state.publication || request.outputId !== state.spec.publication.outputId || request.outputId !== state.publication.outputId) throw new Error('durable-publication-mismatch');
         if (state.publication.status === 'published') return {};
-        state.publication.status = 'published'; state.status = 'succeeded';
+        state.publication.status = 'published'; delete state.publication.error; state.status = 'succeeded';
         this.save(state, 'output-published'); return {};
       }
       if (state.publication && !isResult && !['complete', 'workflow-step-complete'].includes(request.kind)) throw new Error('durable-publication-model-finished');
@@ -762,7 +783,7 @@ export class DurableJournal {
     try {
       this.db.prepare('VACUUM INTO ?').run(staged); chmodSync(staged, 0o600);
       const copy = database(staged);
-      try { copy.exec("PRAGMA synchronous=FULL; BEGIN IMMEDIATE; INSERT OR REPLACE INTO metadata VALUES ('dispatch-disabled','1'); UPDATE runs SET owner=NULL,pid=NULL; COMMIT;"); } finally { copy.close(); }
+      try { copy.exec("PRAGMA synchronous=FULL; BEGIN IMMEDIATE; INSERT OR REPLACE INTO metadata VALUES ('dispatch-disabled','1'); UPDATE runs SET owner=NULL,pid=NULL,process_identity=NULL; COMMIT;"); } finally { copy.close(); }
       const fd = openSync(staged, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); }
       linkSync(staged, destination);
       const directoryFd = openSync(dirname(destination), 'r'); try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }

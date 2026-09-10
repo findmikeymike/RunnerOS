@@ -12,7 +12,7 @@ export interface DurableStartBundle { connectionSlug: string; model: string; sys
 export interface DurableWorkflowStartOptions {
   host: DurableWorkflowHost;
   /** Null means unsupported capabilities; an explicitly selected durable workflow must reject. */
-  resolveBundle(workspaceId: string, agentSlug: string): Promise<DurableStartBundle | null>;
+  resolveBundle(workspaceId: string, agentSlug: string, taskModeId?: string): Promise<DurableStartBundle | null>;
   getWorkspaceRootPath(workspaceId: string): string;
 }
 
@@ -45,12 +45,13 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
       normalizeDurableTriggerInputs(workflow, pinned.triggerInputs, pinned.untrustedTriggerInputs);
       const bundles = new Map<string, DurableStartBundle>();
       for (const step of workflow.metadata.steps) {
-        if (bundles.has(step.agent)) continue;
-        const resolved = await options.resolveBundle(workspaceId, step.agent);
+        const bundleKey = canonical([step.agent, step.taskModeId ?? null]);
+        if (bundles.has(bundleKey)) continue;
+        const resolved = await options.resolveBundle(workspaceId, step.agent, step.taskModeId);
         if (!resolved) throw new Error('This agent is not supported for durable local reads. It requires read-only permission, thinking off, supported workspace filesystem sources, and no skills or specialist tools.');
-        bundles.set(step.agent, JSON.parse(canonical(resolved)) as DurableStartBundle);
+        bundles.set(bundleKey, JSON.parse(canonical(resolved)) as DurableStartBundle);
       }
-      const bundle = bundles.get(workflow.metadata.steps[0]!.agent)!;
+      const bundle = bundles.get(canonical([workflow.metadata.steps[0]!.agent, workflow.metadata.steps[0]!.taskModeId ?? null]))!;
       if ([...bundles.values()].some(candidate => candidate.connectionSlug !== bundle.connectionSlug || candidate.model !== bundle.model)) throw new Error('Durable read steps must use the same model and connection.');
       const legacy = listRuns(options.getWorkspaceRootPath(workspaceId));
       if (existing.some(run => run.workflowSlug === workflow.slug && !['succeeded', 'failed', 'cancelled'].includes(run.state))
@@ -62,7 +63,8 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
         ...bundle, triggerInputs: pinned.triggerInputs, ...(pinned.untrustedTriggerInputs ? { untrustedTriggerInputs: pinned.untrustedTriggerInputs } : {}), workspaceId, runId, commandId: scheduled ? durableWorkflowOccurrenceIdentity(workspaceId, pinned.occurrence!).commandId : `manual-start:${runId}`,
         localSources: [...new Map([...bundles.values()].flatMap(candidate => candidate.localSources ?? []).map(source => [canonical(source), source])).values()],
         resolvedAgentSlug: workflow.metadata.steps[0]!.agent,
-        ...(workflow.metadata.steps.length > 1 ? { resolvedSteps: workflow.metadata.steps.map(step => ({ id: step.id, agent: step.agent, systemPrompt: bundles.get(step.agent)!.systemPrompt })) } : {}),
+        ...(workflow.metadata.steps[0]!.taskModeId ? { resolvedTaskModeId: workflow.metadata.steps[0]!.taskModeId } : {}),
+        ...(workflow.metadata.steps.length > 1 ? { resolvedSteps: workflow.metadata.steps.map(step => ({ id: step.id, agent: step.agent, ...(step.taskModeId ? { taskModeId: step.taskModeId } : {}), systemPrompt: bundles.get(canonical([step.agent, step.taskModeId ?? null]))!.systemPrompt })) } : {}),
         allowedTools: ['read', 'grep', 'find', 'ls'] as const, maxOutputTokens: 4096,
         maxModelAttempts: 8, deadlineAt: Date.now() + 10 * 60_000,
         costPolicy: { unit: 'model-requests' as const, maxTotalUnits: 8, maxUnitsPerAttempt: 1 },

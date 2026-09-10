@@ -3549,21 +3549,21 @@ export class SessionManager implements ISessionManager {
         if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
         return workspace.rootPath
       },
-      resolveBundle: async (workspaceId, agentSlug) => {
+      resolveBundle: async (workspaceId, agentSlug, taskModeId) => {
         const agent = loadGlobalAgent(agentSlug)
         if (!agent) return null
         try {
-          assertDurableWorkflowAgentMetadata(agent.metadata)
+          assertDurableWorkflowAgentMetadata(agent.metadata, taskModeId)
           const workspace = getWorkspaceByNameOrId(workspaceId)
           if (!workspace || workspace.remoteServer) return null
-          assertDurableWorkflowSourcesBeforeComposition(workspace.rootPath, agent.metadata)
+          assertDurableWorkflowSourcesBeforeComposition(workspace.rootPath, agent.metadata, taskModeId)
         }
         catch (error) {
           if (error instanceof Error && error.message === 'unsupported-durable-agent-bundle') return null
           throw error
         }
-        const options = await this.resolveAgentSessionOptions(workspaceId, agentSlug, { referenceMode: 'strict' })
-        try { return resolveDurableWorkflowBundle(workspaceId, agentSlug, options) }
+        const options = await this.resolveAgentSessionOptions(workspaceId, agentSlug, { referenceMode: 'strict', taskModeId, taskModeSelectionSource: 'workflow' })
+        try { return resolveDurableWorkflowBundle(workspaceId, agentSlug, options, taskModeId) }
         catch (error) {
           if (error instanceof Error && error.message === 'unsupported-durable-agent-bundle') return null
           throw error
@@ -6584,7 +6584,10 @@ user a clickable link to where the thing now lives.`
 
       this.workflowRunner = new WorkflowRunner({
         durableStart: input => this.durableWorkflowStart?.(input) ?? null,
-        assertWorkflowAdmissionAvailable: (workspaceId, workflowSlug) => this.durableWorkflowAdmissionGuard?.(workspaceId, workflowSlug),
+        assertWorkflowAdmissionAvailable: (workspaceId, workflowSlug) => {
+          this.scheduledWorkflowStartup.assertAdmissionAvailable()
+          return this.durableWorkflowAdmissionGuard?.(workspaceId, workflowSlug)
+        },
         createSession: (wsId, opts) => this.createSession(wsId, opts).then((s) => ({ id: s.id })),
         resolveAgentSessionOptions: (wsId, agentSlug, options) =>
           this.resolveAgentSessionOptions(wsId, agentSlug, options),

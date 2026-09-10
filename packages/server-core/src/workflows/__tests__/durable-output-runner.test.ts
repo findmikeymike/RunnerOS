@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { DurableWorkflowRuns } from '../durable-workflow-runs.ts';
 import { DurableJournal } from '../../../../shared/src/durable-execution/index.ts';
 import type { LoadedWorkflow } from '../../../../shared/src/workflows/types.ts';
 import { DurableReadRunner, supportsDurableReadWorkflow, type DurableReadBinding, type DurableReadWorkflowInput, type DurableReadRunnerOptions } from '../durable-read-runner.ts';
@@ -155,5 +156,32 @@ test('backend destroy exception preserves pending text and fresh resume publishe
   expect(completed.spec.deadlineAt).toBe(pending.spec.deadlineAt);
   expect(completed.reservedUnits).toBe(pending.reservedUnits);
   expect(publications).toBe(1);
+  expect(f.models()).toBe(1);
+});
+
+
+test.each(['authorization', 'workspace', 'conflict', 'storage'] as const)('publication persists safe %s remedy and clears it after successful retry', async category => {
+  const f = fixture(); let authorizationChecks = 0;
+  const privateDetail = '/private/customer-secret/token=never-show';
+  const runner = new DurableReadRunner({ ...f.options,
+    authorizePublication() { if (++authorizationChecks > 1 && category === 'authorization') throw new Error(privateDetail); },
+    resolvePublicationWorkspace() { if (category === 'workspace') throw new Error(privateDetail); return f.binding.workspace; },
+    publishOutput() { throw new Error(category === 'conflict' ? 'durable-output-conflict' : privateDetail); },
+  });
+  const pending = await runner.startWorkflow(f.workflow, f.input);
+  expect(pending.status).toBe('paused');
+  expect(pending.publication?.error).toBe(category);
+  expect(pending.publication?.content).toBe('result 1');
+  expect(JSON.stringify(pending)).not.toContain(privateDetail);
+  const runs = new DurableWorkflowRuns({ journal: f.journal, resolvePrincipal: () => 'principal' });
+  const projected = await runs.get(f.input.workspaceId, f.input.runId, { clientId: 'fixture', workspaceId: f.input.workspaceId });
+  const remedy = { authorization: 'Restore access', workspace: 'original workspace folder', conflict: 'conflicting files', storage: 'disk space' }[category];
+  expect(projected?.outputError).toContain(remedy);
+  expect(projected?.outputError).not.toContain(privateDetail);
+  const recovered = new DurableReadRunner({ ...f.options, createBackend() { throw new Error('must not replay model'); }, publishOutput: (_root, input) => ({ outputId: input.id }) });
+  const complete = await resume(f, recovered);
+  expect(complete.status).toBe('succeeded');
+  expect(complete.publication?.error).toBeUndefined();
+  expect((await runs.get(f.input.workspaceId, f.input.runId, { clientId: 'fixture' }))?.outputError).toBeUndefined();
   expect(f.models()).toBe(1);
 });

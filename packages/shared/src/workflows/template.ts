@@ -29,6 +29,7 @@ export interface TemplateResolveResult {
   warnings: string[];
 }
 
+const own = (value: object, key: string): boolean => Object.prototype.hasOwnProperty.call(value, key);
 const TOKEN_RE = /\{\{\s*([^}]+?)\s*\}\}/g;
 
 function stringify(value: unknown): string {
@@ -72,7 +73,7 @@ function formatUntrustedTriggerValue(name: string, value: unknown): string {
 function dotWalk(root: unknown, parts: string[]): { ok: true; value: unknown } | { ok: false } {
   let cur: unknown = root;
   for (const p of parts) {
-    if (cur == null || typeof cur !== 'object') return { ok: false };
+    if (cur == null || typeof cur !== 'object' || !own(cur, p)) return { ok: false };
     cur = (cur as Record<string, unknown>)[p];
     if (cur === undefined) return { ok: false };
   }
@@ -91,7 +92,7 @@ function resolveToken(expr: string, ctx: TemplateContext): { ok: true; value: st
     const field = parts[1];
     if (field === undefined) return { ok: false, reason: `"{{${expr}}}" is missing a field name` };
     if (parts.length !== 2) return { ok: false, reason: `"{{${expr}}}" must be trigger.<field>` };
-    if (!ctx.trigger || !(field in ctx.trigger)) {
+    if (!ctx.trigger || !own(ctx.trigger, field)) {
       return { ok: false, reason: `unknown trigger field "${field}"` };
     }
     if (ctx.untrustedTriggerFields?.includes(field)) {
@@ -117,8 +118,8 @@ function resolveToken(expr: string, ctx: TemplateContext): { ok: true; value: st
     if (parts.length < 3 || parts[2] !== 'output' || stepId === undefined) {
       return { ok: false, reason: `"{{${expr}}}" must be steps.<id>.output[.path]` };
     }
-    const step = ctx.steps?.[stepId];
-    if (!step) return { ok: false, reason: `unknown step "${stepId}"` };
+    const step = ctx.steps && own(ctx.steps, stepId) ? ctx.steps[stepId] : undefined;
+    if (!step || !own(step, 'output')) return { ok: false, reason: `unknown step "${stepId}"` };
     if (parts.length === 3) return { ok: true, value: formatResolvedValue(step.output, parsed.filter) };
     const walked = dotWalk(step.output, parts.slice(3));
     if (!walked.ok) return { ok: false, reason: `unknown path "${parts.slice(3).join('.')}" in step "${stepId}" output` };

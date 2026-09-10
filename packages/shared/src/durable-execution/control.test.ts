@@ -128,7 +128,7 @@ test('schema-one history remains readable but its older adapter cannot dispatch 
   db.exec('DROP TABLE control_commands; PRAGMA user_version=1');
   const upgraded = open();
   try {
-    expect((upgraded as any).db.prepare('PRAGMA user_version').get().user_version).toBe(2);
+    expect((upgraded as any).db.prepare('PRAGMA user_version').get().user_version).toBe(3);
     expect(upgraded.get('run', 'workspace').controlRevision).toBe(0);
     const claim = upgraded.claim('run', 'workspace');
     await expect(upgraded.bridge(claim).checkpoint({ kind: 'model-start', turn: 0, context })).rejects.toThrow('manifest-changed');

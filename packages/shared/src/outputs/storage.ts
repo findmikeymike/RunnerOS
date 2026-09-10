@@ -7,6 +7,11 @@
 
 import {
   existsSync,
+  closeSync,
+  fsyncSync,
+  linkSync,
+  lstatSync,
+  openSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -16,6 +21,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { readProcessIdentity, processIdentityProvesReplacement } from '../durable-execution/process-identity';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
@@ -34,7 +40,6 @@ import {
 export const OUTPUTS_DIR = 'outputs';
 export const OUTPUT_MANIFEST_FILE = 'output.json';
 const OUTPUT_LOCK_TIMEOUT_MS = 10_000;
-const OUTPUT_ORPHAN_LOCK_STALE_MS = 24 * 60 * 60 * 1000;
 const outputLockContext = new AsyncLocalStorage<Map<string, string>>();
 
 function slugify(value: string): string {
@@ -356,68 +361,105 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error;
 }
 
+interface OutputLockOwner { token: string; pid: number; hostname: string; createdAt: string; processIdentity?: string }
+function readLockOwner(path: string): Partial<OutputLockOwner> {
+  const stat = lstatSync(path);
+  if (stat.isSymbolicLink()) throw new Error('Output lock must not be a symbolic link.');
+  return JSON.parse(readFileSync(stat.isDirectory() ? join(path, 'owner.json') : path, 'utf8')) as Partial<OutputLockOwner>;
+}
 function lockOwnerIsAbandoned(path: string): boolean {
   try {
-    const owner = JSON.parse(readFileSync(join(path, 'owner.json'), 'utf8')) as { pid?: number; hostname?: string };
+    const owner = readLockOwner(path);
     if (owner.hostname !== hostname() || !Number.isInteger(owner.pid) || (owner.pid ?? 0) <= 0) return false;
     try {
       process.kill(owner.pid!, 0);
-      return false;
-    } catch (error) {
-      return isNodeError(error) && error.code === 'ESRCH';
+      return processIdentityProvesReplacement(typeof owner.processIdentity === 'string' ? owner.processIdentity : null, readProcessIdentity(owner.pid!));
     }
+    catch (error) { return isNodeError(error) && error.code === 'ESRCH'; }
   } catch {
-    try {
-      return Date.now() - statSync(path).mtimeMs > OUTPUT_ORPHAN_LOCK_STALE_MS;
-    } catch {
-      return false;
-    }
+    // An unreadable/ownerless legacy lock may belong to a suspended writer.
+    // Age cannot prove abandonment. Such artifacts require manual cleanup only
+    // after independently proving the old writer is gone; new atomic locks avoid this gap.
+    return false;
   }
 }
-
 function liveLockOwner(path: string): { pid: number; hostname: string } | undefined {
   try {
-    const owner = JSON.parse(readFileSync(join(path, 'owner.json'), 'utf8')) as { pid?: number; hostname?: string };
+    const owner = readLockOwner(path);
     if (owner.hostname !== hostname() || !Number.isInteger(owner.pid) || (owner.pid ?? 0) <= 0) return undefined;
     process.kill(owner.pid!, 0);
+    if (processIdentityProvesReplacement(typeof owner.processIdentity === 'string' ? owner.processIdentity : null, readProcessIdentity(owner.pid!))) return undefined;
     return { pid: owner.pid!, hostname: owner.hostname };
-  } catch {
-    return undefined;
+  } catch { return undefined; }
+}
+function newLockOwner(): OutputLockOwner {
+  return { token: randomUUID(), pid: process.pid, hostname: hostname(), createdAt: new Date().toISOString(), processIdentity: readProcessIdentity(process.pid) ?? undefined };
+}
+/** Publish complete ownership atomically; a crash can never expose an empty new lock. */
+function acquireOutputLock(path: string, owner: OutputLockOwner): void {
+  const prepared = join(dirname(path), `.owner-${owner.token}.tmp`);
+  const fd = openSync(prepared, 'wx', 0o600);
+  try {
+    try {
+      writeFileSync(fd, JSON.stringify(owner), 'utf8');
+      fsyncSync(fd);
+    } finally { closeSync(fd); }
+    linkSync(prepared, path);
+  } finally {
+    try { unlinkSync(prepared); } catch { /* An orphan preparation file never owns the lock; cleanup cannot invalidate successful acquisition. */ }
   }
 }
-
-function releaseOutputLock(path: string, ownerPath: string, token: string): void {
+function lockIdentity(path: string): string {
+  const stat = lstatSync(path);
+  let token: string | undefined;
+  try { token = readLockOwner(path).token; } catch { /* Legacy ownerless directory. */ }
+  return JSON.stringify([stat.dev, stat.ino, stat.birthtimeMs, token ?? null]);
+}
+function releaseOutputLock(path: string, token: string): void {
   try {
-    const current = JSON.parse(readFileSync(ownerPath, 'utf8')) as { token?: string };
-    if (current.token === token) rmSync(path, { recursive: true, force: true });
-  } catch {
-    // Never remove a lock whose ownership cannot be proven.
-  }
+    if (readLockOwner(path).token === token) rmSync(path, { recursive: true, force: true });
+  } catch { /* Never remove a lock whose ownership cannot be proven. */ }
+}
+/**
+ * Serialize dead-owner removal for the observed identity, then recheck it under
+ * ownership. Recovery of a crashed reclaimer uses the same rule one level down;
+ * bounded recursion fails closed rather than ever stealing a live writer.
+ */
+function removeAbandonedOutputLock(path: string, depth = 0): boolean {
+  if (depth >= 16 || !lockOwnerIsAbandoned(path)) return false;
+  let identity: string;
+  try { identity = lockIdentity(path); } catch { return false; }
+  const guard = join(dirname(path), `.reclaim-${createHash('sha256').update(path + identity).digest('hex')}.lock`);
+  const owner = newLockOwner();
+  try {
+    try { acquireOutputLock(guard, owner); }
+    catch (error) {
+      if (!isNodeError(error) || error.code !== 'EEXIST') throw error;
+      if (!removeAbandonedOutputLock(guard, depth + 1)) return false;
+      try { acquireOutputLock(guard, owner); }
+      catch (retryError) { if (isNodeError(retryError) && retryError.code === 'EEXIST') return false; throw retryError; }
+    }
+    try {
+      if (lockIdentity(path) !== identity || !lockOwnerIsAbandoned(path)) return false;
+      rmSync(path, { recursive: true, force: true });
+      return true;
+    } catch (error) { if (isNodeError(error) && error.code === 'ENOENT') return true; throw error; }
+  } finally { releaseOutputLock(guard, owner.token); }
 }
 
 export function withOutputBundleLock<T>(workspaceRootPath: string, outputId: string, fn: () => T): T {
   const path = outputLockDir(workspaceRootPath, outputId);
   if (outputLockContext.getStore()?.has(path)) return fn();
-  const ownerPath = join(path, 'owner.json');
-  const owner = { token: randomUUID(), pid: process.pid, hostname: hostname(), createdAt: new Date().toISOString() };
+  const owner = newLockOwner();
   mkdirSync(dirname(path), { recursive: true });
   const deadline = Date.now() + OUTPUT_LOCK_TIMEOUT_MS;
   while (true) {
     try {
-      mkdirSync(path, { recursive: false });
-      try {
-        writeFileSync(ownerPath, JSON.stringify(owner), { encoding: 'utf8', flag: 'wx' });
-      } catch (error) {
-        rmSync(path, { recursive: true, force: true });
-        throw error;
-      }
+      acquireOutputLock(path, owner);
       break;
     } catch (error) {
       if (!isNodeError(error) || error.code !== 'EEXIST') throw error;
-      if (lockOwnerIsAbandoned(path)) {
-        rmSync(path, { recursive: true, force: true });
-        continue;
-      }
+      if (removeAbandonedOutputLock(path)) continue;
       const liveOwner = liveLockOwner(path);
       if (liveOwner?.pid === process.pid) throw new Error(`Output "${outputId}" is busy with another operation in this process.`);
       if (Date.now() >= deadline) throw new Error(`Timed out waiting for Output lock: ${outputId}`);
@@ -429,33 +471,23 @@ export function withOutputBundleLock<T>(workspaceRootPath: string, outputId: str
   try {
     return outputLockContext.run(context, fn);
   } finally {
-    releaseOutputLock(path, ownerPath, owner.token);
+    releaseOutputLock(path, owner.token);
   }
 }
 
 export async function withOutputBundleLockAsync<T>(workspaceRootPath: string, outputId: string, fn: () => Promise<T>): Promise<T> {
   const path = outputLockDir(workspaceRootPath, outputId);
   if (outputLockContext.getStore()?.has(path)) return fn();
-  const ownerPath = join(path, 'owner.json');
-  const owner = { token: randomUUID(), pid: process.pid, hostname: hostname(), createdAt: new Date().toISOString() };
+  const owner = newLockOwner();
   mkdirSync(dirname(path), { recursive: true });
   const deadline = Date.now() + OUTPUT_LOCK_TIMEOUT_MS;
   while (true) {
     try {
-      mkdirSync(path, { recursive: false });
-      try {
-        writeFileSync(ownerPath, JSON.stringify(owner), { encoding: 'utf8', flag: 'wx' });
-      } catch (error) {
-        rmSync(path, { recursive: true, force: true });
-        throw error;
-      }
+      acquireOutputLock(path, owner);
       break;
     } catch (error) {
       if (!isNodeError(error) || error.code !== 'EEXIST') throw error;
-      if (lockOwnerIsAbandoned(path)) {
-        rmSync(path, { recursive: true, force: true });
-        continue;
-      }
+      if (removeAbandonedOutputLock(path)) continue;
       if (Date.now() >= deadline) throw new Error(`Timed out waiting for Output lock: ${outputId}`);
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
     }
@@ -465,7 +497,7 @@ export async function withOutputBundleLockAsync<T>(workspaceRootPath: string, ou
   try {
     return await outputLockContext.run(context, fn);
   } finally {
-    releaseOutputLock(path, ownerPath, owner.token);
+    releaseOutputLock(path, owner.token);
   }
 }
 

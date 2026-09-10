@@ -60,12 +60,12 @@ function validateAgainstSchema(value: unknown, schema: JsonSchema, path = '$'): 
       ? schema.required.filter((item): item is string => typeof item === 'string')
       : [];
     for (const key of required) {
-      if (!(key in value)) errors.push(`${path}.${key} is required`);
+      if (!Object.prototype.hasOwnProperty.call(value, key)) errors.push(`${path}.${key} is required`);
     }
 
     const properties = isPlainObject(schema.properties) ? schema.properties : {};
     for (const [key, propSchema] of Object.entries(properties)) {
-      if (!(key in value) || !isPlainObject(propSchema)) continue;
+      if (!Object.prototype.hasOwnProperty.call(value, key) || !isPlainObject(propSchema)) continue;
       errors.push(...validateAgainstSchema(value[key], propSchema, `${path}.${key}`));
     }
   }

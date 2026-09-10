@@ -57,7 +57,7 @@ The scheduler first persists a work-attempt ID. Workspace, order, and that attem
 
 Scheduled work polls authorized journal projections and retains interrupted/paused runs for an explicit Resume in Recent Runs. Late replies cannot settle or attach to a newer attempt. Actual worker ownership holds the background lane through cancellation cleanup, even if the saved status is already terminal.
 
-On startup, scans wait until the enabled protected journal opens. If opening fails, or saved recovery storage exists while the development host flag is disabled, tracked schedules stay paused with an explanatory notice. This intentionally pauses the whole tracked schedule queue because unreadable storage cannot prove which work is unfinished; ordinary manual workflows remain available. Profiles with no recovery storage and no enabled host retain existing scheduling behavior.
+On startup, scans wait until the enabled protected journal opens. If opening fails, or saved recovery storage exists while the development host flag is disabled, tracked schedules stay paused with an explanatory notice. This intentionally pauses the whole tracked schedule queue because unreadable storage cannot prove which work is unfinished; new manual starts and legacy reruns are also blocked until recovery storage can be inspected; ordinary chats remain available. Profiles with no recovery storage and no enabled host retain existing scheduling behavior.
 
 The real SIGKILL test kills a child after journal admission but before the scheduler saves the returned ID. A fresh process reconnects the same persisted attempt/run, with one original dispatch and unchanged deadline/budget. Tests use synthetic storage protection and an injected backend; no real account or desktop restart is part of this proof.
 
@@ -135,7 +135,21 @@ The journal freezes normalized values and untrusted-field annotations alongside 
 
 Output titles, `run.*` references, nested output paths, permission overrides, source overrides and new automatic entrypoints remain unsupported. This adds workflow data, not new tool authority. Earlier slice statements excluding trigger variables describe those earlier boundaries.
 
-Further slices extend remote source/tool capabilities, mixed transports and child delegation with their own effect/reconciliation proofs. None inherit certification merely by calling the shared start function.
+## Slice 8: explicit read-only worker focus modes
+
+A workflow step can now set `taskModeId`. Agents declaring modes require an explicit known choice; there is no automatic fallback to a conversational/default mode. The host resolves the existing recipe and verifies its launch receipt, source selection and composed prompt. Bundles are cached by agent and mode together, so two steps can use different focuses from the same worker without sharing the wrong instructions. Frozen step metadata and prompts preserve the selected behavior after restart.
+
+Only recipes without primary or adjacent skills are supported, and safe permission/thinking-off/no-specialist-tool restrictions remain. Required sources must meet the local filesystem contract. Unselected optional connectors do not become dependencies. This does not certify most skill-backed built-in modes, activate new tools or convert user workflow definitions.
+
+## Slice 9: validated JSON step handoffs
+
+Steps may declare a bounded `outputSchema`. The supported keywords are `type`, primitive `enum`, `properties`, `required`, and `items`; supported types are object, array, string, number, integer, boolean and null. Other keywords—including pattern, length constraints, additionalProperties and references—reject before execution rather than being silently ignored. Schemas and nested output paths are checked before admission; schema nesting is bounded.
+
+The prompt receives the frozen schema instruction. Completion validates saved model text before the step can succeed, a successor can start or final publication can proceed. Invalid JSON/schema results fail the run; this slice adds no automatic repair or model retries. JSON values must be finite and bounded in nesting. Raw response text remains in the journal; history and successor templates receive the parsed value. Supported nested references such as `{{steps.research.output.summary}}` or `{{steps.research.output.items.0.title | escape}}` must follow the declared schema. Missing optional fields fail template resolution, while prototype-inherited properties never count as supplied data.
+
+Publication still writes the final saved text as a local report/document. Existing plain-text workflows keep their behavior. Restart reuses cached model results and frozen schemas; no fresh provider call is required merely to parse or validate saved output.
+
+Further slices extend skill-backed modes, remote source/tool capabilities, mixed transports and child delegation with their own effect/reconciliation proofs. None inherit certification merely by calling the shared start function.
 
 ## Follow-up review corrections
 

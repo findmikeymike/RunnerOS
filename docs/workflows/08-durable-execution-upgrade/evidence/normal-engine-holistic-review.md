@@ -1,0 +1,14 @@
+# Normal-engine holistic review — 2026-09-10
+
+Scope: `bd3dd7684`, `d10032d2e`, `c5c0c6990`, `c9c4b0c2d`, and their journal/Output-lock dependencies. Two independent cold reviewers covered lifecycle/scheduling and filesystem/source/input behavior. Passing prior slice tests were not treated as holistic acceptance.
+
+Confirmed findings:
+
+1. **High: unavailable recovery host allowed legacy manual admission.** Startup deferred schedules but omitted the durable unfinished-work guard when host initialization failed or remained disabled. A changed workflow marker or older legacy rerun could bypass saved work. The same startup gate now blocks all new workflow admission until the recovery host opens; profiles with no required recovery storage retain normal behavior. Existing chat is unaffected. Startup notices describe the actual blocked paths.
+2. **Medium: process-ID reuse stranded saved claims.** Claim availability checked only PID liveness. New claims persist an OS process birth identity and reclaim only a demonstrably replaced owner; epoch fencing remains. Missing legacy identity or unavailable inspection stays conservative while the PID lives. Linux uses boot ID/start ticks; macOS uses boot time/process start time. The sandbox fallback can prove same-process equality only, never replacement of a foreign process.
+3. **Medium: Output lock acquisition had an ownerless crash window.** Creating a lock directory before writing owner metadata left a possible 24-hour recovery delay. New acquisition fsyncs private owner metadata and publishes it atomically by exclusive hardlink. Keyed recovery guards serialize dead-owner reclamation, including recovery after a reclaimer crashes. Process birth identity prevents PID reuse from stranding new locks. A stopped live writer is never displaced. Ownerless or unreadable legacy locks remain fail-closed regardless of age and require independent proof of abandonment before manual cleanup; age is not proof. Successful acquisition is not invalidated by failure to remove its private preparation file.
+4. **Medium: publishing failures hid the required repair.** Pending publication now retains a safe category—authorization, workspace, conflict, storage—and presents a concrete remedy. Raw exceptions, filesystem paths and credentials are not exposed. Successful publication clears the error and preserves the original model result.
+
+Verification and closure are recorded in build state after the combined checks. No desktop relaunch or live provider account is implied by synthetic process tests.
+
+The journal is schema v3 so older binaries reject reopening it instead of silently writing stale process-identity metadata. Electron's single-instance startup prevents mixed running app hosts; an already-open older raw Journal consumer is not retroactively fenced by a schema upgrade. Historical schema-v2 evidence remains historical.

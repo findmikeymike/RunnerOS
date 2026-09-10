@@ -44,7 +44,9 @@ export function ensureDurableTextOutput(workspaceRootPath: string, input: Durabl
   const outputs = join(root, 'outputs');
   const finalDir = getOutputDir(root, input.id);
   assertPlainPath(outputs);
-  assertPlainPath(join(root, 'context', '.locks', 'outputs', `${input.id}.lock`, 'owner.json'));
+  const lockPath = join(root, 'context', '.locks', 'outputs', `${input.id}.lock`);
+  assertPlainPath(lockPath);
+  if (existsSync(lockPath) && lstatSync(lockPath).isDirectory()) assertPlainPath(join(lockPath, 'owner.json'));
   assertPlainPath(finalDir);
   return withOutputBundleLock(root, input.id, () => {
     assertPlainPath(finalDir);

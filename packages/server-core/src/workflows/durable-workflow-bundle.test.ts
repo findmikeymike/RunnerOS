@@ -73,3 +73,59 @@ test('precomposition rejects selected built-in optional tools before composing c
   const root = mkdtempSync(join(tmpdir(), 'durable-bundle-precheck-')); roots.push(root);
   expect(() => assertDurableWorkflowSourcesBeforeComposition(root, { name: 'Reader', description: '', optionalSources: ['computer-use'] })).toThrow('unsupported-durable-agent-bundle');
 });
+
+test('explicit skill-free mode replaces base skills and sources without inheriting defaults', () => {
+  const f = fixture();
+  f.metadata.skills = ['unsupported-base-skill']; f.metadata.sources = ['base-remote'];
+  f.metadata.taskModes = [{ id: 'read', label: 'Read', description: 'Read only', kind: 'focus', primarySkillSlugs: [], requiredSourceSlugs: [] }];
+  f.config.defaults!.enabledSourceSlugs = ['default-remote'];
+  const mode = assertDurableWorkflowAgentMetadata(f.metadata, 'read')!;
+  const options = { ...f.options, enabledSourceSlugs: [], launchReceipt: { taskMode: {
+    schemaVersion: 1, id: mode.id, label: mode.label, definitionRevision: mode.definitionRevision, selectionSource: 'workflow', primarySkills: [], adjacentSkills: [], fullMode: false,
+  } } } as unknown as Partial<CreateSessionOptions>;
+  expect(f.resolve('w', 'reader', options, 'read').model).toBe('standard');
+  expect(() => f.resolve('w', 'reader', options)).toThrow('unsupported-durable-agent-bundle');
+  expect(() => f.resolve('w', 'reader', options, 'unknown')).toThrow('unsupported-durable-agent-bundle');
+  expect(() => f.resolve('w', 'reader', f.options, 'read')).toThrow('unsupported-durable-agent-bundle');
+  expect(() => f.resolve('w', 'reader', { ...options, enabledSourceSlugs: ['default-remote'] }, 'read')).toThrow('unsupported-durable-agent-bundle');
+  expect(() => f.resolve('w', 'reader', { ...options, launchReceipt: { ...options.launchReceipt, taskMode: { ...options.launchReceipt!.taskMode!, definitionRevision: 'changed' } } } as Partial<CreateSessionOptions>, 'read')).toThrow('unsupported-durable-agent-bundle');
+});
+
+test('mode selection rejects primary skills and adjacent expansions before composition', () => {
+  const f = fixture(); f.metadata.skills = ['write'];
+  f.metadata.taskModes = [{ id: 'read', label: 'Read', description: 'Read', kind: 'focus', primarySkillSlugs: ['write'] }];
+  expect(() => assertDurableWorkflowAgentMetadata(f.metadata, 'read')).toThrow('unsupported-durable-agent-bundle');
+  f.metadata.taskModes[0]!.primarySkillSlugs = [];
+  f.metadata.taskModes[0]!.adjacentSkills = [{ slug: 'write', when: 'later', expansion: 'same-session' }];
+  expect(() => assertDurableWorkflowAgentMetadata(f.metadata, 'read')).toThrow('unsupported-durable-agent-bundle');
+});
+
+test('mode uses selected required filesystem sources and refuses missing composed requirements', () => {
+  const f = fixture(), root = mkdtempSync(join(tmpdir(), 'durable-mode-source-')); roots.push(root);
+  f.deps.getWorkspaceByNameOrId = () => ({ id: 'w', name: 'w', slug: 'w', rootPath: root, createdAt: 1 });
+  mkdirSync(join(root, 'sources', 'notes'), { recursive: true }); mkdirSync(join(root, 'notes'));
+  writeFileSync(join(root, 'sources', 'notes', 'config.json'), JSON.stringify({ id: 'notes', slug: 'notes', name: 'notes', enabled: true, type: 'local', provider: 'local', local: { format: 'filesystem', path: join(root, 'notes') } }));
+  f.metadata.sources = ['unselected-remote', 'notes'];
+  f.metadata.taskModes = [{ id: 'read', label: 'Read', description: 'Read', kind: 'focus', primarySkillSlugs: [], requiredSourceSlugs: ['notes'] }];
+  const mode = assertDurableWorkflowAgentMetadata(f.metadata, 'read')!;
+  const options = { ...f.options, enabledSourceSlugs: ['notes'], launchReceipt: { taskMode: {
+    schemaVersion: 1, id: mode.id, label: mode.label, definitionRevision: mode.definitionRevision, selectionSource: 'workflow', primarySkills: [], adjacentSkills: [], fullMode: false,
+  } } } as unknown as Partial<CreateSessionOptions>;
+  expect(() => assertDurableWorkflowSourcesBeforeComposition(root, f.metadata, 'read')).not.toThrow();
+  expect(f.resolve('w', 'reader', options, 'read').localSources?.map(source => source.slug)).toEqual(['notes']);
+  expect(() => f.resolve('w', 'reader', { ...options, enabledSourceSlugs: [] }, 'read')).toThrow('unsupported-durable-agent-bundle');
+});
+
+
+test('precomposition ignores usable optional MCP sources not selected by a skill-free mode', () => {
+  const root = mkdtempSync(join(tmpdir(), 'durable-mode-optional-')); roots.push(root);
+  mkdirSync(join(root, 'sources', 'remote'), { recursive: true });
+  writeFileSync(join(root, 'sources', 'remote', 'config.json'), JSON.stringify({ id: 'remote', slug: 'remote', name: 'Remote', enabled: true,
+    type: 'mcp', provider: 'custom', isAuthenticated: true, mcp: { transport: 'http', url: 'https://example.invalid/mcp', authType: 'none' } }));
+  const f = fixture();
+  f.metadata.optionalSources = ['remote'];
+  f.metadata.taskModes = [{ id: 'read', label: 'Read', description: 'Read only', kind: 'focus', primarySkillSlugs: [], optionalSourceSlugs: ['remote'] }];
+  expect(() => assertDurableWorkflowSourcesBeforeComposition(root, f.metadata, 'read')).not.toThrow();
+  f.metadata.taskModes[0]!.requiredSourceSlugs = ['remote'];
+  expect(() => assertDurableWorkflowSourcesBeforeComposition(root, f.metadata, 'read')).toThrow('unsupported-durable-agent-bundle');
+});

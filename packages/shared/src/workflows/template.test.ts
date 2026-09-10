@@ -152,3 +152,25 @@ describe('validateTemplateReferences', () => {
     ]);
   });
 });
+
+
+test('templates reject inherited trigger fields, step entries and nested output paths', () => {
+  for (const [template, context] of [
+    ['{{trigger.toString}}', { trigger: {} }],
+    ['{{trigger.name}}', { trigger: Object.create({ name: 'inherited' }) }],
+    ['{{steps.ghost.output}}', { steps: Object.create({ ghost: { output: 'inherited' } }) }],
+    ['{{steps.real.output.toString}}', { steps: { real: { output: {} } } }],
+    ['{{steps.real.output.child.value}}', { steps: { real: { output: { child: Object.create({ value: 'inherited' }) } } } }],
+    ['{{steps.real.output}}', { steps: { real: Object.create({ output: 'inherited' }) } }],
+  ] as const) {
+    const result = resolveTemplate(template, context);
+    expect(result.output).toBe(''); expect(result.warnings).toHaveLength(1);
+  }
+});
+
+test('templates preserve explicit own fields that share Object prototype names', () => {
+  const result = resolveTemplate('{{trigger.toString}} / {{steps.constructor.output.nested.toString}} / {{steps.constructor.output.rows.0.valueOf}}', {
+    trigger: { toString: 'input' }, steps: { constructor: { output: { nested: { toString: 'nested' }, rows: [{ valueOf: 'array' }] } } },
+  });
+  expect(result).toEqual({ output: 'input / nested / array', warnings: [] });
+});

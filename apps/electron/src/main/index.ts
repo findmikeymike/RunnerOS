@@ -1071,23 +1071,23 @@ app.whenReady().then(async () => {
             instance.sessionManager.setDurableWorkflowHost(durableHost)
           }
         } catch {
-          // Do not expose keychain/credential details or break existing workflows.
+          // Do not expose keychain/credential details. Unknown recovery state blocks new workflow admission.
           mainLog.error('[durable-workflows] Host unavailable; durable controls remain disabled')
           void dialog.showMessageBox({
             type: 'warning', title: 'Workflow recovery unavailable',
             message: 'The optional workflow recovery host could not start.',
-            detail: 'Scheduled work is paused until recovery storage is available. Manual workflows remain available. Check secure-storage access and local-only server settings before trying again on the next launch.',
+            detail: 'Scheduled work and new workflow starts are paused until recovery storage is available. Check secure-storage access and local-only server settings before trying again on the next launch.',
             buttons: ['OK'],
           }).catch(() => mainLog.warn('[durable-workflows] Startup notice could not be displayed'))
         } finally {
           instance.sessionManager.finishDurableWorkflowStartup()
         }
       } else if (durableRecoveryRequired) {
-        mainLog.warn('[durable-workflows] Saved recovery storage exists; scheduled work remains paused while the host is disabled')
+        mainLog.warn('[durable-workflows] Saved recovery storage exists; workflow admission remains paused while the host is disabled')
         void dialog.showMessageBox({
-          type: 'warning', title: 'Scheduled work paused',
+          type: 'warning', title: 'Workflow recovery required',
           message: 'Saved workflow recovery data needs the recovery host.',
-          detail: 'Scheduled work is paused to preserve saved runs. Restart this development build with CRAFT_DURABLE_READ_HOST=1 to reconnect them. Manual workflows remain available.',
+          detail: 'Scheduled work and new workflow starts are paused to preserve saved runs. Restart this development build with CRAFT_DURABLE_READ_HOST=1 to reconnect them.',
           buttons: ['OK'],
         }).catch(() => mainLog.warn('[durable-workflows] Disabled-host notice could not be displayed'))
       }
