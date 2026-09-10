@@ -23,7 +23,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(shell).toContain('data-testid="sidebar-toggle-close"')
     expect(shell).toContain('pointer-events-auto absolute bottom-3 right-2 z-[80]')
     expect(shell).toContain('pointer-events-auto fixed bottom-3 left-2 z-[100]')
-    expect(shell).toContain('usesWorkspaceHeader ? "px-3 pb-10 pt-5"')
+    expect(shell).toContain('usesWorkspaceHeader ? "px-3 pb-10 pt-10"')
     expect(shell).toContain('usesWorkspaceHeader && "artist-os-sidebar-glass"')
     expect(styles).toContain('.artist-os-sidebar-glass {')
     expect(styles).toContain('backdrop-filter: blur(28px) saturate(145%);')

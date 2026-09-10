@@ -3313,7 +3313,7 @@ function AppShellContent({
                   }}
                   className={cn(
                     "flex-1 w-full overflow-y-auto overflow-x-hidden min-h-0 mask-fade-bottom",
-                    usesWorkspaceHeader ? "px-3 pb-10 pt-5" : "pt-[18px] pb-4",
+                    usesWorkspaceHeader ? "px-3 pb-10 pt-10" : "pt-[18px] pb-4",
                   )}
                 >
                 <LeftSidebar
