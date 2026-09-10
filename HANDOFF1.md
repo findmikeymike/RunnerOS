@@ -89,8 +89,11 @@ classes in `packages/shared/src/agent/`, which is a real source of confusion.
 - Starter personas live in `packages/shared/src/agent-definitions/starter-templates.ts`.
   This is a very large file of prompt strings. Prompts are written in the
   artist's language, not engineer language.
-- `trustedWorkerTools` on the metadata is the tool allowlist for that agent.
-  A tool not listed there does not exist for it.
+- `trustedWorkerTools` declares which session tools a worker can run without
+  generic per-tool prompts. Availability comes from backend role/scope filters,
+  not this metadata. Tool registry approval policies and handler-level approval
+  checks still apply. Unknown names produce nonblocking configuration notes;
+  declarations are preserved. Claude and Pi share role/scope filter derivation.
 - Agents live in a **global** library and are activated **per workspace**.
 
 **Availability and activation are separate.** `starter-templates.ts` owns definitions;

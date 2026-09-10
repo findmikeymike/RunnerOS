@@ -27,6 +27,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { validateTrustedWorkerToolNames } from '@craft-agent/session-tools-core';
 import { isDeepStrictEqual } from 'node:util';
 import { matter, stringifyFrontmatter, type GrayMatterFile } from '../config/frontmatter';
 import { atomicWriteFileSync } from '../utils/files.ts';
@@ -406,6 +407,17 @@ export function parseAgentFile(content: string): { metadata: AgentMetadata; syst
   const skills = coerceStringArray(data.skills, 'skills', warnings);
   const sources = coerceStringArray(data.sources, 'sources', warnings);
   const optionalSources = coerceStringArray(data.optionalSources, 'optionalSources', warnings);
+  const trustedWorkerTools = coerceStringArray(data.trustedWorkerTools, 'trustedWorkerTools', warnings);
+  // Diagnostics must not erase custom/future declarations or make saved agents unloadable.
+  for (const diagnostic of validateTrustedWorkerToolNames(trustedWorkerTools ?? [])) {
+    warnings.push(warning(
+      'trustedWorkerTools',
+      'invalid-trusted-worker-tools',
+      diagnostic.reason === 'unknown-tool'
+        ? `Unknown session tool "${diagnostic.name}" in trustedWorkerTools; the declaration was preserved but grants no trust.`
+        : `Session tool "${diagnostic.name}" requires explicit approval; trustedWorkerTools cannot bypass that policy. The declaration was preserved.`,
+    ));
+  }
   const metadata: AgentMetadata = {
     name,
     description,
@@ -418,7 +430,7 @@ export function parseAgentFile(content: string): { metadata: AgentMetadata; syst
     taskModes: coerceTaskModes(data.taskModes, { skills, sources, optionalSources }, warnings),
     sources,
     optionalSources,
-    trustedWorkerTools: coerceStringArray(data.trustedWorkerTools, 'trustedWorkerTools', warnings),
+    trustedWorkerTools,
     visualAgent: data.visualAgent === true ? true : undefined,
     greeting: typeof data.greeting === 'string' ? data.greeting.trim() || undefined : undefined,
     inputs: typeof data.inputs === 'string' ? data.inputs.trim() || undefined : undefined,

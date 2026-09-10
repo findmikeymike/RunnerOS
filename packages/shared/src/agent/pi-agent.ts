@@ -65,6 +65,7 @@ import {
 import { attachSessionSelfManagementBindings } from './session-self-management-bindings.ts';
 
 // Session tool proxy definitions (for registering with subprocess)
+import { deriveSessionToolFilterOptions } from './session-tool-filter-options.ts';
 import { getSessionToolProxyDefs, SESSION_TOOL_NAMES } from './backend/pi/session-tool-defs.ts';
 import { isToolBlockedForDelegatedSession } from './spawn-session-isolation.ts';
 
@@ -566,17 +567,10 @@ export class PiAgent extends BaseAgent {
     // are executed in the main process when the LLM calls them.
     this.assertBackendSessionToolParity();
     const delegatedSession = this.config.session?.launchReceipt?.delegation !== undefined;
-    const sessionToolDefs = getSessionToolProxyDefs({
-      includeScheduleWork: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge',
-      includeSupplyWorkInput: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge',
-      includeManagerTools: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge'
-        && (this.config.workspace.artistWorkspaceScope === 'hq' || this.config.workspace.artistWorkspaceScope === 'campaign'),
-      includeCampaignManagerTools: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge'
-        && this.config.workspace.artistWorkspaceScope === 'campaign',
-      includeLabTools: this.config.workspace.artistWorkspaceScope === 'lab',
-      includeSocialVariantTools: this.config.session?.spawnedFromAgent?.agentSlug === 'raw-video-editor',
-      includeSocialVariantQueryTools: ['concierge', 'social-publisher'].includes(this.config.session?.spawnedFromAgent?.agentSlug ?? ''),
-    }).filter((tool) => {
+    const sessionToolDefs = getSessionToolProxyDefs(deriveSessionToolFilterOptions(
+      this.config.session?.spawnedFromAgent?.agentSlug,
+      this.config.workspace.artistWorkspaceScope,
+    )).filter((tool) => {
       return !isToolBlockedForDelegatedSession(tool.name, delegatedSession);
     });
 

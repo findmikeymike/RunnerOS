@@ -11,13 +11,14 @@ import {
   SESSION_TOOL_NAMES,
   type JsonSchemaToolDef,
 } from '@craft-agent/session-tools-core';
+import type { SessionRoleToolFilterOptions } from '../../session-tool-filter-options.ts';
 import { FEATURE_FLAGS } from '../../../feature-flags.ts';
 
 export type SessionToolProxyDef = JsonSchemaToolDef;
 
 export { SESSION_TOOL_NAMES };
 
-export function getSessionToolProxyDefs(options?: { includeScheduleWork?: boolean; includeSupplyWorkInput?: boolean; includeManagerTools?: boolean; includeCampaignManagerTools?: boolean; includeLabTools?: boolean; includeSocialVariantTools?: boolean; includeSocialVariantQueryTools?: boolean }): SessionToolProxyDef[] {
+export function getSessionToolProxyDefs(options?: Partial<SessionRoleToolFilterOptions>): SessionToolProxyDef[] {
   return getToolDefsAsJsonSchema({
     prefix: 'mcp__session__',
     includeManagedSkillTools: RUNTIME_IDENTITY.variant === 'artist-os',

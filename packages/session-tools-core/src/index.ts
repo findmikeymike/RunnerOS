@@ -516,6 +516,9 @@ export {
   SESSION_TOOL_REGISTRY,
   // Filtered helper views
   getSessionToolDefs,
+  normalizeSessionToolName,
+  getSessionToolTrustPolicy,
+  validateTrustedWorkerToolNames,
   getSessionToolNames,
   getSessionBackendToolNames,
   getSessionRegistryToolNames,

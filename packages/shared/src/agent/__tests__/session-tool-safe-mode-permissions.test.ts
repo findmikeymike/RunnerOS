@@ -93,7 +93,8 @@ describe('session tool safe-mode classification', () => {
       trustedWorkerTools: ['send_agent_message'],
       permissionManager,
     });
-    expect(explicitlyTrustedSend.type).toBe('block');
+    // Internal replies have no separate human-approval boundary.
+    expect(explicitlyTrustedSend.type).toBe('allow');
 
     const explicitlyTrustedApproval = runPreToolUseChecks({
       toolName: 'mcp__session__approve_deep_research_plan',
