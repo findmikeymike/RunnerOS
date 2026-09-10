@@ -250,7 +250,7 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
 
         {agent.parseWarnings && agent.parseWarnings.length > 0 && (
           <Info_Alert variant="warning" icon={<AlertTriangle className="h-4 w-4" />}>
-            <Info_Alert.Title>AGENT.md has ignored fields</Info_Alert.Title>
+            <Info_Alert.Title>AGENT.md has configuration notes</Info_Alert.Title>
             <Info_Alert.Description>
               {agent.parseWarnings.map((warning) => warning.message).join(' ')}
             </Info_Alert.Description>

@@ -544,7 +544,7 @@ export const CreateAgentSchema = z.object({
     skills: z.array(z.string()).optional().describe('Skill slugs to bundle.'),
     sources: z.array(z.string()).optional().describe('Source slugs to bundle.'),
     optionalSources: z.array(z.string()).optional().describe('Source slugs to use when already connected, but never require to launch the agent.'),
-    trustedWorkerTools: z.array(z.string()).optional().describe('Session tool names this trusted worker may run without per-tool babysitting. Use only for bounded internal work such as research runs and outputs; never for external sends/posts.'),
+    trustedWorkerTools: z.array(z.string()).optional().describe('Session tool names this worker may run without generic per-tool prompts, including ordinary edits, drafts, and internal replies. Existing explicit approval actions and handler approval checks cannot be bypassed. Unknown names are preserved with a configuration note.'),
     visualAgent: z.boolean().optional().describe('Set true for agents that should proactively create/pin visual, web, media, or document Outputs in Canvas.'),
     inputs: z.string().optional().describe('One sentence describing expected inputs.'),
     outputs: z.string().optional().describe('One sentence describing produced outputs.'),
@@ -1788,7 +1788,7 @@ Use this only after walking the user through the agent-creator interview and get
 
 **Inputs:**
 - \`slug\`: kebab-case (1-64 chars). If unsure, derive from the agent name.
-- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, visualAgent, inputs, outputs, tags, routing) and free for you to infer sensibly. Use \`sources\` for required tools and \`optionalSources\` for tools that should attach only when connected. Use \`trustedWorkerTools\` only for bounded internal tools the worker may run without babysitting; never include email/post/send tools. Set \`visualAgent: true\` only for agents that should proactively use Canvas for visual/web/media/document artifacts.
+- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, visualAgent, inputs, outputs, tags, routing) and free for you to infer sensibly. Use \`sources\` for required tools and \`optionalSources\` for tools that should attach only when connected. Use \`trustedWorkerTools\` for the ordinary session tools this worker should run autonomously. Existing explicit approvals remain enforced; declaring a tool does not grant availability or approve an external send. Set \`visualAgent: true\` only for agents that should proactively use Canvas for visual/web/media/document artifacts.
 - \`systemPrompt\`: the agent's identity + operating instructions. Required, non-empty.
 - \`activateInWorkspace\` (default true): activate in this workspace immediately so the user sees it.
 - \`overwrite\` (default false): only set true if the user explicitly asked to replace an existing agent.
@@ -2217,6 +2217,9 @@ interface SessionToolDefBase {
   inputSchema: z.ZodObject<z.ZodRawShape>;
   /** Whether this tool is allowed in Explore/Safe mode. */
   safeMode: SessionToolSafeMode;
+  /** Existing approval boundary that a worker declaration cannot waive.
+   * Unset means declared trust skips generic prompts; handler approvals still run. */
+  workerTrust?: 'approval' | 'exact-approval';
   /** Whether this tool only reads data (no side effects). Enables parallel execution in backends that support it. */
   readOnly?: boolean;
 }
@@ -2289,7 +2292,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'start_deep_research', description: TOOL_DESCRIPTIONS.start_deep_research, inputSchema: StartDeepResearchSchema, executionMode: 'registry', safeMode: 'block', handler: handleStartDeepResearch },
   { name: 'list_deep_research_runs', description: TOOL_DESCRIPTIONS.list_deep_research_runs, inputSchema: ListDeepResearchRunsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListDeepResearchRuns },
   { name: 'get_deep_research_run', description: TOOL_DESCRIPTIONS.get_deep_research_run, inputSchema: GetDeepResearchRunSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetDeepResearchRun },
-  { name: 'approve_deep_research_plan', description: TOOL_DESCRIPTIONS.approve_deep_research_plan, inputSchema: ApproveDeepResearchPlanSchema, executionMode: 'registry', safeMode: 'block', handler: handleApproveDeepResearchPlan },
+  { name: 'approve_deep_research_plan', workerTrust: 'approval', description: TOOL_DESCRIPTIONS.approve_deep_research_plan, inputSchema: ApproveDeepResearchPlanSchema, executionMode: 'registry', safeMode: 'block', handler: handleApproveDeepResearchPlan },
   { name: 'revise_deep_research_plan', description: TOOL_DESCRIPTIONS.revise_deep_research_plan, inputSchema: ReviseDeepResearchPlanSchema, executionMode: 'registry', safeMode: 'block', handler: handleReviseDeepResearchPlan },
   { name: 'cancel_deep_research_run', description: TOOL_DESCRIPTIONS.cancel_deep_research_run, inputSchema: CancelDeepResearchRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleCancelDeepResearchRun },
   // Inter-session messaging
@@ -2347,12 +2350,12 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'get_social_variant_set', description: TOOL_DESCRIPTIONS.get_social_variant_set, inputSchema: GetSocialVariantSetSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSocialVariantSet },
   { name: 'record_social_variant_result', description: TOOL_DESCRIPTIONS.record_social_variant_result, inputSchema: RecordSocialVariantResultSchema, executionMode: 'registry', safeMode: 'block', handler: handleRecordSocialVariantResult },
   { name: 'list_usable_social_variants', description: TOOL_DESCRIPTIONS.list_usable_social_variants, inputSchema: ListUsableSocialVariantsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListUsableSocialVariants },
-  { name: 'promote_output_to_final', description: TOOL_DESCRIPTIONS.promote_output_to_final, inputSchema: PromoteOutputToFinalSchema, executionMode: 'registry', safeMode: 'block', handler: handlePromoteOutputToFinal },
+  { name: 'promote_output_to_final', workerTrust: 'approval', description: TOOL_DESCRIPTIONS.promote_output_to_final, inputSchema: PromoteOutputToFinalSchema, executionMode: 'registry', safeMode: 'block', handler: handlePromoteOutputToFinal },
   { name: 'list_release_kit', description: TOOL_DESCRIPTIONS.list_release_kit, inputSchema: ListReleaseKitSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListReleaseKit },
   { name: 'get_release_kit_item', description: TOOL_DESCRIPTIONS.get_release_kit_item, inputSchema: GetReleaseKitItemSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetReleaseKitItem },
-  { name: 'promote_to_release_kit', description: TOOL_DESCRIPTIONS.promote_to_release_kit, inputSchema: PromoteToReleaseKitSchema, executionMode: 'registry', safeMode: 'block', handler: handlePromoteToReleaseKit },
-  { name: 'remove_from_release_kit', description: TOOL_DESCRIPTIONS.remove_from_release_kit, inputSchema: RemoveFromReleaseKitSchema, executionMode: 'registry', safeMode: 'block', handler: handleRemoveFromReleaseKit },
-  { name: 'set_release_kit_primary', description: TOOL_DESCRIPTIONS.set_release_kit_primary, inputSchema: SetReleaseKitPrimarySchema, executionMode: 'registry', safeMode: 'block', handler: handleSetReleaseKitPrimary },
+  { name: 'promote_to_release_kit', workerTrust: 'exact-approval', description: TOOL_DESCRIPTIONS.promote_to_release_kit, inputSchema: PromoteToReleaseKitSchema, executionMode: 'registry', safeMode: 'block', handler: handlePromoteToReleaseKit },
+  { name: 'remove_from_release_kit', workerTrust: 'exact-approval', description: TOOL_DESCRIPTIONS.remove_from_release_kit, inputSchema: RemoveFromReleaseKitSchema, executionMode: 'registry', safeMode: 'block', handler: handleRemoveFromReleaseKit },
+  { name: 'set_release_kit_primary', workerTrust: 'exact-approval', description: TOOL_DESCRIPTIONS.set_release_kit_primary, inputSchema: SetReleaseKitPrimarySchema, executionMode: 'registry', safeMode: 'block', handler: handleSetReleaseKitPrimary },
   { name: 'list_campaign_assets', description: TOOL_DESCRIPTIONS.list_campaign_assets, inputSchema: ListCampaignAssetsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListCampaignAssets },
   { name: 'list_artist_vault', description: TOOL_DESCRIPTIONS.list_artist_vault, inputSchema: ListArtistVaultSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListArtistVault },
   { name: 'list_campaign_outputs', description: TOOL_DESCRIPTIONS.list_campaign_outputs, inputSchema: ListCampaignOutputsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListCampaignOutputs },
@@ -2363,7 +2366,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'save_lab_lyrics', description: TOOL_DESCRIPTIONS.save_lab_lyrics, inputSchema: SaveLabLyricsSchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveLabLyrics },
   { name: 'list_lab_songs', description: TOOL_DESCRIPTIONS.list_lab_songs, inputSchema: ListLabSongsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListLabSongs },
   { name: 'artwork_compose', description: TOOL_DESCRIPTIONS.artwork_compose, inputSchema: ArtworkComposeSchema, executionMode: 'registry', safeMode: 'block', handler: handleArtworkCompose },
-  { name: 'media_provider_request', description: TOOL_DESCRIPTIONS.media_provider_request, inputSchema: MediaProviderRequestSchema, executionMode: 'registry', safeMode: 'block', handler: handleMediaProviderRequest },
+  { name: 'media_provider_request', workerTrust: 'approval', description: TOOL_DESCRIPTIONS.media_provider_request, inputSchema: MediaProviderRequestSchema, executionMode: 'registry', safeMode: 'block', handler: handleMediaProviderRequest },
   { name: 'video_project_create', description: TOOL_DESCRIPTIONS.video_project_create, inputSchema: VideoProjectCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectCreate },
   { name: 'video_project_update', description: TOOL_DESCRIPTIONS.video_project_update, inputSchema: VideoProjectUpdateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectUpdate },
   { name: 'video_media_import', description: TOOL_DESCRIPTIONS.video_media_import, inputSchema: VideoMediaImportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoMediaImport },
@@ -2494,6 +2497,27 @@ export function getSessionSafeBlockedToolNames(options?: SessionToolNameOptions)
 
 /** Set of session tool names for quick membership checks. */
 export const SESSION_TOOL_NAMES = new Set(SESSION_TOOL_DEFS.map(d => d.name));
+
+/** Accept the wire prefix without changing case-sensitive names such as SubmitPlan. */
+export function normalizeSessionToolName(name: string): string {
+  return name.startsWith('mcp__session__') ? name.slice('mcp__session__'.length) : name;
+}
+
+/** Trust never makes a tool available; role/scope filtering and handler checks still apply. */
+export function getSessionToolTrustPolicy(name: string): 'declared' | 'approval' | 'exact-approval' | undefined {
+  const definition = SESSION_TOOL_DEFS.find(tool => tool.name === normalizeSessionToolName(name));
+  return definition ? definition.workerTrust ?? 'declared' : undefined;
+}
+
+/** Nonblocking diagnostics. Keep saved declarations intact, including unknown future tools. */
+export function validateTrustedWorkerToolNames(names: readonly string[]): Array<{ name: string; reason: 'unknown-tool' | 'explicit-approval' }> {
+  return names.flatMap<{ name: string; reason: 'unknown-tool' | 'explicit-approval' }>(name => {
+    const policy = getSessionToolTrustPolicy(name);
+    if (policy === undefined) return [{ name, reason: 'unknown-tool' as const }];
+    if (policy !== 'declared') return [{ name, reason: 'explicit-approval' as const }];
+    return [];
+  });
+}
 
 /** Session tool names that must be handled by backend-specific adapters (Pi/Claude/session-mcp-server). */
 export const SESSION_BACKEND_TOOL_NAMES = new Set(

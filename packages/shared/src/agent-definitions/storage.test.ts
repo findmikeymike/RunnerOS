@@ -63,6 +63,39 @@ describe('isValidAgentSlug', () => {
 })
 
 describe('parseAgentFile', () => {
+  test('unknown trusted tool names warn without dropping the declaration or agent', () => {
+    const parsed = parseAgentFile(serializeAgent({
+      name: 'Custom Worker',
+      description: 'Keeps future tool declarations.',
+      trustedWorkerTools: ['create_output', 'future_custom_tool', 'submitplan'],
+    }, 'Custom prompt.'))
+    expect(parsed).not.toBeNull()
+    expect(parsed!.metadata.trustedWorkerTools).toEqual(['create_output', 'future_custom_tool', 'submitplan'])
+    expect(parsed!.systemPrompt).toBe('Custom prompt.')
+    expect(parsed!.warnings).toHaveLength(2)
+    expect(parsed!.warnings.every(w => w.field === 'trustedWorkerTools' && w.code === 'invalid-trusted-worker-tools')).toBe(true)
+    expect(parsed!.warnings[0]!.message).toContain('Unknown session tool "future_custom_tool"')
+    expect(parsed!.warnings[1]!.message).toContain('Unknown session tool "submitplan"')
+    const roundTripped = parseAgentFile(serializeAgent(parsed!.metadata, parsed!.systemPrompt))
+    expect(roundTripped!.metadata.trustedWorkerTools).toEqual(parsed!.metadata.trustedWorkerTools)
+  })
+
+  test('prefixed tools and case-sensitive SubmitPlan are recognized without rewriting metadata', () => {
+    const names = ['mcp__session__create_output', 'SubmitPlan', 'mcp__session__SubmitPlan']
+    const parsed = parseAgentFile(serializeAgent({ name: 'Worker', description: 'Known tools.', trustedWorkerTools: names }, 'Prompt.'))
+    expect(parsed!.metadata.trustedWorkerTools).toEqual(names)
+    expect(parsed!.warnings.filter(w => w.message.includes('Unknown session tool'))).toEqual([])
+  })
+
+  test('known approval-gated tools receive a policy warning, never an unknown-name warning', () => {
+    const names = ['promote_to_release_kit', 'mcp__session__promote_to_release_kit']
+    const parsed = parseAgentFile(serializeAgent({ name: 'Worker', description: 'Explicit approvals.', trustedWorkerTools: names }, 'Prompt.'))
+    expect(parsed!.metadata.trustedWorkerTools).toEqual(names)
+    expect(parsed!.warnings).toHaveLength(2)
+    expect(parsed!.warnings.every(w => w.message.includes('requires explicit approval'))).toBe(true)
+    expect(parsed!.warnings.some(w => w.message.includes('Unknown session tool'))).toBe(false)
+  })
+
   test('parses a fully-populated agent', () => {
     const md = `---
 name: Research Agent
@@ -421,6 +454,21 @@ describe('library + activation interplay (using a fake global dir)', () => {
     expect(reloaded!.metadata.name).toBe('Researcher')
     expect(reloaded!.metadata.skills).toEqual(['web-research'])
     expect(reloaded!.systemPrompt).toContain('structured findings')
+  })
+
+  test('saving and reloading unknown trust declarations succeeds with non-fatal diagnostics', () => {
+    const names = ['future_custom_tool', 'promote_to_release_kit', 'mcp__session__create_output']
+    const loaded = writeGlobalAgent({
+      slug: 'custom-trust',
+      metadata: { name: 'Custom Trust', description: 'Preserves declared tools.', trustedWorkerTools: names },
+      systemPrompt: 'Keep this prompt.',
+    }, { globalAgentsDir })
+    expect(loaded.metadata.trustedWorkerTools).toEqual(names)
+    expect(loaded.parseWarnings).toHaveLength(2)
+    const reloaded = loadGlobalAgent('custom-trust', { globalAgentsDir })
+    expect(reloaded!.metadata.trustedWorkerTools).toEqual(names)
+    expect(reloaded!.systemPrompt).toBe('Keep this prompt.')
+    expect(loadAllGlobalAgents({ globalAgentsDir }).map(agent => agent.slug)).toContain('custom-trust')
   })
 
   test('loadAllGlobalAgents includes non-fatal parse warnings', () => {

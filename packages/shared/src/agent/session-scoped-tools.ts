@@ -34,6 +34,7 @@ import {
 } from '@craft-agent/session-tools-core';
 import { createLLMTool, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
 import { createSpawnSessionTool, type SpawnSessionFn } from './spawn-session-tool.ts';
+import { deriveSessionToolFilterOptions } from './session-tool-filter-options.ts';
 import { isToolBlockedForDelegatedSession } from './spawn-session-isolation.ts';
 import { createBrowserTools, type BrowserPaneFns } from './browser-tools.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
@@ -226,7 +227,8 @@ export function getSessionScopedTools(
   artistWorkspaceScope?: string,
   delegatedSession = false,
 ): ReturnType<typeof createSdkMcpServer> {
-  const cacheKey = `${sessionId}::${workspaceRootPath}::${agentSlug ?? ''}::scope=${artistWorkspaceScope ?? ''}::lab=${includeLabTools}::delegated=${delegatedSession}`;
+  const scope = artistWorkspaceScope ?? (includeLabTools ? 'lab' : undefined);
+  const cacheKey = `${sessionId}::${workspaceRootPath}::${agentSlug ?? ''}::scope=${scope ?? ''}::delegated=${delegatedSession}`;
 
   // Return cached tools if available, but always create a fresh MCP server wrapper
   let tools: any[] | undefined = sessionToolsCache.get(cacheKey);
@@ -269,13 +271,7 @@ export function getSessionScopedTools(
     tools = getSessionToolDefs({
       includeManagedSkillTools: RUNTIME_IDENTITY.variant === 'artist-os',
       includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback,
-      includeScheduleWork: agentSlug === 'concierge',
-      includeSupplyWorkInput: agentSlug === 'concierge',
-      includeManagerTools: agentSlug === 'concierge' && (artistWorkspaceScope === 'hq' || artistWorkspaceScope === 'campaign'),
-      includeCampaignManagerTools: agentSlug === 'concierge' && artistWorkspaceScope === 'campaign',
-      includeLabTools,
-      includeSocialVariantTools: agentSlug === 'raw-video-editor',
-      includeSocialVariantQueryTools: agentSlug === 'concierge' || agentSlug === 'social-publisher',
+      ...deriveSessionToolFilterOptions(agentSlug, scope),
     })
       .filter(def => !isToolBlockedForDelegatedSession(def.name, delegatedSession))
       .filter(def => def.handler !== null) // Skip backend-specific tools (call_llm)

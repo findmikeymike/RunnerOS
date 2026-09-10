@@ -1,3 +1,4 @@
+import { getSessionToolTrustPolicy, normalizeSessionToolName } from '@craft-agent/session-tools-core';
 import { checkManagedSkillToolAccess } from './managed-skill-tool-guard.ts';
 /**
  * Shared PreToolUse utilities and centralized PreToolUse pipeline.
@@ -690,19 +691,6 @@ const BUILT_IN_MCP_SERVERS = new Set(['session', 'runner-docs']);
 /** File write tools that require permission in ask mode */
 const FILE_WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
-const TRUST_ELIGIBLE_SESSION_TOOLS = new Set([
-  'start_deep_research',
-  'list_deep_research_runs',
-  'get_deep_research_run',
-  'create_output',
-]);
-
-const EXACT_APPROVAL_SESSION_TOOLS = new Set([
-  'promote_to_release_kit',
-  'remove_from_release_kit',
-  'set_release_kit_primary',
-]);
-
 type GmailMutationKind = 'send' | 'draft' | 'unknown';
 
 function normalizeGmailPath(rawPath: unknown): string {
@@ -808,14 +796,14 @@ export function teamAutomationExternalOperatorBlockReason(input: {
 }
 
 function normalizeTrustedWorkerToolName(toolName: string): string {
-  return toolName.startsWith('mcp__session__') ? toolName.slice('mcp__session__'.length) : toolName;
+  return normalizeSessionToolName(toolName);
 }
 
 function isTrustedWorkerTool(toolName: string, trustedWorkerTools?: readonly string[]): boolean {
   if (!trustedWorkerTools?.length) return false;
   const normalized = normalizeTrustedWorkerToolName(toolName);
-  if (!TRUST_ELIGIBLE_SESSION_TOOLS.has(normalized)) return false;
-  return trustedWorkerTools.includes(toolName) || trustedWorkerTools.includes(normalized);
+  if (getSessionToolTrustPolicy(normalized) !== 'declared') return false;
+  return trustedWorkerTools.some(name => normalizeSessionToolName(name) === normalized);
 }
 
 /**
@@ -1046,7 +1034,7 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
       modifiedInput: wasModified ? currentInput : undefined,
     };
   }
-  if (EXACT_APPROVAL_SESSION_TOOLS.has(normalizedSessionTool)) {
+  if (getSessionToolTrustPolicy(normalizedSessionTool) === 'exact-approval') {
     return {
       type: 'prompt',
       promptType: 'mcp_mutation',
