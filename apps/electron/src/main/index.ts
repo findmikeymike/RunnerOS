@@ -1046,7 +1046,7 @@ app.whenReady().then(async () => {
         },
       })
 
-      // Explicit host-only opt-in. Public START still uses the legacy runner.
+      // Host opt-in: supported manual local reads use durable Start; other workflows keep their existing engine.
       if (RUNTIME_IDENTITY.variant === 'artist-os' && process.env.CRAFT_DURABLE_READ_HOST === '1') {
         try {
           const durableHost = await startElectronDurableWorkflowHost({
@@ -1058,7 +1058,11 @@ app.whenReady().then(async () => {
               resolveBinding: createDurableReadBindingResolver(),
             },
           })
-          if (durableHost && durableHandlerDeps) durableHandlerDeps.getDurableWorkflowControls = () => durableHost.controls
+          if (durableHost && durableHandlerDeps) {
+            durableHandlerDeps.getDurableWorkflowControls = () => durableHost.controls
+            durableHandlerDeps.getDurableWorkflowRuns = () => durableHost.runs
+            instance.sessionManager.setDurableWorkflowHost(durableHost)
+          }
         } catch {
           // Do not expose keychain/credential details or break existing workflows.
           mainLog.error('[durable-workflows] Host unavailable; durable controls remain disabled')

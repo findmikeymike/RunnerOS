@@ -25,6 +25,12 @@ export interface DurableReadInput {
   /** Certified by the host, never estimated from renderer input. */
   costPolicy: DurableRunSpec['costPolicy'];
 }
+export type DurableReadWorkflowInput = Omit<DurableReadInput, 'prompt'> & { resolvedAgentSlug: string };
+export interface DurableReadAdmission {
+  snapshot: DurableRunSnapshot;
+  /** Observed internally; callers may separately await completion or failure. */
+  execution: Promise<DurableRunSnapshot>;
+}
 export interface DurableReadBackendArgs {
   context: ResolvedBackendContext; hostRuntime: BackendHostRuntimeContext; coreConfig: CoreBackendConfig;
 }
@@ -79,6 +85,17 @@ function frozenContext(spec: DurableRunSpec): FrozenReadContext {
   return value;
 }
 
+/** The narrow workflow shape whose execution semantics are implemented by this adapter. */
+export function supportsDurableReadWorkflow(workflow: LoadedWorkflow): boolean {
+  const step = workflow.metadata.steps[0];
+  return !(workflow.parseWarnings?.length || workflow.metadata.trigger.type !== 'manual' || workflow.metadata.steps.length !== 1 || !step
+      || workflow.metadata.outputs?.mode !== 'none' || workflow.metadata.trigger.inputs?.length
+      || step.taskModeId || step.outputSchema || step.timeout !== undefined
+      || (step.retries ?? 0) !== 0 || (step.onFailure ?? 'stop') !== 'stop' || step.legacySkillReferences?.length
+      || Object.keys(step).some(key => !['id', 'agent', 'input', 'description', 'retries', 'onFailure', 'completion', 'legacySkillReferences', 'legacySkillPromptHash'].includes(key))
+      || /\{\{/.test(step.input) || Object.keys(step.completion ?? {}).some(key => key !== 'requireNonEmptyOutput'));
+}
+
 /** Single-step local read execution. Only journal checkpoints authorize success. */
 export class DurableReadRunner {
   private readonly active = new Map<string, ActiveReadExecution>();
@@ -125,25 +142,24 @@ export class DurableReadRunner {
   }
 
   /** Existing workflow adapter: unsupported execution semantics fail before admission. */
-  startWorkflow(workflow: LoadedWorkflow, input: Omit<DurableReadInput, 'prompt'> & { resolvedAgentSlug: string }): Promise<DurableRunSnapshot> {
+  async startWorkflow(workflow: LoadedWorkflow, input: DurableReadWorkflowInput): Promise<DurableRunSnapshot> {
+    return (await this.admitWorkflow(workflow, input)).execution;
+  }
+
+  admitWorkflow(workflow: LoadedWorkflow, input: DurableReadWorkflowInput): Promise<DurableReadAdmission> {
     if (this.closing) return Promise.reject(new Error('durable-host-closing'));
     workflow = JSON.parse(JSON.stringify(workflow)) as LoadedWorkflow;
     const step = workflow.metadata.steps[0];
-    if (workflow.parseWarnings?.length || workflow.metadata.trigger.type !== 'manual' || workflow.metadata.steps.length !== 1 || !step
-      || workflow.metadata.outputs?.mode !== 'none' || workflow.metadata.trigger.inputs?.length
-      || step.agent !== input.resolvedAgentSlug || step.taskModeId || step.outputSchema || step.timeout !== undefined
-      || (step.retries ?? 0) !== 0 || (step.onFailure ?? 'stop') !== 'stop' || step.legacySkillReferences?.length
-      || Object.keys(step).some(key => !['id', 'agent', 'input', 'description', 'retries', 'onFailure', 'completion', 'legacySkillReferences', 'legacySkillPromptHash'].includes(key))
-      || /\{\{/.test(step.input) || Object.keys(step.completion ?? {}).some(key => key !== 'requireNonEmptyOutput')) {
+    if (!supportsDurableReadWorkflow(workflow) || step?.agent !== input.resolvedAgentSlug) {
       return Promise.reject(new Error('unsupported-durable-read-workflow'));
     }
     const { resolvedAgentSlug: _slug, ...rest } = input;
     return this.admit({ ...rest, prompt: step.input }, workflow);
   }
 
-  start(input: DurableReadInput): Promise<DurableRunSnapshot> { return this.admit(input); }
+  async start(input: DurableReadInput): Promise<DurableRunSnapshot> { return (await this.admit(input)).execution; }
 
-  private async admit(input: DurableReadInput, workflow?: LoadedWorkflow): Promise<DurableRunSnapshot> {
+  private async admit(input: DurableReadInput, workflow?: LoadedWorkflow): Promise<DurableReadAdmission> {
     this.assertOpen();
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.runId) || !input.prompt.trim() || !input.systemPrompt.trim()) throw new Error('invalid-durable-read-input');
     const requested = JSON.parse(canonical(input)) as DurableReadInput;
@@ -164,8 +180,10 @@ export class DurableReadRunner {
       costPolicy: requested.costPolicy, context: context as unknown as DurableJson,
       ...(requested.approvalPrincipalId !== undefined ? { approvalPrincipalId: requested.approvalPrincipalId } : {}),
       authority: { adapter: 'pi-local-read-1', stepCount: 1, completion: 'journal-only' } };
-    this.options.journal.admit(spec);
-    return this.resume(spec.runId, spec.workspaceId);
+    const snapshot = this.options.journal.admit(spec);
+    const execution = this.resume(spec.runId, spec.workspaceId);
+    void execution.catch(() => {});
+    return { snapshot, execution };
   }
 
   /** Internal orchestration seam: children use this host's active parent claim and lifetime. */
@@ -178,6 +196,8 @@ export class DurableReadRunner {
     this.options.authorizeRun?.({ runId: parentRunId, workspaceId, approvalPrincipalId: parent.spec.approvalPrincipalId });
     return new DurableChildRunner({ journal: this.options.journal, runner: this }).start(claim, request);
   }
+
+  isActive(runId: string, workspaceId: string): boolean { return this.active.has(canonical([workspaceId, runId])); }
 
   resume(runId: string, workspaceId: string): Promise<DurableRunSnapshot> {
     if (this.closing) return Promise.reject(new Error('durable-host-closing'));

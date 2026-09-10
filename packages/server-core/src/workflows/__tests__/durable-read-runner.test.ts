@@ -733,3 +733,31 @@ test('workspace revocation after a tool result blocks the next model reservation
   expect((await runner.start(input)).status).toBe('paused'); expect(dispatched).toBe(false);
   expect(journal.get(input.runId,input.workspaceId).modelAttempts).toBe(1);
 });
+
+test('workflow admission acknowledges persistence before model completion and duplicate callers share execution', async () => {
+  const { input, base, journal } = fixture();
+  const workflow = { slug: 'read-notes', source: 'global' as const, path: '/host/read-notes', body: '', metadata: { name: 'Read', description: '', trigger: { type: 'manual' as const }, outputs: { mode: 'none' as const }, steps: [{ id: 'read', agent: 'researcher', input: 'Read notes' }] } };
+  let release!: () => void, creations = 0;
+  const gate = new Promise<void>(resolve => release = resolve);
+  const runner = new DurableReadRunner({ ...base, createBackend: args => { creations++; return { async *chat() { await gate; await complete(args); }, async abort() {}, destroy() {} }; } });
+  const request = { ...input, resolvedAgentSlug: 'researcher' };
+  const first = await runner.admitWorkflow(workflow, request);
+  expect(first.snapshot.status).toBe('running');
+  expect(journal.get(input.runId, input.workspaceId).spec.commandId).toBe(input.commandId);
+  const second = await runner.admitWorkflow(workflow, request);
+  expect(second.execution).toBe(first.execution);
+  expect(creations).toBe(1);
+  release(); expect((await first.execution).status).toBe('succeeded');
+});
+
+test('admitted execution failure is observed even when caller initially reads only the receipt', async () => {
+  const { input, base } = fixture();
+  const workflow = { slug: 'read-notes', source: 'global' as const, path: '/host/read-notes', body: '', metadata: { name: 'Read', description: '', trigger: { type: 'manual' as const }, outputs: { mode: 'none' as const }, steps: [{ id: 'read', agent: 'researcher', input: 'Read notes' }] } };
+  const failure = new Error('provider unavailable');
+  const runner = new DurableReadRunner({ ...base, createBackend: () => ({ async *chat() { throw failure; }, async abort() {}, destroy() {} }) });
+  const accepted = await runner.admitWorkflow(workflow, { ...input, resolvedAgentSlug: 'researcher' });
+  expect(accepted.snapshot.status).toBe('running');
+  // Let rejection notifications run before the caller attaches its own observer.
+  await new Promise(resolve => setTimeout(resolve, 10));
+  await expect(accepted.execution).rejects.toBe(failure);
+});

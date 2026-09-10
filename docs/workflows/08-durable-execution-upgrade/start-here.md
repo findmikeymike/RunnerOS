@@ -5,11 +5,11 @@
 This packet specifies an upgrade beneath existing Artist OS workflows. It does not replace the product, claim DBOS powers the main runner, or certify arbitrary external actions as exactly once.
 
 - Repository: `/Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os`, branch `main`.
-- Current baseline: `32d4b000c`; verify Git before edits.
+- Foundation baseline: `32d4b000c`; current main has advanced. Verify Git before edits.
 - Revision: r10. P-01/P-02 internal foundations and earlier P-03 slices are implemented; the P-03 internal implementation pass is complete; live exit gates remain open.
 - Authority: latest user request → specification → current code/evidence. Specs and structural plan validity do not prove shipped behavior.
-- Current entry: [Build state](state.md), [T-07](tasks/T-07.md), [T-08](tasks/T-08.md).
-- The durable host is opt-in and public admission remains legacy. Do not restart the user's app without permission.
+- Current entry: [Build state](state.md), [normal-engine integration slices](normal-engine-integration.md).
+- The durable host is opt-in; normal manual Start supports explicitly marked local-read workflows. Other workflow classes remain on the existing engine. Do not restart the user's app without permission.
 
 ## Packet map
 

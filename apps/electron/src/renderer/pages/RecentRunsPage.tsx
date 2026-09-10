@@ -1,3 +1,4 @@
+import { useWorkflowAttention } from '@/hooks/useWorkflowAttention'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { History } from 'lucide-react'
@@ -6,7 +7,6 @@ import { routes } from '../../shared/routes'
 import { useWorkflowRuns } from '@/hooks/useWorkflowRuns'
 import { useWorkflows } from '@/hooks/useWorkflows'
 import { RunStateDot } from './WorkflowsListPage'
-import type { WorkflowAttentionDTO } from '../../shared/types'
 
 interface Props {
   workspaceId: string
@@ -15,23 +15,9 @@ interface Props {
 export default function RecentRunsPage({ workspaceId }: Props) {
   const { t } = useTranslation()
   const { navigate } = useNavigation()
-  const { runs, loading, error } = useWorkflowRuns(workspaceId)
+  const { runs, loading, error, listRevision } = useWorkflowRuns(workspaceId)
   const { allWorkflows } = useWorkflows(workspaceId)
-  const [attention, setAttention] = React.useState<WorkflowAttentionDTO[]>([])
-
-  React.useEffect(() => {
-    let mounted = true
-    void window.electronAPI.listWorkflowAttention(workspaceId).then((items) => {
-      if (mounted) setAttention(items)
-    }).catch(() => {})
-    const cleanup = window.electronAPI.onWorkflowAttentionUpdated((changedWorkspaceId, changed) => {
-      if (changedWorkspaceId !== workspaceId) return
-      setAttention((current) => changed.status === 'pending'
-        ? [...current.filter((item) => item.id !== changed.id), changed]
-        : current.filter((item) => item.id !== changed.id))
-    })
-    return () => { mounted = false; cleanup() }
-  }, [workspaceId])
+  const { attention } = useWorkflowAttention(workspaceId, undefined, listRevision)
 
   const nameBySlug = React.useMemo(() => {
     const map = new Map<string, string>()

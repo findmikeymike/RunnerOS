@@ -97,7 +97,31 @@ export type WorkflowRunEventDetail =
  * forwards each call to a `SessionManager` instance — see the bootstrap
  * wiring (added in the RPC step).
  */
+export interface WorkflowStartInput {
+  workflow: LoadedWorkflow;
+  workspaceId: string;
+  triggerInputs: Record<string, unknown>;
+  untrustedTriggerInputs?: string[];
+  runId?: string;
+  /** Set only by trusted UI transport; internal/automatic callers omit this. */
+  invocation?: 'manual-ui';
+  actor?: { clientId: string; workspaceId?: string };
+}
+
+function freezeStartInput<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    for (const child of Object.values(value)) freezeStartInput(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 export interface WorkflowRunnerDeps {
+  /** Check saved durable concurrency for both fresh and legacy rerun admission. */
+  assertWorkflowAdmissionAvailable?: (workspaceId: string, workflowSlug: string) => Promise<void> | void;
+  /** Null means unselected. Selected admission errors must never fall back to legacy execution. */
+  durableStart?: (input: WorkflowStartInput) => Promise<WorkflowRunSnapshot | null> | WorkflowRunSnapshot | null;
+
   /** Spawn a session with given options. Mirrors `SessionManager.createSession`. */
   createSession: (
     workspaceId: string,
@@ -232,6 +256,7 @@ function retryDelayMs(attempt: number): number {
 }
 
 export class WorkflowRunner {
+  private readonly admitting = new Set<string>();
   private readonly active = new Map<string /* runId */, ActiveRun>();
   private readonly activeByKey = new Map<string /* concurrencyKey */, string /* runId */>();
 
@@ -354,13 +379,26 @@ export class WorkflowRunner {
    * Phase 1 concurrency: rejects if a run is already active for this
    * (workspaceId, workflowSlug) pair.
    */
-  async start(input: {
-    workflow: LoadedWorkflow;
-    workspaceId: string;
-    triggerInputs: Record<string, unknown>;
-    untrustedTriggerInputs?: string[];
-    runId?: string;
-  }): Promise<WorkflowRunSnapshot> {
+  async start(input: WorkflowStartInput): Promise<WorkflowRunSnapshot> {
+    // Pin before the first await so UI/config mutations cannot change the selected execution.
+    input = this.cloneJson(input);
+    const admissionKey = concurrencyKey(input.workspaceId, input.workflow.slug);
+    if (this.admitting.has(admissionKey)) throw new Error('Workflow already has an active run; admission is already in progress.');
+    this.admitting.add(admissionKey);
+    try { return await this.startPinned(input); }
+    finally { this.admitting.delete(admissionKey); }
+  }
+
+  private async startPinned(input: WorkflowStartInput): Promise<WorkflowRunSnapshot> {
+    if (this.activeByKey.has(concurrencyKey(input.workspaceId, input.workflow.slug))) throw new Error('Workflow already has an active run; previous execution is still draining.');
+    if (this.deps.assertWorkflowAdmissionAvailable) await this.deps.assertWorkflowAdmissionAvailable(input.workspaceId, input.workflow.slug);
+    if (this.deps.durableStart) {
+      const durable = await this.deps.durableStart(freezeStartInput(this.cloneJson(input)));
+      if (durable !== null) return this.cloneSnapshot(durable);
+    }
+    if (input.workflow.metadata.execution === 'durable-local-read') {
+      throw new Error('Durable local-read execution is not available on this host.');
+    }
     const { workflow, workspaceId } = input;
     const triggerInputs = normalizeWorkflowTriggerInputs(workflow, input.triggerInputs);
     const key = concurrencyKey(workspaceId, workflow.slug);
@@ -456,6 +494,7 @@ export class WorkflowRunner {
     runId: string;
     stepId?: string;
   }): Promise<WorkflowRunSnapshot> {
+    input = this.cloneJson(input);
     const root = this.deps.getWorkspaceRootPath(input.workspaceId);
     assertValidWorkflowRunId(input.runId);
     const original = readRun(root, input.runId);
@@ -464,6 +503,17 @@ export class WorkflowRunner {
       throw new Error(`Workflow run "${input.runId}" does not belong to workspace "${input.workspaceId}".`);
     }
 
+    if (original.durable || original.workflowSnapshot.metadata.execution === 'durable-local-read') throw new Error('Durable workflows require durable resume controls.');
+    const admissionKey = concurrencyKey(input.workspaceId, original.workflowSlug);
+    if (this.admitting.has(admissionKey)) throw new Error('Workflow already has an active run; admission is already in progress.');
+    this.admitting.add(admissionKey);
+    try {
+      if (this.deps.assertWorkflowAdmissionAvailable) await this.deps.assertWorkflowAdmissionAvailable(input.workspaceId, original.workflowSlug);
+      return await this.rerunPinned(input, root, original);
+    } finally { this.admitting.delete(admissionKey); }
+  }
+
+  private async rerunPinned(input: { workspaceId: string; runId: string; stepId?: string }, root: string, original: WorkflowRunSnapshot): Promise<WorkflowRunSnapshot> {
     const workflowSnapshot = this.cloneJson(original.workflowSnapshot);
     const startIndex = this.resolveRerunStartIndex(original, input.stepId);
     const startStep = workflowSnapshot.metadata.steps[startIndex]!;

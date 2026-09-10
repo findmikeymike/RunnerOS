@@ -47,7 +47,8 @@ export interface DurableRunSpec extends DurableExecutionDescriptor {
   context: DurableJson;
   deadlineAt: number;
   maxModelAttempts: number;
-  costPolicy: { maxTotalUnits: number; maxUnitsPerAttempt: number; unit: 'verified-free' | 'trusted-upper-bound' };
+  /** model-requests bounds provider attempts only; it is not a monetary spending guarantee. */
+  costPolicy: { maxTotalUnits: number; maxUnitsPerAttempt: number; unit: 'verified-free' | 'trusted-upper-bound' | 'model-requests' };
 }
 export interface DurableClaim { runId: string; workspaceId: string; ownerId: string; epoch: number; controlRevision: number; observationOnly?: true }
 interface Call { id: string; tool: string; inputDigest?: string; attempts: number; skipped?: true; result?: DurableJson }
@@ -176,7 +177,7 @@ export class DurableJournal {
     if (spec.parent !== undefined) throw new Error('durable-child-atomic-admission-required');
     const policy = spec.costPolicy;
     if (spec.approvalPrincipalId !== undefined && (typeof spec.approvalPrincipalId !== 'string' || !spec.approvalPrincipalId.trim())) throw new Error('invalid-approval-principal');
-    if (!/^[a-f0-9]{64}$/.test(spec.credentialIdentity) || !spec.runtimeManifest || Object.values(spec.runtimeManifest).some(value => typeof value !== 'string') || spec.engine !== 'sqlite-v2-readonly-1' || !spec.runId || !spec.workspaceId || !spec.commandId || !spec.model || !Number.isSafeInteger(spec.maxOutputTokens) || spec.maxOutputTokens < 1 || !Number.isSafeInteger(spec.maxModelAttempts) || spec.maxModelAttempts < 1 || !Number.isFinite(spec.deadlineAt) || !Array.isArray(spec.allowedTools) || spec.allowedTools.some(t => !['read', 'grep', 'find', 'ls'].includes(t)) || !policy || !['verified-free', 'trusted-upper-bound'].includes(policy.unit) || !Number.isSafeInteger(policy.maxTotalUnits) || !Number.isSafeInteger(policy.maxUnitsPerAttempt) || policy.maxTotalUnits < 0 || policy.maxUnitsPerAttempt < 0 || (policy.unit === 'verified-free' ? policy.maxTotalUnits !== 0 || policy.maxUnitsPerAttempt !== 0 : policy.maxUnitsPerAttempt === 0)) throw new Error('invalid-durable-admission');
+    if (!/^[a-f0-9]{64}$/.test(spec.credentialIdentity) || !spec.runtimeManifest || Object.values(spec.runtimeManifest).some(value => typeof value !== 'string') || spec.engine !== 'sqlite-v2-readonly-1' || !spec.runId || !spec.workspaceId || !spec.commandId || !spec.model || !Number.isSafeInteger(spec.maxOutputTokens) || spec.maxOutputTokens < 1 || !Number.isSafeInteger(spec.maxModelAttempts) || spec.maxModelAttempts < 1 || !Number.isFinite(spec.deadlineAt) || !Array.isArray(spec.allowedTools) || spec.allowedTools.some(t => !['read', 'grep', 'find', 'ls'].includes(t)) || !policy || !['verified-free', 'trusted-upper-bound', 'model-requests'].includes(policy.unit) || !Number.isSafeInteger(policy.maxTotalUnits) || !Number.isSafeInteger(policy.maxUnitsPerAttempt) || policy.maxTotalUnits < 0 || policy.maxUnitsPerAttempt < 0 || (policy.unit === 'verified-free' ? policy.maxTotalUnits !== 0 || policy.maxUnitsPerAttempt !== 0 : policy.maxUnitsPerAttempt === 0) || (policy.unit === 'model-requests' && (policy.maxUnitsPerAttempt !== 1 || policy.maxTotalUnits !== spec.maxModelAttempts))) throw new Error('invalid-durable-admission');
     return this.transaction(() => {
       const old = this.db.prepare('SELECT * FROM runs WHERE id=? OR (workspace=? AND command=?)').all(spec.runId, spec.workspaceId, spec.commandId);
       if (old.length) { if (old.length !== 1 || old[0].id !== spec.runId || old[0].workspace !== spec.workspaceId || old[0].spec_digest !== digest(spec)) throw new Error('durable-command-conflict'); return this.decrypt(old[0].payload, spec.runId); }
@@ -504,6 +505,7 @@ export class DurableJournal {
     const request = JSON.parse(canonical(input)) as DurableChildAdmission;
     return this.transaction(() => {
       const parent = this.fenced(claim);
+      if (parent.spec.costPolicy.unit === 'model-requests') throw new Error('durable-request-budget-children-unsupported');
       if (parent.spec.parent) throw new Error('durable-child-depth-exceeded');
       if (!parent.spec.approvalPrincipalId) throw new Error('durable-child-principal-required');
       const child = request.childSpec, policy = child.costPolicy;
@@ -597,6 +599,7 @@ export class DurableJournal {
       !Number.isSafeInteger(intent.maxAttempts) || intent.maxAttempts < 1 || !Number.isFinite(intent.maxUnitsPerAttempt) || intent.maxUnitsPerAttempt < 0 || !Object.hasOwn(intent,'input')) throw new Error('invalid-durable-operation-intent');
     return this.transaction(() => {
       const state = this.fenced(claim);
+      if (state.spec.costPolicy.unit === 'model-requests') throw new Error('durable-request-budget-operations-unsupported');
       const existing = state.operations?.find(item => item.intent.slotId === intent.slotId);
       if (existing) { if (digest(existing.intent) !== digest(intent)) throw new Error('durable-operation-intent-conflict'); return existing; }
       this.operationDispatch(state, claim);

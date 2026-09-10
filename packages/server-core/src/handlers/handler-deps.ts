@@ -44,6 +44,8 @@ export interface HandlerDeps<
   getWorkflowRunner?: () => import('../workflows/runner').WorkflowRunner
   /** Optional internal durable attention bridge; omission keeps rollout disabled. */
   getDurableWorkflowControls?: () => Pick<import('../workflows/durable-workflow-controls').DurableWorkflowControls, 'listAttention' | 'resolveAttention' | 'control'>
+  /** Authenticated journal projections used by normal run history. */
+  getDurableWorkflowRuns?: () => Pick<import('../workflows/durable-workflow-runs').DurableWorkflowRuns, 'get' | 'list'>
   getDeepResearchRunner?: () => import('../deep-research/DeepResearchRunner').DeepResearchRunner
   validateSocialProfile?: (input: { platform: string; profileId: string }) => Promise<{ ready: boolean; reason?: string }>
   /**

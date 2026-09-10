@@ -18,4 +18,24 @@ Not activated: default-off `CRAFT_DURABLE_READ_HOST=1` opt-in remains unchanged;
 
 Open exit gates: a concrete safe remote-provider adapter/target proof, copied/packaged Electron safeStorage and actual UI restart journey. The copied Electron probe timed out before confirming availability; this is not a pass. The user's running app and live credentials were untouched. P-04 scheduling, P-05 migration/UI and P-06 rollout/certification remain ahead.
 
-Live desktop smoke subsequently passed canonical development startup, real protected journal open/reopen, authenticated service routing, normal Quit and native app relaunch; see [live smoke evidence](evidence/P-03-live-smoke.md). A relaunch cleanup bypass was fixed, rebuilt, live-tested and recorded with the smoke evidence. The user plans to test long-running workflows next. Visible durable approval/recovery remains blocked by legacy-only run list/detail routing; packaged release and remote-provider gates remain open.
+Live desktop smoke subsequently passed canonical development startup, real protected journal open/reopen, authenticated service routing, normal Quit and native app relaunch; see [live smoke evidence](evidence/P-03-live-smoke.md). A relaunch cleanup bypass was fixed, rebuilt, live-tested and recorded with the smoke evidence. The user plans to test long-running workflows next. That smoke predates the normal-engine integration below; packaged release and remote-provider gates remain open.
+
+## Normal-engine connection — first reviewed slice
+
+See [normal-engine integration](normal-engine-integration.md) for the current slices and acceptance boundaries. Admission acknowledgement, normal journal-backed run history, and saved-run controls are now connected in source behind the existing host opt-in. Public START still uses the current engine; agent get-run and scheduled observers remain legacy. The next slice must certify a real host-resolved agent/connection/cost policy and connect shared Start. No new desktop smoke or remote provider certification is claimed.
+
+Fresh verification for this slice: **119 tests passed, 557 assertions** across admission, host lifetime, projection, approvals/controls, children, normal RPC routing and renderer recovery helpers. Server-core and Electron typechecks and changed renderer lint passed. Cold rival review found both ID-collision and stale-visibility defects; fixes were independently rechecked with **41 tests / 183 assertions** and no remaining scoped findings. Normal START and desktop visual acceptance remain outside this evidence.
+
+## Normal Start connection — second slice
+
+Normal Start is now connected in source for explicit `execution: durable-local-read` workflows while the existing local host opt-in is enabled. Unmarked workflows keep normal execution; marked unsupported/automatic/host-unavailable paths fail before admission. Real prompt/account/model resolution is preserved. Eight model requests and a ten-minute deadline bound attempts, not dollar spending. Shared guards cover normal starts and older legacy reruns. See [integration details and configuration](normal-engine-integration.md). Earlier statements that public START is wholly legacy describe the earlier slices. No user-profile workflow was converted and the running app was not restarted.
+
+Fresh second-slice checks: **360 distinct tests passed / 1,583 assertions** across the affected durability/parser/storage/runner/RPC/recovery suites and the isolated default-Pi process test. Server-core and Electron typechecks passed. Cold rival found mixed-engine Start and older-legacy-rerun concurrency gaps; both were fixed and independently rechecked (15 tests / 54 assertions, no remaining scoped blocker). The Pi probe used synthetic credentials and localhost only: two model requests and one native read. This is not live-provider or desktop smoke certification.
+
+The final real-host regression also proves that an older failed legacy run cannot bypass active durable work: no legacy session is created and the prior record remains byte-for-byte unchanged.
+
+## Follow-up rival fixes — 2026-09-09
+
+All four follow-up findings are fixed: admission stays blocked until cancelled execution actually drains (both engines); mounted history discovers work after lost Start replies and reconnect; fresh authorized detail reads recover from transient errors; and approval badges refresh from saved progress. Request ownership now survives slow replies across polling ticks, while decisions, route changes and unmount still fence stale replies. No additional START is issued during discovery recovery.
+
+Fresh checks: **155 tests passed / 660 assertions** across runner, host, routing, history and renderer request/discovery controllers; changed renderer lint passed. Rival independently verified the drain fixes and final request-lifecycle fix, with no remaining scoped findings. Controller lifecycle tests do not constitute mounted React or desktop smoke proof; no app restart, live provider call or commit was performed.

@@ -1,3 +1,6 @@
+import { useWorkflowRunHydration } from '@/hooks/useWorkflowRunHydration'
+import { useWorkflowAttention } from '@/hooks/useWorkflowAttention'
+import { visibleWorkflowRun } from '@/lib/durable-workflow-run'
 import * as React from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -38,62 +41,23 @@ type LooseRecord = Record<string, unknown>
 export default function WorkflowRunPage({ runId, workspaceId }: Props) {
   const { t } = useTranslation()
   const { navigate } = useNavigation()
-  const { runs, cancel, resume, canResume } = useWorkflowRuns(workspaceId)
+  const { runs, listRevision, hasLoaded: runsHaveLoaded, cancel, resume, canResume, control } = useWorkflowRuns(workspaceId)
   const { allAgents } = useAgents(workspaceId)
-  const [hydratedRun, setHydratedRun] = React.useState<WorkflowRunDTO | null>(null)
-  const [hydrateError, setHydrateError] = React.useState<string | null>(null)
+  const { run: hydratedRun, error: hydrateError } = useWorkflowRunHydration(workspaceId, runId, listRevision, t('workflows.run.notFound'))
   const [workflow, setWorkflow] = React.useState<WorkflowDTO | null>(null)
   const [rerunOpen, setRerunOpen] = React.useState(false)
   const [recoveryPendingStepId, setRecoveryPendingStepId] = React.useState<string | null>(null)
   const [now, setNow] = React.useState(() => Date.now())
-  const [attention, setAttention] = React.useState<WorkflowAttentionDTO[]>([])
+  const { attention, setAttention } = useWorkflowAttention(workspaceId, runId, listRevision)
   const attentionCommands = React.useRef(new Map<string, { commandId: string; expectedVersion: number }>())
+  const [controlPending, setControlPending] = React.useState(false)
   const [resolvingAttentionId, setResolvingAttentionId] = React.useState<string | null>(null)
-
-  // Hydrate on mount; live updates flow through useWorkflowRuns broadcast.
-  React.useEffect(() => {
-    let mounted = true
-    const load = async () => {
-      try {
-        const r = await window.electronAPI.getWorkflowRun(workspaceId, runId)
-        if (!mounted) return
-        if (!r) {
-          setHydrateError(t('workflows.run.notFound'))
-          return
-        }
-        setHydratedRun(r)
-      } catch (err) {
-        if (!mounted) return
-        setHydrateError(err instanceof Error ? err.message : String(err))
-      }
-    }
-    load()
-    return () => { mounted = false }
-  }, [workspaceId, runId, t])
-
-  React.useEffect(() => {
-    let mounted = true
-    const refresh = () => window.electronAPI.listWorkflowAttention(workspaceId, runId)
-      .then((items) => { if (mounted) setAttention(items) })
-      .catch(() => { if (mounted) setAttention([]) })
-    void refresh()
-    const cleanup = window.electronAPI.onWorkflowAttentionUpdated((changedWorkspaceId, changed) => {
-      if (changedWorkspaceId !== workspaceId || changed.workflowRunId !== runId) return
-      if (changed.status === 'pending') {
-        setAttention((current) => [...current.filter((item) => item.id !== changed.id), changed])
-      } else {
-        setAttention((current) => current.filter((item) => item.id !== changed.id))
-      }
-    })
-    return () => { mounted = false; cleanup() }
-  }, [workspaceId, runId])
 
   // Prefer the version pushed via broadcast (live), fall back to the
   // hydrated one taken at mount.
   const run: WorkflowRunDTO | null = React.useMemo(() => {
-    const live = runs.find((r) => r.id === runId)
-    return live ?? hydratedRun
-  }, [runs, runId, hydratedRun])
+    return hydratedRun ? visibleWorkflowRun(runs, runId, hydratedRun, runsHaveLoaded) : null
+  }, [runs, runId, hydratedRun, runsHaveLoaded])
 
   // Tick once a second so the elapsed-time header refreshes while running.
   React.useEffect(() => {
@@ -114,6 +78,14 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
     }).catch(() => {})
     return () => { mounted = false }
   }, [run])
+
+  const handleDurableControl = async (action: 'pause' | 'resume' | 'cancel') => {
+    if (!run?.durable) return
+    setControlPending(true)
+    try { await control(run, action) }
+    catch (err) { toast.error(err instanceof Error ? err.message : String(err)) }
+    finally { setControlPending(false) }
+  }
 
   const handleCancel = async () => {
     if (!run) return
@@ -161,7 +133,7 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
     )
   }
   if (!run) {
-    return <div className="runneros-glass-route flex h-full items-center justify-center text-sm text-white/50">{t('common.loading')}</div>
+    return <div className="runneros-glass-route flex h-full items-center justify-center text-sm text-white/50">{hydratedRun?.durable && runsHaveLoaded ? 'This saved run is no longer available.' : t('common.loading')}</div>
   }
 
   const startedAtMs = run.createdAt ? Date.parse(run.createdAt) : 0
@@ -198,13 +170,23 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {run.state === 'running' && (
+            {run.durable && !['succeeded', 'failed', 'cancelled'].includes(run.durable.status) && (
+              <>
+                {(run.durable.status !== 'waiting-approval' || attention.some(item => item.durable && item.durable.expiresAt <= Date.now())) && (
+                  <Button size="sm" variant="outline" disabled={controlPending} onClick={() => handleDurableControl(run.state === 'running' ? 'pause' : 'resume')}>
+                    {run.state === 'running' ? 'Pause' : 'Resume saved run'}
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" disabled={controlPending} onClick={() => handleDurableControl('cancel')}>Stop</Button>
+              </>
+            )}
+            {!run.durable && run.state === 'running' && (
               <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={handleCancel}>
                 <Square className="h-3.5 w-3.5 mr-1.5" />
                 {t('workflows.run.cancel')}
               </Button>
             )}
-            {isRecoverableRunState(run.state) && (
+            {!run.durable && isRecoverableRunState(run.state) && (
               <Button
                 size="sm"
                 variant="outline"
@@ -217,10 +199,10 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
                 Resume from next incomplete step
               </Button>
             )}
-            <Button size="sm" className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={() => setRerunOpen(true)} disabled={!workflow}>
+            {!run.durable && <Button size="sm" className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={() => setRerunOpen(true)} disabled={!workflow}>
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
               {t('workflows.run.rerun')}
-            </Button>
+            </Button>}
           </div>
         </div>
 
@@ -301,7 +283,7 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
               agentNameBySlug={agentNameBySlug}
               onOpenSession={(sid) => navigate(routes.view.allSessions(sid))}
               onRerunFromStep={(stepId) => handleResume(stepId)}
-              canRerun={canResume && isRecoverableRunState(run.state)}
+              canRerun={!run.durable && canResume && isRecoverableRunState(run.state)}
               recoveryPendingStepId={recoveryPendingStepId}
             />
           ))}

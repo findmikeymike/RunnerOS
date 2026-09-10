@@ -6,26 +6,31 @@
  * so the recent-runs page and the run page both stay reactive.
  */
 
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useAtom } from 'jotai'
 import { workflowRunsStateAtomFamily, type WorkflowRunsState } from '@/atoms/workflow-runs'
 import { RPC_CHANNELS, type WorkflowRunDTO } from '../../shared/types'
+import { controlDurableRun, preferWorkflowRun, mergeWorkflowRuns } from '@/lib/durable-workflow-run'
+import type { DurableWorkflowCommandDTO } from '../../shared/types'
+import { startWorkflowRunDiscovery, refreshAfterUncertainWorkflowStart } from '@/lib/workflow-run-discovery'
 import { useWorkspaceSyncRefresh } from './useWorkspaceSyncRefresh'
 
 export interface UseWorkflowRunsResult {
   runs: WorkflowRunDTO[]
   loading: boolean
+  hasLoaded: boolean
+  listRevision: number
   error: string | null
   refresh: () => Promise<void>
   start: (workflowSlug: string, triggerInputs: Record<string, unknown>) => Promise<WorkflowRunDTO>
   cancel: (runId: string) => Promise<void>
   resume: (runId: string, stepId?: string) => Promise<WorkflowRunDTO>
+  control: (run: WorkflowRunDTO, action: 'pause' | 'resume' | 'cancel') => Promise<void>
   canResume: boolean
   remove: (runId: string) => Promise<boolean>
 }
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
-const loadedWorkspaceKeys = new Set<string>()
 const inFlightRefreshes = new Map<string, Promise<void>>()
 const mountedWorkspaceKeys = new Map<string, number>()
 let globalRunsCleanup: (() => void) | null = null
@@ -42,7 +47,7 @@ function sortRuns(runs: WorkflowRunDTO[]): WorkflowRunDTO[] {
 
 function spliceRun(runs: WorkflowRunDTO[], next: WorkflowRunDTO): WorkflowRunDTO[] {
   const filtered = runs.filter((r) => r.id !== next.id)
-  filtered.push(next)
+  filtered.push(preferWorkflowRun(runs.find(run => run.id === next.id), next))
   return sortRuns(filtered)
 }
 
@@ -50,34 +55,26 @@ export function useWorkflowRuns(workspaceId: string | null | undefined): UseWork
   const workspaceKey = getWorkspaceKey(workspaceId)
   const [state, setState] = useAtom(workflowRunsStateAtomFamily(workspaceKey))
 
-  const refresh = useCallback(async (authoritative = false) => {
+  const controlCommands = useRef(new Map<string, DurableWorkflowCommandDTO>())
+  const refresh = useCallback(async (authoritative = false, silent = false) => {
     const existing = inFlightRefreshes.get(workspaceKey)
     if (existing) return existing
 
     const run = (async () => {
-      setState((prev) => ({ ...prev, loading: true }))
+      if (!silent) setState((prev) => ({ ...prev, loading: true }))
       try {
         const runs = workspaceId
           ? await window.electronAPI.listWorkflowRuns(workspaceId)
           : []
         setState((prev) => {
-          const byId = new Map<string, WorkflowRunDTO>()
-          for (const run of runs) byId.set(run.id, run)
-          if (!authoritative) {
-            for (const run of prev.runs) {
-              const listed = byId.get(run.id)
-              if (!listed || (run.updatedAt ?? '') > (listed.updatedAt ?? '')) {
-                byId.set(run.id, run)
-              }
-            }
-          }
           return {
-            runs: sortRuns([...byId.values()]),
+            runs: mergeWorkflowRuns(runs, prev.runs, authoritative),
             loading: false,
+            hasLoaded: true,
+            listRevision: prev.listRevision + 1,
             error: null,
           }
         })
-        loadedWorkspaceKeys.add(workspaceKey)
       } catch (err) {
         setState((prev) => ({
           ...prev,
@@ -108,11 +105,7 @@ export function useWorkflowRuns(workspaceId: string | null | undefined): UseWork
     }
   }, [refresh, setState, workspaceKey])
 
-  useEffect(() => {
-    if (!loadedWorkspaceKeys.has(workspaceKey)) {
-      refresh()
-    }
-  }, [refresh, workspaceKey])
+
 
   useEffect(() => {
     mountedWorkspaceKeys.set(workspaceKey, (mountedWorkspaceKeys.get(workspaceKey) ?? 0) + 1)
@@ -137,15 +130,36 @@ export function useWorkflowRuns(workspaceId: string | null | undefined): UseWork
     }
   }, [workspaceKey])
 
+  useEffect(() => {
+    if (!workspaceId) return
+    return startWorkflowRunDiscovery({ refresh: () => refresh(false, true), target: window })
+  }, [workspaceId, refresh])
+
+  const control = useCallback(async (run: WorkflowRunDTO, action: 'pause' | 'resume' | 'cancel') => {
+    if (!workspaceId) throw new Error('No active workspace')
+    try {
+      const saved = await controlDurableRun({ workspaceId, run, action, commands: controlCommands.current, api: window.electronAPI })
+      setState(prev => ({ ...prev, runs: spliceRun(prev.runs, saved) }))
+    } catch (error) {
+      await refresh(false, true)
+      throw error
+    }
+  }, [workspaceId, setState, refresh])
+
   const start = useCallback(async (
     workflowSlug: string,
     triggerInputs: Record<string, unknown>,
   ): Promise<WorkflowRunDTO> => {
     if (!workspaceId) throw new Error('No active workspace')
-    const created = await window.electronAPI.startWorkflowRun(workspaceId, workflowSlug, triggerInputs)
-    setState((prev) => ({ ...prev, runs: spliceRun(prev.runs, created) }))
-    return created
-  }, [setState, workspaceId])
+    try {
+      const created = await window.electronAPI.startWorkflowRun(workspaceId, workflowSlug, triggerInputs)
+      setState((prev) => ({ ...prev, runs: spliceRun(prev.runs, created) }))
+      return created
+    } catch (error) {
+      void refreshAfterUncertainWorkflowStart(() => refresh(false, true))
+      throw error
+    }
+  }, [setState, workspaceId, refresh])
 
   const cancel = useCallback(async (runId: string) => {
     if (!workspaceId) return
@@ -172,11 +186,14 @@ export function useWorkflowRuns(workspaceId: string | null | undefined): UseWork
   return {
     runs: state.runs,
     loading: state.loading,
+    hasLoaded: state.hasLoaded,
+    listRevision: state.listRevision,
     error: state.error,
     refresh,
     start,
     cancel,
     resume,
+    control,
     canResume: window.electronAPI.isChannelAvailable(RPC_CHANNELS.workflowRuns.RESUME),
     remove,
   }

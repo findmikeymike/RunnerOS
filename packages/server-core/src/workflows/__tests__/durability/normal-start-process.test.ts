@@ -1,0 +1,26 @@
+import { expect, test } from 'bun:test';
+import { createServer } from 'node:http';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { startProcess } from './process-support';
+
+test('normal runner Start reaches default Pi backend and performs a native read in isolated configuration', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'artist-normal-pi-')); let requests = 0, nativeReads = 0;
+  const server = createServer(async (req, res) => {
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    const body = JSON.parse(raw); requests++; const done = body.messages.some((message: { role: string }) => message.role === 'tool');
+    if (done) { nativeReads++; expect(raw).toContain('NORMAL_START_NATIVE_READ'); }
+    const delta = done ? { role: 'assistant', content: 'Read completed' } : { role: 'assistant', tool_calls: [{ index: 0, id: 'read-1', type: 'function', function: { name: 'read', arguments: JSON.stringify({ path: join(root, 'fixture.txt') }) } }] };
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    for (const [value, finish] of [[delta, null], [{}, done ? 'stop' : 'tool_calls']]) res.write(`data: ${JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', created: 1, model: 'approval-fixture', choices: [{ index: 0, delta: value, finish_reason: finish }] })}\n\n`);
+    res.end('data: [DONE]\n\n');
+  });
+  await new Promise<void>(yes => server.listen(0, '127.0.0.1', yes));
+  writeFileSync(join(root, 'synthetic-only'), 'approval-fixture'); writeFileSync(join(root, 'fixture.txt'), 'NORMAL_START_NATIVE_READ');
+  try {
+    const child = startProcess([join(import.meta.dir, 'normal-start-worker.ts'), root, `http://127.0.0.1:${(server.address() as { port: number }).port}`, 'start'], { CRAFT_CONFIG_DIR: join(root, 'config'), CRAFT_PRODUCT_VARIANT: 'artist-os', CRAFT_BUNDLED_ASSETS_ROOT: resolve(import.meta.dir, '../../../../../../apps/electron/resources') }, process.execPath, 25000);
+    const result = await child.done; expect({ code: result.code, error: result.code ? result.stderr : '' }).toEqual({ code: 0, error: '' });
+    expect(result.stdout).toContain('"barrier":"admitted"'); expect(result.stdout).toContain('"result":"succeeded"'); expect(requests).toBe(2); expect(nativeReads).toBe(1);
+  } finally { server.closeAllConnections(); await new Promise<void>(yes => server.close(() => yes())); rmSync(root, { recursive: true, force: true }); }
+}, 30000);

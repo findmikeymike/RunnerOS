@@ -124,6 +124,8 @@ export interface WorkflowStep {
 }
 
 export interface WorkflowMetadata {
+  /** Explicit execution capability opt-in; omission preserves the legacy engine. */
+  execution?: 'durable-local-read';
   name: string;
   description: string;
   /** Single emoji shown in pickers. */

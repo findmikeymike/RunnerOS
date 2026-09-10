@@ -19,6 +19,7 @@ import {
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import type { DurableWorkflowActor } from '../../workflows/durable-workflow-controls'
 import {
   approveEscalation,
   listPendingEscalations,
@@ -59,6 +60,14 @@ async function assertWorkflowRunPermission(workspaceId: string, action: 'agent.c
 }
 
 export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDeps): void {
+  const actor = (ctx: { clientId: string; workspaceId: string | null }): DurableWorkflowActor =>
+    ({ clientId: ctx.clientId, ...(ctx.workspaceId === null ? {} : { workspaceId: ctx.workspaceId }) })
+  // Only absence permits legacy fallback. Authorization/storage errors must propagate.
+  const durableRun = (workspaceId: string, runId: string, ctx: { clientId: string; workspaceId: string | null }) =>
+    deps.getDurableWorkflowRuns?.().get(workspaceId, runId, actor(ctx)) ?? Promise.resolve(null)
+  const rejectDurableLegacyMutation = async (workspaceId: string, runId: string, ctx: { clientId: string; workspaceId: string | null }) => {
+    if (await durableRun(workspaceId, runId, ctx)) throw new Error('Use durable workflow controls for this saved run; legacy rerun and deletion are unavailable.')
+  }
   server.handle(
     RPC_CHANNELS.workflowRuns.DURABLE_CONTROL,
     async (ctx, workspaceId: string, runId: string, command: DurableWorkflowCommandDTO): Promise<DurableWorkflowControlResultDTO> => {
@@ -134,7 +143,7 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
   server.handle(
     RPC_CHANNELS.workflowRuns.START,
     async (
-      _ctx,
+      ctx,
       workspaceId: string,
       workflowSlug: string,
       triggerInputs: Record<string, unknown>,
@@ -147,27 +156,29 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
       const workflow = loadGlobalWorkflow(workflowSlug)
       if (!workflow) throw new Error(`Workflow not found: ${workflowSlug}`)
       const runner = requireRunner(deps)
-      return runner.start({ workflow, workspaceId, triggerInputs: normalizeWorkflowTriggerInputs(workflow, triggerInputs) })
+      return runner.start({ workflow, workspaceId, triggerInputs: normalizeWorkflowTriggerInputs(workflow, triggerInputs), invocation: 'manual-ui', actor: actor(ctx) })
     },
   )
 
   server.handle(
     RPC_CHANNELS.workflowRuns.GET,
-    async (_ctx, workspaceId: string, runId: string): Promise<WorkflowRunSnapshot | null> => {
-      return readRun(resolveRootPath(workspaceId), runId)
+    async (ctx, workspaceId: string, runId: string): Promise<WorkflowRunSnapshot | null> => {
+      return await durableRun(workspaceId, runId, ctx) ?? readRun(resolveRootPath(workspaceId), runId)
     },
   )
 
   server.handle(
     RPC_CHANNELS.workflowRuns.LIST,
-    async (_ctx, workspaceId: string): Promise<WorkflowRunSnapshot[]> => {
-      return listRuns(resolveRootPath(workspaceId))
+    async (ctx, workspaceId: string): Promise<WorkflowRunSnapshot[]> => {
+      const legacy = listRuns(resolveRootPath(workspaceId))
+      return deps.getDurableWorkflowRuns ? deps.getDurableWorkflowRuns().list(workspaceId, actor(ctx), legacy) : legacy
     },
   )
 
   server.handle(
     RPC_CHANNELS.workflowRuns.CANCEL,
-    async (_ctx, workspaceId: string, runId: string): Promise<WorkflowRunSnapshot> => {
+    async (ctx, workspaceId: string, runId: string): Promise<WorkflowRunSnapshot> => {
+      await rejectDurableLegacyMutation(workspaceId, runId, ctx)
       await assertWorkflowRunPermission(workspaceId, 'agent.chat')
       const runner = requireRunner(deps)
       return runner.cancel(workspaceId, runId)
@@ -177,11 +188,12 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
   server.handle(
     WORKFLOW_RUNS_RESUME,
     async (
-      _ctx,
+      ctx,
       workspaceId: string,
       runId: string,
       stepId?: string,
     ): Promise<WorkflowRunSnapshot> => {
+      await rejectDurableLegacyMutation(workspaceId, runId, ctx)
       await assertWorkflowRunPermission(workspaceId, 'agent.chat')
       const workspaceRoot = resolveRootPath(workspaceId)
       const original = readRun(workspaceRoot, runId)
@@ -202,7 +214,8 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
 
   server.handle(
     RPC_CHANNELS.workflowRuns.DELETE,
-    async (_ctx, workspaceId: string, runId: string): Promise<boolean> => {
+    async (ctx, workspaceId: string, runId: string): Promise<boolean> => {
+      await rejectDurableLegacyMutation(workspaceId, runId, ctx)
       await assertWorkflowRunPermission(workspaceId, 'files.write')
       const rootPath = resolveRootPath(workspaceId)
       const existing = readRun(rootPath, runId)

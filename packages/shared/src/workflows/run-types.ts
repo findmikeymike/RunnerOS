@@ -120,6 +120,14 @@ export interface WorkflowRunStep {
  * run (per "Risks & open questions" in `02-runtime.md`).
  */
 export interface WorkflowRunSnapshot {
+  /** Journal-backed projection; use durable controls instead of legacy rerun/delete. */
+  durable?: {
+    engine: 'sqlite-v2-readonly-1';
+    version: number;
+    status: import('../protocol/durable-execution.ts').DurableRunStatus;
+    controlRevision: number;
+    continuationRevision: number;
+  };
   /** UUID. */
   id: string;
   workflowSlug: string;

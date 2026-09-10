@@ -170,3 +170,63 @@ test('real control service returns committed receipt without waiting and preserv
     expect(journal.get('control-run', 'workspace').status).toBe('running')
   } finally { journal.close(); rmSync(root, { recursive: true, force: true }) }
 })
+
+describe('normal run history uses authenticated durable projections', () => {
+  function readsHarness(service?: NonNullable<HandlerDeps['getDurableWorkflowRuns']> extends () => infer T ? T : never) {
+    const handlers = new Map<string, HandlerFn>()
+    let legacyControls = 0
+    registerWorkflowRunsHandlers({ handle: (channel: string, fn: HandlerFn) => handlers.set(channel, fn) } as unknown as RpcServer,
+      { ...(service ? { getDurableWorkflowRuns: () => service } : {}), getWorkflowRunner: () => { legacyControls++; throw new Error('legacy control called') } } as unknown as HandlerDeps)
+    return { invoke: (channel: string, ...args: unknown[]) => handlers.get(channel)!(context, 'workspace', ...args), legacyControls: () => legacyControls }
+  }
+  const saved = { id: 'saved', workspaceId: 'workspace', state: 'paused', createdAt: '2026-01-01', durable: { engine: 'sqlite-v2-readonly-1', version: 3 } } as workflows.WorkflowRunSnapshot
+
+  test('GET prefers saved journal data; LIST delegates collision filtering with trusted actor', async () => {
+    const getWorkspace = spyOn(config, 'getWorkspaceByNameOrId').mockReturnValue({ id: 'workspace', rootPath: '/fixture' } as ReturnType<typeof config.getWorkspaceByNameOrId>)
+    const legacy = { ...saved, durable: undefined, state: 'running' } as workflows.WorkflowRunSnapshot
+    const read = spyOn(workflows, 'readRun').mockReturnValue(legacy)
+    const list = spyOn(workflows, 'listRuns').mockReturnValue([legacy])
+    const calls: unknown[] = []
+    try {
+      const h = readsHarness({ get: async (...args) => { calls.push(args); return saved }, list: async (...args) => { calls.push(args); return [saved] } })
+      expect(await h.invoke(RPC_CHANNELS.workflowRuns.GET, 'saved')).toEqual(saved)
+      expect(read).not.toHaveBeenCalled()
+      expect(await h.invoke(RPC_CHANNELS.workflowRuns.LIST)).toEqual([saved])
+      expect(calls).toEqual([
+        ['workspace', 'saved', { clientId: context.clientId, workspaceId: context.workspaceId }],
+        ['workspace', { clientId: context.clientId, workspaceId: context.workspaceId }, [legacy]],
+      ])
+    } finally { read.mockRestore(); list.mockRestore(); getWorkspace.mockRestore() }
+  })
+
+  test('no storage or authorization error falls through to legacy GET or mutations', async () => {
+    for (const message of ['durable-runs-principal-mismatch', 'durable-workflow-not-public', 'SQLITE_FULL']) {
+      const read = spyOn(workflows, 'readRun').mockReturnValue(saved)
+      try {
+        const h = readsHarness({ get: async () => { throw new Error(message) }, list: async () => [] })
+        for (const channel of [RPC_CHANNELS.workflowRuns.GET, RPC_CHANNELS.workflowRuns.CANCEL, RPC_CHANNELS.workflowRuns.RESUME, RPC_CHANNELS.workflowRuns.DELETE]) {
+          await expect(h.invoke(channel, 'saved')).rejects.toThrow(message)
+        }
+        expect(read).not.toHaveBeenCalled(); expect(h.legacyControls()).toBe(0)
+      } finally { read.mockRestore() }
+    }
+  })
+
+  test('visible durable runs reject every legacy mutation without creating a rerun', async () => {
+    const h = readsHarness({ get: async () => saved, list: async () => [saved] })
+    for (const channel of [RPC_CHANNELS.workflowRuns.CANCEL, RPC_CHANNELS.workflowRuns.RESUME, RPC_CHANNELS.workflowRuns.DELETE]) {
+      await expect(h.invoke(channel, 'saved')).rejects.toThrow('Use durable workflow controls')
+    }
+    expect(h.legacyControls()).toBe(0)
+  })
+
+  test('true absence and a disabled host preserve legacy reads', async () => {
+    const getWorkspace = spyOn(config, 'getWorkspaceByNameOrId').mockReturnValue({ id: 'workspace', rootPath: '/fixture' } as ReturnType<typeof config.getWorkspaceByNameOrId>)
+    const read = spyOn(workflows, 'readRun').mockReturnValue(saved)
+    try {
+      expect(await readsHarness().invoke(RPC_CHANNELS.workflowRuns.GET, 'legacy')).toBe(saved)
+      expect(await readsHarness({ get: async () => null, list: async () => [] }).invoke(RPC_CHANNELS.workflowRuns.GET, 'legacy')).toBe(saved)
+      expect(read).toHaveBeenCalledTimes(2)
+    } finally { read.mockRestore(); getWorkspace.mockRestore() }
+  })
+})

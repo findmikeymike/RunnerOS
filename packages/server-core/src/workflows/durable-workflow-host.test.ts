@@ -1,3 +1,9 @@
+import * as workspaceConfig from '@craft-agent/shared/config';
+import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
+import { registerWorkflowRunsHandlers } from '../handlers/rpc/workflow-runs';
+import type { HandlerDeps } from '../handlers/handler-deps';
+import type { HandlerFn, RpcServer } from '../transport/types';
+import type { WorkflowRunSnapshot } from '../../../shared/src/workflows/run-types';
 import { afterEach, expect, test, spyOn } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
@@ -137,4 +143,94 @@ test('a drained backend error preserves the first close failure but does not poi
   await expect(host.start(f.input)).rejects.toThrow('durable-host-closing');await host.close();
   const key=loadDurableKey(f.root,protection),observer=new DurableJournal({configRoot:f.root,key});key.fill(0);
   try{expect(observer.get(f.input.runId,'w').status).toBe('paused');}finally{observer.close();}
+});
+
+function readWorkflow() { return { slug: 'read-notes', source: 'global' as const, path: '/host/read-notes', body: '', metadata: { name: 'Read', description: '', trigger: { type: 'manual' as const }, outputs: { mode: 'none' as const }, steps: [{ id: 'read', agent: 'researcher', input: 'Read notes' }] } }; }
+
+test('host owns admitted workflow execution after acknowledgement and drains it on close', async () => {
+  const f = fixture(); let entered!: () => void, release!: () => void;
+  const ready = new Promise<void>(resolve => entered = resolve), gate = new Promise<void>(resolve => release = resolve);
+  f.runnerOptions.createBackend = args => ({ async *chat() {
+    const bridge = args.coreConfig.durableExecution!;
+    await bridge.checkpoint({ kind: 'model-start', turn: 0, context: {} }); entered(); await gate;
+    await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'saved' }] } });
+    await bridge.checkpoint({ kind: 'complete' });
+  }, async abort() {}, destroy() {} });
+  const host = f.open(); const accepted = await host.admitWorkflow(readWorkflow(), { ...f.input, resolvedAgentSlug: 'researcher' });
+  expect(accepted.snapshot.status).toBe('running'); await ready;
+  expect((await host.runs.get('w', f.input.runId, actor))?.state).toBe('running');
+  expect((await host.runs.list('w', actor)).map(run => run.id)).toEqual([f.input.runId]);
+  let closed = false; const closing = host.close().then(() => { closed = true; });
+  await expect(host.admitWorkflow(readWorkflow(), { ...f.input, resolvedAgentSlug: 'researcher' })).rejects.toThrow('durable-host-closing');
+  expect(closed).toBe(false); release(); expect((await accepted.execution).status).toBe('paused'); await closing; expect(closed).toBe(true);
+  await expect(host.runs.list('w', actor)).rejects.toThrow('durable-host-closing');
+});
+
+test('close during workflow binding lookup prevents admission from appearing after journal shutdown', async () => {
+  const f = fixture(), binding = await f.runnerOptions.resolveBinding('w', 'test-local', 'test-model');
+  let entered!: () => void, release!: () => void;
+  const ready = new Promise<void>(resolve => entered = resolve), gate = new Promise<void>(resolve => release = resolve);
+  f.runnerOptions.resolveBinding = async () => { entered(); await gate; return binding; };
+  const host = f.open(), admission = host.admitWorkflow(readWorkflow(), { ...f.input, resolvedAgentSlug: 'researcher' });
+  void admission.catch(() => {}); await ready;
+  const closing = host.close(); release(); await expect(admission).rejects.toThrow('durable-host-closing'); await closing;
+  const key = loadDurableKey(f.root, protection), observer = new DurableJournal({ configRoot: f.root, key }); key.fill(0);
+  try { expect(observer.list('w')).toEqual([]); } finally { observer.close(); }
+});
+
+test('normal history RPC and durable control preserve the admitted run across pause, host reopen, and cached resume', async () => {
+  const f = fixture();
+  const binding = await f.runnerOptions.resolveBinding('w', 'test-local', 'test-model');
+  const workspaceSpy = spyOn(workspaceConfig, 'getWorkspaceByNameOrId').mockImplementation(id => id === 'w' ? binding.workspace : null);
+  cleanup.push(() => workspaceSpy.mockRestore());
+  let release!: () => void, entered!: () => void, finished!: () => void, modelCalls = 0, backends = 0;
+  const gate = new Promise<void>(resolve => release = resolve), ready = new Promise<void>(resolve => entered = resolve), resumed = new Promise<void>(resolve => finished = resolve);
+  f.runnerOptions.createBackend = args => {
+    const backendNumber = ++backends;
+    return { async *chat() {
+      const bridge = args.coreConfig.durableExecution!;
+      const result = await bridge.checkpoint({ kind: 'model-start', turn: 0, context: {} });
+      if (result.cached === undefined) {
+        modelCalls++; entered(); await gate;
+        await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'saved once' }] } });
+      }
+      await bridge.checkpoint({ kind: 'complete' });
+    }, async abort() {}, destroy() { if (backendNumber === 2) finished(); } };
+  };
+  let host = f.open();
+  const handlers = new Map<string, HandlerFn>();
+  registerWorkflowRunsHandlers({ handle: (channel: string, handler: HandlerFn) => handlers.set(channel, handler), push() {} } as unknown as RpcServer, {
+    getDurableWorkflowRuns: () => host.runs, getDurableWorkflowControls: () => host.controls,
+    getWorkflowRunner: () => { throw new Error('legacy runner must not execute'); },
+  } as unknown as HandlerDeps);
+  const ctx = { ...actor, webContentsId: null };
+  const get = () => handlers.get(RPC_CHANNELS.workflowRuns.GET)!(ctx, 'w', f.input.runId) as Promise<WorkflowRunSnapshot>;
+  const list = () => handlers.get(RPC_CHANNELS.workflowRuns.LIST)!(ctx, 'w') as Promise<WorkflowRunSnapshot[]>;
+  const accepted = await host.admitWorkflow(readWorkflow(), { ...f.input, resolvedAgentSlug: 'researcher' }); await ready;
+  const running = await get(); expect(running.state).toBe('running'); expect(running.durable).toBeDefined();
+  expect((await list()).map(run => run.id)).toEqual([f.input.runId]);
+  await handlers.get(RPC_CHANNELS.workflowRuns.DURABLE_CONTROL)!(ctx, 'w', f.input.runId, { action: 'pause', commandId: 'rpc-pause', expectedVersion: running.durable!.version });
+  release(); expect((await accepted.execution).status).toBe('paused'); await host.close();
+  host = f.open();
+  const paused = await get(); expect(paused.id).toBe(f.input.runId); expect(paused.state).toBe('paused');
+  await handlers.get(RPC_CHANNELS.workflowRuns.DURABLE_CONTROL)!(ctx, 'w', f.input.runId, { action: 'resume', commandId: 'rpc-resume', expectedVersion: paused.durable!.version });
+  await resumed;
+  const completed = await get(); expect(completed.id).toBe(f.input.runId); expect(completed.state).toBe('succeeded');
+  expect((await list()).map(run => run.id)).toEqual([f.input.runId]); expect(modelCalls).toBe(1); expect(backends).toBe(2);
+  await host.close();
+});
+test('cancelled durable backend keeps workflow admission blocked until actual backend drain', async () => {
+  const f = fixture(); let entered!: () => void, release!: () => void;
+  const ready = new Promise<void>(resolve => entered = resolve), gate = new Promise<void>(resolve => release = resolve);
+  let aborts = 0, destroyed = false;
+  f.runnerOptions.createBackend = () => ({ async *chat() { entered(); await gate; }, abort: async () => { aborts++; }, destroy: async () => { destroyed = true; } });
+  const host = f.open();
+  const workflow = { slug: 'read', path: f.root, source: 'global' as const, body: '', metadata: { name: 'Read', description: 'Read', execution: 'durable-local-read' as const, trigger: { type: 'manual' as const }, outputs: { mode: 'none' as const }, steps: [{ id: 'read', agent: 'reader', input: 'Read' }] } };
+  const { prompt: _prompt, approvalPrincipalId: _principal, ...input } = f.input;
+  const admitted = await host.admitWorkflowForActor(workflow, { ...input, resolvedAgentSlug: 'reader' }, actor); await ready;
+  const run = (await host.runs.get('w', f.input.runId, actor))!;
+  const cancelled = await host.controls.control('w', f.input.runId, { action: 'cancel', commandId: 'cancel', expectedVersion: run.durable!.version }, actor);
+  expect(cancelled.state.status).toBe('cancelled'); expect(aborts).toBe(1); expect(destroyed).toBe(false);
+  expect(await host.hasUnfinishedWorkflow('w', 'read')).toBe(true);
+  release(); await admitted.execution; expect(destroyed).toBe(true); expect(await host.hasUnfinishedWorkflow('w', 'read')).toBe(false);
 });

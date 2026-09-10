@@ -1,3 +1,6 @@
+import { createDurableWorkflowStart } from '../workflows/durable-workflow-start'
+import { assertDurableWorkflowAgentMetadata, resolveDurableWorkflowBundle } from '../workflows/durable-workflow-bundle'
+import type { DurableWorkflowHost } from '../workflows/durable-workflow-host'
 import { resolveRuntimeIdentity } from '@craft-agent/shared/config/runtime-identity'
 import { sanitizePrivateSkillActivityInput, sanitizePrivateSkillResultPaths, isPrivateSkillLoaderTool } from '@craft-agent/shared/agent/core/private-skill-activity'
 import { inheritHostAgentFocus, createPendingAgentFocusState, createAgentFocusTransferIntent, validateTransferredAgentFocus, parseAgentFocusTransferIntent } from '@craft-agent/shared/sessions'
@@ -174,7 +177,7 @@ import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, scheduledWork
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
-import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
+import { WorkflowRunner, type WorkflowRunEvent, type WorkflowRunnerDeps } from '../workflows/runner'
 import { findExactWorkflowStepOutput } from '../workflows/step-output'
 import { ScheduledWorkRunner, type ScheduledSocialExecutor, type ScheduledSocialPreparer } from '../scheduled-work/ScheduledWorkRunner'
 import { queueAutomationWork } from '../scheduled-work/AutomationWorkQueue'
@@ -2249,6 +2252,8 @@ export class SessionManager implements ISessionManager {
   private lastTimestamp = 0
   /** Workflow runner — bootstrapped during `initialize()`. */
   private workflowRunner!: WorkflowRunner
+  private durableWorkflowStart?: WorkflowRunnerDeps['durableStart']
+  private durableWorkflowAdmissionGuard?: (workspaceId: string, workflowSlug: string) => Promise<void>
   private scheduledWorkRunner?: ScheduledWorkRunner
   private automaticPromptAdmissionTail: Promise<void> = Promise.resolve()
   private automaticPromptLaneOccupied = false
@@ -3506,6 +3511,38 @@ export class SessionManager implements ISessionManager {
   /** Expose the workflow runner so RPC handlers can reach it via HandlerDeps. */
   getWorkflowRunner(): WorkflowRunner {
     return this.workflowRunner
+  }
+
+  /** Installed by the local desktop host only after protected durable storage opens. */
+  setDurableWorkflowHost(host: DurableWorkflowHost): void {
+    this.durableWorkflowAdmissionGuard = async (workspaceId, workflowSlug) => {
+      if (await host.hasUnfinishedWorkflow(workspaceId, workflowSlug)) {
+        throw new Error('This workflow has unfinished work. Open its saved run to continue or stop it.')
+      }
+    }
+    this.durableWorkflowStart = createDurableWorkflowStart({
+      host,
+      getWorkspaceRootPath: workspaceId => {
+        const workspace = getWorkspaceByNameOrId(workspaceId)
+        if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+        return workspace.rootPath
+      },
+      resolveBundle: async (workspaceId, agentSlug) => {
+        const agent = loadGlobalAgent(agentSlug)
+        if (!agent) return null
+        try { assertDurableWorkflowAgentMetadata(agent.metadata) }
+        catch (error) {
+          if (error instanceof Error && error.message === 'unsupported-durable-agent-bundle') return null
+          throw error
+        }
+        const options = await this.resolveAgentSessionOptions(workspaceId, agentSlug, { referenceMode: 'strict' })
+        try { return resolveDurableWorkflowBundle(workspaceId, agentSlug, options) }
+        catch (error) {
+          if (error instanceof Error && error.message === 'unsupported-durable-agent-bundle') return null
+          throw error
+        }
+      },
+    })
   }
 
   private signalService?: SignalService
@@ -6497,6 +6534,8 @@ user a clickable link to where the thing now lives.`
       await this.loadSessionsFromDisk()
 
       this.workflowRunner = new WorkflowRunner({
+        durableStart: input => this.durableWorkflowStart?.(input) ?? null,
+        assertWorkflowAdmissionAvailable: (workspaceId, workflowSlug) => this.durableWorkflowAdmissionGuard?.(workspaceId, workflowSlug),
         createSession: (wsId, opts) => this.createSession(wsId, opts).then((s) => ({ id: s.id })),
         resolveAgentSessionOptions: (wsId, agentSlug, options) =>
           this.resolveAgentSessionOptions(wsId, agentSlug, options),

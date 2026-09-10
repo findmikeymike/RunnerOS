@@ -334,6 +334,7 @@ export function parseWorkflowFile(
 
   const data = parsed.data as Record<string, unknown>;
   if (hasUnsupportedExecutionField(data)) return null;
+  if (data.execution !== undefined && data.execution !== 'durable-local-read') return null;
 
   const name = typeof data.name === 'string' ? data.name.trim() : '';
   const description = typeof data.description === 'string' ? data.description.trim() : '';
@@ -429,6 +430,7 @@ export function parseWorkflowFile(
 
   return {
     metadata: {
+      ...(data.execution === 'durable-local-read' ? { execution: data.execution } : {}),
       name,
       description,
       avatar,
@@ -448,6 +450,7 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
     description: metadata.description,
   };
   if (metadata.avatar) data.avatar = metadata.avatar;
+  if (metadata.execution !== undefined) data.execution = metadata.execution;
 
   const trigger: Record<string, unknown> = { type: metadata.trigger.type };
   if (metadata.trigger.inputs && metadata.trigger.inputs.length > 0) {
@@ -488,6 +491,7 @@ function hasUnsupportedExecutionField(data: Record<string, unknown>): boolean {
 }
 
 function validateSerializableWorkflowMetadata(metadata: WorkflowMetadata): void {
+  if (metadata.execution !== undefined && metadata.execution !== 'durable-local-read') throw new Error('Unsupported workflow execution engine.');
   if (hasUnsupportedExecutionField(metadata as unknown as Record<string, unknown>)) {
     throw new Error('Unsupported workflow execution fields are not implemented.');
   }
