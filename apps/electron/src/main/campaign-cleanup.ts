@@ -10,7 +10,15 @@ import { deleteWorkspaceSessionLogEntries } from '@craft-agent/shared/sessions-l
 import { listSessions } from '@craft-agent/shared/sessions'
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { previewCampaignCleanup, preserveCampaignForDeletion, type CampaignCleanupOptions, type CampaignCleanupPreview, type CampaignCleanupResult } from '@craft-agent/shared/campaign-cleanup'
+import { beginCampaignRemovalJournal, type CampaignRemovalJournal } from './campaign-cleanup-recovery'
 import type { WorkspaceMigrationRuntimeLease } from '@craft-agent/server-core/handlers'
+
+export class CampaignCleanupRecoveryRequiredError extends Error {
+  constructor(message: string) {
+    super(`${message} Your campaign files are retained. Restart Artist OS to retry recovery; do not recreate the campaign folder.`)
+    this.name = 'CampaignCleanupRecoveryRequiredError'
+  }
+}
 
 export interface CampaignCleanupRuntime {
   quiesceCampaignForDeletion(workspaceId: string): Promise<WorkspaceMigrationRuntimeLease>
@@ -110,6 +118,7 @@ export interface CampaignRemovalStorage {
   saveConfig(config: NonNullable<ReturnType<typeof loadStoredConfig>>): void
   rename(source: string, destination: string): void
   remove(path: string): void
+  beginJournal?: typeof beginCampaignRemovalJournal
 }
 
 const campaignRemovalStorage: CampaignRemovalStorage = {
@@ -118,16 +127,28 @@ const campaignRemovalStorage: CampaignRemovalStorage = {
   saveConfig,
   rename: renameSync,
   remove: path => rmSync(path, { recursive: true, force: true }),
+  beginJournal: beginCampaignRemovalJournal,
 }
 
-function restoreStagedRoots(stagedRoots: readonly StagedCampaignRoot[], storage: CampaignRemovalStorage): void {
+function restoreStagedRoots(stagedRoots: readonly StagedCampaignRoot[], storage: CampaignRemovalStorage, journal?: CampaignRemovalJournal): void {
   const failures: string[] = []
   for (const staged of [...stagedRoots].reverse()) {
-    if (!storage.exists(staged.staged)) continue
-    try { storage.rename(staged.staged, staged.source) }
+    if (!storage.exists(staged.staged)) {
+      if (journal) {
+        try { journal.verifyRoot(staged, 'source') }
+        catch { failures.push(staged.source) }
+      }
+      continue
+    }
+    try {
+      if (storage.exists(staged.source)) throw new Error('Rollback destination already exists')
+      journal?.verifyRoot(staged, 'staged')
+      storage.rename(staged.staged, staged.source)
+      journal?.syncRoot(staged)
+    }
     catch { failures.push(staged.source) }
   }
-  if (failures.length) throw new Error(`Campaign removal could not be rolled back safely: ${failures.join(', ')}`)
+  if (failures.length) throw new CampaignCleanupRecoveryRequiredError(`Campaign removal could not be rolled back safely: ${failures.join(', ')}`)
 }
 
 /**
@@ -152,16 +173,22 @@ export function removeFilesAndRegistration(
   const previousActiveSessionId = config.activeSessionId
   const roots = [workspace.rootPath]
   if (resolve(legacyRoot) !== resolve(workspace.rootPath) && storage.exists(legacyRoot)) roots.unshift(legacyRoot)
+  const existingRoots = roots.filter(source => storage.exists(source))
+  const transaction = storage.beginJournal?.(workspace, existingRoots, config.workspaces)
+  const plannedRoots = transaction?.roots ?? existingRoots.map(source => ({ source, staged: join(dirname(source), `.${basename(source)}.artist-os-delete-${randomUUID()}`) }))
+  const journal = transaction?.journal
   const stagedRoots: StagedCampaignRoot[] = []
   try {
-    for (const source of roots) {
-      if (!storage.exists(source)) continue
-      const staged = join(dirname(source), `.${basename(source)}.artist-os-delete-${randomUUID()}`)
-      storage.rename(source, staged)
-      stagedRoots.push({ source, staged })
+    for (const root of plannedRoots) {
+      if (storage.exists(root.staged)) throw new Error('Cleanup staging destination already exists')
+      journal?.verifyRoot(root, 'source')
+      storage.rename(root.source, root.staged)
+      stagedRoots.push(root)
+      journal?.syncRoot(root)
     }
   } catch (error) {
-    restoreStagedRoots(stagedRoots, storage)
+    restoreStagedRoots(stagedRoots, storage, journal)
+    journal?.finish()
     throw error
   }
 
@@ -173,19 +200,41 @@ export function removeFilesAndRegistration(
   try {
     storage.saveConfig(config)
   } catch (error) {
-    config.workspaces.push(workspace)
-    config.activeWorkspaceId = previousActiveWorkspaceId
-    config.activeSessionId = previousActiveSessionId
-    restoreStagedRoots(stagedRoots, storage)
-    throw error
+    // A write can throw after its rename committed. Consult raw registration,
+    // without the config loader that would recreate the staged campaign root.
+    let registrationRemoved = false
+    try { registrationRemoved = journal?.registrationRemoved() ?? false }
+    catch { throw new CampaignCleanupRecoveryRequiredError('Campaign cleanup needs recovery because its registration could not be confirmed. Its staged files were retained.') }
+    if (!registrationRemoved) {
+      config.workspaces.push(workspace)
+      config.activeWorkspaceId = previousActiveWorkspaceId
+      config.activeSessionId = previousActiveSessionId
+      restoreStagedRoots(stagedRoots, storage, journal)
+      journal?.finish()
+      throw error
+    }
   }
 
+  try {
+    if (journal && !journal.registrationRemoved()) throw new Error('Campaign registration did not commit')
+    journal?.syncRegistration()
+  } catch {
+    return ['Campaign registration was updated, but durable cleanup could not finish. Its staged files and recovery journal were retained for the next start.']
+  }
   const warnings: string[] = []
   for (const staged of stagedRoots) {
-    try { storage.remove(staged.staged) }
+    try {
+      journal?.verifyRoot(staged, 'staged')
+      storage.remove(staged.staged)
+      journal?.syncRoot(staged)
+    }
     catch {
       warnings.push(`Campaign files were removed from Artist OS, but a temporary cleanup folder remains at ${staged.staged}.`)
     }
+  }
+  if (!warnings.length) {
+    try { journal?.finish() }
+    catch { warnings.push('Campaign was deleted, but its cleanup journal needs recovery on the next start.') }
   }
   return warnings
 }
@@ -237,7 +286,7 @@ export function createCampaignCleanupController(deps: Dependencies) {
         try { deps.onDeleted(result) } catch (error) { console.error('Campaign deleted; window refresh failed:', error) }
         return result
       } catch (error) {
-        if (lease && !removed) {
+        if (lease && !removed && !(error instanceof CampaignCleanupRecoveryRequiredError)) {
           await deps.runtime.resumeWorkspaceAfterMigration(lease)
           if (messagingStopped) await deps.resumeMessaging(workspaceId)
         }

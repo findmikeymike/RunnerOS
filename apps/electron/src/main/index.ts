@@ -1,3 +1,4 @@
+import { recoverCampaignCleanupTransactions } from './campaign-cleanup-recovery'
 import { createSafeRelaunch } from './safe-relaunch'
 import { waitForSafeShutdown } from './shutdown-wait'
 import { startElectronDurableWorkflowHost } from './durable-workflow-startup'
@@ -286,7 +287,6 @@ if (process.defaultApp) {
 
 // Apply network proxy settings early (Node-level only — Electron sessions require app.whenReady)
 import { applyConfiguredProxySettings } from './network-proxy'
-void applyConfiguredProxySettings()
 
 // Accept self-signed / untrusted certificates when connecting to a user-configured remote server.
 // Only bypasses cert validation for the exact CRAFT_SERVER_URL origin — all other connections
@@ -369,6 +369,21 @@ if (!gotTheLock) {
     }
   })
 }
+
+// Resolve interrupted, already-confirmed deletions before config loaders can
+// recreate a staged campaign's original folder. Only the owning app recovers.
+let campaignRecoveryWarnings: string[] = []
+if (gotTheLock && RUNTIME_IDENTITY.variant === 'artist-os') {
+  try {
+    campaignRecoveryWarnings = recoverCampaignCleanupTransactions()
+  } catch (error) {
+    campaignRecoveryWarnings = [`Interrupted campaign cleanup could not be checked. Files were left in place: ${error instanceof Error ? error.message : String(error)}`]
+  }
+  for (const warning of campaignRecoveryWarnings) mainLog.warn('[campaign-cleanup]', warning)
+}
+
+// Proxy configuration reads workspace registration: recover before this read.
+if (gotTheLock) void applyConfiguredProxySettings()
 
 // Helper to create initial windows on startup
 async function createInitialWindows(): Promise<void> {
@@ -461,6 +476,7 @@ async function createInitialWindows(): Promise<void> {
 app.whenReady().then(async () => {
   // Export packaged state as env var so logger.ts (and headless Bun) don't need 'electron'
   process.env.CRAFT_IS_PACKAGED = app.isPackaged ? 'true' : 'false'
+
 
   if (RUNTIME_IDENTITY.variant === 'artist-os') {
     const paths = resolveEmbeddedOmniRoutePaths({
@@ -1094,6 +1110,17 @@ app.whenReady().then(async () => {
 
       // Capture module-level references for before-quit cleanup and deep-link handlers
       sessionManager = instance.sessionManager
+      if (campaignRecoveryWarnings.length) {
+        const hq = getWorkspaces().find(workspace => workspace.artistWorkspaceScope === 'hq' && !workspace.remoteServer)
+        if (hq) {
+          try {
+            sessionManager.getNotificationService().add({
+              workspaceId: hq.id, source: 'system', title: 'Campaign cleanup recovery',
+              message: campaignRecoveryWarnings.join('\n'), urgency: 'normal',
+            })
+          } catch (error) { mainLog.warn('[campaign-cleanup] Could not save recovery notice', error) }
+        }
+      }
       oauthFlowStore = instance.oauthFlowStore
       moduleSink = instance.wsServer.push.bind(instance.wsServer)
       moduleClientResolver = resolveClientId

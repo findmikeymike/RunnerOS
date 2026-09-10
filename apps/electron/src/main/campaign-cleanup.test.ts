@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync, existsSync 
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { Workspace } from '@craft-agent/core/types'
-import { createCampaignCleanupController, removeFilesAndRegistration, resolveCampaignCleanup } from './campaign-cleanup'
+import { CampaignCleanupRecoveryRequiredError, createCampaignCleanupController, removeFilesAndRegistration, resolveCampaignCleanup } from './campaign-cleanup'
 
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
@@ -23,7 +23,7 @@ function setup(overrides: Record<string, unknown> = {}) {
   const { root, campaign, hq } = fixture()
   const calls: string[] = []
   const lease = { workspaceId: campaign.id, sourceRootPath: campaign.rootPath, released: false }
-  const result = { workspaceId: campaign.id, hqWorkspaceId: hq.id, retainedFileCount: 2, retainedMemoryCount: 1, pastReleaseLabel: 'Past Releases / campaign' }
+  const result = { workspaceId: campaign.id, hqWorkspaceId: hq.id, retainedFileCount: 2, pastReleaseLabel: 'Past Releases / campaign' }
   const deps = {
     workspaces: () => [campaign, hq],
     runtime: {
@@ -35,7 +35,7 @@ function setup(overrides: Record<string, unknown> = {}) {
     stopMessaging: async () => { calls.push('stop-messaging') },
     resumeMessaging: async () => { calls.push('resume-messaging') },
     preserve: async () => { calls.push('preserve'); return result },
-    preview: () => ({ workspaceId: campaign.id, campaignName: campaign.name, previewToken: 'fresh', retainedFileCount: 2, retainedBytes: 100, retainedMemoryCount: 1, retainedFiles: [], deletedFileCount: 4, warnings: [] }),
+    preview: () => ({ workspaceId: campaign.id, campaignName: campaign.name, previewToken: 'fresh', retainedFileCount: 2, retainedBytes: 100, retainedFiles: [], deletedFileCount: 4, warnings: [] }),
     clearPrivateState: async () => { calls.push('clear-private') },
     removeFilesAndRegistration: () => { calls.push('remove') },
     onDeleted: () => { calls.push('notify') },
@@ -50,6 +50,25 @@ describe('campaign cleanup boundary', () => {
     expect(await controller.delete('campaign', 'fresh')).toMatchObject({ hqWorkspaceId: 'hq', retainedFileCount: 2 })
     expect(calls).toEqual(['quiesce', 'stop-messaging', 'preserve', 'dispose-sessions', 'remove', 'finish', 'clear-private', 'notify'])
   })
+  test('unresolved cleanup retains quiescence but releases the request fence', async () => {
+    let released = false
+    const { controller, calls } = setup({
+      acquireRequestFence: () => () => { released = true },
+      removeFilesAndRegistration: () => { throw new CampaignCleanupRecoveryRequiredError('Staged files need recovery') },
+    })
+    await expect(controller.delete('campaign', 'fresh')).rejects.toThrow('need recovery')
+    expect(calls).not.toContain('resume')
+    expect(calls).not.toContain('resume-messaging')
+    expect(released).toBe(true)
+  })
+
+  test('ordinary cleanup error after rollback resumes runtime and messaging', async () => {
+    const { controller, calls } = setup({ removeFilesAndRegistration: () => { throw new Error('Journal unlink failed after rollback') } })
+    await expect(controller.delete('campaign', 'fresh')).rejects.toThrow('Journal unlink')
+    expect(calls).toContain('resume')
+    expect(calls).toContain('resume-messaging')
+  })
+
   test('stale preview/preservation failure resumes runtime without deleting data', async () => {
     const { controller, calls, campaign } = setup({ preserve: async () => { throw new Error('Campaign changed. Review again.') } })
     await expect(controller.delete('campaign', 'stale')).rejects.toThrow('Campaign changed')
@@ -60,7 +79,7 @@ describe('campaign cleanup boundary', () => {
     const events: string[] = []
     const { controller, calls } = setup({
       acquireRequestFence: () => { events.push('fence'); return () => { events.push('release') } },
-      preview: () => ({ workspaceId: 'campaign', campaignName: 'campaign', previewToken: 'changed', retainedFileCount: 2, retainedBytes: 100, retainedMemoryCount: 1, retainedFiles: [], deletedFileCount: 4, warnings: [] }),
+      preview: () => ({ workspaceId: 'campaign', campaignName: 'campaign', previewToken: 'changed', retainedFileCount: 2, retainedBytes: 100, retainedFiles: [], deletedFileCount: 4, warnings: [] }),
     })
     await expect(controller.delete('campaign', 'fresh')).rejects.toThrow('Campaign changed during cleanup')
     expect(calls).not.toContain('remove')
@@ -98,7 +117,7 @@ describe('campaign cleanup boundary', () => {
   test('blocks concurrent deletion attempts', async () => {
     let release!: () => void
     const pending = new Promise<void>((resolve) => { release = resolve })
-    const { controller } = setup({ preserve: async () => { await pending; return { retainedFileCount: 0, retainedMemoryCount: 0, pastReleaseLabel: 'campaign' } } })
+    const { controller } = setup({ preserve: async () => { await pending; return { retainedFileCount: 0, pastReleaseLabel: 'campaign' } } })
     const first = controller.delete('campaign', 'fresh')
     await expect(controller.delete('campaign', 'fresh')).rejects.toThrow('already')
     release()

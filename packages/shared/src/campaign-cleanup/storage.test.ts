@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import * as fs from 'node:fs';
+import * as hashing from '../utils/hash-file.ts';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -14,7 +16,7 @@ function fixture(): CampaignCleanupOptions {
   const root = mkdtempSync(join(tmpdir(), 'campaign-preservation-')); roots.push(root);
   const campaignRootPath = join(root, 'campaign'); const hqRootPath = join(root, 'hq');
   mkdirSync(campaignRootPath); mkdirSync(hqRootPath);
-  return { campaignRootPath, hqRootPath, campaignId: 'campaign-1', campaignName: 'Summer EP', hqWorkspaceId: 'hq', retainedMemoryCount: 3 };
+  return { campaignRootPath, hqRootPath, campaignId: 'campaign-1', campaignName: 'Summer EP', hqWorkspaceId: 'hq' };
 }
 function write(root: string, path: string, body: unknown): void {
   const destination = join(root, path); mkdirSync(dirname(destination), { recursive: true });
@@ -38,7 +40,6 @@ describe('campaign preservation', () => {
     write(options.campaignRootPath, 'assets/manifest.json', assetManifest('assets/design/source.custom'));
     const preview = previewCampaignCleanup(options);
     expect(preview.retainedFileCount).toBe(6); expect(preview.deletedFileCount).toBe(6);
-    expect(preview.retainedMemoryCount).toBe(3);
     const result = await preserveCampaignForDeletion(options, preview.previewToken);
     expect(result.pastReleaseLabel).toBe('Summer EP');
     const vault = loadArtistVaultManifest(options.hqRootPath, 'hq');
@@ -266,4 +267,109 @@ describe('campaign preservation', () => {
     expect(existsSync(join(copiedBundle, 'node_modules'))).toBe(false);
   });
 
+});
+
+describe('preservation snapshot boundaries', () => {
+  test('copies multi-chunk binary media exactly and hashes the source only twice during preservation', async () => {
+    const options = fixture();
+    const source = join(options.campaignRootPath, 'master.wav');
+    const media = Buffer.alloc(3 * 1024 * 1024 + 137);
+    for (let index = 0; index < media.length; index++) media[index] = index % 251;
+    writeFileSync(source, media);
+    const preview = previewCampaignCleanup(options);
+    const originalHash = hashing.hashFileSha256;
+    const paths: string[] = [];
+    const hashSpy = spyOn(hashing, 'hashFileSha256').mockImplementation(path => {
+      paths.push(path);
+      return originalHash(path);
+    });
+    let receipt;
+    try { receipt = await preserveCampaignForDeletion(options, preview.previewToken); }
+    finally { hashSpy.mockRestore(); }
+    const archived = loadArtistVaultManifest(options.hqRootPath).assets.find(asset => asset.label === 'master.wav')!;
+    expect(readFileSync(join(options.hqRootPath, archived.relativePath!))).toEqual(media);
+    expect(archived.sha256).toBe(originalHash(source));
+    expect(paths.filter(path => realpathSync(path) === realpathSync(source))).toHaveLength(2);
+    expect(paths).toHaveLength(3); // Two source inventories and one destination verification.
+    expect(receipt!.postPreservationToken).toBe(previewCampaignCleanup(options).previewToken);
+  });
+
+  test('same-size source edits with restored mtime invalidate the approved snapshot', async () => {
+    const options = fixture();
+    const source = join(options.campaignRootPath, 'master.wav');
+    writeFileSync(source, Buffer.from([0, 1, 2, 3]));
+    const before = fs.statSync(source);
+    const preview = previewCampaignCleanup(options);
+    writeFileSync(source, Buffer.from([3, 2, 1, 0]));
+    fs.utimesSync(source, before.atime, before.mtime);
+    await expect(preserveCampaignForDeletion(options, preview.previewToken)).rejects.toThrow('changed');
+    expect(existsSync(source)).toBe(true);
+    expect(existsSync(join(options.hqRootPath, 'vault/manifest.json'))).toBe(false);
+  });
+
+  test('source mutation during Vault publication is not blessed by the receipt', async () => {
+    const options = fixture();
+    const source = join(options.campaignRootPath, 'master.wav');
+    writeFileSync(source, 'original');
+    const preview = previewCampaignCleanup(options);
+    const originalRename = fs.renameSync;
+    let mutated = false;
+    const renameSpy = spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      originalRename(from, to);
+      if (String(to) === join(options.hqRootPath, 'vault/manifest.json')) {
+        writeFileSync(source, 'modified');
+        mutated = true;
+      }
+    });
+    let receipt;
+    try { receipt = await preserveCampaignForDeletion(options, preview.previewToken); }
+    finally { renameSpy.mockRestore(); }
+    expect(mutated).toBe(true);
+    const finalPreview = previewCampaignCleanup(options);
+    expect(finalPreview.previewToken).not.toBe(receipt!.postPreservationToken);
+    expect(readFileSync(source, 'utf8')).toBe('modified');
+    const archived = loadArtistVaultManifest(options.hqRootPath).assets.find(asset => asset.label === 'master.wav')!;
+    expect(readFileSync(join(options.hqRootPath, archived.relativePath!), 'utf8')).toBe('original');
+  });
+});
+
+test('partial cross-vault publication keeps originals and permits a clean retry', async () => {
+  const options = fixture();
+  const source = join(options.campaignRootPath, 'master.wav');
+  writeFileSync(source, Buffer.from([0, 255, 128, 3]));
+  options.linkedVaultWorkspaces = ['lab-a', 'lab-b'].map(workspaceId => {
+    const rootPath = join(dirname(options.hqRootPath), workspaceId);
+    mkdirSync(rootPath);
+    const manifest = emptyArtistVaultManifest(workspaceId);
+    manifest.assets.push({
+      id: 'shared-master', label: 'Private master', category: 'music', kind: 'master-final',
+      absolutePath: source, source: 'linked-file', status: 'approved', rightsStatus: 'private',
+      usableByAgents: false, createdAt: '2026-01-01', updatedAt: '2026-01-01',
+    });
+    write(rootPath, 'vault/manifest.json', manifest);
+    return { workspaceId, workspaceName: workspaceId, rootPath, writable: true };
+  });
+  const preview = previewCampaignCleanup(options);
+  const originalRename = fs.renameSync;
+  const failingPath = join(realpathSync(options.linkedVaultWorkspaces[1]!.rootPath), 'vault/manifest.json');
+  const renameSpy = spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+    if (String(to) === failingPath) throw new Error('fixture publication failure');
+    originalRename(from, to);
+  });
+  try { await expect(preserveCampaignForDeletion(options, preview.previewToken)).rejects.toThrow('fixture publication failure'); }
+  finally { renameSpy.mockRestore(); }
+  expect(readFileSync(source)).toEqual(Buffer.from([0, 255, 128, 3]));
+  expect(existsSync(join(options.hqRootPath, 'vault/manifest.json'))).toBe(false);
+  const retry = previewCampaignCleanup(options);
+  const receipt = await preserveCampaignForDeletion(options, retry.previewToken);
+  for (const workspace of options.linkedVaultWorkspaces) {
+    const vault = loadArtistVaultManifest(workspace.rootPath, workspace.workspaceId);
+    expect(vault.assets).toHaveLength(1);
+    const asset = vault.assets[0]!;
+    expect(readFileSync(asset.absolutePath!)).toEqual(readFileSync(source));
+    expect(asset.rightsStatus).toBe('private');
+    expect(asset.usableByAgents).toBe(false);
+  }
+  expect(receipt.postPreservationToken).toBe(previewCampaignCleanup(options).previewToken);
+  expect(loadArtistVaultManifest(options.hqRootPath).assets).toHaveLength(2);
 });
