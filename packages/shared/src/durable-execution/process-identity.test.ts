@@ -44,7 +44,7 @@ test('schema-two legacy rows receive nullable process identity without discardin
   const upgraded = f.open('os:test:new');
   expect((upgraded as any).db.prepare('PRAGMA table_info(runs)').all().some((column: any) => column.name === 'process_identity')).toBe(true);
   expect(() => upgraded.claim('run', 'w')).toThrow('owned');
-  expect((upgraded as any).db.prepare('PRAGMA user_version').get().user_version).toBe(4);
+  expect((upgraded as any).db.prepare('PRAGMA user_version').get().user_version).toBe(5);
 });
 test('self identity is stable; local fallback and unavailable identities never prove replacement', () => {
   expect(readProcessIdentity(process.pid)).toBe(readProcessIdentity(process.pid));

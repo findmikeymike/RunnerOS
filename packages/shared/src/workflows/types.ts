@@ -128,6 +128,8 @@ export interface WorkflowStep {
 export interface WorkflowMetadata {
   /** Explicit execution capability opt-in; omission preserves the legacy engine. */
   execution?: 'durable-local-read';
+  /** Exact public HTTPS pages approved for durable text reads; no search or downloads. */
+  webReadUrls?: string[];
   name: string;
   description: string;
   /** Single emoji shown in pickers. */

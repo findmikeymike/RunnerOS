@@ -12,7 +12,7 @@ import type { AgentEvent, Workspace } from '@craft-agent/core/types';
 import type { AgentBackend, BackendHostRuntimeContext, CoreBackendConfig } from '../../../shared/src/agent/backend/types.ts';
 import type { ResolvedBackendContext } from '../../../shared/src/agent/backend/factory.ts';
 import { canonical, digest, type DurableClaim, type DurableJournal, type DurableRunSnapshot, type DurableRunSpec } from '../../../shared/src/durable-execution/index.ts';
-import { DURABLE_RUNTIME_MANIFEST, type DurableCheckpoint, type DurableControlCommand, type DurableControlReceipt, type DurableDecisionCommand, type DurableDecisionReceipt, type DurableJson, type DurableSteeringCommand, type DurableSteeringReceipt, type DurableToolAuthorization } from '../../../shared/src/protocol/durable-execution.ts';
+import { DURABLE_RUNTIME_MANIFEST, isDurableWebReadUrls, isDurableWebReadInput, type DurableCheckpoint, type DurableControlCommand, type DurableControlReceipt, type DurableDecisionCommand, type DurableDecisionReceipt, type DurableJson, type DurableSteeringCommand, type DurableSteeringReceipt, type DurableToolAuthorization } from '../../../shared/src/protocol/durable-execution.ts';
 import type { LoadedWorkflow } from '../../../shared/src/workflows/types.ts';
 import { assertDurableLocalSourcesCurrent, type DurableLocalSource } from './durable-workflow-sources.ts';
 
@@ -25,6 +25,7 @@ export interface DurableReadBinding {
 export interface DurableReadInput {
   runId: string; commandId: string; workspaceId: string; connectionSlug: string; model: string;
   prompt: string; systemPrompt: string; allowedTools: DurableRunSpec['allowedTools'];
+  webReadUrls?: string[];
   maxOutputTokens: number; deadlineAt: number; maxModelAttempts: number;
   /** Opt-in trusted authorization binding. Omit for the existing certified read path. */
   approvalPrincipalId?: string;
@@ -131,6 +132,7 @@ function publicationId(workspaceId: string, runId: string): string {
 /** The narrow workflow shape whose execution semantics are implemented by this adapter. */
 export function supportsDurableReadWorkflow(workflow: LoadedWorkflow): boolean {
   try { assertDurableTriggerDeclarations(workflow); } catch { return false; }
+  if (workflow.metadata.webReadUrls !== undefined && !isDurableWebReadUrls(workflow.metadata.webReadUrls)) return false;
   const triggerNames = new Set((workflow.metadata.trigger.inputs ?? []).map(definition => definition.name));
   if (workflow.parseWarnings?.length || workflow.metadata.trigger.type !== 'manual' || !supportsPublication(workflow)
     || workflow.metadata.steps.length < 1 || workflow.metadata.steps.length > 8) return false;
@@ -224,6 +226,7 @@ export class DurableReadRunner {
     if (!supportsDurableReadWorkflow(workflow) || step?.agent !== input.resolvedAgentSlug || step?.taskModeId !== input.resolvedTaskModeId) {
       return Promise.reject(new Error('unsupported-durable-read-workflow'));
     }
+    if (canonical(input.webReadUrls ?? null) !== canonical(workflow.metadata.webReadUrls ?? null)) return Promise.reject(new Error('unsupported-durable-read-workflow'));
     const { resolvedAgentSlug: _slug, resolvedTaskModeId: _mode, resolvedSteps, ...rest } = input;
     if ((workflow.metadata.steps.length > 1 || workflow.metadata.steps.some(step => step.modelRole)) && (!resolvedSteps || resolvedSteps.length !== workflow.metadata.steps.length
       || resolvedSteps.some((resolved, i) => resolved.id !== workflow.metadata.steps[i]!.id || resolved.agent !== workflow.metadata.steps[i]!.agent || resolved.taskModeId !== workflow.metadata.steps[i]!.taskModeId || resolved.modelPlan?.role !== workflow.metadata.steps[i]!.modelRole || !resolved.systemPrompt?.trim()))) {
@@ -276,6 +279,7 @@ export class DurableReadRunner {
     const spec: DurableRunSpec = { engine: 'sqlite-v2-readonly-1', runId: requested.runId, workspaceId: requested.workspaceId,
       credentialIdentity: binding.credentialIdentity, runtimeManifest: { ...DURABLE_RUNTIME_MANIFEST },
       createdAt, commandId: requested.commandId, model: requested.model, allowedTools: requested.allowedTools,
+      ...(requested.webReadUrls ? { webReadUrls: requested.webReadUrls } : {}),
       maxOutputTokens: requested.maxOutputTokens, maxModelAttempts: requested.maxModelAttempts, deadlineAt: requested.deadlineAt,
       ...(output?.mode === 'final-step' ? { publication: { outputId: publicationId(requested.workspaceId, requested.runId),
         kind: (output.kind ?? 'document') as 'report' | 'document', title: output.title?.trim() || workflow!.metadata.name.trim(),
@@ -460,7 +464,8 @@ export class DurableReadRunner {
           assertDurableLocalSourcesCurrent(frozen.workspaceRoot, frozen.localSources ?? []);
           permissionsConfigCache.invalidateDefaults();
           permissionsConfigCache.invalidateWorkspace(frozen.workspaceRoot);
-          const policyTool = { read: 'Read', grep: 'Grep', find: 'Glob', ls: 'Glob' }[request.tool];
+          if (request.tool === 'web_fetch' && !isDurableWebReadInput(request.input, initial.spec.webReadUrls)) throw new Error('durable-web-read-not-authorized');
+          const policyTool = { read: 'Read', grep: 'Grep', find: 'Glob', ls: 'Glob', web_fetch: 'WebFetch' }[request.tool];
           if (!policyTool || !shouldAllowToolInMode(policyTool, request.input, 'safe', { permissionsContext: { workspaceRootPath: frozen.workspaceRoot, activeSourceSlugs: [] } }).allowed) throw new Error('durable-authorization-blocked');
         };
         await checkCurrent();

@@ -33,3 +33,12 @@ test('explicit model roles survive roundtrip and invalid roles reject', () => {
     expect(parseWorkflowFile(serializeWorkflow(metadata, '').replace('    agent: reader', `    agent: reader\n    modelRole: ${JSON.stringify(modelRole)}`))).toBeNull();
   }
 });
+
+test('approved durable web URLs roundtrip and cannot leak into legacy workflows', () => {
+  const valid = { ...metadata, execution: 'durable-local-read' as const, webReadUrls: ['https://example.com/article'] };
+  expect(parseWorkflowFile(serializeWorkflow(valid, ''))?.metadata.webReadUrls).toEqual(valid.webReadUrls);
+  for (const webReadUrls of [[], ['http://example.com/'], ['https://user:pass@example.com/'], ['https://example.com/#section'], ['https://example.com:444/'], ['https://example.com/','https://example.com/'], Array.from({length:9},(_,i)=>`https://example.com/${i}`)]) {
+    expect(() => serializeWorkflow({ ...valid, webReadUrls }, '')).toThrow('web read');
+  }
+  expect(() => serializeWorkflow({ ...metadata, webReadUrls: valid.webReadUrls }, '')).toThrow('web read');
+});

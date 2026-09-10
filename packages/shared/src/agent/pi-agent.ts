@@ -1199,7 +1199,7 @@ export class PiAgent extends BaseAgent {
       this.debug(`Captured pre-tool metadata for ${toolName} (${toolCallId}, sessionId=${debugSessionId}): intent=${!!preIntent}, displayName=${!!preDisplayName}`);
     }
 
-    if (this.config.durableExecution && !({ Read: 'read', Grep: 'grep', Find: 'find', Ls: 'ls', Glob: 'find', LS: 'ls', read: 'read', grep: 'grep', find: 'find', ls: 'ls' } as Record<string, string>)[toolName]) {
+    if (this.config.durableExecution && !this.config.durableExecution.descriptor.allowedTools.includes(({ Read: 'read', Grep: 'grep', Find: 'find', Ls: 'ls', Glob: 'find', LS: 'ls', WebFetch: 'web_fetch', web_fetch: 'web_fetch', read: 'read', grep: 'grep', find: 'find', ls: 'ls' } as Record<string, string>)[toolName] as 'read')) {
       this.send({ type: 'pre_tool_use_response', requestId, action: 'block', reason: 'Tool is unsupported for durable execution' });
       return;
     }

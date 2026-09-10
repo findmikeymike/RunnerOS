@@ -74,6 +74,7 @@ import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm
 import { PI_TOOL_NAME_MAP, THINKING_TO_PI } from '../../shared/src/agent/backend/pi/constants.ts';
 import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts';
 import { createWebFetchTool } from './tools/web-fetch.ts';
+import { createDurableWebFetchTool } from './tools/durable-web-fetch.ts';
 import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
 import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
@@ -576,7 +577,7 @@ async function ensureSession(): Promise<AgentSession> {
   ];
   const proxyTools = initConfig.durableExecution ? [] : buildProxyTools();
   const permitted = initConfig.durableExecution
-    ? builtinDefs.filter(tool => initConfig!.durableExecution!.allowedTools.includes(tool.name as 'read'))
+    ? [...builtinDefs, ...(initConfig.durableExecution.webReadUrls ? [createDurableWebFetchTool(initConfig.durableExecution.webReadUrls)] : [])].filter(tool => initConfig!.durableExecution!.allowedTools.includes(tool.name as 'read'))
     : [...builtinDefs, ...webTools, ...proxyTools];
   const wrappedAll = wrapToolsWithHooks(permitted);
   const toolAllowlist = wrappedAll.map(t => t.name);

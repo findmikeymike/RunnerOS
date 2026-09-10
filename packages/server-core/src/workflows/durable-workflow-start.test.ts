@@ -354,3 +354,11 @@ test('same agent with different explicit task modes resolves and pins distinct b
   ]);
   f.release();
 });
+
+test('normal Start pins explicit public web URLs and enables only the certified web reader', async () => {
+  const f = fixture(); Object.assign(f.workflow.metadata, { webReadUrls: ['https://example.com/article'] });
+  const run = await f.createRunner().start(f.input); await f.ready;
+  const journal = new DurableJournal({ configRoot: f.root, key: loadDurableKey(f.root, protection) });
+  try { const spec = journal.get(run.id, 'w').spec; expect(spec.webReadUrls).toEqual(['https://example.com/article']); expect(spec.allowedTools).toEqual(['read', 'grep', 'find', 'ls', 'web_fetch']); expect(spec.approvalPrincipalId).toBe('alice'); } finally { journal.close(); f.release(); }
+  await f.done;
+});

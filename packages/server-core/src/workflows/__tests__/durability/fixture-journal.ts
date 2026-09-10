@@ -76,9 +76,11 @@ export class FixtureJournal {
     }
     this.db = openDatabase(this.path);
     try {
+      // Recovery can briefly hold the database lock before the first schema read.
+      this.db.exec('PRAGMA busy_timeout=150;');
       const version = Number(this.db.prepare('PRAGMA user_version').get().user_version);
       if (version !== 0 && version !== 1) throw new Error('unsupported-schema');
-      this.db.exec('PRAGMA busy_timeout=150; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;');
+      this.db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;');
       this.db.exec(`BEGIN IMMEDIATE;
         CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY, workspace TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 0, pid INTEGER NOT NULL DEFAULT 0, payload TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS events(run_id TEXT NOT NULL REFERENCES runs(id), seq INTEGER NOT NULL, kind TEXT NOT NULL, PRIMARY KEY(run_id, seq));

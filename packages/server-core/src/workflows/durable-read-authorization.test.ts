@@ -97,3 +97,12 @@ test('policy revision refuses a different defaults source than the actual policy
   const authorize = createDurableReadAuthorization({ configRoot: f.configRoot, resolveBinding: () => f.binding, assertRunPrincipal() {} });
   await expect(authorize(f.request, f.context)).rejects.toThrow('policy-source-mismatch');
 });
+
+test('certified web reads use current owner and bounded WebFetch approval', async () => {
+  const f = fixture(); let current = true;
+  const authorize = createDurableReadAuthorization({ configRoot: f.configRoot, resolveBinding: () => f.binding, assertRunPrincipal() { if (!current) throw new Error('principal-revoked'); }, now: () => 1000 });
+  const request = { ...f.request, tool: 'web_fetch', input: { url: 'https://example.com/article' } };
+  const approval = await authorize(request, { ...f.context, deadlineAt: 2000 });
+  expect(approval.allowed).toBe(true); expect(approval.requiresApproval).toBe(true); expect(approval.approvalExpiresAt).toBe(2000);
+  current = false; await expect(authorize(request, f.context)).rejects.toThrow('principal-revoked');
+});

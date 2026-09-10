@@ -164,3 +164,19 @@ For certified durable local reads, admission freezes the primary and up to two e
 Exhausted approved choices pause the run with a specific provider remedy. Explicit Resume retries its saved current choice; it does not silently adopt edited Settings or rotated credentials. The original deadline still applies: expired provider-paused runs show a blocked Resume and explain that the user must stop that saved run before starting again. Completed model results waiting only for local Output publication remain exempt from this provider retry path. Model attempt receipts are visible on the run detail page.
 
 This slice routes model selection; it does not relax existing durable bundle certification. Extended thinking remains off, skills/remote tools remain outside this path, and unsupported transports do not become eligible because they appear in a backup list. Unmarked steps preserve existing fallback behavior. Journal schema 4 prevents older binaries reopening the new format while migrating existing records without changing their original runtime manifests; concurrent mixed-version raw journal consumers remain unsupported.
+
+## Slice 11 — approved public web reads
+
+A durable read workflow may now declare up to eight exact public-page URLs:
+
+```yaml
+execution: durable-local-read
+webReadUrls:
+  - https://example.com/article
+```
+
+Only this explicit grant enables `web_fetch`; local-only workflows keep their current tool set. URLs must be canonical HTTPS URLs on the default port, without embedded credentials or fragments. The host freezes the list, checks it again at tool dispatch, and applies the current WebFetch permission policy. The SDK uses a dedicated reader rather than the ordinary download-capable web tool. The initial supported transport is public IPv4 with DNS resolution pinned to the actual TLS connection; localhost, private and reserved addresses are rejected. No account credentials, cookies, redirects, proxy tools, paid search, binary downloads, or file writes are enabled. Redirecting URLs must be replaced with their direct destination in a newly authored grant.
+
+Each request has a 15-second total DNS/connection/body deadline, a 512 KiB body ceiling and a 50,000-character text ceiling. HTML scripts/styles are removed; returned text is wrapped as untrusted source data. Supported responses are uncompressed HTML, XHTML, JSON and plain text. Remote HTTP/tool failures retain existing tool-failure behavior; model-provider fallback is not a remote-tool retry policy.
+
+Saved tool results replay without contacting the website. A process death before the result is saved may repeat the GET within the existing read-attempt limits. This is bounded read recovery, not an exactly-once network guarantee. The public page may change between unsaved attempts; the committed response becomes the replay authority. Journal schema 5 fences older writers on reopen without rewriting old local-run manifests. Connected-account reads and remote writes still require separate certified adapters and are not enabled by this slice.

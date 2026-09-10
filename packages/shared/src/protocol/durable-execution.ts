@@ -92,6 +92,21 @@ export async function durableCredentialIdentity(transport: { provider: string; c
   const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }
+/** Exact public-read targets; transport additionally checks DNS and rejects redirects. */
+export function isDurableWebReadUrls(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.length <= 8 && new Set(value).size === value.length && value.every(raw => {
+    if (typeof raw !== 'string' || raw.length > 4096) return false;
+    try {
+      const url = new URL(raw);
+      return url.href === raw && url.protocol === 'https:' && !url.port && !url.username && !url.password && !url.hash;
+    } catch { return false; }
+  });
+}
+export function isDurableWebReadInput(input: unknown, urls: unknown): boolean {
+  if (!isDurableWebReadUrls(urls) || !input || typeof input !== 'object' || Array.isArray(input)) return false;
+  const value = input as Record<string, unknown>;
+  return Object.keys(value).every(key => key === 'url') && typeof value.url === 'string' && urls.includes(value.url);
+}
 export interface DurableExecutionDescriptor {
   credentialIdentity: string;
   runtimeManifest: DurableRuntimeManifest;
@@ -99,8 +114,9 @@ export interface DurableExecutionDescriptor {
   runId: string;
   workspaceId: string;
   createdAt: number;
-  /** P-02 supports only explicitly certified local Pi read tools. No MCP/proxy effects. */
-  allowedTools: Array<'read' | 'grep' | 'find' | 'ls'>;
+  /** Explicitly certified reads only. Remote reads require an exact frozen URL list. */
+  allowedTools: Array<'read' | 'grep' | 'find' | 'ls' | 'web_fetch'>;
+  webReadUrls?: string[];
   model: string;
   maxOutputTokens: number;
 }

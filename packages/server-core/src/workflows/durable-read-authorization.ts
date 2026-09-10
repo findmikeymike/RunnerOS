@@ -34,7 +34,7 @@ export function createDurableReadAuthorization(options: {
     const revision = readDurablePolicyRevision(options.configRoot, binding.workspace.rootPath);
     permissionsConfigCache.invalidateDefaults();
     permissionsConfigCache.invalidateWorkspace(binding.workspace.rootPath);
-    const tool = { read: 'Read', grep: 'Grep', find: 'Glob', ls: 'Glob' }[request.tool];
+    const tool = { read: 'Read', grep: 'Grep', find: 'Glob', ls: 'Glob', web_fetch: 'WebFetch' }[request.tool];
     const now = (options.now ?? Date.now)();
     const allowed = !!tool && now < context.deadlineAt && shouldAllowToolInMode(tool, request.input, 'safe', { permissionsContext: { workspaceRootPath: binding.workspace.rootPath, activeSourceSlugs: [] } }).allowed;
     return { principalId: context.approvalPrincipalId, credentialIdentity: binding.credentialIdentity, policyRevision: revision,

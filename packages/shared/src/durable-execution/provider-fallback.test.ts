@@ -103,7 +103,7 @@ test('schema three upgrades while unopted saved runs retain their dispatch seman
   const before = f.journal.get('r', 'w');
   (f.journal as any).db.exec('PRAGMA user_version=3');
   f.reopen();
-  expect((f.journal as any).db.prepare('PRAGMA user_version').get().user_version).toBe(4);
+  expect((f.journal as any).db.prepare('PRAGMA user_version').get().user_version).toBe(5);
   expect(f.journal.get('r', 'w')).toEqual(before);
   const bridge = f.journal.bridge(f.journal.claim('r', 'w'));
   await bridge.checkpoint({ kind: 'workflow-step-start', step: 0, input: 'old prompt' });
