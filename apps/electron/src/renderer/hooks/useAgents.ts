@@ -12,7 +12,6 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useAtom } from 'jotai'
 import { agentsStateAtomFamily, type AgentsState } from '@/atoms/agents'
-import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO } from '../../shared/types'
 
 export interface UseAgentsResult {
@@ -30,7 +29,7 @@ export interface UseAgentsResult {
   refresh: () => Promise<void>
   /** Toggle activation in the active workspace. */
   setActive: (slug: string, active: boolean) => Promise<void>
-  /** Create or update an agent. Auto-activates in the current workspace. */
+  /** Create or update an agent, requesting activation in the current workspace. */
   upsert: (input: {
     slug: string
     metadata: AgentDefinitionDTO['metadata']
@@ -41,50 +40,13 @@ export interface UseAgentsResult {
 }
 
 export interface UseAgentsOptions {
+  /** Legacy presentation hint. Defaults are applied by the server, never to active state. */
   defaultVisibleSlugs?: readonly string[]
-  /** System surfaces can pin built-ins; explicit libraries such as Lab honor the saved manifest. */
+  /** Legacy presentation hint. All surfaces now honor the saved manifest. */
   includeSystemVisibleAgents?: boolean
 }
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
-const EMPTY_DEFAULT_VISIBLE_SLUGS: readonly string[] = []
-const BUILTIN_VISIBLE_AGENT_SLUGS = [
-  CONCIERGE_SLUG,
-  ORCHESTRATOR_SLUG,
-  SETUP_CONCIERGE_SLUG,
-  SOCIAL_PUBLISHER_SLUG,
-  'content-genius',
-  'scriptwriter',
-  'scroll-stopper',
-  'video-director',
-  'lottie-animation-agent',
-  'video-editor-agent',
-  'raw-video-editor',
-  'ads-strategist',
-  'ad-creative-agent',
-  'ads-agent',
-  'trypost-agent',
-  'postiz-agent',
-  'spotify-analyst',
-  'spotify-playlist-creator',
-  'shopify-agent',
-  'print-agent',
-  'gaygent-master',
-  'persona-agent',
-  'branding-agent',
-  'comms-agent',
-  // The site and the fan list are career-wide objects a campaign also acts on,
-  // so both belong in HQ and in a campaign — same as comms-agent beside them.
-  'website-agent',
-  'community-agent',
-  'outreach-agent',
-  'industry-hunter',
-  'college-radio-agent',
-  'youtube-research-agent',
-  'youtube-intelligence-agent',
-  'signal-scout-agent',
-  'signal-analyst-agent',
-] as const
 const inFlightRefreshes = new Map<string, Promise<void>>()
 const mountedWorkspaceKeys = new Map<string, number>()
 let globalDefinitionsCleanup: (() => void) | null = null
@@ -98,29 +60,9 @@ function sortAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {
   return [...agents].sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
 }
 
-function withSystemActiveSlugs(slugs: string[], agents: AgentDefinitionDTO[], extraDefaultVisibleSlugs: readonly string[] = EMPTY_DEFAULT_VISIBLE_SLUGS): string[] {
-  const next = new Set(slugs)
-  for (const systemSlug of [...BUILTIN_VISIBLE_AGENT_SLUGS, ...extraDefaultVisibleSlugs]) {
-    if (agents.some((agent) => agent.slug === systemSlug)) next.add(systemSlug)
-  }
-  return Array.from(next)
-}
-
-export function useAgents(activeWorkspaceId: string | null | undefined, options: UseAgentsOptions = {}): UseAgentsResult {
+export function useAgents(activeWorkspaceId: string | null | undefined, _options: UseAgentsOptions = {}): UseAgentsResult {
   const workspaceKey = getWorkspaceKey(activeWorkspaceId)
   const [state, setState] = useAtom(agentsStateAtomFamily(workspaceKey))
-  const defaultVisibleKey = (options.defaultVisibleSlugs ?? EMPTY_DEFAULT_VISIBLE_SLUGS).join('\u0000')
-  const defaultVisibleSlugs = useMemo(
-    () => defaultVisibleKey ? defaultVisibleKey.split('\u0000') : EMPTY_DEFAULT_VISIBLE_SLUGS,
-    [defaultVisibleKey],
-  )
-  const systemVisibleSlugs = options.includeSystemVisibleAgents === false
-    ? EMPTY_DEFAULT_VISIBLE_SLUGS
-    : BUILTIN_VISIBLE_AGENT_SLUGS
-
-  const withVisibleSlugs = useCallback((slugs: string[], agents: AgentDefinitionDTO[]) => (
-    withSystemActiveSlugs(slugs, agents, [...systemVisibleSlugs, ...defaultVisibleSlugs])
-  ), [defaultVisibleSlugs, systemVisibleSlugs])
 
   const refresh = useCallback(async () => {
     const existing = inFlightRefreshes.get(workspaceKey)
@@ -129,16 +71,17 @@ export function useAgents(activeWorkspaceId: string | null | undefined, options:
     const run = (async () => {
       setState((prev) => ({ ...prev, loading: true }))
       try {
-        const [libraryRaw, activeRaw] = await Promise.all([
+        // Available definitions do not imply activation. The server owns defaults
+        // and scope policy; every renderer surface consumes the saved manifest.
+        const [libraryRaw, activeSlugs] = await Promise.all([
           window.electronAPI.listAllAgentDefinitions(),
           activeWorkspaceId
             ? window.electronAPI.listActiveAgentDefinitions(activeWorkspaceId)
             : Promise.resolve([] as string[]),
         ])
-        const allAgents = sortAgents(libraryRaw)
         const next: AgentsState = {
-          allAgents,
-          activeSlugs: withVisibleSlugs(activeRaw, allAgents),
+          allAgents: sortAgents(libraryRaw),
+          activeSlugs,
           loading: false,
           error: null,
         }
@@ -156,7 +99,7 @@ export function useAgents(activeWorkspaceId: string | null | undefined, options:
 
     inFlightRefreshes.set(workspaceKey, run)
     return run
-  }, [activeWorkspaceId, setState, withVisibleSlugs, workspaceKey])
+  }, [activeWorkspaceId, setState, workspaceKey])
 
   useEffect(() => {
     refreshersByWorkspaceKey.set(workspaceKey, refresh)
@@ -194,13 +137,9 @@ export function useAgents(activeWorkspaceId: string | null | undefined, options:
 
   const setActive = useCallback(async (slug: string, active: boolean) => {
     if (!activeWorkspaceId) return
-    if ([...systemVisibleSlugs, ...defaultVisibleSlugs].includes(slug) && !active) {
-      setState((prev) => ({ ...prev, activeSlugs: withVisibleSlugs(prev.activeSlugs, prev.allAgents) }))
-      return
-    }
     const result = await window.electronAPI.setAgentDefinitionActive(activeWorkspaceId, slug, active)
-    setState((prev) => ({ ...prev, activeSlugs: withVisibleSlugs(result.active, prev.allAgents) }))
-  }, [activeWorkspaceId, defaultVisibleSlugs, setState, systemVisibleSlugs, withVisibleSlugs])
+    setState((prev) => ({ ...prev, activeSlugs: result.active }))
+  }, [activeWorkspaceId, setState])
 
   const upsert = useCallback(async (input: {
     slug: string
@@ -220,12 +159,10 @@ export function useAgents(activeWorkspaceId: string | null | undefined, options:
       return { ...prev, allAgents: next }
     })
     if (activeWorkspaceId) {
-      setState((prev) => ({
-        ...prev,
-        activeSlugs: prev.activeSlugs.includes(created.slug)
-          ? prev.activeSlugs
-          : [...prev.activeSlugs, created.slug],
-      }))
+      // Definition creation can succeed while activation is refused. Read the
+      // manifest instead of treating the requested activation as confirmation.
+      const activeSlugs = await window.electronAPI.listActiveAgentDefinitions(activeWorkspaceId)
+      setState((prev) => ({ ...prev, activeSlugs }))
     }
     return created
   }, [activeWorkspaceId, setState])

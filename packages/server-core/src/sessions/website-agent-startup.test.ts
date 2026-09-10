@@ -8,16 +8,9 @@ import * as definitions from '@craft-agent/shared/agent-definitions';
 // without initializing sessions, contacting providers, or launching Electron.
 function requiredStartupAgents(): typeof definitions.STARTER_AGENTS {
   const source = readFileSync(new URL('./SessionManager.ts', import.meta.url), 'utf8');
-  const start = source.indexOf('const required = STARTER_AGENTS.filter(');
-  const end = source.indexOf('const { ensured } = ensureRequiredAgents(required)', start);
-  expect(start).toBeGreaterThan(0);
-  expect(end).toBeGreaterThan(start);
-  const names = ['STARTER_AGENTS', 'ORCHESTRATOR_SLUG', 'CONCIERGE_SLUG',
-    'SETUP_CONCIERGE_SLUG', 'SOCIAL_PUBLISHER_SLUG', 'SONG_DIRECTOR_SLUG',
-    'ANYTHING_AGENT_SLUG', 'RELEASE_MANAGER_AGENT_SLUG'] as const;
-  return new Function(...names, source.slice(start, end) + '\nreturn required;')(
-    ...names.map(name => definitions[name]),
-  );
+  expect(source).toContain('new Set(REQUIRED_BUILTIN_AGENT_SLUGS)');
+  expect(source).toContain('STARTER_AGENTS.filter(agent => requiredSlugs.has(agent.slug))');
+  return definitions.STARTER_AGENTS.filter(agent => definitions.REQUIRED_BUILTIN_AGENT_SLUGS.includes(agent.slug));
 }
 
 test('startup adds Website Agent to an existing library and preserves customization and deletion', () => {

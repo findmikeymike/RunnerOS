@@ -198,6 +198,8 @@ export interface ActivatedAgentsManifest {
   version: 1;
   /** Slugs of globally-defined agents that should be visible in this workspace. */
   active: string[];
+  /** Explicitly disabled slugs. Optional for compatibility with older manifests. */
+  deactivated?: string[];
   /** ISO timestamp of last mutation. */
   updatedAt: string;
 }

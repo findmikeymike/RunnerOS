@@ -65,3 +65,5 @@ export { RELEASE_MANAGER_AGENT_SLUG, RELEASE_MANAGER_SKILL_SLUGS, ANYTHING_AGENT
 export { CANVAS_GUIDANCE_HEADER, buildCanvasGuidanceSection } from './canvas-guidance.ts';
 export { migrateMonidRouting } from './monid-routing-migration.ts';
 export { migrateHelperGuide } from './helper-guide-migration.ts';
+
+export { BUILTIN_AGENT_REGISTRATIONS, REQUIRED_BUILTIN_AGENT_SLUGS, BASE_DEFAULT_WORKER_SLUGS, HQ_DEFAULT_WORKER_SLUGS, CAMPAIGN_DEFAULT_WORKER_SLUGS, LAB_DEFAULT_WORKER_SLUGS, defaultWorkerSlugs, excludedWorkerSlugs, type BuiltinAgentRegistration, type ArtistWorkspaceScope } from './registration.ts';
