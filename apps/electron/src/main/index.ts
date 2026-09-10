@@ -1,3 +1,4 @@
+import { createSafeRelaunch } from './safe-relaunch'
 import { waitForSafeShutdown } from './shutdown-wait'
 import { startElectronDurableWorkflowHost } from './durable-workflow-startup'
 import { createDurableReadBindingResolver } from '@craft-agent/server-core/workflows/durable-read-binding'
@@ -1317,10 +1318,20 @@ app.whenReady().then(async () => {
       })
 
       // App relaunch (for server config changes — NOT an update install)
-      ipcMain.handle('app:relaunch', () => {
-        app.relaunch()
-        app.exit(0)
-      })
+      ipcMain.handle('app:relaunch', createSafeRelaunch({
+        prepare: () => {
+          isQuitting = true
+          windowManager?.setAppQuitting(true)
+          captureAndSaveWindowState('before-quit')
+        },
+        cleanup: waitForQuitCleanup,
+        relaunch: () => app.relaunch(),
+        exit: () => app.exit(0),
+        failed: () => {
+          isQuitting = false
+          windowManager?.setAppQuitting(false)
+        },
+      }))
 
       // Language change: sync from renderer to main process and rebuild native menu
       ipcMain.handle('i18n:changeLanguage', async (_event, lang: string) => {
