@@ -2774,7 +2774,7 @@ function SignalsStrip({
   return (
     <section className="hq-performance" aria-label="Artist performance and manager">
       <div className="hq-manager-performance-row">
-        <div className="hq-pulse-card shadow-[0px_2px_3px_-1px_rgba(0,0,0,0.1),0px_1px_0px_0px_rgba(25,28,33,0.02),0px_0px_0px_1px_rgba(25,28,33,0.08)]" aria-label="Spotify performance">
+        <div className="hq-pulse-card" aria-label="Spotify performance">
           <div className="hq-pulse-heading">
             <div className="hq-pulse-identity">
               <h3>Spotify</h3>
@@ -2829,7 +2829,7 @@ function SignalsStrip({
           </div>
         </div>
         <div className="hq-performance-manager">{manager}</div>
-        <div className="hq-pulse-card shadow-[0px_2px_3px_-1px_rgba(0,0,0,0.1),0px_1px_0px_0px_rgba(25,28,33,0.02),0px_0px_0px_1px_rgba(25,28,33,0.08)]" aria-label="Instagram performance">
+        <div className="hq-pulse-card" aria-label="Instagram performance">
           <div className="hq-pulse-heading">
             <div className="hq-pulse-identity"><h3>Instagram</h3></div>
             <div className="flex shrink-0 items-center gap-1">
@@ -2875,7 +2875,7 @@ function SignalsStrip({
             signedTrend
             foot={monthlyRangeFoot(instagramMonthlyFollowers.map((point) => point.month))
               ?? (instagramSnapshot?.windowDays ? `${instagramSnapshot.windowDays} days` : instagramPending)}
-            ariaLabel="Open Social Pulse analysis"
+            ariaLabel="Open Instagram Pulse analysis"
             onOpen={() => setSocialOpen(true)}
           />
           </div>
@@ -3093,6 +3093,7 @@ function SpotifyPulseDetails({
   history: ArtistSpotifyHistoryPoint[]
   error: string | null
 }) {
+  const [metric, setMetric] = React.useState<'streams' | 'listeners'>('streams')
   const sourceLabel = snapshot?.dataSource === 'spotify-web-api'
     ? 'Public API'
     : snapshot?.dataSource === 'spotify-for-artists-browser'
@@ -3100,9 +3101,39 @@ function SpotifyPulseDetails({
       : snapshot?.dataSource === 'manual'
         ? 'Manual'
         : 'No snapshot'
-  const growth = calculateArtistSpotifyGrowth(history)
   const monthlyStreams = buildArtistSpotifyMonthlyStreams(snapshot)
   const monthlyListeners = buildArtistSpotifyMonthlyListeners(snapshot)
+  const historyListenerPoints: PulseChartPoint[] = history
+    .filter((point): point is ArtistSpotifyHistoryPoint & { listeners: number } => typeof point.listeners === 'number')
+    .map((point) => ({ key: point.date, label: formatShortDate(point.date), value: point.listeners }))
+  const streamPoints: PulseChartPoint[] = monthlyStreams.length > 0
+    ? monthlyStreams.map((point) => ({ key: point.month, label: formatMonthKey(point.month, false), value: point.streams }))
+    : history.length > 0
+      ? history.map((point) => ({ key: point.date, label: formatShortDate(point.date), value: point.streams }))
+      : typeof snapshot?.metrics.streams === 'number'
+        ? [{ key: snapshot.snapshotDate, label: formatShortDate(snapshot.snapshotDate), value: snapshot.metrics.streams }]
+        : []
+  const listenerPoints: PulseChartPoint[] = monthlyListeners.length > 0
+    ? monthlyListeners.map((point) => ({ key: point.month, label: formatMonthKey(point.month, false), value: point.listeners }))
+    : historyListenerPoints.length > 0
+      ? historyListenerPoints
+      : typeof snapshot?.metrics.listeners === 'number'
+        ? [{ key: snapshot.snapshotDate, label: formatShortDate(snapshot.snapshotDate), value: snapshot.metrics.listeners }]
+        : []
+  const activePoints = metric === 'streams' ? streamPoints : listenerPoints
+  const activeHasMonthly = (metric === 'streams' ? monthlyStreams : monthlyListeners).length > 0
+  const monthlyBreakdown = [...new Set([
+    ...monthlyStreams.map((point) => point.month),
+    ...monthlyListeners.map((point) => point.month),
+  ])].sort().map((month) => ({
+    month,
+    streams: monthlyStreams.find((point) => point.month === month)?.streams,
+    listeners: monthlyListeners.find((point) => point.month === month)?.listeners,
+  }))
+  const topTracks = (snapshot?.tracks ?? []).slice(0, 8)
+  const topCities = (snapshot?.geo?.topCities ?? []).slice(0, 8)
+  const discoveryPlaylists = (snapshot?.playlistsDriving ?? []).slice(0, 8)
+  const discoverySources = Object.entries(snapshot?.sources ?? {})
   const streamsPerListener = typeof snapshot?.metrics.streams === 'number'
     && typeof snapshot.metrics.listeners === 'number'
     && snapshot.metrics.listeners > 0
@@ -3116,59 +3147,77 @@ function SpotifyPulseDetails({
       title="Spotify Pulse"
       description={`${sourceLabel}${snapshot ? ` · ${formatShortDate(snapshot.snapshotDate)}` : ''}`}
     >
+      <PulseTrendCard
+        label={activeHasMonthly ? `Monthly ${metric}` : metric === 'streams' ? 'Stream trend' : 'Listener trend'}
+        points={activePoints}
+        valueFormatter={formatMetric}
+        comparison={pulseTrendComparison(activePoints)}
+        range={activeHasMonthly
+          ? monthlyRangeFoot((metric === 'streams' ? monthlyStreams : monthlyListeners).map((point) => point.month)) ?? 'Completed months'
+          : pulsePointRange(activePoints)}
+        countLabel={activeHasMonthly ? 'completed months' : 'captured reads'}
+        empty="Run Spotify Pulse to capture the first performance read."
+        controls={(
+          <PulseMetricTabs
+            label="Spotify chart metric"
+            value={metric}
+            options={[{ value: 'streams', label: 'Streams' }, { value: 'listeners', label: 'Listeners' }]}
+            onChange={(value) => setMetric(value as 'streams' | 'listeners')}
+          />
+        )}
+      />
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-white/[0.06] bg-white/[0.06] sm:grid-cols-3">
-        <SignalStat label="Streams" value={formatMetric(snapshot?.metrics.streams)} />
-        <SignalStat label="Listeners" value={formatMetric(snapshot?.metrics.listeners)} />
         <SignalStat label="Streams / listener" value={streamsPerListener} />
         <SignalStat label="Followers" value={formatMetric(snapshot?.metrics.followers)} />
         <SignalStat label="Saves" value={formatMetric(snapshot?.metrics.saves)} />
         <SignalStat label="Popularity" value={formatMetric(snapshot?.metrics.popularity)} />
         <SignalStat label="Save rate" value={formatRateMetric(snapshot?.metrics.saveRate)} />
         <SignalStat label="Skip rate" value={formatRateMetric(snapshot?.metrics.skipRate)} />
-        <SignalStat label="Stream change" value={formatPercentMetric(growth?.streamsPercent, true)} />
       </div>
-      <PulseDetailSection title="Monthly streams" empty="No monthly stream history captured yet.">
-        {monthlyStreams.slice().reverse().map((point) => (
-          <PulseDetailRow key={point.month} label={formatMonthKey(point.month)} value={formatMetric(point.streams)} />
+      {monthlyBreakdown.length > 0 ? <PulseDisclosureSection title="Monthly breakdown" summary={`${monthlyBreakdown.length} months`}>
+        {monthlyBreakdown.slice().reverse().map((point) => (
+          <PulseDetailRow
+            key={point.month}
+            label={formatMonthKey(point.month)}
+            value={[
+              typeof point.streams === 'number' ? `${formatMetric(point.streams)} streams` : null,
+              typeof point.listeners === 'number' ? `${formatMetric(point.listeners)} listeners` : null,
+            ].filter(Boolean).join(' · ')}
+          />
         ))}
-      </PulseDetailSection>
-      <PulseDetailSection title="Monthly listeners" empty="No monthly listener history captured yet.">
-        {monthlyListeners.slice().reverse().map((point) => (
-          <PulseDetailRow key={point.month} label={formatMonthKey(point.month)} value={formatMetric(point.listeners)} />
-        ))}
-      </PulseDetailSection>
-      <PulseDetailSection title="Top tracks" empty="No track analysis yet.">
-        {(snapshot?.tracks ?? []).slice(0, 8).map((track) => (
+      </PulseDisclosureSection> : null}
+      {topTracks.length > 0 ? <PulseDisclosureSection title="Top tracks" summary={`${topTracks.length} shown`} defaultOpen>
+        {topTracks.map((track) => (
           <PulseDetailRow
             key={track.id ?? track.name}
             label={track.name}
             value={`${formatMetric(track.streams)} streams · ${formatMetric(track.saves)} saves`}
           />
         ))}
-      </PulseDetailSection>
-      <PulseDetailSection title="Top cities" empty="No city analysis yet.">
-        {(snapshot?.geo?.topCities ?? []).slice(0, 8).map((city) => (
+      </PulseDisclosureSection> : null}
+      {topCities.length > 0 ? <PulseDisclosureSection title="Top cities" summary={`${topCities.length} shown`}>
+        {topCities.map((city) => (
           <PulseDetailRow
             key={`${city.city}-${city.country ?? ''}`}
             label={[city.city, city.country].filter(Boolean).join(', ')}
             value={`${formatMetric(city.listeners)} listeners`}
           />
         ))}
-      </PulseDetailSection>
-      <PulseDetailSection title="Playlists driving discovery" empty="No playlist analysis yet.">
-        {(snapshot?.playlistsDriving ?? []).slice(0, 8).map((playlist) => (
+      </PulseDisclosureSection> : null}
+      {discoveryPlaylists.length > 0 ? <PulseDisclosureSection title="Playlists driving discovery" summary={`${discoveryPlaylists.length} shown`}>
+        {discoveryPlaylists.map((playlist) => (
           <PulseDetailRow
             key={`${playlist.name}-${playlist.type ?? ''}`}
             label={playlist.name}
             value={[playlist.type, typeof playlist.listeners === 'number' ? `${formatMetric(playlist.listeners)} listeners` : null].filter(Boolean).join(' · ') || '--'}
           />
         ))}
-      </PulseDetailSection>
-      <PulseDetailSection title="Discovery sources" empty="No source breakdown yet.">
-        {Object.entries(snapshot?.sources ?? {}).map(([source, value]) => (
+      </PulseDisclosureSection> : null}
+      {discoverySources.length > 0 ? <PulseDisclosureSection title="Discovery sources" summary={`${discoverySources.length} sources`}>
+        {discoverySources.map(([source, value]) => (
           <PulseDetailRow key={source} label={source} value={formatMetric(value)} />
         ))}
-      </PulseDetailSection>
+      </PulseDisclosureSection> : null}
       {error || snapshot?.errors?.length ? (
         <PulseDetailNotice>{error ?? snapshot?.errors?.join(' · ')}</PulseDetailNotice>
       ) : null}
@@ -3178,11 +3227,233 @@ function SpotifyPulseDetails({
 
 function SignalStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 bg-[#0F0F10] px-3 py-3">
-      <p className="text-[8px] font-medium uppercase tracking-[0.13em] text-white/48">{label}</p>
-      <p title={value} className="mt-1.5 truncate text-[13px] font-medium text-white/82">{value}</p>
+    <div className="min-w-0 bg-[#101112] px-3.5 py-3">
+      <p className="text-[9px] font-medium uppercase tracking-[0.13em] text-white/42">{label}</p>
+      <p title={value} className="mt-1.5 truncate text-[15px] font-medium tracking-[-0.015em] text-white/84">{value}</p>
     </div>
   )
+}
+
+type PulseChartPoint = {
+  key: string
+  label: string
+  value: number
+}
+
+function PulseMetricTabs({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: Array<{ value: string; label: string }>
+  onChange: (value: string) => void
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex rounded-[8px] border border-white/[0.07] bg-black/20 p-0.5">
+      {options.map((option) => {
+        const selected = value === option.value
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              'rounded-[6px] px-2.5 py-1.5 text-[10px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#f97316]/60',
+              selected ? 'bg-white/[0.09] text-white/86' : 'text-white/38 hover:text-white/68',
+            )}
+          >
+            {option.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function PulseTrendCard({
+  label,
+  points,
+  valueFormatter,
+  comparison,
+  range,
+  countLabel = 'completed months',
+  empty,
+  mode = 'line',
+  signed = false,
+  controls,
+}: {
+  label: string
+  points: PulseChartPoint[]
+  valueFormatter: (value: number | undefined) => string
+  comparison: string
+  range: string
+  countLabel?: string
+  empty: string
+  mode?: 'line' | 'bars'
+  signed?: boolean
+  controls?: React.ReactNode
+}) {
+  const latest = points.at(-1)
+  const tone = pulseTrendTone(points, signed)
+  return (
+    <section className="overflow-hidden rounded-[14px] border border-white/[0.075] bg-[#101112]">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-4 pb-2 pt-3.5">
+        <div className="min-w-0">
+          <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/40">{label}</p>
+          <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            <p className="text-[28px] font-medium leading-none tracking-[-0.045em] text-white/92">
+              {latest ? valueFormatter(latest.value) : '—'}
+            </p>
+            {latest ? <p className="text-[11px] text-white/34">{latest.label}</p> : null}
+          </div>
+          <p className={cn(
+            'mt-2 text-[11px]',
+            tone === 'up' ? 'text-emerald-300/82' : tone === 'down' ? 'text-red-300/76' : 'text-white/42',
+          )}>
+            {latest ? comparison : empty}
+          </p>
+        </div>
+        {controls}
+      </div>
+      {points.length > 0 ? (
+        <div className="border-t border-white/[0.045] px-3 pb-3 pt-2.5">
+          <PulseChart points={points} valueFormatter={valueFormatter} mode={mode} signed={signed} />
+          <div className="mt-1 flex items-center justify-between px-1 text-[9px] text-white/28">
+            <span>{range}</span>
+            <span>{points.length > 1 ? `${points.length} ${countLabel}` : 'Baseline captured'}</span>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function PulseChart({
+  points,
+  valueFormatter,
+  mode,
+  signed,
+}: {
+  points: PulseChartPoint[]
+  valueFormatter: (value: number | undefined) => string
+  mode: 'line' | 'bars'
+  signed: boolean
+}) {
+  const recent = points.slice(-12)
+  const width = 620
+  const height = 142
+  const left = 10
+  const right = 10
+  const top = 10
+  const bottom = 18
+  const plotWidth = width - left - right
+  const plotHeight = height - top - bottom
+  const rawMin = Math.min(...recent.map((point) => point.value))
+  const rawMax = Math.max(...recent.map((point) => point.value))
+  const minimum = signed ? Math.min(0, rawMin) : mode === 'bars' ? 0 : rawMin
+  const maximum = signed ? Math.max(0, rawMax) : mode === 'bars' ? Math.max(1, rawMax) : rawMax
+  const padding = maximum === minimum ? Math.max(1, Math.abs(maximum) * 0.08) : (maximum - minimum) * 0.08
+  const min = minimum === maximum ? minimum - padding : minimum - (signed || mode === 'bars' ? 0 : padding)
+  const max = minimum === maximum ? maximum + padding : maximum + (signed || mode === 'bars' ? 0 : padding)
+  const range = Math.max(1, max - min)
+  const xFor = (index: number) => mode === 'bars'
+    ? left + ((index + 0.5) / recent.length) * plotWidth
+    : recent.length === 1
+      ? width / 2
+      : left + (index / (recent.length - 1)) * plotWidth
+  const yFor = (value: number) => top + ((max - value) / range) * plotHeight
+  const coordinates = recent.map((point, index) => ({ ...point, x: xFor(index), y: yFor(point.value) }))
+  const baseline = yFor(0)
+  const line = coordinates.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
+  const area = coordinates.length > 1
+    ? `${line} L ${coordinates.at(-1)!.x.toFixed(1)} ${(top + plotHeight).toFixed(1)} L ${coordinates[0]!.x.toFixed(1)} ${(top + plotHeight).toFixed(1)} Z`
+    : ''
+  const barWidth = Math.min(28, Math.max(8, plotWidth / Math.max(1, recent.length) * 0.52))
+  const labelIndexes = [...new Set([0, Math.floor((recent.length - 1) / 2), recent.length - 1])]
+
+  return (
+    <figure role="img" aria-label={`${recent.length}-point ${mode === 'line' ? 'trend' : 'growth'} chart`}>
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-[142px] w-full overflow-visible" aria-hidden="true">
+        {[top, top + plotHeight / 2, top + plotHeight].map((y) => (
+          <line key={y} x1={left} x2={width - right} y1={y} y2={y} stroke="rgba(255,255,255,0.055)" strokeWidth="1" />
+        ))}
+        {signed ? <line x1={left} x2={width - right} y1={baseline} y2={baseline} stroke="rgba(255,255,255,0.16)" strokeWidth="1" /> : null}
+        {mode === 'line' ? (
+          <>
+            {area ? <path d={area} fill="rgba(249,115,22,0.07)" /> : null}
+            {coordinates.length > 1 ? <path d={line} fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /> : null}
+            {coordinates.map((point, index) => (
+              <g key={point.key}>
+                <circle cx={point.x} cy={point.y} r={index === coordinates.length - 1 ? 4 : 2.25} fill="#f97316" stroke="#101112" strokeWidth="2">
+                  <title>{`${point.label}: ${valueFormatter(point.value)}`}</title>
+                </circle>
+              </g>
+            ))}
+          </>
+        ) : coordinates.map((point) => {
+          const valueY = yFor(point.value)
+          const y = Math.min(baseline, valueY)
+          const rectHeight = Math.max(3, Math.abs(baseline - valueY))
+          return (
+            <rect
+              key={point.key}
+              x={point.x - barWidth / 2}
+              y={y}
+              width={barWidth}
+              height={rectHeight}
+              rx="3"
+              fill={point.value >= 0 ? 'rgba(249,115,22,0.88)' : 'rgba(252,165,165,0.72)'}
+            >
+              <title>{`${point.label}: ${valueFormatter(point.value)}`}</title>
+            </rect>
+          )
+        })}
+        {labelIndexes.map((index) => {
+          const point = coordinates[index]
+          if (!point) return null
+          return (
+            <text
+              key={`${point.key}-label`}
+              x={point.x}
+              y={height - 2}
+              textAnchor={coordinates.length === 1 ? 'middle' : index === 0 ? 'start' : index === coordinates.length - 1 ? 'end' : 'middle'}
+              fill="rgba(255,255,255,0.28)"
+              fontSize="9"
+            >
+              {point.label}
+            </text>
+          )
+        })}
+      </svg>
+    </figure>
+  )
+}
+
+function pulseTrendComparison(points: PulseChartPoint[]): string {
+  if (points.length < 2) return 'First baseline captured'
+  const current = points.at(-1)!
+  const previous = points.at(-2)!
+  if (previous.value === 0) return `${formatSignedMetric(current.value - previous.value)} from ${previous.label}`
+  const percent = ((current.value - previous.value) / Math.abs(previous.value)) * 100
+  const arrow = percent > 0 ? '↑' : percent < 0 ? '↓' : '→'
+  return `${arrow} ${Math.abs(percent).toFixed(1)}% from ${previous.label}`
+}
+
+function pulsePointRange(points: PulseChartPoint[]): string {
+  if (points.length === 0) return 'No captured history'
+  if (points.length === 1) return points[0]!.label
+  return `${points[0]!.label} – ${points.at(-1)!.label}`
+}
+
+function pulseTrendTone(points: PulseChartPoint[], signed: boolean): 'up' | 'down' | 'muted' {
+  if (points.length === 0) return 'muted'
+  const latest = points.at(-1)!.value
+  const comparison = signed ? latest : points.length > 1 ? latest - points.at(-2)!.value : 0
+  return comparison > 0 ? 'up' : comparison < 0 ? 'down' : 'muted'
 }
 
 function PulseDetailsDialog({
@@ -3200,12 +3471,12 @@ function PulseDetailsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[min(760px,calc(100vh-2rem))] w-[min(680px,calc(100vw-2rem))] max-w-[680px] flex-col gap-0 overflow-hidden border-white/[0.09] bg-[#0C0D0E] p-0 text-white shadow-modal-small">
+      <DialogContent className="flex max-h-[min(800px,calc(100vh-2rem))] w-[min(720px,calc(100vw-2rem))] max-w-[720px] flex-col gap-0 overflow-hidden border-white/[0.09] bg-[#0C0D0E] p-0 text-white shadow-modal-small">
         <DialogHeader className="shrink-0 border-b border-white/[0.06] px-5 py-4 pr-14 text-left">
           <DialogTitle className="text-lg font-medium tracking-[-0.02em]">{title}</DialogTitle>
           <DialogDescription className="text-xs text-white/40">{description}</DialogDescription>
         </DialogHeader>
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+        <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-5">
           {children}
         </div>
       </DialogContent>
@@ -3213,23 +3484,28 @@ function PulseDetailsDialog({
   )
 }
 
-function PulseDetailSection({
+function PulseDisclosureSection({
   title,
-  empty,
+  summary,
   children,
+  defaultOpen = false,
 }: {
   title: string
-  empty: string
+  summary?: string
   children: React.ReactNode
+  defaultOpen?: boolean
 }) {
-  const hasChildren = React.Children.count(children) > 0
   return (
-    <section>
-      <p className="mb-2 text-[9px] font-medium uppercase tracking-[0.15em] text-white/38">{title}</p>
-      <div className="overflow-hidden rounded-[12px] border border-white/[0.06] bg-[#0F0F10]">
-        {hasChildren ? children : <p className="px-3 py-4 text-xs text-white/32">{empty}</p>}
+    <details className="group overflow-hidden rounded-[12px] border border-white/[0.06] bg-[#101112]" open={defaultOpen || undefined}>
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-white/[0.025] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#f97316]/55">
+        <span className="min-w-0 flex-1 text-xs font-medium text-white/74">{title}</span>
+        {summary ? <span className="text-[10px] text-white/32">{summary}</span> : null}
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-white/28 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-white/[0.05]">
+        {children}
       </div>
-    </section>
+    </details>
   )
 }
 
@@ -3693,33 +3969,75 @@ function SocialPulseDetails({
   readyProfiles: number
   error: string | null
 }) {
+  const [metric, setMetric] = React.useState<'followers' | 'growth'>('followers')
   const statusLabel = busy
     ? 'Checking'
     : snapshot
-      ? `${snapshot.profile.handle ?? snapshot.profile.profile} · ${snapshot.windowDays ? `${snapshot.windowDays} days` : 'Insights'}`
+      ? `${snapshot.profile.handle ?? snapshot.profile.profile} · through ${formatShortDate(snapshot.snapshotDate)}${snapshot.windowDays ? ` · ${snapshot.windowDays}-day read` : ''}`
       : readyProfiles > 0
         ? 'Instagram ready'
         : 'Instagram setup needed'
+  const followerPoints: PulseChartPoint[] = monthlyFollowers
+    .filter((point): point is ArtistInstagramMonthlyFollower & { followers: number } => typeof point.followers === 'number')
+    .map((point) => ({ key: point.month, label: formatMonthKey(point.month, false), value: point.followers }))
+  const growthPoints: PulseChartPoint[] = monthlyFollowers
+    .filter((point): point is ArtistInstagramMonthlyFollower & { net: number } => typeof point.net === 'number')
+    .map((point) => ({ key: point.month, label: formatMonthKey(point.month, false), value: point.net }))
+  const fallbackFollowerPoints: PulseChartPoint[] = followerPoints.length > 0
+    ? followerPoints
+    : typeof snapshot?.metrics.followers === 'number'
+      ? [{ key: snapshot.snapshotDate, label: formatShortDate(snapshot.snapshotDate), value: snapshot.metrics.followers }]
+      : []
+  const fallbackGrowthPoints: PulseChartPoint[] = growthPoints.length > 0
+    ? growthPoints
+    : typeof snapshot?.metrics.followerDelta === 'number'
+      ? [{ key: snapshot.snapshotDate, label: snapshot.windowDays ? `${snapshot.windowDays} days` : 'Latest', value: snapshot.metrics.followerDelta }]
+      : history.map((point) => ({ key: point.date, label: formatShortDate(point.date), value: point.followerDelta })).slice(-12)
+  const activePoints = metric === 'followers' ? fallbackFollowerPoints : fallbackGrowthPoints
+  const activeHasMonthly = (metric === 'followers' ? followerPoints : growthPoints).length > 0
+  const latestGrowth = fallbackGrowthPoints.at(-1)
+  const growthComparison = latestGrowth
+    ? `${formatSignedMetric(latestGrowth.value)} net in ${latestGrowth.label}`
+    : 'No completed growth period captured'
 
   return (
     <PulseDetailsDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Social Pulse"
+      title="Instagram Pulse"
       description={statusLabel}
     >
+      <PulseTrendCard
+        label={metric === 'followers' ? 'Follower growth' : activeHasMonthly ? 'Monthly net growth' : 'Follower change'}
+        points={activePoints}
+        valueFormatter={metric === 'followers' ? formatMetric : formatSignedMetric}
+        comparison={metric === 'followers' ? pulseTrendComparison(activePoints) : growthComparison}
+        range={activeHasMonthly ? monthlyRangeFoot(monthlyFollowers.map((point) => point.month)) ?? 'Completed months' : pulsePointRange(activePoints)}
+        countLabel={activeHasMonthly ? 'completed months' : 'captured reads'}
+        empty="Run Instagram Insights to capture the first performance read."
+        mode={metric === 'followers' ? 'line' : 'bars'}
+        signed={metric === 'growth'}
+        controls={(
+          <PulseMetricTabs
+            label="Instagram chart metric"
+            value={metric}
+            options={[{ value: 'followers', label: 'Followers' }, { value: 'growth', label: 'Monthly growth' }]}
+            onChange={(value) => setMetric(value as 'followers' | 'growth')}
+          />
+        )}
+      />
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-white/[0.06] bg-white/[0.06] sm:grid-cols-3">
-        <SignalStat label="Followers" value={formatMetric(snapshot?.metrics.followers)} />
-        <SignalStat label="Follower change" value={formatSignedMetric(snapshot?.metrics.followerDelta)} />
         <SignalStat label="Reach" value={formatMetric(snapshot?.metrics.accountsReached)} />
         <SignalStat label="Engaged" value={formatMetric(snapshot?.metrics.accountsEngaged)} />
         <SignalStat label="Interactions" value={formatMetric(snapshot?.metrics.interactions)} />
         <SignalStat label="Profile visits" value={formatMetric(snapshot?.metrics.profileVisits)} />
         <SignalStat label="Likes" value={formatMetric(snapshot?.metrics.likes)} />
         <SignalStat label="Comments" value={formatMetric(snapshot?.metrics.comments)} />
-        <SignalStat label="Period" value={snapshot?.windowDays ? `${snapshot.windowDays} days` : '--'} />
       </div>
-      <PulseDetailSection title="Monthly follower growth" empty="No monthly follower history captured yet.">
+      {monthlyFollowers.length > 0 || history.length > 0 ? <PulseDisclosureSection
+        title="Monthly follower breakdown"
+        summary={monthlyFollowers.length > 0 ? `${monthlyFollowers.length} months` : `${history.length} reads`}
+      >
         {monthlyFollowers.length > 0
           ? monthlyFollowers.slice().reverse().map((point) => (
             <PulseDetailRow
@@ -3734,7 +4052,7 @@ function SocialPulseDetails({
           : history.slice().reverse().map((point) => (
             <PulseDetailRow key={point.date} label={formatShortDate(point.date)} value={formatSignedMetric(point.followerDelta)} />
           ))}
-      </PulseDetailSection>
+      </PulseDisclosureSection> : null}
       {error || snapshot?.errors?.length ? (
         <PulseDetailNotice>{error ?? snapshot?.errors?.join(' · ')}</PulseDetailNotice>
       ) : null}
@@ -3977,11 +4295,6 @@ function IntelConfigDialog({
 function formatMetric(value: number | undefined): string {
   if (typeof value !== 'number') return '--'
   return new Intl.NumberFormat('en-US', { notation: value >= 10000 ? 'compact' : 'standard' }).format(value)
-}
-
-function formatPercentMetric(value: number | undefined, signed = false): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
-  return `${signed && value > 0 ? '+' : ''}${value.toFixed(Math.abs(value) >= 10 ? 0 : 1)}%`
 }
 
 function formatRateMetric(value: number | undefined): string {

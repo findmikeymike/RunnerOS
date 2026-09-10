@@ -646,7 +646,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain('backdrop-blur-2xl')
     expect(hq).not.toContain('border border-[#f97316]/35')
     expect(hq).toContain('ariaLabel="Open Spotify Pulse analysis"')
-    expect(hq).toContain('ariaLabel="Open Social Pulse analysis"')
+    expect(hq).toContain('ariaLabel="Open Instagram Pulse analysis"')
     expect(hq).toContain('<PulseDetailsDialog')
     expect(hq).not.toContain('mt-3 grid grid-cols-3 gap-2 rounded-[12px] bg-black/20 py-3')
     expect(hq).toContain('<ArtistManagerOrb onOpen={() => managerVoice.setOpen(true)} />')
