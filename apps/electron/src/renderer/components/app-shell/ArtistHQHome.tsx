@@ -35,6 +35,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
 import { resolvePulseExecutionTarget, type PulseExecutionTarget } from '@/lib/pulse-execution'
+import {
+  buildPulseChartDomain,
+  defaultSpotifyPulseMetric,
+  formatPulseExactMetric,
+  selectPulseGrowthSeries,
+  spotifyPulseMetricOptions,
+  type SpotifyPulseMetric,
+} from '@/lib/artist-pulse-presentation'
 import { openAgentSessionComposer } from '@/lib/run-agent'
 import { appendSignalNugget, signalFreshness } from '@/lib/artist-signals'
 import {
@@ -3093,7 +3101,10 @@ function SpotifyPulseDetails({
   history: ArtistSpotifyHistoryPoint[]
   error: string | null
 }) {
-  const [metric, setMetric] = React.useState<'streams' | 'listeners'>('streams')
+  const [metric, setMetric] = React.useState<SpotifyPulseMetric>(() => defaultSpotifyPulseMetric(snapshot?.dataSource))
+  React.useEffect(() => {
+    setMetric(defaultSpotifyPulseMetric(snapshot?.dataSource))
+  }, [snapshot?.dataSource])
   const sourceLabel = snapshot?.dataSource === 'spotify-web-api'
     ? 'Public API'
     : snapshot?.dataSource === 'spotify-for-artists-browser'
@@ -3120,8 +3131,30 @@ function SpotifyPulseDetails({
       : typeof snapshot?.metrics.listeners === 'number'
         ? [{ key: snapshot.snapshotDate, label: formatShortDate(snapshot.snapshotDate), value: snapshot.metrics.listeners }]
         : []
-  const activePoints = metric === 'streams' ? streamPoints : listenerPoints
-  const activeHasMonthly = (metric === 'streams' ? monthlyStreams : monthlyListeners).length > 0
+  const popularityPoints: PulseChartPoint[] = typeof snapshot?.metrics.popularity === 'number'
+    ? [{ key: snapshot.snapshotDate, label: formatShortDate(snapshot.snapshotDate), value: snapshot.metrics.popularity }]
+    : []
+  const followerPoints: PulseChartPoint[] = typeof snapshot?.metrics.followers === 'number'
+    ? [{ key: snapshot.snapshotDate, label: formatShortDate(snapshot.snapshotDate), value: snapshot.metrics.followers }]
+    : []
+  const metricPoints: Record<SpotifyPulseMetric, PulseChartPoint[]> = {
+    streams: streamPoints,
+    listeners: listenerPoints,
+    popularity: popularityPoints,
+    followers: followerPoints,
+  }
+  const activePoints = metricPoints[metric]
+  const activeHasMonthly = metric === 'streams'
+    ? monthlyStreams.length > 0
+    : metric === 'listeners'
+      ? monthlyListeners.length > 0
+      : false
+  const activeMonthlyMonths = metric === 'streams'
+    ? monthlyStreams.map((point) => point.month)
+    : metric === 'listeners'
+      ? monthlyListeners.map((point) => point.month)
+      : []
+  const activeMetricLabel = spotifyPulseMetricOptions(snapshot?.dataSource).find((option) => option.value === metric)?.label ?? metric
   const monthlyBreakdown = [...new Set([
     ...monthlyStreams.map((point) => point.month),
     ...monthlyListeners.map((point) => point.month),
@@ -3148,21 +3181,23 @@ function SpotifyPulseDetails({
       description={`${sourceLabel}${snapshot ? ` · ${formatShortDate(snapshot.snapshotDate)}` : ''}`}
     >
       <PulseTrendCard
-        label={activeHasMonthly ? `Monthly ${metric}` : metric === 'streams' ? 'Stream trend' : 'Listener trend'}
+        label={activeHasMonthly ? `Monthly ${metric}` : `${activeMetricLabel} trend`}
         points={activePoints}
         valueFormatter={formatMetric}
+        detailFormatter={formatPulseExactMetric}
         comparison={pulseTrendComparison(activePoints)}
         range={activeHasMonthly
-          ? monthlyRangeFoot((metric === 'streams' ? monthlyStreams : monthlyListeners).map((point) => point.month)) ?? 'Completed months'
+          ? monthlyRangeFoot(activeMonthlyMonths) ?? 'Completed months'
           : pulsePointRange(activePoints)}
         countLabel={activeHasMonthly ? 'completed months' : 'captured reads'}
         empty="Run Spotify Pulse to capture the first performance read."
+        fixedDomain={metric === 'popularity' ? { min: 0, max: 100 } : undefined}
         controls={(
           <PulseMetricTabs
             label="Spotify chart metric"
             value={metric}
-            options={[{ value: 'streams', label: 'Streams' }, { value: 'listeners', label: 'Listeners' }]}
-            onChange={(value) => setMetric(value as 'streams' | 'listeners')}
+            options={spotifyPulseMetricOptions(snapshot?.dataSource)}
+            onChange={(value) => setMetric(value as SpotifyPulseMetric)}
           />
         )}
       />
@@ -3180,8 +3215,8 @@ function SpotifyPulseDetails({
             key={point.month}
             label={formatMonthKey(point.month)}
             value={[
-              typeof point.streams === 'number' ? `${formatMetric(point.streams)} streams` : null,
-              typeof point.listeners === 'number' ? `${formatMetric(point.listeners)} listeners` : null,
+              typeof point.streams === 'number' ? `${formatPulseExactMetric(point.streams)} streams` : null,
+              typeof point.listeners === 'number' ? `${formatPulseExactMetric(point.listeners)} listeners` : null,
             ].filter(Boolean).join(' · ')}
           />
         ))}
@@ -3191,7 +3226,7 @@ function SpotifyPulseDetails({
           <PulseDetailRow
             key={track.id ?? track.name}
             label={track.name}
-            value={`${formatMetric(track.streams)} streams · ${formatMetric(track.saves)} saves`}
+            value={`${formatPulseExactMetric(track.streams)} streams · ${formatPulseExactMetric(track.saves)} saves`}
           />
         ))}
       </PulseDisclosureSection> : null}
@@ -3200,7 +3235,7 @@ function SpotifyPulseDetails({
           <PulseDetailRow
             key={`${city.city}-${city.country ?? ''}`}
             label={[city.city, city.country].filter(Boolean).join(', ')}
-            value={`${formatMetric(city.listeners)} listeners`}
+            value={`${formatPulseExactMetric(city.listeners)} listeners`}
           />
         ))}
       </PulseDisclosureSection> : null}
@@ -3209,13 +3244,13 @@ function SpotifyPulseDetails({
           <PulseDetailRow
             key={`${playlist.name}-${playlist.type ?? ''}`}
             label={playlist.name}
-            value={[playlist.type, typeof playlist.listeners === 'number' ? `${formatMetric(playlist.listeners)} listeners` : null].filter(Boolean).join(' · ') || '--'}
+            value={[playlist.type, typeof playlist.listeners === 'number' ? `${formatPulseExactMetric(playlist.listeners)} listeners` : null].filter(Boolean).join(' · ') || '--'}
           />
         ))}
       </PulseDisclosureSection> : null}
       {discoverySources.length > 0 ? <PulseDisclosureSection title="Discovery sources" summary={`${discoverySources.length} sources`}>
         {discoverySources.map(([source, value]) => (
-          <PulseDetailRow key={source} label={source} value={formatMetric(value)} />
+          <PulseDetailRow key={source} label={source} value={formatPulseExactMetric(value)} />
         ))}
       </PulseDisclosureSection> : null}
       {error || snapshot?.errors?.length ? (
@@ -3278,6 +3313,7 @@ function PulseTrendCard({
   label,
   points,
   valueFormatter,
+  detailFormatter = valueFormatter,
   comparison,
   range,
   countLabel = 'completed months',
@@ -3285,10 +3321,12 @@ function PulseTrendCard({
   mode = 'line',
   signed = false,
   controls,
+  fixedDomain,
 }: {
   label: string
   points: PulseChartPoint[]
   valueFormatter: (value: number | undefined) => string
+  detailFormatter?: (value: number | undefined) => string
   comparison: string
   range: string
   countLabel?: string
@@ -3296,6 +3334,7 @@ function PulseTrendCard({
   mode?: 'line' | 'bars'
   signed?: boolean
   controls?: React.ReactNode
+  fixedDomain?: { min: number; max: number }
 }) {
   const latest = points.at(-1)
   const tone = pulseTrendTone(points, signed)
@@ -3321,7 +3360,7 @@ function PulseTrendCard({
       </div>
       {points.length > 0 ? (
         <div className="border-t border-white/[0.045] px-3 pb-3 pt-2.5">
-          <PulseChart points={points} valueFormatter={valueFormatter} mode={mode} signed={signed} />
+          <PulseChart points={points} valueFormatter={detailFormatter} mode={mode} signed={signed} fixedDomain={fixedDomain} />
           <div className="mt-1 flex items-center justify-between px-1 text-[9px] text-white/28">
             <span>{range}</span>
             <span>{points.length > 1 ? `${points.length} ${countLabel}` : 'Baseline captured'}</span>
@@ -3337,28 +3376,24 @@ function PulseChart({
   valueFormatter,
   mode,
   signed,
+  fixedDomain,
 }: {
   points: PulseChartPoint[]
   valueFormatter: (value: number | undefined) => string
   mode: 'line' | 'bars'
   signed: boolean
+  fixedDomain?: { min: number; max: number }
 }) {
   const recent = points.slice(-12)
   const width = 620
   const height = 142
-  const left = 10
+  const left = mode === 'line' ? 48 : 10
   const right = 10
   const top = 10
   const bottom = 18
   const plotWidth = width - left - right
   const plotHeight = height - top - bottom
-  const rawMin = Math.min(...recent.map((point) => point.value))
-  const rawMax = Math.max(...recent.map((point) => point.value))
-  const minimum = signed ? Math.min(0, rawMin) : mode === 'bars' ? 0 : rawMin
-  const maximum = signed ? Math.max(0, rawMax) : mode === 'bars' ? Math.max(1, rawMax) : rawMax
-  const padding = maximum === minimum ? Math.max(1, Math.abs(maximum) * 0.08) : (maximum - minimum) * 0.08
-  const min = minimum === maximum ? minimum - padding : minimum - (signed || mode === 'bars' ? 0 : padding)
-  const max = minimum === maximum ? maximum + padding : maximum + (signed || mode === 'bars' ? 0 : padding)
+  const { min, max } = buildPulseChartDomain(recent.map((point) => point.value), { mode, signed, fixed: fixedDomain })
   const range = Math.max(1, max - min)
   const xFor = (index: number) => mode === 'bars'
     ? left + ((index + 0.5) / recent.length) * plotWidth
@@ -3381,6 +3416,12 @@ function PulseChart({
         {[top, top + plotHeight / 2, top + plotHeight].map((y) => (
           <line key={y} x1={left} x2={width - right} y1={y} y2={y} stroke="rgba(255,255,255,0.055)" strokeWidth="1" />
         ))}
+        {mode === 'line' ? (
+          <>
+            <text x={left - 8} y={top + 3} textAnchor="end" fill="rgba(255,255,255,0.28)" fontSize="9">{formatMetric(max)}</text>
+            <text x={left - 8} y={top + plotHeight} textAnchor="end" fill="rgba(255,255,255,0.28)" fontSize="9">{formatMetric(min)}</text>
+          </>
+        ) : null}
         {signed ? <line x1={left} x2={width - right} y1={baseline} y2={baseline} stroke="rgba(255,255,255,0.16)" strokeWidth="1" /> : null}
         {mode === 'line' ? (
           <>
@@ -3988,11 +4029,15 @@ function SocialPulseDetails({
     : typeof snapshot?.metrics.followers === 'number'
       ? [{ key: snapshot.snapshotDate, label: formatShortDate(snapshot.snapshotDate), value: snapshot.metrics.followers }]
       : []
-  const fallbackGrowthPoints: PulseChartPoint[] = growthPoints.length > 0
-    ? growthPoints
-    : typeof snapshot?.metrics.followerDelta === 'number'
-      ? [{ key: snapshot.snapshotDate, label: snapshot.windowDays ? `${snapshot.windowDays} days` : 'Latest', value: snapshot.metrics.followerDelta }]
-      : history.map((point) => ({ key: point.date, label: formatShortDate(point.date), value: point.followerDelta })).slice(-12)
+  const historyGrowthPoints: PulseChartPoint[] = history.map((point) => ({
+    key: point.date,
+    label: formatShortDate(point.date),
+    value: point.followerDelta,
+  }))
+  const currentGrowthPoint: PulseChartPoint | undefined = typeof snapshot?.metrics.followerDelta === 'number'
+    ? { key: snapshot.snapshotDate, label: snapshot.windowDays ? `${snapshot.windowDays} days` : 'Latest', value: snapshot.metrics.followerDelta }
+    : undefined
+  const fallbackGrowthPoints = selectPulseGrowthSeries(growthPoints, historyGrowthPoints, currentGrowthPoint)
   const activePoints = metric === 'followers' ? fallbackFollowerPoints : fallbackGrowthPoints
   const activeHasMonthly = (metric === 'followers' ? followerPoints : growthPoints).length > 0
   const latestGrowth = fallbackGrowthPoints.at(-1)
@@ -4011,6 +4056,7 @@ function SocialPulseDetails({
         label={metric === 'followers' ? 'Follower growth' : activeHasMonthly ? 'Monthly net growth' : 'Follower change'}
         points={activePoints}
         valueFormatter={metric === 'followers' ? formatMetric : formatSignedMetric}
+        detailFormatter={metric === 'followers' ? formatPulseExactMetric : formatSignedMetric}
         comparison={metric === 'followers' ? pulseTrendComparison(activePoints) : growthComparison}
         range={activeHasMonthly ? monthlyRangeFoot(monthlyFollowers.map((point) => point.month)) ?? 'Completed months' : pulsePointRange(activePoints)}
         countLabel={activeHasMonthly ? 'completed months' : 'captured reads'}
@@ -4044,7 +4090,7 @@ function SocialPulseDetails({
               key={point.month}
               label={formatMonthKey(point.month)}
               value={[
-                typeof point.followers === 'number' ? `${formatMetric(point.followers)} followers` : null,
+                typeof point.followers === 'number' ? `${formatPulseExactMetric(point.followers)} followers` : null,
                 typeof point.net === 'number' ? `${formatSignedMetric(point.net)} net` : null,
               ].filter(Boolean).join(' · ')}
             />
@@ -4062,7 +4108,7 @@ function SocialPulseDetails({
 
 function formatSignedMetric(value: number | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
-  return `${value > 0 ? '+' : ''}${value.toLocaleString()}`
+  return `${value > 0 ? '+' : ''}${formatPulseExactMetric(value)}`
 }
 
 function IntelConfigDialog({
