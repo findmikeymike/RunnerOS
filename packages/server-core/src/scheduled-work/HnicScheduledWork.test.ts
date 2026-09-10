@@ -48,7 +48,7 @@ mock.module('@craft-agent/shared/agent-definitions', () => ({
 mock.module('@craft-agent/shared/workflows', () => ({
   ...actualWorkflows,
   readActivatedWorkflows: (rootPath: string, ...rest: Tail<Parameters<typeof realReadActivatedWorkflows>>) => rootPath.includes('hnic-scheduled-work-')
-    ? { version: 1, active: ['input-workflow', 'legacy-input-workflow'] }
+    ? { version: 1, active: ['input-workflow', 'legacy-input-workflow', 'durable-input-workflow'] }
     : realReadActivatedWorkflows(rootPath, ...rest),
   loadGlobalWorkflow: (slug: string, ...rest: Tail<Parameters<typeof realLoadGlobalWorkflow>>) => {
     if (slug === 'legacy-input-workflow') {
@@ -71,9 +71,10 @@ mock.module('@craft-agent/shared/workflows', () => ({
         source: 'global',
       }
     }
-    return slug === 'input-workflow' ? {
+    return slug === 'input-workflow' || slug === 'durable-input-workflow' ? {
         slug,
         metadata: {
+          ...(slug === 'durable-input-workflow' ? { execution: 'durable-local-read' as const } : {}),
           name: 'Input Workflow',
           description: 'Uses one required topic and one optional limit.',
           trigger: {
@@ -557,4 +558,39 @@ describe('persistHnicScheduleWork', () => {
       trigger: { type: 'schedule', cron: '0 9 * * 1', cadence: 'weekly', timezone: 'America/Chicago' },
     })))).rejects.toThrow(/exactly one of cron or cadence/)
   })
+})
+
+for (const value of ['', null]) {
+  test(`durable scheduled inputs preserve explicit ${JSON.stringify(value)} until final admission`, async () => {
+    const root = createRoot()
+    await persistHnicScheduleWork(options(root, input({ execution: {
+      type: 'workflow-run', workflowSlug: 'durable-input-workflow', triggerInputs: { topic: 'notes', limit: value },
+    } })))
+    const parsed = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+    if (!parsed.ok) throw new Error(parsed.error)
+    expect(parsed.work.items[0]?.execution).toMatchObject({ triggerInputs: { topic: 'notes', limit: value } })
+  })
+}
+
+test('durable fixed empty binding persists empty instead of restoring default', async () => {
+  const root = createRoot()
+  await persistHnicScheduleWork(options(root, workflowAutomation({ execution: {
+    type: 'workflow-run', workflowSlug: 'durable-input-workflow', inputBindings: {
+      topic: { mode: 'fixed', value: 'notes' }, limit: { mode: 'fixed', value: '' },
+    },
+  } })))
+  const config = await Bun.file(resolveAutomationsConfigPath(root)).json()
+  expect(config.automations.SchedulerTick[0].actions[0].execution.triggerInputs).toEqual({ topic: 'notes', limit: '' })
+})
+
+test('legacy scheduled empty input normalization stays unchanged', async () => {
+  const root = createRoot()
+  await persistHnicScheduleWork(options(root, input({ execution: {
+    type: 'workflow-run', workflowSlug: 'input-workflow', triggerInputs: { topic: 'notes', limit: '' },
+  } })))
+  const parsed = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+  if (!parsed.ok) throw new Error(parsed.error)
+  expect(parsed.work.items[0]?.execution).toMatchObject({ triggerInputs: { topic: 'notes' } })
+  if (parsed.work.items[0]?.execution.type !== 'workflow-run') throw new Error('wrong execution')
+  expect(parsed.work.items[0].execution.triggerInputs).not.toHaveProperty('limit')
 })

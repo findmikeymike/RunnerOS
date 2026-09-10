@@ -388,3 +388,13 @@ describe('integration: per-job override end-to-end (no full agent boot)', () => 
     });
   });
 });
+
+test('intermediate empty preservation prevents later durable default restoration without changing legacy', () => {
+  const defined = workflow([{ name: 'text', type: 'string', default: 'fallback' }, { name: 'amount', type: 'number', default: 4 }]);
+  const saved = normalizeWorkflowTriggerInputs(defined, { text: '', amount: null }, { preserveEmptyInputs: true });
+  expect(saved).toEqual({ text: '', amount: null });
+  expect(normalizeWorkflowTriggerInputs(defined, saved)).toEqual({});
+  expect(normalizeWorkflowTriggerInputs(defined, { text: '', amount: null })).toEqual({});
+  expect(normalizeWorkflowTriggerInputs(defined, {}, { preserveEmptyInputs: true })).toEqual({ text: 'fallback', amount: 4 });
+  expect(() => normalizeWorkflowTriggerInputs(workflow([{ name: 'required', type: 'string', required: true }]), { required: '' }, { preserveEmptyInputs: true })).toThrow('Missing required');
+});

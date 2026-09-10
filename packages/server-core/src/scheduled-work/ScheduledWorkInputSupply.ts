@@ -115,7 +115,7 @@ export async function supplyScheduledWorkInputs(
     const triggerInputs = normalizeWorkflowTriggerInputs(workflow, {
       ...order.execution.triggerInputs,
       ...input.values,
-    })
+    }, { preserveEmptyInputs: workflow.metadata.execution === 'durable-local-read' })
     const now = (deps.now?.() ?? new Date()).toISOString()
     const execution = { ...order.execution, triggerInputs }
     const nextOrder = {

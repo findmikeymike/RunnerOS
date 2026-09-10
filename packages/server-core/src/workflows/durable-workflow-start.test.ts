@@ -26,8 +26,10 @@ function fixture() {
   const workflow = { slug: 'read', source: 'global' as const, path: '/fixture/read', body: '', metadata: { execution: 'durable-local-read' as const, name: 'Read', description: '', trigger: { type: 'manual' as const }, outputs: { mode: 'none' as const }, steps: [{ id: 'read', agent: 'reader', input: 'Read notes' }] } };
   const bundle = { connectionSlug: 'route', model: 'fixture', systemPrompt: 'Read only' };
   let release!: () => void, entered!: () => void, finished!: () => void, modelCalls = 0, legacyCalls = 0;
+  const prompts: string[] = [];
   const gate = new Promise<void>(resolve => release = resolve), ready = new Promise<void>(resolve => entered = resolve), done = new Promise<void>(resolve => finished = resolve);
-  const runnerOptions: Omit<DurableReadRunnerOptions, 'journal'> = { resolvePublicationWorkspace: () => workspace, authorizePublication: () => {}, hostRuntime: { appRootPath: root, isPackaged: false }, resolveBinding: () => ({ workspace, credentialIdentity: 'a'.repeat(64), context: { provider: 'pi', authType: 'api_key', resolvedModel: 'fixture', capabilities: { needsHttpPoolServer: false }, connection: { slug: 'route', name: 'route', providerType: 'pi', authType: 'api_key', piAuthProvider: 'openai', createdAt: 1 } } }), createBackend: args => ({ async *chat() {
+  const runnerOptions: Omit<DurableReadRunnerOptions, 'journal'> = { resolvePublicationWorkspace: () => workspace, authorizePublication: () => {}, hostRuntime: { appRootPath: root, isPackaged: false }, resolveBinding: () => ({ workspace, credentialIdentity: 'a'.repeat(64), context: { provider: 'pi', authType: 'api_key', resolvedModel: 'fixture', capabilities: { needsHttpPoolServer: false }, connection: { slug: 'route', name: 'route', providerType: 'pi', authType: 'api_key', piAuthProvider: 'openai', createdAt: 1 } } }), createBackend: args => ({ async *chat(prompt: string) {
+    prompts.push(prompt);
     const bridge = args.coreConfig.durableExecution!; const reply = await bridge.checkpoint({ kind: 'model-start', turn: 0, context: {} });
     if (reply.cached === undefined) { modelCalls++; entered(); await gate;
       await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'done' }] } }); }
@@ -41,7 +43,7 @@ function fixture() {
   const createRunner = (durableStart = createStart()) => new WorkflowRunner({ durableStart, getWorkspaceRootPath: () => root,
     assertWorkflowAdmissionAvailable: async (workspaceId, workflowSlug) => { if (await host.hasUnfinishedWorkflow(workspaceId, workflowSlug)) throw new Error('This workflow has unfinished work.'); },
     createSession: async () => { legacyCalls++; return { id: 'legacy' }; }, sendMessage: async () => {}, getLastAssistantText: () => 'legacy output', abortSession: async () => {} });
-  return { setScheduledPrincipal: (value: string) => { scheduledPrincipal = value; }, root, workspace, workflow, bundle, host, open, input, createStart, createRunner, ready, done, release, modelCalls: () => modelCalls, legacyCalls: () => legacyCalls };
+  return { prompts, setScheduledPrincipal: (value: string) => { scheduledPrincipal = value; }, root, workspace, workflow, bundle, host, open, input, createStart, createRunner, ready, done, release, modelCalls: () => modelCalls, legacyCalls: () => legacyCalls };
 }
 
 test('normal START returns committed durable identity before completion and GET/LIST expose that identity', async () => {
@@ -200,6 +202,61 @@ test('a later unsupported or differently routed agent rejects the whole workflow
     expect(await f.host.runs.list('w', f.input.actor!)).toEqual([]);
     expect(f.modelCalls()).toBe(0); expect(f.legacyCalls()).toBe(0);
   }
+});
+
+test.each(['manual-ui', 'scheduled-work'] as const)('%s freezes typed inputs in prompts and authorized history', async invocation => {
+  const f = fixture();
+  const workflow: WorkflowStartInput['workflow'] = { ...f.workflow, metadata: { ...f.workflow.metadata,
+    trigger: { type: 'manual', inputs: [{ name: 'release', type: 'string', required: true }, { name: 'count', type: 'number', default: 0 }, { name: 'draft', type: 'boolean', default: false }] },
+    steps: [{ id: 'read', agent: 'reader', input: '{{trigger.release}}/{{trigger.count}}/{{trigger.draft}}' }],
+  } };
+  const occurrence = { workOrderId: 'input-order', attemptId: 'input-attempt', workflowSlug: workflow.slug, workflowDigest: 'input-definition' };
+  const input: WorkflowStartInput = { ...f.input, workflow, triggerInputs: { release: 'First release' }, invocation,
+    ...(invocation === 'scheduled-work' ? { actor: undefined, occurrence } : {}) };
+  const saved = await f.createRunner().start(input); await f.ready;
+  input.triggerInputs.release = 'Later edit'; workflow.metadata.trigger.inputs![1]!.default = 99;
+  expect(saved.trigger.inputs).toEqual({ release: 'First release', count: 0, draft: false });
+  expect(f.prompts).toEqual(['First release/0/false']);
+  f.release();
+  for (let i = 0; i < 100 && await f.host.isRunActive('w', saved.id); i++) await new Promise(resolve => setTimeout(resolve, 1));
+  await f.host.close(); const reopened = f.open(); cleanup.push(() => reopened.close());
+  const restored = await reopened.runs.get('w', saved.id, f.input.actor!);
+  expect(restored?.trigger.inputs).toEqual(saved.trigger.inputs); expect(restored?.state).toBe('succeeded');
+  if (invocation === 'scheduled-work') {
+    workflow.metadata.trigger.inputs![1]!.default = 'invalid later default';
+    const start = createDurableWorkflowStart({ host: reopened, getWorkspaceRootPath: () => f.root, resolveBundle: async () => { throw new Error('must reuse occurrence'); } });
+    const reused = await start({ ...input, triggerInputs: { release: 123 } });
+    expect(reused?.id).toBe(saved.id); expect(reused?.trigger.inputs).toEqual(saved.trigger.inputs);
+  }
+  expect(f.modelCalls()).toBe(1);
+});
+
+test('invalid typed inputs reject before bundle resolution or journal admission', async () => {
+  const f = fixture(); let bundles = 0;
+  const workflow: WorkflowStartInput['workflow'] = { ...f.workflow, metadata: { ...f.workflow.metadata,
+    trigger: { type: 'manual', inputs: [{ name: 'count', type: 'number', required: true, min: 1, max: 3, integer: true }] },
+    steps: [{ id: 'read', agent: 'reader', input: '{{trigger.count}}' }],
+  } };
+  const start = createDurableWorkflowStart({ host: f.host, getWorkspaceRootPath: () => f.root, resolveBundle: async () => { bundles++; return f.bundle; } });
+  for (const triggerInputs of [{}, { count: '2' }, { count: 0 }, { count: 4 }, { count: 1.5 }, { count: NaN }, { count: Infinity }, { count: 2, permission_mode: 'yolo' }, { count: 2, enabled_source_slugs: [] }]) {
+    await expect(f.createRunner(start).start({ ...f.input, workflow, triggerInputs })).rejects.toThrow();
+  }
+  expect(bundles).toBe(0); expect(await f.host.runs.list('w', f.input.actor!)).toEqual([]); expect(f.modelCalls()).toBe(0);
+});
+
+test.each(['', null])('RPC Start preserves explicit empty optional input (%s) instead of refilling its default', async value => {
+  const f = fixture(), workflow: WorkflowStartInput['workflow'] = { ...f.workflow, metadata: { ...f.workflow.metadata,
+    trigger: { type: 'manual', inputs: [{ name: 'brief', type: 'string', default: 'DEFAULT' }] },
+    steps: [{ id: 'read', agent: 'reader', input: 'Brief: {{trigger.brief}}' }],
+  } };
+  const spies = [spyOn(config, 'getWorkspaceByNameOrId').mockReturnValue(f.workspace), spyOn(workflows, 'loadGlobalWorkflow').mockReturnValue(workflow),
+    spyOn(workflows, 'readActivatedWorkflows').mockReturnValue({ active: ['read'] } as ReturnType<typeof workflows.readActivatedWorkflows>), spyOn(workspaces, 'assertTeamPermission').mockReturnValue({ allowed: true, action: 'agent.chat', role: 'owner', machineId: 'fixture' })];
+  cleanup.push(() => spies.forEach(spy => spy.mockRestore()));
+  const handlers = new Map<string, HandlerFn>(), runner = f.createRunner();
+  registerWorkflowRunsHandlers({ handle: (channel: string, handler: HandlerFn) => handlers.set(channel, handler), push() {} } as unknown as RpcServer,
+    { getWorkflowRunner: () => runner, getDurableWorkflowRuns: () => f.host.runs, getDurableWorkflowControls: () => f.host.controls } as unknown as HandlerDeps);
+  const saved = await handlers.get(RPC_CHANNELS.workflowRuns.START)!({ clientId: 'c', workspaceId: 'w', webContentsId: null }, 'w', 'read', { brief: value });
+  await f.ready; expect(saved.trigger.inputs).toEqual({}); expect(f.prompts).toEqual(['Brief: ']); f.release();
 });
 
 test('tracked schedules admit multi-step reads under one occurrence identity', async () => {

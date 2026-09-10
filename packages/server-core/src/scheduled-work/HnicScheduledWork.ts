@@ -125,7 +125,7 @@ function resolveExecution(rootPath: string, request: ScheduleWorkToolInput): Sch
   const supplied = input.triggerInputs ?? {}
   let triggerInputs: Record<string, unknown>
   if (!input.inputBindings) {
-    triggerInputs = normalizeWorkflowTriggerInputs(workflow, supplied)
+    triggerInputs = normalizeWorkflowTriggerInputs(workflow, supplied, { preserveEmptyInputs: workflow.metadata.execution === 'durable-local-read' })
   } else {
     if (request.destination !== 'automation') {
       throw new Error('Workflow input bindings are available only for Automations.')
@@ -149,6 +149,7 @@ function resolveExecution(rootPath: string, request: ScheduleWorkToolInput): Sch
     triggerInputs = normalizeWorkflowTriggerInputs(workflow, raw, {
       allowMissingRequired: unresolved,
       skipDefaultsFor: unresolved,
+      preserveEmptyInputs: workflow.metadata.execution === 'durable-local-read',
     })
   }
   return {

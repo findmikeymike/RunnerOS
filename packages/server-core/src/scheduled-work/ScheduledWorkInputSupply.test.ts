@@ -213,6 +213,21 @@ function supply(
 }
 
 describe('supplyScheduledWorkInputs', () => {
+  test('durable input supply preserves an already-cleared optional default', async () => {
+    const previous = workflow.metadata.trigger.inputs
+    workflow.metadata.execution = 'durable-local-read'
+    workflow.metadata.trigger.inputs = [...previous!, { name: 'note', type: 'string', default: 'fallback' }]
+    try {
+      const root = makeRoot(), order = waitingOrder()
+      order.inputRequest!.inputs = ['file', 'count']
+      if (order.execution.type !== 'workflow-run') throw new Error('wrong execution')
+      order.execution.triggerInputs = { note: '' }
+      writeOrder(root, order)
+      const result = await supply(root)
+      expect(result.order.execution).toMatchObject({ triggerInputs: { note: '', file: '/vault/art.png', count: 2 } })
+    } finally { delete workflow.metadata.execution; workflow.metadata.trigger.inputs = previous }
+  })
+
   test('validates all requested values, schedules the work, and makes retries harmless', async () => {
     const root = makeRoot()
     writeOrder(root, waitingOrder())

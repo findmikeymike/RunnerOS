@@ -3675,7 +3675,7 @@ export class SessionManager implements ISessionManager {
           const run = await this.workflowRunner.start({
             workflow,
             workspaceId: workspace.id,
-            triggerInputs: normalizeWorkflowTriggerInputs(workflow, triggerInputs),
+            triggerInputs: workflow.metadata.execution === 'durable-local-read' ? triggerInputs : normalizeWorkflowTriggerInputs(workflow, triggerInputs),
             untrustedTriggerInputs,
             ...(workflow.metadata.execution === 'durable-local-read' ? { invocation: 'scheduled-work' as const, occurrence } : {}),
           })

@@ -65,7 +65,7 @@ export function fillMissingWorkflowTriggerInputConstraints(
 export function normalizeWorkflowTriggerInputs(
   workflow: LoadedWorkflow,
   raw: Record<string, unknown>,
-  options: { allowMissingRequired?: readonly string[]; skipDefaultsFor?: readonly string[] } = {},
+  options: { allowMissingRequired?: readonly string[]; skipDefaultsFor?: readonly string[]; preserveEmptyInputs?: boolean } = {},
 ): Record<string, unknown> {
   const inputDefs = workflow.metadata.trigger.inputs ?? [];
 
@@ -79,7 +79,15 @@ export function normalizeWorkflowTriggerInputs(
       && (value === undefined || value === null || value === '')) {
       throw new Error(`Missing required workflow input: ${def.name}`);
     }
-    if (value === undefined || value === null || value === '') continue;
+    if (value === undefined || value === null || value === '') {
+      // Preserve explicit clearing through intermediate schedule validation. Final admission
+      // normalizes once without this option, so defaults are never restored accidentally.
+      if (options.preserveEmptyInputs && Object.prototype.hasOwnProperty.call(raw, def.name)
+        && (raw[def.name] === null || raw[def.name] === '')) {
+        Object.defineProperty(out, def.name, { value: raw[def.name], enumerable: true, configurable: true, writable: true });
+      }
+      continue;
+    }
 
     if (def.type === 'string') {
       if (typeof value !== 'string') throw new Error(`Workflow input "${def.name}" must be a string.`);

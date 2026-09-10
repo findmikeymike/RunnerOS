@@ -114,6 +114,27 @@ The composed prompt includes frozen source names, paths and guide text. A saved 
 
 This activates no connectors or command tools: the backend still receives an empty enabled-source list and uses only the existing Read/Grep/Find/Ls tools. Saved tool results retain normal journal replay. Source files themselves are not snapshotted: a fresh read can observe current file content. Source containment validates this source contract, not a new global filesystem sandbox for all native reads.
 
+## Slice 7: frozen workflow inputs (implemented, bounded)
+
+Durable manual and tracked scheduled runs accept declared string, number and boolean inputs using the existing required/default, finite-number, integer, min/max and maxFrom rules. Declaration names must be unique simple identifiers; prototype names and runner controls (`permission_mode`, `enabled_source_slugs`) are rejected. Ordinary undeclared business fields are dropped, matching normal normalization. Missing optional values remain absent in history and expand to empty text in a prompt. Explicit blank/null optional values do not refill defaults during repeated scheduled staging.
+
+```yaml
+trigger:
+  type: manual
+  inputs:
+    - name: release
+      type: string
+      required: true
+steps:
+  - id: research
+    agent: local-reader
+    input: Review the workspace notes for {{trigger.release | escape}}.
+```
+
+The journal freezes normalized values and untrusted-field annotations alongside the original templates. Single and multiple steps resolve those saved values with prior step outputs in one pass: template-looking text inside a supplied value is not executed as another template. Untrusted fields retain the existing escaped data wrapper. Authorized run history shows the saved inputs. A known scheduled occurrence returns its saved run before considering edited input values/defaults; a resumed run keeps its original values and budget.
+
+Output titles, `run.*` references, nested output paths, permission overrides, source overrides and new automatic entrypoints remain unsupported. This adds workflow data, not new tool authority. Earlier slice statements excluding trigger variables describe those earlier boundaries.
+
 Further slices extend remote source/tool capabilities, mixed transports and child delegation with their own effect/reconciliation proofs. None inherit certification merely by calling the shared start function.
 
 ## Follow-up review corrections

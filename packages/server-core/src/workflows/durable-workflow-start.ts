@@ -1,3 +1,4 @@
+import { normalizeDurableTriggerInputs } from './durable-workflow-inputs';
 import { randomUUID } from 'node:crypto';
 import { canonical } from '../../../shared/src/durable-execution/index.ts';
 import { listRuns } from '../../../shared/src/workflows/run-storage.ts';
@@ -19,16 +20,15 @@ export interface DurableWorkflowStartOptions {
 export function createDurableWorkflowStart(options: DurableWorkflowStartOptions) {
   const pending = new Set<string>();
   return async (input: WorkflowStartInput) => {
-    input = JSON.parse(JSON.stringify(input)) as WorkflowStartInput;
+    input = structuredClone(input);
     // All callers share this guard, even when they will use the legacy engine.
     if (await options.host.hasUnfinishedWorkflow(input.workspaceId, input.workflow.slug)) {
       throw new Error('This workflow has unfinished work. Open its saved run to continue or stop it.');
     }
     if (input.workflow.metadata.execution !== 'durable-local-read') return null;
     const scheduled = input.invocation === 'scheduled-work' && input.occurrence !== undefined && !input.actor;
-    if ((!scheduled && (input.invocation !== 'manual-ui' || !input.actor || input.occurrence)) || input.runId || input.untrustedTriggerInputs?.length
-      || Object.keys(input.triggerInputs).length || !supportsDurableReadWorkflow(input.workflow)) throw new Error('This durable read workflow requires a manual start or tracked schedule and supported sequential local-read steps.');
-    const pinned = JSON.parse(canonical(input)) as WorkflowStartInput;
+    if ((!scheduled && (input.invocation !== 'manual-ui' || !input.actor || input.occurrence)) || input.runId) throw new Error('This durable read workflow requires a manual start or tracked schedule and supported sequential local-read steps.');
+    const pinned = structuredClone(input);
     const { workspaceId, workflow, actor } = pinned;
     const key = canonical([workspaceId, workflow.slug]);
     if (pending.has(key)) throw new Error('This workflow is already starting.');
@@ -39,6 +39,10 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
         ? [await options.host.getScheduledRun(workspaceId, pinned.occurrence!)].filter(run => run !== null)
         : await options.host.runs.list(workspaceId, actor!);
       if (scheduled && existing.length) return existing[0]!;
+      if (!supportsDurableReadWorkflow(workflow)) throw new Error('This durable read workflow requires supported sequential local-read steps.');
+      // Validate before bundle work, but pass the original scalar values onward so defaults
+      // are applied exactly once when admission freezes the normalized inputs.
+      normalizeDurableTriggerInputs(workflow, pinned.triggerInputs, pinned.untrustedTriggerInputs);
       const bundles = new Map<string, DurableStartBundle>();
       for (const step of workflow.metadata.steps) {
         if (bundles.has(step.agent)) continue;
@@ -55,7 +59,7 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
       }
       const runId = scheduled ? durableWorkflowOccurrenceIdentity(workspaceId, pinned.occurrence!).runId : randomUUID();
       const admission = {
-        ...bundle, workspaceId, runId, commandId: scheduled ? durableWorkflowOccurrenceIdentity(workspaceId, pinned.occurrence!).commandId : `manual-start:${runId}`,
+        ...bundle, triggerInputs: pinned.triggerInputs, ...(pinned.untrustedTriggerInputs ? { untrustedTriggerInputs: pinned.untrustedTriggerInputs } : {}), workspaceId, runId, commandId: scheduled ? durableWorkflowOccurrenceIdentity(workspaceId, pinned.occurrence!).commandId : `manual-start:${runId}`,
         localSources: [...new Map([...bundles.values()].flatMap(candidate => candidate.localSources ?? []).map(source => [canonical(source), source])).values()],
         resolvedAgentSlug: workflow.metadata.steps[0]!.agent,
         ...(workflow.metadata.steps.length > 1 ? { resolvedSteps: workflow.metadata.steps.map(step => ({ id: step.id, agent: step.agent, systemPrompt: bundles.get(step.agent)!.systemPrompt })) } : {}),

@@ -1,3 +1,4 @@
+import { assertDurableTriggerDeclarations, normalizeDurableTriggerInputs, durableTriggerTemplateContext } from './durable-workflow-inputs';
 import { resolveTemplate } from '../../../shared/src/workflows/template.ts';
 import { DurableChildRunner, type DurableChildRequest, type DurableChildResult } from './durable-child-runner.ts';
 import { shouldAllowToolInMode } from '../../../shared/src/agent/mode-manager.ts';
@@ -26,6 +27,8 @@ export interface DurableReadInput {
   /** Opt-in trusted authorization binding. Omit for the existing certified read path. */
   approvalPrincipalId?: string;
   localSources?: DurableLocalSource[];
+  triggerInputs?: Record<string, unknown>;
+  untrustedTriggerInputs?: string[];
   /** Certified by the host, never estimated from renderer input. */
   costPolicy: DurableRunSpec['costPolicy'];
 }
@@ -71,6 +74,8 @@ interface FrozenReadContext {
   requireNonEmptyOutput: boolean;
   workflow: DurableJson;
   localSources?: DurableLocalSource[];
+  triggerInputs?: Record<string, unknown>;
+  untrustedTriggerInputs?: string[];
   steps?: Array<{ id: string; prompt: string; systemPrompt: string; requireNonEmptyOutput: boolean }>;
 }
 
@@ -118,8 +123,10 @@ function publicationId(workspaceId: string, runId: string): string {
 
 /** The narrow workflow shape whose execution semantics are implemented by this adapter. */
 export function supportsDurableReadWorkflow(workflow: LoadedWorkflow): boolean {
+  try { assertDurableTriggerDeclarations(workflow); } catch { return false; }
+  const triggerNames = new Set((workflow.metadata.trigger.inputs ?? []).map(definition => definition.name));
   if (workflow.parseWarnings?.length || workflow.metadata.trigger.type !== 'manual' || !supportsPublication(workflow)
-    || workflow.metadata.trigger.inputs?.length || workflow.metadata.steps.length < 1 || workflow.metadata.steps.length > 8) return false;
+    || workflow.metadata.steps.length < 1 || workflow.metadata.steps.length > 8) return false;
   const prior = new Set<string>();
   for (const step of workflow.metadata.steps) {
     if (!step || !/^[a-zA-Z0-9_-]+$/.test(step.id) || prior.has(step.id) || !step.input?.trim()
@@ -130,6 +137,9 @@ export function supportsDurableReadWorkflow(workflow: LoadedWorkflow): boolean {
     let valid = true;
     const remaining = step.input.replace(/\{\{\s*steps\.([a-zA-Z0-9_-]+)\.output\s*(?:\|\s*escape\s*)?\}\}/g, (_match, id: string) => {
       if (!prior.has(id)) valid = false;
+      return '';
+    }).replace(/\{\{\s*trigger\.([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\|\s*escape\s*)?\}\}/g, (_match, name: string) => {
+      if (!triggerNames.has(name)) valid = false;
       return '';
     });
     if (!valid || remaining.includes('{{') || remaining.includes('}}')) return false;
@@ -190,6 +200,9 @@ export class DurableReadRunner {
 
   admitWorkflow(workflow: LoadedWorkflow, input: DurableReadWorkflowInput): Promise<DurableReadAdmission> {
     if (this.closing) return Promise.reject(new Error('durable-host-closing'));
+    let triggerValues: ReturnType<typeof normalizeDurableTriggerInputs>;
+    try { triggerValues = normalizeDurableTriggerInputs(workflow, input.triggerInputs, input.untrustedTriggerInputs); }
+    catch (error) { return Promise.reject(error); }
     workflow = JSON.parse(JSON.stringify(workflow)) as LoadedWorkflow;
     const step = workflow.metadata.steps[0];
     if (!supportsDurableReadWorkflow(workflow) || step?.agent !== input.resolvedAgentSlug) {
@@ -200,7 +213,7 @@ export class DurableReadRunner {
       || resolvedSteps.some((resolved, i) => resolved.id !== workflow.metadata.steps[i]!.id || resolved.agent !== workflow.metadata.steps[i]!.agent || !resolved.systemPrompt?.trim()))) {
       return Promise.reject(new Error('unsupported-durable-read-workflow'));
     }
-    return this.admit({ ...rest, prompt: step.input }, workflow, resolvedSteps ? JSON.parse(canonical(resolvedSteps)) : undefined);
+    return this.admit({ ...rest, ...triggerValues, prompt: step.input }, workflow, resolvedSteps ? JSON.parse(canonical(resolvedSteps)) : undefined);
   }
 
   async start(input: DurableReadInput): Promise<DurableRunSnapshot> { return (await this.admit(input)).execution; }
@@ -217,6 +230,7 @@ export class DurableReadRunner {
       connectionSlug: requested.connectionSlug, workspaceRoot: realpathSync(binding.workspace.rootPath), bindingDigest: bindingDigest(binding),
       requireNonEmptyOutput: workflow?.metadata.steps[0]?.completion?.requireNonEmptyOutput !== false,
       workflow: workflow ? JSON.parse(JSON.stringify(workflow)) as DurableJson : null,
+      ...(workflow ? { triggerInputs: requested.triggerInputs ?? {}, untrustedTriggerInputs: requested.untrustedTriggerInputs ?? [] } : {}),
       ...(requested.localSources?.length ? { localSources: requested.localSources } : {}),
       ...(workflow && workflow.metadata.steps.length > 1 ? { steps: workflow.metadata.steps.map((step, i) => ({ id: step.id, prompt: step.input,
         systemPrompt: resolvedSteps![i]!.systemPrompt, requireNonEmptyOutput: step.completion?.requireNonEmptyOutput !== false })) } : {}) };
@@ -470,7 +484,9 @@ export class DurableReadRunner {
         if (frozen.steps && state.workflowSteps?.[index]?.endTurn !== undefined) continue;
         assertDispatch();
         const outputs = Object.fromEntries((state.workflowSteps ?? []).filter(record => record.endTurn !== undefined).map(record => [record.id, { output: record.output }]));
-        const resolved = frozen.steps ? resolveTemplate(step.prompt, { steps: outputs }) : { output: step.prompt, warnings: [] };
+        const savedWorkflow = frozen.workflow as unknown as LoadedWorkflow | undefined;
+        const resolved = savedWorkflow || frozen.steps ? resolveTemplate(step.prompt, { steps: outputs,
+          trigger: durableTriggerTemplateContext(savedWorkflow, frozen.triggerInputs), untrustedTriggerFields: frozen.untrustedTriggerInputs }) : { output: step.prompt, warnings: [] };
         if (resolved.warnings.length) throw new Error('durable-workflow-template-unresolved');
         if (frozen.steps) await bridge.checkpoint({ kind: 'workflow-step-start', step: index, input: { prompt: resolved.output, systemPrompt: step.systemPrompt } });
         state = journal.get(runId, workspaceId);

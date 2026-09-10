@@ -156,6 +156,24 @@ describe('queueAutomationWork', () => {
     }
   }
 
+  test.each([false, true])('durable queue preserves empty optional input (bindings=%s)', async bindings => {
+    const metadata = demoWorkflow.metadata as typeof demoWorkflow.metadata & { execution?: 'durable-local-read' }
+    metadata.execution = 'durable-local-read'
+    try {
+      const workspaceRoot = root(), pending = workflowPending()
+      if (pending.action.execution.type !== 'workflow-run') throw new Error('wrong execution')
+      if (bindings) pending.action.inputBindings!.count = { mode: 'fixed', value: '' }
+      else {
+        delete pending.action.inputBindings
+        pending.action.execution.triggerInputs = { file: '/workspace/file', brief: 'Notes', count: null }
+      }
+      await queueAutomationWork(workspaceId, workspaceRoot, pending)
+      const work = parseScheduledWorkDocResult(loadContextDoc(workspaceRoot, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspaceId)
+      if (!work.ok) throw new Error(work.error)
+      expect(work.work.items[0]?.execution).toMatchObject({ triggerInputs: { count: bindings ? '' : null } })
+    } finally { delete metadata.execution }
+  })
+
   test('resolves fixed, trigger, and default workflow inputs before queueing', async () => {
     const workspaceRoot = root()
     await queueAutomationWork(workspaceId, workspaceRoot, workflowPending())

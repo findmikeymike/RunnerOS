@@ -713,7 +713,7 @@ function resolveWorkflowInputBindings(
         ...action,
         execution: {
           ...action.execution,
-          triggerInputs: normalizeWorkflowTriggerInputs(workflow, action.execution.triggerInputs),
+          triggerInputs: normalizeWorkflowTriggerInputs(workflow, action.execution.triggerInputs, { preserveEmptyInputs: workflow.metadata.execution === 'durable-local-read' }),
         },
       },
       missingInputs: [],
@@ -758,6 +758,7 @@ function resolveWorkflowInputBindings(
   const triggerInputs = normalizeWorkflowTriggerInputs(workflow, raw, {
     allowMissingRequired: missingInputs,
     skipDefaultsFor: missingInputs,
+    preserveEmptyInputs: workflow.metadata.execution === 'durable-local-read',
   })
   return {
     action: {

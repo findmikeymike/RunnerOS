@@ -5,12 +5,13 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { startProcess } from './process-support';
 
-test.each(['start', 'multi', 'sources'])('normal runner %s reaches default Pi backend and performs native reads in isolated configuration', async (mode) => {
+test.each(['start', 'multi', 'sources', 'inputs'])('normal runner %s reaches default Pi backend and performs native reads in isolated configuration', async (mode) => {
   const root = mkdtempSync(join(tmpdir(), 'artist-normal-pi-')); let requests = 0, nativeReads = 0, usedPriorOutput = false;
   const server = createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk;
     const body = JSON.parse(raw); requests++; if (raw.includes('Use Read completed and read fixture.txt again.')) usedPriorOutput = true; const done = body.messages.some((message: { role: string }) => message.role === 'tool');
     if (mode === 'sources') expect(raw).toContain('SOURCE_CONTEXT_NATIVE_READ');
+    if (mode === 'inputs') { expect(raw).toContain('INPUT_FIXTURE Read fixture.txt.'); expect(raw).not.toContain('{{trigger.file}}'); }
     if (done) { nativeReads++; expect(raw).toContain('NORMAL_START_NATIVE_READ'); }
     const delta = done ? { role: 'assistant', content: 'Read completed' } : { role: 'assistant', tool_calls: [{ index: 0, id: 'read-1', type: 'function', function: { name: 'read', arguments: JSON.stringify({ path: join(root, 'fixture.txt') }) } }] };
     res.writeHead(200, { 'content-type': 'text/event-stream' });

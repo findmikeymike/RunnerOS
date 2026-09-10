@@ -55,7 +55,7 @@ export class DurableWorkflowRuns {
 
   private project(snapshot: DurableRunSnapshot): WorkflowRunSnapshot | null {
     const { spec, status } = snapshot;
-    const context = spec.context as unknown as { workflow?: LoadedWorkflow };
+    const context = spec.context as unknown as { workflow?: LoadedWorkflow; triggerInputs?: Record<string, unknown>; untrustedTriggerInputs?: string[] };
     const workflow = context?.workflow;
     const authority = spec.authority as unknown as { adapter?: string; stepCount?: number; completion?: string };
     const multi = authority?.adapter === 'pi-local-read-multi-1';
@@ -92,7 +92,8 @@ export class DurableWorkflowRuns {
     const createdAt = new Date(spec.createdAt).toISOString();
     return {
       id: spec.runId, workspaceId: spec.workspaceId, workflowSlug: workflow.slug, state,
-      trigger: { type: workflow.metadata.trigger.type, inputs: {}, firedAt: createdAt },
+      trigger: { type: workflow.metadata.trigger.type, inputs: JSON.parse(canonical(context.triggerInputs ?? {})),
+        ...(context.untrustedTriggerInputs?.length ? { untrustedInputNames: [...context.untrustedTriggerInputs] } : {}), firedAt: createdAt },
       workflowSnapshot: JSON.parse(canonical({ metadata: workflow.metadata, body: workflow.body })),
       steps, createdAt, updatedAt: createdAt,
       ...(snapshot.publication?.status === 'published' ? { finalOutputId: snapshot.publication.outputId, outputIds: [snapshot.publication.outputId] } : {}),

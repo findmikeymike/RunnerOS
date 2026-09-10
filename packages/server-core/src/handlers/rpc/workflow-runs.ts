@@ -156,7 +156,7 @@ export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDep
       const workflow = loadGlobalWorkflow(workflowSlug)
       if (!workflow) throw new Error(`Workflow not found: ${workflowSlug}`)
       const runner = requireRunner(deps)
-      return runner.start({ workflow, workspaceId, triggerInputs: normalizeWorkflowTriggerInputs(workflow, triggerInputs), invocation: 'manual-ui', actor: actor(ctx) })
+      return runner.start({ workflow, workspaceId, triggerInputs: workflow.metadata.execution === 'durable-local-read' ? triggerInputs : normalizeWorkflowTriggerInputs(workflow, triggerInputs), invocation: 'manual-ui', actor: actor(ctx) })
     },
   )
 

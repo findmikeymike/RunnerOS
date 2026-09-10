@@ -383,7 +383,7 @@ export class WorkflowRunner {
    */
   async start(input: WorkflowStartInput): Promise<WorkflowRunSnapshot> {
     // Pin before the first await so UI/config mutations cannot change the selected execution.
-    input = this.cloneJson(input);
+    input = input.workflow.metadata.execution === 'durable-local-read' ? structuredClone(input) : this.cloneJson(input);
     const admissionKey = concurrencyKey(input.workspaceId, input.workflow.slug);
     if (this.admitting.has(admissionKey)) throw new Error('Workflow already has an active run; admission is already in progress.');
     this.admitting.add(admissionKey);
@@ -395,7 +395,7 @@ export class WorkflowRunner {
     if (this.activeByKey.has(concurrencyKey(input.workspaceId, input.workflow.slug))) throw new Error('Workflow already has an active run; previous execution is still draining.');
     if (this.deps.assertWorkflowAdmissionAvailable) await this.deps.assertWorkflowAdmissionAvailable(input.workspaceId, input.workflow.slug);
     if (this.deps.durableStart) {
-      const durable = await this.deps.durableStart(freezeStartInput(this.cloneJson(input)));
+      const durable = await this.deps.durableStart(freezeStartInput(input.workflow.metadata.execution === 'durable-local-read' ? structuredClone(input) : this.cloneJson(input)));
       if (durable !== null) return this.cloneSnapshot(durable);
     }
     if (input.workflow.metadata.execution === 'durable-local-read') {
