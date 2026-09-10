@@ -85,6 +85,24 @@ function validateRoots(options: CampaignCleanupOptions): void {
   if (!options.campaignId.trim() || !options.campaignName.trim()) throw new Error('Campaign identity is required.');
 }
 
+function previewTokenForSnapshot(options: CampaignCleanupOptions, campaignContentToken: string, vaults: readonly Pick<VaultPlan, 'workspaceId' | 'rootPath' | 'manifest'>[]): string {
+  return digest({
+    campaignContentToken,
+    hq: realpathSync(options.hqRootPath),
+    vaults: vaults.map(vault => ({
+      workspaceId: vault.workspaceId,
+      rootPath: vault.rootPath,
+      manifest: {
+        version: vault.manifest.version,
+        workspaceId: vault.manifest.workspaceId,
+        vaultRoot: vault.manifest.vaultRoot,
+        storageMode: vault.manifest.storageMode,
+        assets: vault.manifest.assets,
+      },
+    })),
+  });
+}
+
 function buildPlan(options: CampaignCleanupOptions) {
   validateRoots(options);
   const root = realpathSync(options.campaignRootPath);
@@ -218,23 +236,9 @@ function buildPlan(options: CampaignCleanupOptions) {
   });
   const preview: CampaignCleanupPreview = {
     workspaceId: options.campaignId, campaignName: options.campaignName,
-    previewToken: digest({
-      campaignContentToken,
-      hq: realpathSync(options.hqRootPath),
-      vaults: vaults.map(vault => ({
-        workspaceId: vault.workspaceId,
-        rootPath: vault.rootPath,
-        manifest: {
-          version: vault.manifest.version,
-          workspaceId: vault.manifest.workspaceId,
-          vaultRoot: vault.manifest.vaultRoot,
-          storageMode: vault.manifest.storageMode,
-          assets: vault.manifest.assets,
-        },
-      })),
-    }),
+    previewToken: previewTokenForSnapshot(options, campaignContentToken, vaults),
     retainedFileCount: retainedFiles.length, retainedBytes: retainedFiles.reduce((sum,file) => sum + file.sizeBytes, 0),
-    retainedMemoryCount: options.retainedMemoryCount ?? 0, retainedFiles,
+    retainedFiles,
     deletedFileCount: files.length - retainedFiles.length, warnings,
   };
   return { preview, campaignContentToken, vaults, externalLinks, savedMetadata };
@@ -350,12 +354,15 @@ export async function preserveCampaignForDeletion(options: CampaignCleanupOption
       durableJson(vault.rootPath, getArtistVaultManifestPath(vault.rootPath), { ...vault.manifest, assets, updatedAt: now });
     }
     durableJson(options.hqRootPath, getArtistVaultManifestPath(options.hqRootPath), { ...hqVault.manifest, assets: [...byId.values()], updatedAt: now });
-    const postPreservationToken = buildPlan(options).preview.previewToken;
+    // Keep the verified campaign snapshot: reading it again here could bless a
+    // mutation during manifest publication. The lifecycle owner compares this
+    // receipt against a fresh full preview immediately before deletion.
+    const postPreservationToken = previewTokenForSnapshot(options, plan.campaignContentToken,
+      vaultWorkspaces(options).map(vault => ({ ...vault, manifest: strictVault(vault) })));
     return {
       workspaceId: options.campaignId,
       hqWorkspaceId: options.hqWorkspaceId,
       retainedFileCount: plan.preview.retainedFileCount,
-      retainedMemoryCount: plan.preview.retainedMemoryCount,
       pastReleaseLabel: options.campaignName,
       postPreservationToken,
     };

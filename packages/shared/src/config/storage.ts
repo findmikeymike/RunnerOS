@@ -16,6 +16,7 @@ import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync, atomicWriteFileSync } from '../utils/files.ts';
 import { CONFIG_DIR } from './paths.ts';
+import { readPendingCampaignCleanup, isWorkspaceInitializationBlockedByCampaignCleanup } from './pending-campaign-cleanup.ts';
 import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
 import type { Plan } from '../agent/plan-types.ts';
 import type { PermissionMode } from '../agent/mode-manager.ts';
@@ -381,9 +382,12 @@ export function loadStoredConfig(): StoredConfig | null {
       config.activeWorkspaceId = config.workspaces[0]?.id || null;
     }
 
-    // Ensure workspace folder structure exists for all workspaces.
+    // Pending deletion journals own missing source paths. Recreating one here
+    // would turn a recoverable staged campaign into a conflicting empty folder.
+    const pendingCleanup = readPendingCampaignCleanup(CONFIG_DIR);
     // Failures here are non-fatal — the workspace will be re-created on next access.
     for (const workspace of config.workspaces) {
+      if (isWorkspaceInitializationBlockedByCampaignCleanup(workspace.rootPath, pendingCleanup)) continue;
       if (!isValidWorkspace(workspace.rootPath)) {
         try {
           const canInitializeWorkspace = !existsSync(workspace.rootPath) || readdirSync(workspace.rootPath).length === 0;

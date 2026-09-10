@@ -14,7 +14,7 @@ harness.failDelete = false
 harness.delayDelete = false
 const preview = {
   workspaceId: 'summer', campaignName: 'Summer EP', previewToken: 'reviewed-inventory',
-  retainedFileCount: 2, retainedBytes: 3000000, retainedMemoryCount: 3, deletedFileCount: 9,
+  retainedFileCount: 2, retainedBytes: 3000000, deletedFileCount: 9,
   retainedFiles: [
     { relativePath: 'assets/master.wav', sizeBytes: 2000000, sha256: 'a', reason: 'Audio' },
     { relativePath: 'release-kit/cover.png', sizeBytes: 1000000, sha256: 'b', reason: 'Release Kit' },
@@ -30,7 +30,7 @@ harness.electronAPI = {
     harness.calls.push(['delete', id, token])
     if (harness.failDelete) throw new Error('Campaign changed. Check the preview again.')
     if (harness.delayDelete) await new Promise(resolve => { harness.finishDelete = resolve })
-    return { workspaceId: id, hqWorkspaceId: 'hq', retainedFileCount: 2, retainedMemoryCount: 3, pastReleaseLabel: 'Summer EP' }
+    return { workspaceId: id, hqWorkspaceId: 'hq', retainedFileCount: 2, pastReleaseLabel: 'Summer EP' }
   },
 }
 function Preview() {

@@ -19,6 +19,7 @@ function keyOf(id: CredentialId): string {
 }
 
 const fakeCredentialManager = {
+  getUserSecret: async (_name: string): Promise<string | null> => null,
   get: async (id: CredentialId): Promise<StoredCredential | null> => {
     return fakeStore.get(keyOf(id)) ?? null;
   },

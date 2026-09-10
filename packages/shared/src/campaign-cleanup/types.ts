@@ -12,7 +12,6 @@ export interface CampaignCleanupOptions {
   campaignName: string;
   hqWorkspaceId: string;
   linkedVaultWorkspaces?: CampaignCleanupVaultWorkspace[];
-  retainedMemoryCount?: number;
 }
 
 export interface CampaignRetainedFile {
@@ -28,7 +27,6 @@ export interface CampaignCleanupPreview {
   previewToken: string;
   retainedFileCount: number;
   retainedBytes: number;
-  retainedMemoryCount: number;
   retainedFiles: CampaignRetainedFile[];
   deletedFileCount: number;
   warnings: string[];
@@ -38,7 +36,6 @@ export interface CampaignCleanupResult {
   workspaceId: string;
   hqWorkspaceId: string;
   retainedFileCount: number;
-  retainedMemoryCount: number;
   pastReleaseLabel: string;
   warnings?: string[];
   /** Internal confirmation state after Vault links are repaired during preservation. */

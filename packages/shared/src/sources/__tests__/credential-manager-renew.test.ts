@@ -21,6 +21,7 @@ let setCalls: unknown[][] = [];
 const mockGet = mock(() => Promise.resolve(null as unknown));
 mock.module('../../credentials/index.ts', () => ({
   getCredentialManager: () => ({
+    getUserSecret: async (_name: string): Promise<string | null> => null,
     set: (...args: unknown[]) => { setCalls.push(args); return Promise.resolve(); },
     get: mockGet,
     delete: mock(() => Promise.resolve()),
