@@ -89,7 +89,10 @@ const realReadActivatedWorkflows = actualWorkflows.readActivatedWorkflows
 
 mock.module('@craft-agent/shared/workflows', () => ({
   ...actualWorkflows,
-  loadGlobalWorkflow: (slug: string) => workflows.get(slug) ?? realLoadGlobalWorkflow(slug),
+  // Explicit storage directories belong to other tests' real filesystem fixtures.
+  loadGlobalWorkflow: (slug: string, options?: Parameters<typeof realLoadGlobalWorkflow>[1]) =>
+    (!options?.globalWorkflowsDir ? workflows.get(slug) : undefined)
+      ?? realLoadGlobalWorkflow(slug, options),
   readActivatedWorkflows: (rootPath: string) => rootPath.includes('scheduled-input-supply-')
     ? { version: 1, active: [...workflows.keys()] }
     : realReadActivatedWorkflows(rootPath),

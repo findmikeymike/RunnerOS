@@ -30,14 +30,20 @@ describe('model fallback failure policy', () => {
     expect(classifyModelFallback('unknown_error', { unknownFallbackAlreadyUsed: true })).toBe('stop');
   });
 
-  test('flags authentication and billing failures without cooling them down', () => {
+  test('flags authentication and billing failures with a short cooldown', () => {
     expect(modelFallbackAttentionReason('invalid_api_key')).toBe('connection-auth-failed');
     expect(modelFallbackAttentionReason('expired_oauth_token')).toBe('connection-auth-failed');
     expect(modelFallbackAttentionReason('billing_error')).toBe('connection-billing-failed');
 
-    const registry = new ModelCooldownRegistry(() => 1_000);
-    expect(registry.markFailure({ connectionSlug: 'a', model: 'm', reason: 'invalid_api_key' })).toBeUndefined();
-    expect(registry.isCoolingDown('a', 'm')).toBeFalse();
+    let now = 1_000;
+    const registry = new ModelCooldownRegistry(() => now);
+    for (const reason of ['invalid_api_key', 'invalid_credentials', 'expired_oauth_token', 'token_expired', 'billing_error'] as const) {
+      const entry = registry.markFailure({ connectionSlug: 'a', model: reason, reason });
+      expect(Date.parse(entry!.until) - now).toBe(60_000);
+      expect(registry.isCoolingDown('a', reason)).toBeTrue();
+    }
+    now += 60_000;
+    expect(registry.isCoolingDown('a', 'invalid_api_key')).toBeFalse();
   });
 });
 
@@ -96,5 +102,22 @@ describe('model fallback cooldown registry', () => {
       reason: 'unsupported_input',
     })).toBeUndefined();
     expect(registry.isCoolingDown('text-model', 'model-a')).toBeFalse();
+  });
+});
+
+describe('credential recovery cooldown reset', () => {
+  test('clears every affected model, preserves other connections and transient backoff', () => {
+    const registry = new ModelCooldownRegistry(() => 1_000);
+    for (const model of ['first', 'second']) registry.markFailure({ connectionSlug: 'a', model, reason: 'invalid_credentials' });
+    registry.markFailure({ connectionSlug: 'a', model: 'busy', reason: 'rate_limited' });
+    registry.markFailure({ connectionSlug: 'b', model: 'billing', reason: 'billing_error' });
+    registry.clearConnectionAttentionFailures('a');
+    expect(registry.get('a', 'first')).toBeUndefined();
+    expect(registry.get('a', 'second')).toBeUndefined();
+    expect(registry.get('a', 'busy')).toBeDefined();
+    expect(registry.get('b', 'billing')).toBeDefined();
+    registry.clearConnectionAttentionFailures('b');
+    expect(registry.get('b', 'billing')).toBeUndefined();
+    expect(registry.get('a', 'busy')).toBeDefined();
   });
 });

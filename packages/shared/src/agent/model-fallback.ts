@@ -58,6 +58,7 @@ export interface ModelCooldown {
 }
 
 const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000;
+const ATTENTION_COOLDOWN_MS = 60 * 1000;
 const MAX_RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
 
 function cooldownKey(connectionSlug: string, model: string): string {
@@ -78,13 +79,15 @@ export class ModelCooldownRegistry {
     // Input compatibility is not provider health; text work may still succeed.
     if (input.reason === 'unsupported_input') return undefined;
     const decision = classifyModelFallback(input.reason);
-    if (decision !== 'fall-back') return undefined;
+    if (decision === 'stop') return undefined;
 
     const observedAtMs = this.now();
     const requestedMs = input.reason === 'rate_limited' && Number.isFinite(input.retryAfterMs)
       ? Math.max(0, input.retryAfterMs ?? 0)
       : DEFAULT_COOLDOWN_MS;
-    const durationMs = input.reason === 'rate_limited'
+    const durationMs = decision === 'fall-back-and-flag'
+      ? ATTENTION_COOLDOWN_MS
+      : input.reason === 'rate_limited'
       ? Math.min(requestedMs, MAX_RATE_LIMIT_COOLDOWN_MS)
       : DEFAULT_COOLDOWN_MS;
     const entry: ModelCooldown = {
@@ -115,6 +118,16 @@ export class ModelCooldownRegistry {
 
   clear(connectionSlug: string, model: string): void {
     this.entries.delete(cooldownKey(connectionSlug, model));
+  }
+
+  /** Credential recovery must not erase unrelated rate-limit or service backoff. */
+  clearConnectionAttentionFailures(connectionSlug: string): void {
+    for (const [key, entry] of this.entries) {
+      if (entry.connectionSlug === connectionSlug
+        && modelFallbackAttentionReason(entry.reason)) {
+        this.entries.delete(key);
+      }
+    }
   }
 
   clearAll(): void {

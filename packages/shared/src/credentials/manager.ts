@@ -12,6 +12,7 @@ import type { LlmAuthType, LlmProviderType } from '../config/llm-connections.ts'
 import { SecureStorageBackend } from './backends/secure-storage.ts';
 import { EnvironmentBackend } from './backends/env.ts';
 import { debug } from '../utils/debug.ts';
+import { modelCooldownRegistry } from '../agent/model-fallback.ts';
 
 export interface UserSecretSummary {
   name: string;
@@ -35,6 +36,16 @@ export function maskSecretValue(value: string): string {
   if (!value) return '';
   if (value.length <= 8) return '••••';
   return `${value.slice(0, 4)}••••${value.slice(-4)}`;
+}
+
+/** Only provider credential repairs invalidate provider-attention cooldowns. */
+function clearRepairedCredentialCooldown(id: CredentialId): void {
+  if (id.type === 'anthropic_api_key' || id.type === 'claude_oauth') {
+    // These are the conventional migration destinations for legacy credentials.
+    modelCooldownRegistry.clearConnectionAttentionFailures(id.type === 'anthropic_api_key' ? 'anthropic-api' : 'claude-max');
+  } else if (['llm_api_key', 'llm_oauth', 'llm_iam', 'llm_service_account'].includes(id.type) && id.connectionSlug) {
+    modelCooldownRegistry.clearConnectionAttentionFailures(id.connectionSlug);
+  }
 }
 
 export class CredentialManager {
@@ -159,6 +170,7 @@ export class CredentialManager {
     }
 
     await this.writeBackend.set(id, credential);
+    clearRepairedCredentialCooldown(id);
     debug(`[CredentialManager] Saved ${id.type} to ${this.writeBackend.name}`);
   }
 
@@ -185,6 +197,7 @@ export class CredentialManager {
       }
     }
 
+    if (deleted) clearRepairedCredentialCooldown(id);
     return deleted;
   }
 

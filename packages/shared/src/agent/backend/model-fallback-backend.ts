@@ -10,6 +10,7 @@ import {
 } from '../model-fallback.ts';
 import { parseError, type AgentError } from '../errors.ts';
 import type { LLMQueryRequest, LLMQueryResult } from '../llm-tool.ts';
+import { buildTitlePrompt, buildRegenerateTitlePrompt, validateTitle } from '../../utils/title-generator.ts';
 
 export interface ModelFallbackBackendCandidate extends ResolvedModelFallbackCandidate {
   create: () => AgentBackend;
@@ -232,6 +233,8 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
     queryLlm?: (request: LLMQueryRequest) => Promise<LLMQueryResult>;
   };
   const primaryQueryLlm = primaryWithQuery.queryLlm?.bind(primaryWithQuery);
+  // Only chat owns the target for steering, permissions, and session state.
+  // Auxiliary completions can overlap a chat and must never replace it.
   let active = primary;
   let disposed = false;
   let cancellationEpoch = 0;
@@ -243,6 +246,22 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
   const cancelled = (epoch: number) => disposed || epoch !== cancellationEpoch;
   const assertNotCancelled = (epoch: number) => {
     if (cancelled(epoch)) throw new DOMException('Request was aborted.', 'AbortError');
+  };
+  // Auth/billing cooldowns prefer a healthy route; they must not prevent a
+  // fresh probe when every remaining route needs connection attention.
+  const eligibleRoutes = (candidates: ModelFallbackBackendCandidate[], primaryModel = options.primaryModel) => {
+    const cooling = (slug: string, model: string) => modelCooldownRegistry.isCoolingDown(slug, model);
+    const hasHealthyRoute = !cooling(options.primaryConnectionSlug, primaryModel)
+      || candidates.some(candidate => !cooling(candidate.connectionSlug, candidate.model));
+    const blocked = (slug: string, model: string) => {
+      if (!cooling(slug, model)) return false;
+      const reason = modelCooldownRegistry.get(slug, model)?.reason;
+      return hasHealthyRoute || !reason || !modelFallbackAttentionReason(reason);
+    };
+    return {
+      primaryCoolingDown: blocked(options.primaryConnectionSlug, primaryModel),
+      available: candidates.filter(candidate => !blocked(candidate.connectionSlug, candidate.model)),
+    };
   };
   // Session state configured through methods is not observable by the proxy's
   // property setter. Keep the latest arguments for each persistent runtime setter.
@@ -280,16 +299,10 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
           return;
         }
         options.onProtectedTurnStart?.();
-        const available = candidates.filter((candidate) =>
-          !modelCooldownRegistry.isCoolingDown(candidate.connectionSlug, candidate.model),
-        );
         if (chatOptions?.isRetry) {
           modelCooldownRegistry.clear(options.primaryConnectionSlug, options.primaryModel);
         }
-        const primaryCoolingDown = modelCooldownRegistry.isCoolingDown(
-          options.primaryConnectionSlug,
-          options.primaryModel,
-        );
+        const { available, primaryCoolingDown } = eligibleRoutes(candidates);
         if (primaryCoolingDown && available.length === 0) {
           yield allModelsCoolingDownEvent();
           return;
@@ -415,7 +428,7 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
           attemptReceipts.push(failureReceipt);
           options.onAttempt?.(failureReceipt, 'chat');
 
-          if (decision === 'fall-back') {
+          if (decision !== 'stop') {
             modelCooldownRegistry.markFailure({
               connectionSlug: attempt.connectionSlug,
               model: attempt.model,
@@ -457,19 +470,35 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
       }
     },
 
+    async generateTitle(message: string, titleOptions?: { language?: string }): Promise<string | null> {
+      try {
+        return validateTitle(await controller.runMiniCompletion(buildTitlePrompt(message, titleOptions)));
+      } catch {
+        return null;
+      }
+    },
+
+    async regenerateTitle(messages: string[], assistantResponse: string, titleOptions?: { language?: string }): Promise<string | null> {
+      try {
+        return validateTitle(await controller.runMiniCompletion(buildRegenerateTitlePrompt(messages, assistantResponse, titleOptions)));
+      } catch {
+        return null;
+      }
+    },
+
     async runMiniCompletion(prompt: string): Promise<string | null> {
       const epoch = cancellationEpoch;
       assertNotCancelled(epoch);
       const candidates = await options.resolveCandidates();
       assertNotCancelled(epoch);
-      if (candidates.length === 0) return primary.runMiniCompletion(prompt);
-      const primaryCoolingDown = modelCooldownRegistry.isCoolingDown(
-        options.primaryConnectionSlug,
-        options.primaryModel,
+      if (candidates.length === 0) {
+        const result = await primary.runMiniCompletion(prompt);
+        assertNotCancelled(epoch);
+        return result;
+      }
+      const { primaryCoolingDown, available: availableCandidates } = eligibleRoutes(
+        candidates.filter(candidate => candidate.miniAllowed !== false),
       );
-      const availableCandidates = candidates
-        .filter((candidate) => candidate.miniAllowed !== false)
-        .filter((candidate) => !modelCooldownRegistry.isCoolingDown(candidate.connectionSlug, candidate.model));
       if (primaryCoolingDown && availableCandidates.length === 0) {
         throw new Error('All configured models are temporarily cooling down. Retry later.');
       }
@@ -497,7 +526,6 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
           assertNotCancelled(epoch);
           backend = attempt.create();
           if (backend !== primary) candidatesInUse.add(backend);
-          active = backend;
           await applyAssignedProperties(backend);
           assertNotCancelled(epoch);
           if (backend !== primary) await backend.postInit();
@@ -517,7 +545,6 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
             options.onAttempt?.(receipt, 'mini');
           }
           if (backend !== primary) releaseBackend(backend);
-          active = primary;
           return result;
         } catch (error) {
           if (cancelled(epoch)) {
@@ -526,7 +553,6 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
           }
           if (isAbortError(error)) {
             if (backend && backend !== primary) releaseBackend(backend);
-            active = primary;
             throw error;
           }
           const failure = thrownFailure(error);
@@ -544,7 +570,7 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
           });
           attemptReceipts.push(receipt);
           options.onAttempt?.(receipt, 'mini');
-          if (decision === 'fall-back') {
+          if (decision !== 'stop') {
             modelCooldownRegistry.markFailure({
               connectionSlug: attempt.connectionSlug,
               model: attempt.model,
@@ -554,7 +580,6 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
           }
           if (backend && backend !== primary) releaseBackend(backend);
           if (!canContinue) {
-            active = primary;
             if (attemptReceipts.length > 1) throw new Error(exhaustionMessage(attemptReceipts));
             throw error;
           }
@@ -567,7 +592,6 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
           });
         }
       }
-      active = primary;
       return null;
     },
 
@@ -579,15 +603,15 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
       assertNotCancelled(epoch);
       const candidates = await options.resolveCandidates();
       assertNotCancelled(epoch);
-      if (candidates.length === 0) return runPrimary(request);
+      if (candidates.length === 0) {
+        const result = await runPrimary(request);
+        assertNotCancelled(epoch);
+        return result;
+      }
       const primaryModel = request.model ?? options.primaryModel;
-      const availableCandidates = candidates.filter(candidate =>
-        !modelCooldownRegistry.isCoolingDown(candidate.connectionSlug, candidate.model),
-      );
-      const skipPrimary = modelCooldownRegistry.isCoolingDown(options.primaryConnectionSlug, primaryModel)
-        && availableCandidates.length > 0;
-      if (modelCooldownRegistry.isCoolingDown(options.primaryConnectionSlug, primaryModel)
-        && availableCandidates.length === 0) {
+      const { primaryCoolingDown, available: availableCandidates } = eligibleRoutes(candidates, primaryModel);
+      const skipPrimary = primaryCoolingDown && availableCandidates.length > 0;
+      if (primaryCoolingDown && availableCandidates.length === 0) {
         throw new Error('All configured models are temporarily cooling down. Retry later.');
       }
       const attempts: Array<{
@@ -676,7 +700,7 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
           });
           attemptReceipts.push(receipt);
           options.onAttempt?.(receipt, 'query');
-          if (decision === 'fall-back') {
+          if (decision !== 'stop') {
             modelCooldownRegistry.markFailure({
               connectionSlug: attempt.connectionSlug,
               model: attempt.model,

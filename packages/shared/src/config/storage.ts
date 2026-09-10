@@ -1,3 +1,4 @@
+import { modelCooldownRegistry } from '../agent/model-fallback.ts';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, readdirSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { getCredentialManager } from '../credentials/index.ts';
@@ -2910,6 +2911,14 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
   }
 
   saveConfig(config);
+  const routeChanged = existing.providerType !== updated.providerType
+    || existing.authType !== updated.authType
+    || existing.baseUrl !== updated.baseUrl
+    || existing.piAuthProvider !== updated.piAuthProvider
+    || existing.customEndpoint?.api !== updated.customEndpoint?.api;
+  const attentionCleared = Object.prototype.hasOwnProperty.call(updates, 'modelFallbackAttention')
+    && updated.modelFallbackAttention === undefined;
+  if (routeChanged || attentionCleared) modelCooldownRegistry.clearConnectionAttentionFailures(slug);
   return true;
 }
 
