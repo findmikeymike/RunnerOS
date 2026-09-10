@@ -401,7 +401,10 @@ export function parseError(
   } else if (isLikelyProxyInterception(lowerMessage)) {
     code = 'proxy_error';
   // Check for specific HTTP status codes or patterns
-  } else if (lowerMessage.includes('402') || lowerMessage.includes('payment required')) {
+  } else if (lowerMessage.includes('402') || lowerMessage.includes('payment required')
+    || lowerMessage.includes('insufficient_quota') || lowerMessage.includes('insufficient credits')
+    || lowerMessage.includes('credit balance is too low') || lowerMessage.includes('credits exhausted')
+    || lowerMessage.includes('billing hard limit')) {
     code = 'billing_error';
   } else if (lowerMessage.includes('401') || lowerMessage.includes('unauthorized') || lowerMessage.includes('invalid api key') || lowerMessage.includes('invalid x-api-key') || lowerMessage.includes('authentication failed') || lowerMessage.includes('token is expired') || lowerMessage.includes('token expired')) {
     // Distinguish between API key and OAuth errors

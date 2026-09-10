@@ -646,6 +646,7 @@ export class WorkflowRunner {
         typeof step.taskModeId !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(step.taskModeId)
         || !step.agent
       )) throw new Error(`Workflow step "${step.id}" has an invalid task mode or missing agent.`);
+      if (step.modelRole !== undefined && step.modelRole !== 'reasoning' && step.modelRole !== 'fast') throw new Error('Invalid workflow model role.');
       const key = JSON.stringify([step.agent, step.taskModeId ?? null]);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -934,7 +935,8 @@ export class WorkflowRunner {
       stepDef.agent,
       stepDef.taskModeId ? { taskModeId: stepDef.taskModeId } : undefined,
     ) ?? {};
-    const agentOptionsWithMode = normalizeWorkflowPermissionMode(resolvedAgentOptions);
+    const agentOptionsWithMode = normalizeWorkflowPermissionMode({ ...resolvedAgentOptions,
+      ...(stepDef.modelRole ? { modelFallbackRole: stepDef.modelRole } : {}) });
     // R5: Per-run toolset override (Hermes MIT — cron/scheduler.py:60-88,
     // cron/jobs.py:523/662). Trigger inputs may carry an `enabled_source_slugs`
     // override; if present, the agent's allow-list is replaced by the override

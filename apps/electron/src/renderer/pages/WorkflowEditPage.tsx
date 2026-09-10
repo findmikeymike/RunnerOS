@@ -188,6 +188,15 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
             activeAgentSlugs={activeAgentSlugs}
             loading={agentsLoading}
             error={agentsError}
+            onModelRoleChange={(stepId, modelRole) => {
+              if (!parsed) return
+              const steps = parsed.metadata.steps.map(step => {
+                if (step.id !== stepId) return step
+                const { modelRole: _previous, ...rest } = step
+                return { ...rest, ...(modelRole ? { modelRole } : {}) }
+              })
+              setText(serializeWorkflow({ ...parsed.metadata, steps }, parsed.body))
+            }}
             onTaskModeChange={(stepId, taskModeId) => {
               if (!parsed) return
               const steps = parsed.metadata.steps.map(step => {
@@ -224,6 +233,7 @@ interface WorkflowAgentCapabilitiesPanelProps {
   activeAgentSlugs: Set<string>
   loading: boolean
   error: string | null
+  onModelRoleChange: (stepId: string, role: 'reasoning' | 'fast' | undefined) => void
   onTaskModeChange: (stepId: string, taskModeId: string | undefined) => void
 }
 
@@ -234,6 +244,7 @@ function WorkflowAgentCapabilitiesPanel({
   loading,
   error,
   onTaskModeChange,
+  onModelRoleChange,
 }: WorkflowAgentCapabilitiesPanelProps) {
   const steps = parsed?.metadata.steps ?? []
 
@@ -279,6 +290,19 @@ function WorkflowAgentCapabilitiesPanel({
                       {!agent && <Info_Badge color="destructive">missing</Info_Badge>}
                       {agent && !isActive && <Info_Badge color="warning">inactive</Info_Badge>}
                     </div>
+                    <label className="mt-2 flex flex-col gap-1 text-[11px] text-white/60">
+                      Backup work type
+                      <select
+                        className="runneros-form-input text-xs"
+                        value={step.modelRole ?? ''}
+                        onChange={event => onModelRoleChange(step.id, event.target.value === 'reasoning' || event.target.value === 'fast' ? event.target.value : undefined)}
+                      >
+                        <option value="">Default behavior</option>
+                        <option value="reasoning">Reasoning</option>
+                        <option value="fast">Fast / economical</option>
+                      </select>
+                      <span>Uses the matching approved backups in AI Settings.</span>
+                    </label>
                     {agent ? (
                       <><AgentCapabilitySummary agent={agent} /><div className="mt-2"><AgentTaskModeSelect agent={agent} value={step.taskModeId} onChange={taskModeId => onTaskModeChange(step.id, taskModeId)} /></div></>
                     ) : (

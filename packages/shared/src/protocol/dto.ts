@@ -121,6 +121,8 @@ export interface Session {
 }
 
 export interface CreateSessionOptions {
+  /** Explicit fallback lane; absent retains general backups. */
+  modelFallbackRole?: 'reasoning' | 'fast'
   name?: string
   permissionMode?: PermissionMode
   /**

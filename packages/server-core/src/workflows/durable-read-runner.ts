@@ -34,7 +34,9 @@ export interface DurableReadInput {
   /** Certified by the host, never estimated from renderer input. */
   costPolicy: DurableRunSpec['costPolicy'];
 }
-export type DurableReadWorkflowInput = Omit<DurableReadInput, 'prompt'> & { resolvedAgentSlug: string; resolvedTaskModeId?: string; resolvedSteps?: Array<{ id: string; agent: string; taskModeId?: string; systemPrompt: string }> };
+interface ModelPlan { role?: 'reasoning' | 'fast'; candidates: Array<{ connectionSlug: string; model: string }> }
+interface FrozenModelPlan { role?: 'reasoning' | 'fast'; candidates: Array<{ connectionSlug: string; model: string; bindingDigest: string; credentialIdentity: string }> }
+export type DurableReadWorkflowInput = Omit<DurableReadInput, 'prompt'> & { resolvedAgentSlug: string; resolvedTaskModeId?: string; resolvedSteps?: Array<{ id: string; agent: string; taskModeId?: string; systemPrompt: string; modelPlan?: ModelPlan }> };
 export interface DurableReadAdmission {
   snapshot: DurableRunSnapshot;
   /** Observed internally; callers may separately await completion or failure. */
@@ -51,6 +53,8 @@ export interface DurableReadRunnerOptions {
   resolveBinding(workspaceId: string, connectionSlug: string, model: string): Promise<DurableReadBinding> | DurableReadBinding;
   createBackend?: (args: DurableReadBackendArgs) => Promise<ReadBackend> | ReadBackend;
   onEvent?: (runId: string, event: AgentEvent) => void;
+  /** Test seam; production retries once after five seconds. */
+  providerRetryDelayMs?: number;
   /** Synchronous source revision after the last awaited authorization/binding lookup. */
   readPolicyRevision?: (workspaceRoot: string) => string;
   resolvePublicationWorkspace?: (workspaceId: string) => { id: string; rootPath: string } | Promise<{ id: string; rootPath: string }>;
@@ -78,6 +82,7 @@ interface FrozenReadContext {
   localSources?: DurableLocalSource[];
   triggerInputs?: Record<string, unknown>;
   untrustedTriggerInputs?: string[];
+  modelPlans?: FrozenModelPlan[];
   steps?: Array<{ id: string; prompt: string; systemPrompt: string; requireNonEmptyOutput: boolean }>;
 }
 
@@ -131,10 +136,10 @@ export function supportsDurableReadWorkflow(workflow: LoadedWorkflow): boolean {
     || workflow.metadata.steps.length < 1 || workflow.metadata.steps.length > 8) return false;
   const prior = new Set<string>();
   for (const step of workflow.metadata.steps) {
-    if (!step || !/^[a-zA-Z0-9_-]+$/.test(step.id) || prior.has(step.id) || !step.input?.trim()
+    if (!step || step.modelRole !== undefined && !['reasoning', 'fast'].includes(step.modelRole) || !/^[a-zA-Z0-9_-]+$/.test(step.id) || prior.has(step.id) || !step.input?.trim()
       || (step.taskModeId !== undefined && (typeof step.taskModeId !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(step.taskModeId))) || (step.outputSchema !== undefined && !supportsDurableOutputSchema(step.outputSchema)) || step.timeout !== undefined
       || (step.retries ?? 0) !== 0 || (step.onFailure ?? 'stop') !== 'stop' || step.legacySkillReferences?.length
-      || Object.keys(step).some(key => !['id', 'agent', 'taskModeId', 'outputSchema', 'input', 'description', 'retries', 'onFailure', 'completion', 'legacySkillReferences', 'legacySkillPromptHash'].includes(key))
+      || Object.keys(step).some(key => !['id', 'agent', 'taskModeId', 'modelRole', 'outputSchema', 'input', 'description', 'retries', 'onFailure', 'completion', 'legacySkillReferences', 'legacySkillPromptHash'].includes(key))
       || Object.keys(step.completion ?? {}).some(key => key !== 'requireNonEmptyOutput')) return false;
     let valid = true;
     const remaining = step.input.replace(/\{\{\s*steps\.([a-zA-Z0-9_-]+)\.output((?:\.[a-zA-Z0-9_-]+)*)\s*(?:\|\s*escape\s*)?\}\}/g, (_match, id: string, suffix: string) => {
@@ -148,6 +153,15 @@ export function supportsDurableReadWorkflow(workflow: LoadedWorkflow): boolean {
     prior.add(step.id);
   }
   return true;
+}
+
+/** Only provider availability errors qualify; checkpoint/tool/schema failures remain terminal. */
+function providerFailure(message: string): 'rate-limit' | 'credits-exhausted' | 'provider-unavailable' | undefined {
+  if (/durable[- ]|SDK tool failed|sqlite|structured-output|schema/i.test(message)) return undefined;
+  if (/insufficient[_ -](?:quota|credits?)|credit(?:s)? (?:balance|exhausted|depleted)|out of credits|billing|payment required|\b402\b/i.test(message)) return 'credits-exhausted';
+  if (/rate.?limit|too many requests|\b429\b/i.test(message)) return 'rate-limit';
+  if (/\b50[0234]\b|service unavailable|overloaded|ECONNRESET|ETIMEDOUT|fetch failed/i.test(message)) return 'provider-unavailable';
+  return undefined;
 }
 
 /** Sequential local read execution. Only journal checkpoints authorize success. */
@@ -211,8 +225,8 @@ export class DurableReadRunner {
       return Promise.reject(new Error('unsupported-durable-read-workflow'));
     }
     const { resolvedAgentSlug: _slug, resolvedTaskModeId: _mode, resolvedSteps, ...rest } = input;
-    if (workflow.metadata.steps.length > 1 && (!resolvedSteps || resolvedSteps.length !== workflow.metadata.steps.length
-      || resolvedSteps.some((resolved, i) => resolved.id !== workflow.metadata.steps[i]!.id || resolved.agent !== workflow.metadata.steps[i]!.agent || resolved.taskModeId !== workflow.metadata.steps[i]!.taskModeId || !resolved.systemPrompt?.trim()))) {
+    if ((workflow.metadata.steps.length > 1 || workflow.metadata.steps.some(step => step.modelRole)) && (!resolvedSteps || resolvedSteps.length !== workflow.metadata.steps.length
+      || resolvedSteps.some((resolved, i) => resolved.id !== workflow.metadata.steps[i]!.id || resolved.agent !== workflow.metadata.steps[i]!.agent || resolved.taskModeId !== workflow.metadata.steps[i]!.taskModeId || resolved.modelPlan?.role !== workflow.metadata.steps[i]!.modelRole || !resolved.systemPrompt?.trim()))) {
       return Promise.reject(new Error('unsupported-durable-read-workflow'));
     }
     return this.admit({ ...rest, ...triggerValues, prompt: step.input }, workflow, resolvedSteps ? JSON.parse(canonical(resolvedSteps)) : undefined);
@@ -228,13 +242,28 @@ export class DurableReadRunner {
     this.assertOpen();
     this.checkBinding(binding, requested.workspaceId, requested.connectionSlug, requested.model);
     assertDurableLocalSourcesCurrent(binding.workspace.rootPath, requested.localSources ?? []);
+    const roleRouting = workflow?.metadata.steps.some(step => step.modelRole !== undefined) ?? false;
+    const modelPlans: FrozenModelPlan[] = [];
+    if (roleRouting) for (const step of resolvedSteps ?? []) {
+      if (!step.modelPlan?.candidates.length || step.modelPlan.candidates.length > 3) throw new Error('durable-model-plan-required');
+      const candidates: FrozenModelPlan['candidates'] = [];
+      for (const candidate of step.modelPlan.candidates) {
+        const current = JSON.parse(JSON.stringify(await this.options.resolveBinding(requested.workspaceId, candidate.connectionSlug, candidate.model))) as DurableReadBinding;
+        this.assertOpen();
+        this.checkBinding(current, requested.workspaceId, candidate.connectionSlug, candidate.model);
+        if (realpathSync(current.workspace.rootPath) !== realpathSync(binding.workspace.rootPath)) throw new Error('durable-read-binding-mismatch');
+        candidates.push({ ...candidate, bindingDigest: bindingDigest(current), credentialIdentity: current.credentialIdentity });
+      }
+      modelPlans.push({ ...(step.modelPlan.role ? { role: step.modelPlan.role } : {}), candidates });
+    }
     const context: FrozenReadContext = { prompt: requested.prompt, systemPrompt: requested.systemPrompt,
       connectionSlug: requested.connectionSlug, workspaceRoot: realpathSync(binding.workspace.rootPath), bindingDigest: bindingDigest(binding),
       requireNonEmptyOutput: workflow?.metadata.steps[0]?.completion?.requireNonEmptyOutput !== false,
       workflow: workflow ? JSON.parse(JSON.stringify(workflow)) as DurableJson : null,
       ...(workflow ? { triggerInputs: requested.triggerInputs ?? {}, untrustedTriggerInputs: requested.untrustedTriggerInputs ?? [] } : {}),
       ...(requested.localSources?.length ? { localSources: requested.localSources } : {}),
-      ...(workflow && workflow.metadata.steps.length > 1 ? { steps: workflow.metadata.steps.map((step, i) => ({ id: step.id, prompt: step.input,
+      ...(roleRouting ? { modelPlans } : {}),
+      ...(workflow && (workflow.metadata.steps.length > 1 || roleRouting) ? { steps: workflow.metadata.steps.map((step, i) => ({ id: step.id, prompt: step.input,
         systemPrompt: resolvedSteps![i]!.systemPrompt, requireNonEmptyOutput: step.completion?.requireNonEmptyOutput !== false })) } : {}) };
     let createdAt = Date.now();
     try { createdAt = this.options.journal.get(requested.runId, requested.workspaceId).spec.createdAt; }
@@ -251,6 +280,7 @@ export class DurableReadRunner {
       ...(output?.mode === 'final-step' ? { publication: { outputId: publicationId(requested.workspaceId, requested.runId),
         kind: (output.kind ?? 'document') as 'report' | 'document', title: output.title?.trim() || workflow!.metadata.name.trim(),
         ...(output.summary?.trim() ? { summary: output.summary.trim() } : {}), stepId: workflow!.metadata.steps.at(-1)!.id } } : {}),
+      ...(roleRouting ? { fallbackPlan: { steps: modelPlans.map(plan => ({ candidates: plan.candidates.map(({ connectionSlug, model, credentialIdentity }) => ({ connectionSlug, model, credentialIdentity })) })) } } : {}),
       costPolicy: requested.costPolicy, context: context as unknown as DurableJson,
       ...(requested.approvalPrincipalId !== undefined ? { approvalPrincipalId: requested.approvalPrincipalId } : {}),
       authority: { adapter: context.steps ? 'pi-local-read-multi-1' : 'pi-local-read-1', stepCount: context.steps?.length ?? 1, completion: 'journal-only' },
@@ -411,17 +441,22 @@ export class DurableReadRunner {
   private async execute(runId: string, workspaceId: string, entry: ActiveReadExecution): Promise<DurableRunSnapshot> {
     const { journal } = this.options, initial = journal.get(runId, workspaceId);
     if (initial.status !== 'running') return initial;
-    const claim = journal.claim(runId, workspaceId);
+    let claim = journal.claim(runId, workspaceId);
     entry.claim = claim;
-    const journalBridge = journal.bridge(claim, initial.spec.approvalPrincipalId ? {
+    const initialFrozen = frozenContext(initial.spec);
+    const primaryCandidate = { connectionSlug: initialFrozen.connectionSlug, model: initial.spec.model,
+      credentialIdentity: initial.spec.credentialIdentity, bindingDigest: initialFrozen.bindingDigest };
+    // Each bridge closes over an immutable claim and candidate, fencing responses from older attempts.
+    const createBridges = (claim: DurableClaim, candidate: FrozenModelPlan['candidates'][number]) => {
+      const journalBridge = journal.bridge(claim, initial.spec.approvalPrincipalId ? {
       authorizeTool: async request => {
         const frozen = frozenContext(initial.spec);
         const checkCurrent = async () => {
           this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId! });
-          const current = await this.options.resolveBinding(workspaceId, frozen.connectionSlug, initial.spec.model);
+          const current = await this.options.resolveBinding(workspaceId, candidate.connectionSlug, candidate.model);
           this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId! });
-          this.checkBinding(current, workspaceId, frozen.connectionSlug, initial.spec.model);
-          if (bindingDigest(current) !== frozen.bindingDigest) throw new Error('durable-authorization-blocked');
+          this.checkBinding(current, workspaceId, candidate.connectionSlug, candidate.model);
+          if (bindingDigest(current) !== candidate.bindingDigest) throw new Error('durable-authorization-blocked');
           assertDurableLocalSourcesCurrent(frozen.workspaceRoot, frozen.localSources ?? []);
           permissionsConfigCache.invalidateDefaults();
           permissionsConfigCache.invalidateWorkspace(frozen.workspaceRoot);
@@ -430,7 +465,7 @@ export class DurableReadRunner {
         };
         await checkCurrent();
         if (!this.options.authorizeTool) throw new Error('durable-authorization-blocked');
-        const authorization = await this.options.authorizeTool(request, { runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId!, connectionSlug: frozen.connectionSlug, model: initial.spec.model, credentialIdentity: initial.spec.credentialIdentity, deadlineAt: initial.spec.deadlineAt });
+        const authorization = await this.options.authorizeTool(request, { runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId!, connectionSlug: candidate.connectionSlug, model: candidate.model, credentialIdentity: candidate.credentialIdentity, deadlineAt: initial.spec.deadlineAt });
         await checkCurrent();
         if (this.options.readPolicyRevision && this.options.readPolicyRevision(frozen.workspaceRoot) !== authorization.policyRevision) throw new Error('durable-authorization-blocked');
         return authorization;
@@ -453,44 +488,51 @@ export class DurableReadRunner {
       if (request.kind === 'output-published') throw new Error('durable-workflow-host-checkpoint-required');
       if (request.kind === 'tool-start' && frozenContext(initial.spec).localSources?.length) assertDispatch();
       if (request.kind === 'model-start') {
+        assertDispatch();
         try {
           const frozen = frozenContext(initial.spec);
           if (initial.spec.approvalPrincipalId) this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId });
-          const current = await this.options.resolveBinding(workspaceId, frozen.connectionSlug, initial.spec.model);
+          const current = await this.options.resolveBinding(workspaceId, candidate.connectionSlug, candidate.model);
           if (initial.spec.approvalPrincipalId) this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId });
-          this.checkBinding(current, workspaceId, frozen.connectionSlug, initial.spec.model);
-          if (bindingDigest(current) !== frozen.bindingDigest) throw new Error('durable-read-binding-changed');
+          this.checkBinding(current, workspaceId, candidate.connectionSlug, candidate.model);
+          if (bindingDigest(current) !== candidate.bindingDigest) throw new Error('durable-read-binding-changed');
         } catch (error) {
           const state = journal.get(runId, workspaceId);
-          if (state.status === 'running') journal.command({ runId, workspaceId, commandId: randomUUID(), expectedVersion: state.version, action: 'pause' });
+          // A delayed authorization lookup belongs only to the claim that issued it.
+          // Neither a newer control revision nor a replacement process may be paused by it.
+          if (state.status === 'running' && state.controlRevision === claim.controlRevision
+            && entry.claim?.ownerId === claim.ownerId && entry.claim.epoch === claim.epoch
+            && entry.claim.controlRevision === claim.controlRevision) {
+            journal.bridge(claim); // Revalidate persisted owner/epoch before any control mutation.
+            journal.command({ runId, workspaceId, commandId: randomUUID(), expectedVersion: state.version, action: 'pause' });
+          }
           throw new Error('durable-authorization-blocked', { cause: error });
         }
         assertDispatch();
       }
       if (request.kind === 'complete') assertDispatch();
-      if (request.kind === 'complete') {
+      if (request.kind === 'complete' && !frozenContext(initial.spec).steps) {
         const schema = (frozenContext(initial.spec).workflow as unknown as LoadedWorkflow | null)?.metadata.steps[0]?.outputSchema;
         if (schema) {
           const message = journal.get(runId, workspaceId).turns.at(-1)?.message as { content?: Array<{ type?: string; text?: string }> } | undefined;
           durableStepOutput(message?.content?.filter(item => item.type === 'text').map(item => item.text ?? '').join('') ?? '', schema);
         }
       }
-      if (request.kind === 'complete' && frozenContext(initial.spec).requireNonEmptyOutput) {
+      if (request.kind === 'complete' && !frozenContext(initial.spec).steps && frozenContext(initial.spec).requireNonEmptyOutput) {
         const turns = journal.get(runId, workspaceId).turns;
         const message = turns[turns.length - 1]?.message as { content?: Array<{ type?: string; text?: string }> } | undefined;
         if (!message?.content?.filter(item => item.type === 'text').map(item => item.text ?? '').join('').trim()) throw new Error('durable-read-empty-output');
       }
       return journalBridge.checkpoint(request);
     } };
+      return { bridge, journalBridge, assertDispatch };
+    };
+    let { bridge, journalBridge, assertDispatch } = createBridges(claim, primaryCandidate);
     let failed = false;
     try {
       const spec = initial.spec, frozen = frozenContext(spec);
       if (spec.engine !== 'sqlite-v2-readonly-1' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(spec.runId) || canonical(spec.authority) !== canonical({ adapter: frozen.steps ? 'pi-local-read-multi-1' : 'pi-local-read-1', stepCount: frozen.steps?.length ?? 1, completion: 'journal-only' })) throw new Error('unsupported-durable-read-authority');
       if (initial.publication?.status === 'pending') return await this.publishPending(initial, claim, journalBridge);
-      const binding = JSON.parse(JSON.stringify(await this.options.resolveBinding(workspaceId, frozen.connectionSlug, spec.model))) as DurableReadBinding;
-      this.checkBinding(binding, workspaceId, frozen.connectionSlug, spec.model);
-      if (bindingDigest(binding) !== frozen.bindingDigest) throw new Error('durable-read-binding-changed');
-      assertDispatch();
       const steps = frozen.steps ?? [{ id: '', prompt: frozen.prompt, systemPrompt: frozen.systemPrompt, requireNonEmptyOutput: frozen.requireNonEmptyOutput }];
       for (let index = 0; index < steps.length; index++) {
         const step = steps[index]!;
@@ -506,10 +548,50 @@ export class DurableReadRunner {
         const prompt = schema ? appendOutputSchemaInstruction(resolved.output, schema) : resolved.output;
         if (frozen.steps) await bridge.checkpoint({ kind: 'workflow-step-start', step: index, input: { prompt, systemPrompt: step.systemPrompt } });
         state = journal.get(runId, workspaceId);
+        const savedAttempt = state.providerAttempts?.findLast(attempt => attempt.step === index);
+        let candidateIndex = savedAttempt?.candidateIndex ?? 0;
+        const plan = frozen.modelPlans?.[index];
+        const billedConnections = new Set(state.providerAttempts?.filter(attempt => attempt.error === 'credits-exhausted')
+          .map(attempt => frozen.modelPlans![attempt.step]!.candidates[attempt.candidateIndex]!.connectionSlug));
+        if (plan && !state.providerAttention) {
+          // A committed failure is already a decision. Recovery must not re-dispatch that provider.
+          const advance = savedAttempt?.error !== undefined && savedAttempt.retryAt === undefined;
+          const next = plan.candidates.findIndex((candidate, i) => (advance ? i > candidateIndex : i >= candidateIndex)
+            && !billedConnections.has(candidate.connectionSlug));
+          if (next >= 0) candidateIndex = next;
+          else if (!savedAttempt || advance) {
+            claim = journal.beginStepAttempt(claim, { step: index, candidateIndex });
+            claim = journal.recordProviderFailure(claim, { step: index, candidateIndex,
+              code: savedAttempt?.error ?? 'credits-exhausted', exhausted: true });
+            entry.claim = claim;
+            return journal.get(runId, workspaceId);
+          }
+        }
+        while (true) {
+        state = journal.get(runId, workspaceId);
+        if (plan) {
+          claim = journal.beginStepAttempt(claim, { step: index, candidateIndex });
+          entry.claim = claim;
+        }
+        const candidate = plan?.candidates[candidateIndex] ?? primaryCandidate;
+        ({ bridge, journalBridge, assertDispatch } = createBridges(claim, candidate));
+        const pendingRetry = journal.get(runId, workspaceId).providerAttempts?.at(-1)?.retryAt;
+        while (pendingRetry !== undefined && Date.now() < pendingRetry) {
+          assertDispatch();
+          await new Promise(resolve => setTimeout(resolve, Math.min(100, pendingRetry - Date.now())));
+        }
+        try {
+        const binding = JSON.parse(JSON.stringify(await this.options.resolveBinding(workspaceId, candidate.connectionSlug, candidate.model))) as DurableReadBinding;
+        this.checkBinding(binding, workspaceId, candidate.connectionSlug, candidate.model);
+        if (bindingDigest(binding) !== candidate.bindingDigest) throw new Error('durable-read-binding-changed');
+        assertDispatch();
+        state = journal.get(runId, workspaceId);
         const offset = frozen.steps ? state.workflowSteps![index]!.startTurn : 0;
-        const stepBridge: typeof bridge = !frozen.steps ? bridge : { ...bridge, checkpoint: async request => {
+        const ownedBridge = bridge;
+        const assertAttemptDispatch = assertDispatch;
+        const stepBridge: typeof bridge = !frozen.steps ? ownedBridge : { ...ownedBridge, checkpoint: async request => {
           if (request.kind === 'complete') {
-            assertDispatch();
+            assertAttemptDispatch();
             if (schema) {
               const message = journal.get(runId, workspaceId).turns.at(-1)?.message as { content?: Array<{ type?: string; text?: string }> } | undefined;
               durableStepOutput(message?.content?.filter(item => item.type === 'text').map(item => item.text ?? '').join('') ?? '', schema);
@@ -518,18 +600,22 @@ export class DurableReadRunner {
               const message = journal.get(runId, workspaceId).turns.at(-1)?.message as { content?: Array<{ type?: string; text?: string }> } | undefined;
               if (!message?.content?.filter(item => item.type === 'text').map(item => item.text ?? '').join('').trim()) throw new Error('durable-read-empty-output');
             }
-            return bridge.checkpoint({ kind: 'workflow-step-complete', step: index });
+            return ownedBridge.checkpoint({ kind: 'workflow-step-complete', step: index });
           }
           if (request.kind === 'workflow-step-start' || request.kind === 'workflow-step-complete' || request.kind === 'output-published') throw new Error('durable-workflow-host-checkpoint-required');
           if (!Number.isSafeInteger(request.turn) || request.turn < (request.kind === 'turn-boundary' ? -1 : 0)) throw new Error('durable-invalid-turn');
-          return bridge.checkpoint({ ...request, turn: request.turn + offset });
+          return ownedBridge.checkpoint({ ...request, turn: request.turn + offset });
         } };
+        // The runner classifies provider failures before committing a terminal state.
+        if (plan?.role) stepBridge.fail = async reason => {
+          if (!providerFailure(reason)) await ownedBridge.fail(reason);
+        };
         entry.backend = await (this.options.createBackend ?? createDurableReadBackend)({ context: binding.context, hostRuntime: this.options.hostRuntime,
-          coreConfig: { workspace: { ...binding.workspace, rootPath: frozen.workspaceRoot }, model: spec.model, customSystemPrompt: step.systemPrompt,
+          coreConfig: { workspace: { ...binding.workspace, rootPath: frozen.workspaceRoot }, model: candidate.model, customSystemPrompt: step.systemPrompt,
             thinkingLevel: 'off', isHeadless: true, skipConfigWatcher: true, agentSkillSlugs: [], modelFallback: { enabled: false },
             durableExecution: stepBridge, session: { id: spec.runId, workspaceRootPath: frozen.workspaceRoot,
               workingDirectory: frozen.workspaceRoot, sdkCwd: frozen.workspaceRoot, createdAt: spec.createdAt, lastUsedAt: spec.createdAt,
-              model: spec.model, llmConnection: frozen.connectionSlug, permissionMode: 'safe', enabledSourceSlugs: [], hidden: true } } });
+              model: candidate.model, llmConnection: candidate.connectionSlug, permissionMode: 'safe', enabledSourceSlugs: [], hidden: true } } });
         assertDispatch();
         let streamError: Error | undefined;
         for await (const event of entry.backend.chat(prompt)) {
@@ -548,6 +634,28 @@ export class DurableReadRunner {
         entry.backend.destroy();
         entry.backend = undefined;
         if (finalState.status !== 'running' || finalState.controlRevision !== claim.controlRevision) return finalState;
+        break;
+        } catch (error) {
+          const code = providerFailure(error instanceof Error ? error.message : String(error));
+          const current = journal.get(runId, workspaceId);
+          if (!plan?.role || !code || current.status !== 'running' || current.controlRevision !== claim.controlRevision) throw error;
+          entry.backend?.destroy(); entry.backend = undefined;
+          const attempt = current.providerAttempts!.at(-1)!;
+          const delay = Math.max(1, Math.min(60_000, this.options.providerRetryDelayMs ?? 5_000));
+          const retryAt = code === 'rate-limit' && attempt.retries === 0 && Date.now() + delay < spec.deadlineAt
+            ? Date.now() + delay : undefined;
+          const billedConnections = new Set(current.providerAttempts?.filter(item => item.error === 'credits-exhausted').map(item => frozen.modelPlans![item.step]!.candidates[item.candidateIndex]!.connectionSlug));
+          if (code === 'credits-exhausted') billedConnections.add(candidate.connectionSlug);
+          const next = plan.candidates.findIndex((item, nextIndex) => nextIndex > candidateIndex && !billedConnections.has(item.connectionSlug));
+          claim = journal.recordProviderFailure(claim, { step: index, candidateIndex, code,
+            ...(retryAt !== undefined ? { retryAt } : next < 0 ? { exhausted: true } : {}) });
+          entry.claim = claim;
+          ({ bridge, journalBridge, assertDispatch } = createBridges(claim, candidate));
+          if (retryAt === undefined && next < 0) return journal.get(runId, workspaceId);
+          if (retryAt === undefined) candidateIndex = next;
+        }
+        }
+
       }
       return await this.publishPending(journal.get(runId, workspaceId), claim, journalBridge);
     } catch (error) {

@@ -21,3 +21,15 @@ test('unknown or malformed execution engines reject rather than disappear', () =
     expect(parseWorkflowFile(text)).toBeNull();
   }
 });
+
+test('explicit model roles survive roundtrip and invalid roles reject', () => {
+  for (const modelRole of ['reasoning', 'fast'] as const) {
+    const definition = { ...metadata, steps: [{ ...metadata.steps[0]!, modelRole }] };
+    expect(parseWorkflowFile(serializeWorkflow(definition, ''))?.metadata.steps[0]?.modelRole).toBe(modelRole);
+  }
+  for (const modelRole of ['cheap', '', null, 1, {}]) {
+    const definition = { ...metadata, steps: [{ ...metadata.steps[0]!, modelRole }] } as unknown as WorkflowMetadata;
+    expect(() => serializeWorkflow(definition, '')).toThrow('model role');
+    expect(parseWorkflowFile(serializeWorkflow(metadata, '').replace('    agent: reader', `    agent: reader\n    modelRole: ${JSON.stringify(modelRole)}`))).toBeNull();
+  }
+});

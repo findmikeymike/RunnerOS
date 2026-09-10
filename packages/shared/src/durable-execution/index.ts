@@ -43,6 +43,7 @@ export interface DurableRunSpec extends DurableExecutionDescriptor {
   commandId: string;
   /** Ordered local-read steps share this run's fencing, deadline and request budget. */
   workflowSteps?: Array<{ id: string }>;
+  fallbackPlan?: { steps: Array<{ candidates: Array<{ model: string; credentialIdentity: string; connectionSlug: string }> }> };
   publication?: { outputId: string; kind: 'report' | 'document'; title: string; summary?: string; stepId: string };
   parent?: { runId: string; slotId: string; mode: 'required' | 'detached' };
   /** Trusted principal whose tool authorization must be resolved before every dispatch. */
@@ -54,6 +55,7 @@ export interface DurableRunSpec extends DurableExecutionDescriptor {
   /** model-requests bounds provider attempts only; it is not a monetary spending guarantee. */
   costPolicy: { maxTotalUnits: number; maxUnitsPerAttempt: number; unit: 'verified-free' | 'trusted-upper-bound' | 'model-requests' };
 }
+export type DurableProviderFailure = 'rate-limit' | 'credits-exhausted' | 'provider-unavailable';
 export interface DurableClaim { runId: string; workspaceId: string; ownerId: string; epoch: number; controlRevision: number; observationOnly?: true }
 interface Call { id: string; tool: string; inputDigest?: string; attempts: number; skipped?: true; result?: DurableJson }
 interface Turn { continuationRevision?: number; contextDigest: string; message?: DurableJson; calls: Call[] }
@@ -72,6 +74,8 @@ export interface DurableRunSnapshot {
   continuationRevision?: number;
   boundaries?: Array<{ afterTurn: number; sequences: number[]; continuationRevision: number }>;
   failure?: string;
+  providerAttempts?: Array<{ step: number; candidateIndex: number; startTurn: number; startedAt: number; endedAt?: number; endTurn?: number; retries: number; failures?: Array<{ code: DurableProviderFailure; at: number }>; error?: DurableProviderFailure; retryAt?: number }>;
+  providerAttention?: DurableProviderFailure;
   operations?: DurableOperation[];
   children?: DurableChildEdge[];
   childReservedModelAttempts?: number;
@@ -121,10 +125,10 @@ export class DurableJournal {
       this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;');
       if (this.db.prepare('PRAGMA journal_mode').get().journal_mode !== 'wal' || this.db.prepare('PRAGMA synchronous').get().synchronous !== 2 || this.db.prepare('PRAGMA foreign_keys').get().foreign_keys !== 1) throw new Error('unsafe-sqlite-settings');
       const version = this.db.prepare('PRAGMA user_version').get().user_version;
-      if (![0, 1, 2, 3].includes(version)) throw new Error('unsupported-durable-schema');
+      if (![0, 1, 2, 3, 4].includes(version)) throw new Error('unsupported-durable-schema');
       this.db.exec('BEGIN IMMEDIATE');
       try {
-        this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, command TEXT NOT NULL, spec_digest TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT, pid INTEGER, payload TEXT NOT NULL, UNIQUE(workspace,command)); CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), version INTEGER NOT NULL, kind TEXT NOT NULL, UNIQUE(run_id,version)); CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES events(sequence), acknowledged INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS control_commands (workspace TEXT NOT NULL, id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(id), payload TEXT NOT NULL, PRIMARY KEY(workspace,id)); PRAGMA user_version=3;');
+        this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, command TEXT NOT NULL, spec_digest TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT, pid INTEGER, payload TEXT NOT NULL, UNIQUE(workspace,command)); CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), version INTEGER NOT NULL, kind TEXT NOT NULL, UNIQUE(run_id,version)); CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES events(sequence), acknowledged INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS control_commands (workspace TEXT NOT NULL, id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(id), payload TEXT NOT NULL, PRIMARY KEY(workspace,id)); PRAGMA user_version=4;');
         if (!this.db.prepare('PRAGMA table_info(runs)').all().some((column: any) => column.name === 'process_identity')) this.db.exec('ALTER TABLE runs ADD COLUMN process_identity TEXT');
         const keyCheck = this.db.prepare("SELECT value FROM metadata WHERE key='key-check'").get();
         if (keyCheck) { if (this.decrypt(keyCheck.value, 'key-check') !== 'artist-os-durable-v1') throw new Error('invalid-key-check'); }
@@ -186,6 +190,10 @@ export class DurableJournal {
     if (spec.parent !== undefined) throw new Error('durable-child-atomic-admission-required');
     const policy = spec.costPolicy;
     if (spec.workflowSteps !== undefined && (!Array.isArray(spec.workflowSteps) || spec.workflowSteps.length < 1 || spec.workflowSteps.length > 8 || spec.workflowSteps.some(step => !step || typeof step.id !== 'string' || !step.id.trim() || Object.keys(step).some(key => key !== 'id')) || new Set(spec.workflowSteps.map(step => step.id)).size !== spec.workflowSteps.length)) throw new Error('invalid-durable-workflow-steps');
+    if (spec.fallbackPlan !== undefined) {
+      const plan = spec.fallbackPlan;
+      if (!plan || !spec.workflowSteps || !Array.isArray(plan.steps) || plan.steps.length !== spec.workflowSteps.length || Object.keys(plan).some(k => k !== 'steps') || plan.steps.some(step => !step || Object.keys(step).some(k => k !== 'candidates') || !Array.isArray(step.candidates) || step.candidates.length < 1 || step.candidates.length > 9 || step.candidates.some(c => !c || Object.keys(c).some(k => !['model', 'credentialIdentity', 'connectionSlug'].includes(k)) || typeof c.model !== 'string' || !c.model.trim() || typeof c.connectionSlug !== 'string' || !c.connectionSlug.trim() || !/^[a-f0-9]{64}$/.test(c.credentialIdentity)))) throw new Error('invalid-durable-fallback-plan');
+    }
     if (spec.publication !== undefined) {
       const publication = spec.publication;
       if (!publication || typeof publication !== 'object' || Object.keys(publication).some(key => !['outputId', 'kind', 'title', 'summary', 'stepId'].includes(key)) || typeof publication.outputId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(publication.outputId) || !['report', 'document'].includes(publication.kind) || typeof publication.title !== 'string' || !publication.title.trim() || typeof publication.stepId !== 'string' || !publication.stepId.trim() || publication.summary !== undefined && typeof publication.summary !== 'string' || spec.workflowSteps && publication.stepId !== spec.workflowSteps.at(-1)!.id) throw new Error('invalid-durable-publication');
@@ -333,9 +341,13 @@ export class DurableJournal {
       return receipt;
     });
   }
+  private activeCredential(state: DurableRunSnapshot): string {
+    const attempt = state.providerAttempts?.at(-1);
+    return attempt && state.spec.fallbackPlan?.steps[attempt.step]?.candidates[attempt.candidateIndex]?.credentialIdentity || state.spec.credentialIdentity;
+  }
   private authorize(state: DurableRunSnapshot, request: Extract<DurableCheckpoint, { kind: 'tool-start' }>, call: Call, inputDigest: string, authorization?: DurableToolAuthorization): { blocked: string } | undefined {
     if (!state.spec.approvalPrincipalId) return;
-    if (!authorization || authorization.allowed !== true || authorization.principalId !== state.spec.approvalPrincipalId || authorization.credentialIdentity !== state.spec.credentialIdentity || typeof authorization.policyRevision !== 'string' || !authorization.policyRevision || typeof authorization.requiresApproval !== 'boolean' || !Number.isFinite(authorization.approvalExpiresAt)) {
+    if (!authorization || authorization.allowed !== true || authorization.principalId !== state.spec.approvalPrincipalId || authorization.credentialIdentity !== this.activeCredential(state) || typeof authorization.policyRevision !== 'string' || !authorization.policyRevision || typeof authorization.requiresApproval !== 'boolean' || !Number.isFinite(authorization.approvalExpiresAt)) {
       state.status = 'paused'; state.controlRevision++; this.save(state, 'authorization-blocked');
       return { blocked: 'durable-authorization-blocked' };
     }
@@ -393,7 +405,7 @@ export class DurableJournal {
       const approval = state.approvals?.find(candidate => candidate.id === command.approvalId);
       if (!approval || state.approvals!.filter(candidate => candidate.operationId === approval.operationId).at(-1)?.id !== approval.id || (approval.status !== 'pending' && !(command.action === 'deny' && approval.status === 'expired'))
         || approval.inputDigest !== command.inputDigest || approval.principalId !== command.principalId || approval.policyRevision !== command.policyRevision || approval.credentialIdentity !== command.credentialIdentity
-        || command.principalId !== state.spec.approvalPrincipalId || command.credentialIdentity !== state.spec.credentialIdentity) throw new Error('durable-approval-decision-mismatch');
+        || command.principalId !== state.spec.approvalPrincipalId || command.credentialIdentity !== this.activeCredential(state)) throw new Error('durable-approval-decision-mismatch');
       if (command.action === 'approve' && (approval.expiresAt <= Date.now() || state.spec.deadlineAt <= Date.now())) {
         approval.status = 'expired'; if (state.status !== 'paused') state.status = 'waiting-approval'; state.controlRevision++; this.save(state, 'approval-expired');
         return { blocked: 'durable-approval-expired' };
@@ -410,10 +422,55 @@ export class DurableJournal {
     return result.receipt!;
   }
 
+  /** Host-only transition: old bridges cannot settle an abandoned provider attempt. */
+  beginStepAttempt(claim: DurableClaim, input: { step: number; candidateIndex: number }): DurableClaim {
+    this.assertExecutionClaim(claim);
+    return this.transaction(() => {
+      const state = this.fenced(claim);
+      this.operationDispatch(state, claim);
+      const candidates = state.spec.fallbackPlan?.steps[input.step]?.candidates;
+      const step = state.workflowSteps?.[input.step];
+      if (!Number.isSafeInteger(input.step) || !Number.isSafeInteger(input.candidateIndex) || !candidates?.[input.candidateIndex] || !step || step.endTurn !== undefined || state.workflowSteps?.slice(0, input.step).some(s => s.endTurn === undefined)) throw new Error('durable-invalid-provider-attempt');
+      const attempts = state.providerAttempts ??= [];
+      const previous = attempts.at(-1);
+      if (previous?.step === input.step && previous.candidateIndex === input.candidateIndex) return { ...claim };
+      if (previous?.step === input.step && (previous.endTurn !== undefined || !previous.error || input.candidateIndex <= previous.candidateIndex)) throw new Error('durable-provider-attempt-order');
+      if (previous?.step === input.step) {
+        previous.endTurn = state.turns.length; previous.endedAt = Date.now();
+        for (const approval of state.approvals ?? []) if (approval.turn >= previous.startTurn && approval.turn < previous.endTurn && ['pending', 'approved'].includes(approval.status)) approval.status = 'superseded';
+        // Reapply steering consumed only by the abandoned context to the new context.
+        for (const entry of state.steering ?? []) if (entry.appliedAfterTurn !== undefined && entry.appliedAfterTurn >= previous.startTurn - 1) delete entry.appliedAfterTurn;
+      }
+      step.startTurn = state.turns.length;
+      attempts.push({ step: input.step, candidateIndex: input.candidateIndex, startTurn: step.startTurn, startedAt: Date.now(), retries: 0 });
+      delete state.providerAttention;
+      state.controlRevision++; this.save(state, 'provider-attempt-start');
+      return { ...claim, controlRevision: state.controlRevision };
+    });
+  }
+  recordProviderFailure(claim: DurableClaim, input: { step: number; candidateIndex: number; code: DurableProviderFailure; retryAt?: number; exhausted?: boolean }): DurableClaim {
+    this.assertExecutionClaim(claim);
+    return this.transaction(() => {
+      const state = this.fenced(claim);
+      this.operationDispatch(state, claim);
+      const attempt = state.providerAttempts?.at(-1);
+      if (!attempt || attempt.step !== input.step || attempt.candidateIndex !== input.candidateIndex || attempt.endTurn !== undefined || state.workflowSteps?.[input.step]?.endTurn !== undefined || !['rate-limit', 'credits-exhausted', 'provider-unavailable'].includes(input.code)) throw new Error('durable-invalid-provider-failure');
+      if (input.retryAt !== undefined && (input.code !== 'rate-limit' || input.exhausted || attempt.retries >= 1 || !Number.isSafeInteger(input.retryAt) || input.retryAt <= Date.now() || input.retryAt > Math.min(state.spec.deadlineAt, Date.now() + 60000))) throw new Error('durable-invalid-provider-retry');
+      attempt.failures = [...(attempt.failures ?? []).slice(-15), { code: input.code, at: Date.now() }];
+      attempt.error = input.code;
+      if (input.retryAt !== undefined) { attempt.retryAt = input.retryAt; attempt.retries++; } else delete attempt.retryAt;
+      if (input.exhausted) { state.status = 'paused'; state.providerAttention = input.code; }
+      state.controlRevision++; this.save(state, 'provider-failure');
+      return { ...claim, controlRevision: state.controlRevision };
+    });
+  }
+
   bridge(claim: DurableClaim, options: { authorizeTool?: (request: Extract<DurableCheckpoint, { kind: 'tool-start' }>) => Promise<DurableToolAuthorization> } = {}): DurableExecutionBridge {
     this.assertExecutionClaim(claim);
-    const spec = this.fenced(claim).spec;
-    const descriptor: DurableExecutionDescriptor = { credentialIdentity: spec.credentialIdentity, runtimeManifest: Object.freeze({...spec.runtimeManifest}), engine: spec.engine, runId: spec.runId, workspaceId: spec.workspaceId, createdAt: spec.createdAt, allowedTools: [...spec.allowedTools], model: spec.model, maxOutputTokens: spec.maxOutputTokens };
+    const snapshot = this.fenced(claim), spec = snapshot.spec;
+    const active = snapshot.providerAttempts?.at(-1);
+    const candidate = active && spec.fallbackPlan?.steps[active.step]?.candidates[active.candidateIndex];
+    const descriptor: DurableExecutionDescriptor = { credentialIdentity: candidate?.credentialIdentity ?? spec.credentialIdentity, runtimeManifest: Object.freeze({...spec.runtimeManifest}), engine: spec.engine, runId: spec.runId, workspaceId: spec.workspaceId, createdAt: spec.createdAt, allowedTools: [...spec.allowedTools], model: candidate?.model ?? spec.model, maxOutputTokens: spec.maxOutputTokens };
     Object.freeze(descriptor.allowedTools); Object.freeze(descriptor);
     return Object.freeze({ descriptor, checkpoint: async (request: DurableCheckpoint) => {
       const pinned = JSON.parse(canonical(request)) as DurableCheckpoint;
@@ -453,6 +510,8 @@ export class DurableJournal {
       const state = this.fenced(claim);
       if (digest(state.spec.runtimeManifest) !== digest(DURABLE_RUNTIME_MANIFEST)) throw new Error('durable-runtime-manifest-changed');
       const isResult = request.kind === 'model-result' || request.kind === 'tool-result';
+      if (state.spec.fallbackPlan && state.controlRevision !== claim.controlRevision) throw new Error('durable-control-changed');
+      const abandoned = (index: number) => state.providerAttempts?.some(a => a.endTurn !== undefined && index >= a.startTurn && index < a.endTurn) ?? false;
       const finalStepReplay = request.kind === 'workflow-step-complete' && state.status === 'succeeded' && state.spec.workflowSteps !== undefined && request.step === state.spec.workflowSteps.length - 1 && state.workflowSteps?.[request.step]?.endTurn !== undefined;
       const publicationReplay = request.kind === 'output-published' && state.status === 'succeeded' && state.publication?.status === 'published';
       const localPublication = request.kind === 'output-published' || state.publication?.status === 'pending' && (request.kind === 'complete' || request.kind === 'workflow-step-complete');
@@ -474,7 +533,7 @@ export class DurableJournal {
       const steeringBlocked = () => { state.controlRevision++; this.save(state, 'steering-replay-required'); return { blocked: 'durable-steering-pending' }; };
       if (request.kind === 'turn-boundary') {
         if (!Number.isSafeInteger(request.turn) || request.turn < -1 || request.turn >= state.turns.length) throw new Error('durable-invalid-turn');
-        if (state.turns.slice(0, request.turn + 1).some(turn => !priorDone(turn))) throw new Error('durable-predecessor-incomplete');
+        if (state.turns.slice(0, request.turn + 1).some((turn, index) => !abandoned(index) && !priorDone(turn))) throw new Error('durable-predecessor-incomplete');
         let boundary = state.boundaries!.find(boundary => boundary.afterTurn === request.turn);
         let changed = false;
         if (!boundary) { boundary = { afterTurn: request.turn, sequences: [], continuationRevision: 0 }; state.boundaries!.push(boundary); changed = true; }
@@ -497,7 +556,7 @@ export class DurableJournal {
             if (step.inputDigest !== inputDigest) throw new Error('durable-workflow-step-input-changed');
             return step.output === undefined ? {} : { cached: step.output };
           }
-          if (steps.some(prior => prior.endTurn === undefined) || !state.turns.every(priorDone)) throw new Error('durable-workflow-step-order');
+          if (steps.some(prior => prior.endTurn === undefined) || !state.turns.every((turn, index) => abandoned(index) || priorDone(turn))) throw new Error('durable-workflow-step-order');
           steps.push({ id: definitions[request.step]!.id, startTurn: state.turns.length, inputDigest });
           this.save(state, 'workflow-step-start'); return {};
         }
@@ -512,6 +571,8 @@ export class DurableJournal {
         // The host enforces the pinned requireNonEmptyOutput policy before this checkpoint.
         const text = message.content?.filter(item => item.type === 'text' && typeof item.text === 'string').map(item => item.text).join('') ?? '';
         step.output = text; step.endTurn = state.turns.length;
+        const activeAttempt = state.providerAttempts?.at(-1);
+        if (activeAttempt?.step === request.step) activeAttempt.endedAt = Date.now();
         if (request.step === definitions.length - 1) {
           if (state.spec.publication) state.publication = { status: 'pending', content: text, outputId: state.spec.publication.outputId };
           else state.status = 'succeeded';
@@ -524,7 +585,7 @@ export class DurableJournal {
         if (state.children?.some(child => child.mode === 'required' && child.status !== 'joined')) throw new Error('durable-child-join-required');
         if (state.operations?.some(operation => operation.status !== 'succeeded')) throw new Error('durable-operation-incomplete');
         if (pending() || state.steering!.some(entry => !state.turns[entry.appliedAfterTurn! + 1])) return steeringBlocked();
-        if (!state.turns.length || !state.turns.every(priorDone) || state.turns[state.turns.length - 1]!.calls.length) throw new Error('durable-incomplete');
+        if (!state.turns.length || !state.turns.every((turn, index) => abandoned(index) || priorDone(turn)) || state.turns[state.turns.length - 1]!.calls.length) throw new Error('durable-incomplete');
         if (state.spec.publication) {
           const message = state.turns.at(-1)!.message as { content?: Array<{ type?: string; text?: string }> };
           const content = message.content?.filter(item => item.type === 'text' && typeof item.text === 'string').map(item => item.text).join('') ?? '';
@@ -534,8 +595,14 @@ export class DurableJournal {
         return {};
       }
       if (!Number.isSafeInteger(request.turn) || request.turn < 0 || request.turn > state.turns.length) throw new Error('durable-invalid-turn');
+      if (abandoned(request.turn)) throw new Error('durable-provider-attempt-abandoned');
       let turn = state.turns[request.turn];
       if (request.kind === 'model-start') {
+        if (state.spec.fallbackPlan) {
+          const active = state.providerAttempts?.at(-1);
+          if (!active || active.endTurn !== undefined || active.step !== state.workflowSteps?.findIndex(s => s.endTurn === undefined) || active.retryAt !== undefined && Date.now() < active.retryAt) throw new Error('durable-provider-attempt-blocked');
+          delete active.retryAt; delete state.providerAttention;
+        }
         if (state.spec.workflowSteps) {
           const step = state.workflowSteps?.find(step => step.endTurn === undefined);
           if (!step || request.turn < step.startTurn) throw new Error('durable-workflow-step-not-started');
@@ -545,9 +612,10 @@ export class DurableJournal {
         const contextDigest = digest(canonicalContext(request.context));
         if (turn && turn.contextDigest !== contextDigest) throw new Error('durable-context-changed');
         if (turn?.message !== undefined) return { cached: turn.message };
-        if (state.turns.slice(0, request.turn).some(t => !priorDone(t)) || request.turn < state.turns.length - 1) throw new Error('durable-predecessor-incomplete');
+        if (state.turns.slice(0, request.turn).some((t, index) => !abandoned(index) && !priorDone(t)) || request.turn < state.turns.length - 1) throw new Error('durable-predecessor-incomplete');
         if (state.modelAttempts + (state.childReservedModelAttempts ?? 0) >= state.spec.maxModelAttempts || state.reservedUnits + state.spec.costPolicy.maxUnitsPerAttempt > state.spec.costPolicy.maxTotalUnits) throw new Error('durable-budget-exhausted');
         if (!turn) { turn = { contextDigest, calls: [], continuationRevision: state.boundaries!.find(boundary => boundary.afterTurn === request.turn - 1)?.continuationRevision ?? 0 }; state.turns.push(turn); }
+        if (state.spec.fallbackPlan) delete state.providerAttempts!.at(-1)!.error;
         state.modelAttempts++; state.reservedUnits += state.spec.costPolicy.maxUnitsPerAttempt;
       } else {
         if (!turn) throw new Error('durable-model-not-started');

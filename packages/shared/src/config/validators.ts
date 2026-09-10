@@ -86,9 +86,17 @@ const ModelFallbackEntrySchema = z.object({
   model: z.string().trim().min(1).optional(),
 });
 
-const ModelFallbackChainSchema = z.object({
+const ModelFallbackProfileSchema = z.object({
   enabled: z.boolean(),
   entries: z.array(ModelFallbackEntrySchema).max(2),
+});
+
+const ModelFallbackChainSchema = ModelFallbackProfileSchema.extend({
+  profiles: z.object({
+    reasoning: ModelFallbackProfileSchema.optional(),
+    fast: ModelFallbackProfileSchema.optional(),
+  }).strict().optional(),
+  inheritGeneral: z.literal(true).optional(),
 });
 
 const ModelConnectionAttentionSchema = z.object({

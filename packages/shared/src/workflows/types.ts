@@ -107,6 +107,8 @@ export interface WorkflowStep {
   agent: string;
   /** Explicit launch recipe for this step; never inferred as Full. */
   taskModeId?: string;
+  /** Explicit fallback quality/cost lane; never guessed from a model name. */
+  modelRole?: 'reasoning' | 'fast';
   /** User-message template for the step's session. Supports `{{...}}`. */
   input: string;
   /** Optional human-readable note describing the step. UI hint only. */

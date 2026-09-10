@@ -221,6 +221,7 @@ interface RawStep {
   legacySkillReferences?: unknown;
   legacySkillPromptHash?: unknown;
   taskModeId?: unknown;
+  modelRole?: unknown;
   id?: unknown;
   agent?: unknown;
   input?: unknown;
@@ -364,6 +365,7 @@ export function parseWorkflowFile(
     if (seenIds.has(id)) return null;
     if (!agent || !AGENT_SLUG_REGEX.test(agent)) return null;
     if (rawStep.taskModeId !== undefined && (typeof rawStep.taskModeId !== 'string' || !AGENT_SLUG_REGEX.test(rawStep.taskModeId))) return null;
+    if (rawStep.modelRole !== undefined && rawStep.modelRole !== 'reasoning' && rawStep.modelRole !== 'fast') return null;
     if (!input) return null;
 
     const refErrors = validateTemplateReferences(input, previousIds, triggerInputNames);
@@ -373,6 +375,7 @@ export function parseWorkflowFile(
     const legacyReferences = preserveLegacySkillReferences(rawStep);
     if (legacyReferences.length) { step.legacySkillReferences = legacyReferences; step.legacySkillPromptHash = rawStep.legacySkillPromptHash as string; }
     if (typeof rawStep.taskModeId === 'string') step.taskModeId = rawStep.taskModeId;
+    if (rawStep.modelRole === 'reasoning' || rawStep.modelRole === 'fast') step.modelRole = rawStep.modelRole;
     if (typeof rawStep.description === 'string' && rawStep.description.trim()) {
       step.description = rawStep.description.trim();
     } else if (rawStep.description !== undefined && typeof rawStep.description !== 'string') {
@@ -472,6 +475,7 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
   data.steps = metadata.steps.map((s) => {
     const out: Record<string, unknown> = { id: s.id, agent: s.agent, input: s.input };
     if (s.taskModeId !== undefined) out.taskModeId = s.taskModeId;
+    if (s.modelRole !== undefined) out.modelRole = s.modelRole;
     if (s.description) out.description = s.description;
     if (s.outputSchema) out.outputSchema = s.outputSchema;
     if (s.timeout !== undefined) out.timeout = s.timeout;
@@ -511,6 +515,7 @@ function validateSerializableWorkflowMetadata(metadata: WorkflowMetadata): void 
     throw new Error('Workflow trigger inputs contain invalid bounds or references.');
   }
   for (const step of metadata.steps) {
+    if (step.modelRole !== undefined && step.modelRole !== 'reasoning' && step.modelRole !== 'fast') throw new Error('Invalid workflow model role.');
     if (step.taskModeId !== undefined && (
       typeof step.taskModeId !== 'string' || !AGENT_SLUG_REGEX.test(step.taskModeId)
       || typeof step.agent !== 'string' || !AGENT_SLUG_REGEX.test(step.agent)

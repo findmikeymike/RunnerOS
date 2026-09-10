@@ -151,6 +151,28 @@ describe('model fallback chain storage', () => {
     expect(readConnection('custom-compat')).not.toHaveProperty('fallbackChain')
   })
 
+  it('round-trips independent work-type lists and rejects malformed profile replacements', () => {
+    const chain = {
+      enabled: false,
+      entries: [],
+      inheritGeneral: true,
+      profiles: {
+        reasoning: { enabled: true, entries: [{ connectionSlug: 'backup', model: 'model-b' }] },
+        fast: { enabled: false, entries: [] },
+      },
+    }
+    const { runUpdate, readConnection, runSetGlobal, readConfig } = setup([
+      makeConnection({ defaultModel: 'model-a' }),
+      makeConnection({ slug: 'backup', defaultModel: 'model-b' }),
+    ])
+    expect(runUpdate('custom-compat', { fallbackChain: chain })).toBe(true)
+    expect(readConnection('custom-compat').fallbackChain).toEqual(chain)
+    expect(runSetGlobal(chain)).toBe(true)
+    expect(readConfig().modelFallbackChain).toEqual(chain)
+    expect(runUpdate('custom-compat', { fallbackChain: { ...chain, profiles: { reasoning: null } } })).toBe(false)
+    expect(readConnection('custom-compat').fallbackChain).toEqual(chain)
+  })
+
   it('persists and clears durable fallback connection attention', () => {
     const attention = {
       reason: 'connection-auth-failed',

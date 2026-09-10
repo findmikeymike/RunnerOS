@@ -1497,6 +1497,7 @@ function mergeUniqueStrings(
 }
 
 interface ManagedSession {
+  modelFallbackRole?: 'reasoning' | 'fast'
   id: string
   workspace: Workspace
   agent: AgentInstance | null  // Lazy-loaded - null until first message
@@ -7892,6 +7893,7 @@ user a clickable link to where the thing now lives.`
       isFlagged: options?.isFlagged,
       enabledSourceSlugs: defaultEnabledSourceSlugs,
       model: resolvedModelOption,
+      modelFallbackRole: options?.modelFallbackRole,
       llmConnection: options?.llmConnection,
       customSystemPrompt: options?.customSystemPrompt,
       agentSkillSlugs: options?.agentSkillSlugs,
@@ -7987,6 +7989,7 @@ user a clickable link to where the thing now lives.`
       model: resolvedModel,
       llmConnection: options?.llmConnection,
       thinkingLevel: defaultThinkingLevel,
+      modelFallbackRole: options?.modelFallbackRole,
       systemPromptPreset: options?.systemPromptPreset,
       enabledSourceSlugs: defaultEnabledSourceSlugs,
       customSystemPrompt: options?.customSystemPrompt,
@@ -8325,6 +8328,7 @@ user a clickable link to where the thing now lives.`
         enable1MContext: await (async () => { const { getEnable1MContext } = await import('@craft-agent/shared/config/storage'); return getEnable1MContext(); })(),
         modelFallback: {
           enabled: true,
+          role: managed.modelFallbackRole,
           onAttempt: (attempt, operation) => {
             if (operation === 'mini') return
             managed.pendingModelAttempts = [...(managed.pendingModelAttempts ?? []), attempt]
@@ -16314,6 +16318,7 @@ user a clickable link to where the thing now lives.`
       llmConnection: header.llmConnection,
       connectionLocked: header.connectionLocked,
       thinkingLevel: header.thinkingLevel,
+      modelFallbackRole: header.modelFallbackRole,
       hidden: header.hidden,
       transferredSessionSummary: header.transferredSessionSummary,
       transferredSessionSummaryApplied: header.transferredSessionSummaryApplied,

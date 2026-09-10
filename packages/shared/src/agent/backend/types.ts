@@ -282,6 +282,7 @@ export interface CoreBackendConfig {
   /** Host-owned model fallback orchestration. Disabled for connection tests. */
   modelFallback?: {
     enabled: boolean;
+    role?: import('../../config/llm-connections.ts').ModelFallbackRole;
     /** Durable audit hook. The host decides where receipts are persisted. */
     onAttempt?: (
       attempt: import('../../config/llm-connections.ts').ModelAttempt,

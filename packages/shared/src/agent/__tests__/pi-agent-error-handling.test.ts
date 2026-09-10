@@ -165,3 +165,11 @@ describe('PiAgent subprocess error handling', () => {
     agent.destroy()
   })
 })
+
+it('Pi billing errors take precedence over generic 429 rate limits', () => {
+  const agent = new PiAgent(createConfig());
+  try {
+    expect((agent as any).parsePiError(new Error('429 insufficient_quota')).code).toBe('billing_error');
+    expect((agent as any).parsePiError(new Error('429 Too many requests')).code).toBe('rate_limited');
+  } finally { agent.destroy(); }
+});

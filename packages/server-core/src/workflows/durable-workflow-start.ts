@@ -1,3 +1,7 @@
+import { getLlmConnections, getModelFallbackChain } from '@craft-agent/shared/config';
+import { getCredentialManager } from '../../../shared/src/credentials/index';
+import { resolveModelFallbackChain } from '../../../shared/src/config/model-fallback';
+import type { ModelFallbackRole } from '../../../shared/src/config/llm-connections';
 import { normalizeDurableTriggerInputs } from './durable-workflow-inputs';
 import { randomUUID } from 'node:crypto';
 import { canonical } from '../../../shared/src/durable-execution/index.ts';
@@ -14,6 +18,18 @@ export interface DurableWorkflowStartOptions {
   /** Null means unsupported capabilities; an explicitly selected durable workflow must reject. */
   resolveBundle(workspaceId: string, agentSlug: string, taskModeId?: string): Promise<DurableStartBundle | null>;
   getWorkspaceRootPath(workspaceId: string): string;
+  resolveFallbackCandidates?: typeof resolveDurableFallbackCandidates;
+}
+
+/** Settings are read once; admission pins each surviving transport before any dispatch. */
+export async function resolveDurableFallbackCandidates(primary: DurableStartBundle, role: ModelFallbackRole) {
+  const credentials = getCredentialManager();
+  const connections = await Promise.all(getLlmConnections().map(async connection => ({ ...connection,
+    isAuthenticated: connection.authType === 'api_key' && !!connection.piAuthProvider
+      && await credentials.hasLlmCredentials(connection.slug, connection.authType),
+  })));
+  return resolveModelFallbackChain({ primaryConnectionSlug: primary.connectionSlug, primaryModel: primary.model,
+    role, connections, globalChain: getModelFallbackChain() }).candidates.map(({ connectionSlug, model }) => ({ connectionSlug, model }));
 }
 
 /** Sequential local reads from manual UI or persisted Scheduled Work attempts. */
@@ -52,19 +68,29 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
         bundles.set(bundleKey, JSON.parse(canonical(resolved)) as DurableStartBundle);
       }
       const bundle = bundles.get(canonical([workflow.metadata.steps[0]!.agent, workflow.metadata.steps[0]!.taskModeId ?? null]))!;
-      if ([...bundles.values()].some(candidate => candidate.connectionSlug !== bundle.connectionSlug || candidate.model !== bundle.model)) throw new Error('Durable read steps must use the same model and connection.');
+      const roleRouting = workflow.metadata.steps.some(step => step.modelRole !== undefined);
+      if (!roleRouting && [...bundles.values()].some(candidate => candidate.connectionSlug !== bundle.connectionSlug || candidate.model !== bundle.model)) throw new Error('Durable read steps must use the same model and connection.');
       const legacy = listRuns(options.getWorkspaceRootPath(workspaceId));
       if (existing.some(run => run.workflowSlug === workflow.slug && !['succeeded', 'failed', 'cancelled'].includes(run.state))
         || legacy.some(run => run.workflowSlug === workflow.slug && run.state === 'running')) {
         throw new Error('This workflow has unfinished work. Open its saved run to continue or stop it.');
       }
       const runId = scheduled ? durableWorkflowOccurrenceIdentity(workspaceId, pinned.occurrence!).runId : randomUUID();
+      const resolvedSteps = await Promise.all(workflow.metadata.steps.map(async step => {
+        const selected = bundles.get(canonical([step.agent, step.taskModeId ?? null]))!;
+        return { id: step.id, agent: step.agent, ...(step.taskModeId ? { taskModeId: step.taskModeId } : {}), systemPrompt: selected.systemPrompt,
+          ...(roleRouting ? { modelPlan: { ...(step.modelRole ? { role: step.modelRole } : {}), candidates: [
+            { connectionSlug: selected.connectionSlug, model: selected.model },
+            ...(step.modelRole ? await (options.resolveFallbackCandidates ?? resolveDurableFallbackCandidates)(selected, step.modelRole) : []),
+          ] } } : {}),
+        };
+      }));
       const admission = {
         ...bundle, triggerInputs: pinned.triggerInputs, ...(pinned.untrustedTriggerInputs ? { untrustedTriggerInputs: pinned.untrustedTriggerInputs } : {}), workspaceId, runId, commandId: scheduled ? durableWorkflowOccurrenceIdentity(workspaceId, pinned.occurrence!).commandId : `manual-start:${runId}`,
         localSources: [...new Map([...bundles.values()].flatMap(candidate => candidate.localSources ?? []).map(source => [canonical(source), source])).values()],
         resolvedAgentSlug: workflow.metadata.steps[0]!.agent,
         ...(workflow.metadata.steps[0]!.taskModeId ? { resolvedTaskModeId: workflow.metadata.steps[0]!.taskModeId } : {}),
-        ...(workflow.metadata.steps.length > 1 ? { resolvedSteps: workflow.metadata.steps.map(step => ({ id: step.id, agent: step.agent, ...(step.taskModeId ? { taskModeId: step.taskModeId } : {}), systemPrompt: bundles.get(canonical([step.agent, step.taskModeId ?? null]))!.systemPrompt })) } : {}),
+        ...(workflow.metadata.steps.length > 1 || roleRouting ? { resolvedSteps } : {}),
         allowedTools: ['read', 'grep', 'find', 'ls'] as const, maxOutputTokens: 4096,
         maxModelAttempts: 8, deadlineAt: Date.now() + 10 * 60_000,
         costPolicy: { unit: 'model-requests' as const, maxTotalUnits: 8, maxUnitsPerAttempt: 1 },

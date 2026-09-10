@@ -35,3 +35,12 @@ describe('parseError proxy interception handling', () => {
     expect(parsed.code).toBe('invalid_api_key')
   })
 })
+
+describe('billing versus temporary rate limits', () => {
+  it('recognizes exhausted credits before a generic 429', () => {
+    for (const message of ['429 insufficient_quota', '429 insufficient credits', 'credit balance is too low', 'credits exhausted', 'billing hard limit reached']) {
+      expect(parseError(new Error(message)).code).toBe('billing_error')
+    }
+    expect(parseError(new Error('429 Too many requests')).code).toBe('rate_limited')
+  })
+})

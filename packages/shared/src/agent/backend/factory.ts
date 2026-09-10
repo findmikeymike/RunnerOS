@@ -32,7 +32,7 @@ import {
   getModelFallbackChain,
   type LlmConnection,
 } from '../../config/storage.ts';
-import { resolveModelFallbackChain } from '../../config/model-fallback.ts';
+import { resolveModelFallbackChain, selectModelFallbackProfile } from '../../config/model-fallback.ts';
 import { createModelFallbackBackend } from './model-fallback-backend.ts';
 import {
   getSessionScopedToolCallbacks,
@@ -177,7 +177,7 @@ export function createBackendFromResolvedContext(args: {
   if (!coreConfig.modelFallback?.enabled || !context.connection) return primary;
 
   const primaryConnection = context.connection;
-  const configuredChain = primaryConnection.fallbackChain ?? getModelFallbackChain();
+  const configuredChain = selectModelFallbackProfile(primaryConnection.fallbackChain, getModelFallbackChain(), coreConfig.modelFallback.role);
   if (!configuredChain?.enabled || configuredChain.entries.length === 0) return primary;
   return createModelFallbackBackend({
     primary,
@@ -200,6 +200,7 @@ export function createBackendFromResolvedContext(args: {
         primaryModel: context.resolvedModel,
         connections,
         globalChain: getModelFallbackChain(),
+        role: coreConfig.modelFallback?.role,
       });
 
       return resolution.candidates.map(candidate => {

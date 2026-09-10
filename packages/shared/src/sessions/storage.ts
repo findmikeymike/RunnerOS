@@ -185,6 +185,7 @@ export async function createSession(
     permissionMode?: SessionConfig['permissionMode'];
     enabledSourceSlugs?: string[];
     model?: string;
+    modelFallbackRole?: 'reasoning' | 'fast';
     llmConnection?: string;
     customSystemPrompt?: string;
     agentSkillSlugs?: string[];
@@ -221,6 +222,7 @@ export async function createSession(
     permissionMode: options?.permissionMode,
     enabledSourceSlugs: options?.enabledSourceSlugs,
     model: options?.model,
+    modelFallbackRole: options?.modelFallbackRole,
     llmConnection: options?.llmConnection,
     customSystemPrompt: options?.customSystemPrompt,
     agentSkillSlugs: options?.agentSkillSlugs,

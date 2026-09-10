@@ -2443,6 +2443,8 @@ export class PiAgent extends BaseAgent {
    */
   private parsePiError(error: Error): AgentError {
     const errorMessage = error.message.toLowerCase();
+    const classified = parseError(error);
+    if (classified.code === 'billing_error') return classified;
 
     // Auth errors
     if (

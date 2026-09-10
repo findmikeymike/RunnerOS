@@ -173,7 +173,7 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
             {run.durable && !['succeeded', 'failed', 'cancelled'].includes(run.durable.status) && (
               <>
                 {(run.durable.status !== 'waiting-approval' || attention.some(item => item.durable && item.durable.expiresAt <= Date.now())) && (
-                  <Button size="sm" variant="outline" disabled={controlPending} onClick={() => handleDurableControl(run.state === 'running' ? 'pause' : 'resume')}>
+                  <Button size="sm" variant="outline" disabled={controlPending || (run.state !== 'running' && Boolean(run.durable.resumeBlockedReason))} title={run.state !== 'running' ? run.durable.resumeBlockedReason : undefined} onClick={() => handleDurableControl(run.state === 'running' ? 'pause' : 'resume')}>
                     {run.state === 'running' ? 'Pause' : 'Resume saved run'}
                   </Button>
                 )}
@@ -241,6 +241,24 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
           onOpenOutput={(outputId) => navigate(routes.view.output(outputId))}
         />
 
+        {run.durable?.resumeBlockedReason && <p role="status" className="text-sm text-amber-300">{run.durable.resumeBlockedReason}</p>}
+        {Boolean(run.durable?.providerAttempts?.length) && (
+          <Section title="Models used">
+            <div className="runneros-card divide-y divide-white/10 px-3">
+              {run.durable!.providerAttempts!.map((attempt, index) => (
+                <div key={`${attempt.step}-${index}`} className="py-3 text-xs">
+                  <p className="text-white/85">{attempt.step} · {attempt.model}</p>
+                  <p className="mt-1 text-white/55">
+                    {attempt.candidateIndex === 0 ? 'Primary model' : `Backup ${attempt.candidateIndex}`}
+                    {attempt.role ? ` · ${attempt.role === 'fast' ? 'Fast / economical' : 'Reasoning'}` : ''}
+                    {` · ${attempt.connectionSlug}`}
+                  </p>
+                  {attempt.error && <p className="mt-1 text-white/65">{attempt.error === 'credits-exhausted' ? 'Credits exhausted' : attempt.error === 'rate-limit' ? 'Rate limit reached' : 'Provider unavailable'}{attempt.retries > 0 ? attempt.retryAt ? ' · one retry scheduled' : ' · retried once' : ''}</p>}
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
         <Section title="Run snapshot">
           <div className="runneros-card px-3 py-3">
             <KeyValueGrid

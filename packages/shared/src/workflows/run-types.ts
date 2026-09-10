@@ -127,6 +127,10 @@ export interface WorkflowRunSnapshot {
     status: import('../protocol/durable-execution.ts').DurableRunStatus;
     controlRevision: number;
     continuationRevision: number;
+    resumeBlockedReason?: string;
+    providerAttempts?: Array<{ step: string; role?: 'reasoning' | 'fast'; connectionSlug: string; model: string;
+      candidateIndex: number; retries: number; error?: 'rate-limit' | 'credits-exhausted' | 'provider-unavailable'; retryAt?: number }>;
+
   };
   /** UUID. */
   id: string;

@@ -38,7 +38,7 @@ export const SESSION_PERSISTENT_FIELDS = [
   'enabledSourceSlugs', 'permissionMode', 'previousPermissionMode', 'workingDirectory',
   'customSystemPrompt', 'agentSkillSlugs', 'trustedWorkerTools', 'managedSkillRunId', 'managedSkillRunLegacyReferences', 'legacySkillReferences',
   // Model/Connection
-  'model', 'llmConnection', 'connectionLocked', 'thinkingLevel',
+  'model', 'llmConnection', 'connectionLocked', 'thinkingLevel', 'modelFallbackRole',
   // Sharing
   'sharedUrl', 'sharedId',
   // Plan execution
@@ -260,6 +260,7 @@ export interface SessionConfig {
   connectionLocked?: boolean;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
+  modelFallbackRole?: 'reasoning' | 'fast';
   /** Full custom persona prompt appended to the backend system prompt. */
   customSystemPrompt?: string;
   /** Saved Agent skills applied implicitly to every turn in this session. */
@@ -400,6 +401,7 @@ export interface SessionHeader {
   connectionLocked?: boolean;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
+  modelFallbackRole?: 'reasoning' | 'fast';
   /** Full custom persona prompt appended to the backend system prompt. */
   customSystemPrompt?: string;
   /** Saved Agent skills applied implicitly to every turn in this session. */
@@ -509,6 +511,7 @@ export interface SessionMetadata {
   connectionLocked?: boolean;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
+  modelFallbackRole?: 'reasoning' | 'fast';
   /** Current or most recent chat-native Goal. */
   chatGoal?: ChatGoalState;
   /** Durable provider-neutral task list. */

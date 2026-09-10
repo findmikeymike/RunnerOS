@@ -74,6 +74,20 @@ export class DurableWorkflowRuns {
         || spec.workflowSteps.some((step, index) => step.id !== workflow.metadata.steps[index]?.id)
         : authority?.adapter !== 'pi-local-read-1' || authority.stepCount !== 1 || workflow.metadata.steps.length !== 1)) return null;
     const definition = workflow.metadata.steps[0]!;
+    const modelPlans = (spec.context as unknown as { modelPlans?: Array<{ role?: 'reasoning' | 'fast' }> }).modelPlans;
+    const providerAttempts = snapshot.providerAttempts?.flatMap(attempt => {
+      const candidate = spec.fallbackPlan?.steps[attempt.step]?.candidates[attempt.candidateIndex];
+      if (!candidate) return [];
+      const error = attempt.error ?? attempt.failures?.at(-1)?.code;
+      return [{ step: workflow.metadata.steps[attempt.step]!.id, role: modelPlans?.[attempt.step]?.role,
+        connectionSlug: candidate.connectionSlug, model: candidate.model, candidateIndex: attempt.candidateIndex,
+        retries: attempt.retries, ...(error ? { error } : {}), ...(attempt.retryAt ? { retryAt: attempt.retryAt } : {}) }];
+    });
+    const providerRemedies = {
+      'rate-limit': 'Available models are rate limited. Wait for the limit to reset, then resume this saved run.',
+      'credits-exhausted': 'Available connections are out of API credits. Add credits to the selected connection, then resume this saved run.',
+      'provider-unavailable': 'The configured models are unavailable. Resume this saved run when the service is back.',
+    };
     const waiting = status === 'waiting-approval';
     const active = status === 'running' && this.options.isActive?.(spec.runId, spec.workspaceId) === true;
     const state = waiting ? 'paused' : status === 'running' ? active ? 'running' : 'interrupted' : status;
@@ -88,8 +102,9 @@ export class DurableWorkflowRuns {
       const terminal = status === 'failed' || status === 'cancelled';
       const projectedState = completed ? 'succeeded' : index === currentStep ? stepState : terminal ? 'skipped' : 'queued';
       const turns = saved ? snapshot.turns.slice(saved.startTurn, saved.endTurn) : [];
-      return { id: step.id, state: projectedState, attempts: turns.length > 0 ? 1 : 0,
+      return { id: step.id, state: projectedState, attempts: snapshot.providerAttempts?.filter(attempt => attempt.step === index).reduce((total, attempt) => total + 1 + attempt.retries, 0) ?? (turns.length > 0 ? 1 : 0),
         ...(completed && typeof saved.output === 'string' ? { output: durableStepOutput(saved.output, step.outputSchema), completion: { outputChars: saved.output.length, toolUseCount: turns.flatMap(turn => turn.calls).filter(call => call.result !== undefined).length, satisfied: true } } : {}),
+        ...(index === currentStep && snapshot.providerAttention ? { error: { code: snapshot.providerAttention, message: Date.now() >= spec.deadlineAt ? 'This run’s time limit expired. Stop this saved run, fix provider access, then start again.' : providerRemedies[snapshot.providerAttention] } } : {}),
         ...(projectedState === 'failed' ? { error: { code: 'durable-execution-failed', message: 'The durable workflow could not complete.' } } : {}),
       };
     }) : [{ id: definition.id, state: snapshot.publication ? 'succeeded' : stepState, attempts: snapshot.modelAttempts > 0 ? 1 : 0,
@@ -107,7 +122,7 @@ export class DurableWorkflowRuns {
       ...(snapshot.publication?.status === 'published' ? { finalOutputId: snapshot.publication.outputId, outputIds: [snapshot.publication.outputId] } : {}),
       ...(snapshot.publication?.status === 'pending' && ['paused', 'interrupted'].includes(state) ? { outputError: snapshot.publication.error ? publicationRemedies[snapshot.publication.error] : 'The result is saved, but its final Output still needs to be published. Resume to retry without repeating the model work.' } : {}),
       ...(state === 'interrupted' ? { interruptionReason: 'No worker is currently executing this saved run. Resume to continue.' } : {}),
-      durable: { engine: spec.engine, version: snapshot.version, status, controlRevision: snapshot.controlRevision, continuationRevision: snapshot.continuationRevision ?? 0 },
+      durable: { engine: spec.engine, version: snapshot.version, status, controlRevision: snapshot.controlRevision, continuationRevision: snapshot.continuationRevision ?? 0, ...(providerAttempts?.length ? { providerAttempts } : {}), ...(snapshot.providerAttention && Date.now() >= spec.deadlineAt && snapshot.publication?.status !== 'pending' ? { resumeBlockedReason: 'This run’s time limit expired. Stop this saved run, fix provider access, then start again.' } : {}) },
     };
   }
 }

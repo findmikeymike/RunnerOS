@@ -9,7 +9,7 @@
  * Follows the Appearance settings pattern: app-level defaults + workspace overrides.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -21,6 +21,7 @@ import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 import { motion, AnimatePresence } from 'motion/react'
 import type { LlmConnectionWithStatus, ModelFallbackChain, ThinkingLevel, WorkspaceSettings, Workspace } from '../../../shared/types'
+import { selectModelFallbackProfile, updateModelFallbackProfile, type ModelFallbackProfile, type ModelFallbackRole } from '@craft-agent/shared/config'
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import {
@@ -167,28 +168,44 @@ function ModelFallbackSettings({
 }) {
   const [scope, setScope] = useState('global')
   const [globalChain, setGlobalChain] = useState<ModelFallbackChain>({ enabled: false, entries: [] })
-  const [draft, setDraft] = useState<ModelFallbackChain>({ enabled: false, entries: [] })
+  const [workType, setWorkType] = useState<'general' | ModelFallbackRole>('general')
   const [saving, setSaving] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  const savingRef = useRef(false)
   const selectedConnection = connections.find(connection => connection.slug === scope)
-  const usesGlobal = scope !== 'global' && selectedConnection?.fallbackChain === undefined
+  const role = workType === 'general' ? undefined : workType
+  const localChain = scope === 'global' ? globalChain : selectedConnection?.fallbackChain
+  const usesGlobal = scope !== 'global' && (role
+    ? localChain?.profiles?.[role] === undefined
+    : localChain === undefined || localChain.inheritGeneral === true)
+  const draft = useMemo(() => selectModelFallbackProfile(scope === 'global' ? undefined : localChain, globalChain, role)
+    ?? { enabled: false, entries: [] }, [scope, localChain, globalChain, role])
+  const disabled = !loaded || saving
 
   useEffect(() => {
+    let current = true
+    setLoadError(false)
     window.electronAPI?.getModelFallbackChain()
-      .then(chain => setGlobalChain(chain ?? { enabled: false, entries: [] }))
-      .catch(error => console.error('Failed to load model fallback chain:', error))
-  }, [])
+      .then(chain => {
+        if (!current) return
+        setGlobalChain(chain ?? { enabled: false, entries: [] })
+        setLoaded(true)
+      })
+      .catch(error => {
+        if (!current) return
+        console.error('Failed to load model fallback chain:', error)
+        setLoadError(true)
+      })
+    return () => { current = false }
+  }, [loadAttempt])
 
-  useEffect(() => {
-    setDraft(scope === 'global'
-      ? globalChain
-      : (selectedConnection?.fallbackChain ?? globalChain))
-  }, [scope, selectedConnection?.fallbackChain, globalChain])
-
-  const save = useCallback(async (next: ModelFallbackChain | undefined) => {
-    if (!window.electronAPI) return
-    const previous = draft
-    if (next) setDraft(next)
+  const save = useCallback(async (profile: ModelFallbackProfile | undefined) => {
+    if (!window.electronAPI || !loaded || savingRef.current) return
+    savingRef.current = true
     setSaving(true)
+    const next = updateModelFallbackProfile(localChain, role, profile)
     try {
       if (scope === 'global') {
         const resolved = next ?? { enabled: false, entries: [] }
@@ -196,22 +213,19 @@ function ModelFallbackSettings({
         if (!result.success) throw new Error(result.error ?? 'Could not save backup models')
         setGlobalChain(resolved)
       } else if (selectedConnection) {
-        const result = await window.electronAPI.setConnectionModelFallbackChain(
-          selectedConnection.slug,
-          next ?? null,
-        )
+        const result = await window.electronAPI.setConnectionModelFallbackChain(selectedConnection.slug, next ?? null)
         if (!result.success) throw new Error(result.error ?? 'Could not save connection backup models')
         await onConnectionsChange()
       }
     } catch (error) {
-      setDraft(previous)
       toast.error('Could not save backup models', {
         description: error instanceof Error ? error.message : 'Unknown error',
       })
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
-  }, [draft, onConnectionsChange, scope, selectedConnection])
+  }, [loaded, localChain, onConnectionsChange, role, scope, selectedConnection])
 
   const setEntryConnection = useCallback((index: number, slug: string) => {
     const entries = [...draft.entries]
@@ -254,10 +268,11 @@ function ModelFallbackSettings({
           <InfoExplainer text="If your main model is unavailable, Runner tries these in order and shows you when it switches." />
         </div>
       }
-      description="Keep work moving through rate limits and provider outages."
+      description="Choose approved backups for each kind of work. Reasoning and fast work never borrow the general list."
     >
       <SettingsCard>
         <SettingsMenuSelectRow
+          disabled={disabled}
           label="Applies when"
           description="Set the app default or override one provider."
           value={scope}
@@ -271,10 +286,23 @@ function ModelFallbackSettings({
             })),
           ]}
         />
+        <SettingsMenuSelectRow
+          disabled={disabled}
+          label="Work type"
+          description="Choose exact models you approve for this kind of work."
+          value={workType}
+          onValueChange={value => setWorkType(value as 'general' | ModelFallbackRole)}
+          options={[
+            { value: 'general', label: 'General', description: 'Existing chats and work without an explicit work type.' },
+            { value: 'reasoning', label: 'Reasoning', description: 'Planning, analysis, and complex decisions.' },
+            { value: 'fast', label: 'Fast / economical', description: 'Summaries, formatting, and simple extraction.' },
+          ]}
+        />
         {scope !== 'global' && (
           <SettingsToggle
-            label="Use global backup models"
-            description="Turn off to give this provider its own ordered backups."
+            disabled={disabled}
+            label="Use global backups for this work type"
+            description="Other work types keep their own settings."
             checked={usesGlobal}
             onCheckedChange={(checked) => {
               if (checked) void save(undefined)
@@ -285,12 +313,14 @@ function ModelFallbackSettings({
         {!usesGlobal && (
           <>
             <SettingsToggle
+            disabled={disabled}
               label="Automatic fallback"
               description="Try the backups below when the current model cannot continue."
               checked={draft.enabled}
               onCheckedChange={enabled => void save({ ...draft, enabled })}
             />
             <SettingsMenuSelectRow
+          disabled={disabled}
               label="Fallback 1"
               description="First backup to try."
               value={draft.entries[0]?.connectionSlug ?? 'none'}
@@ -299,6 +329,7 @@ function ModelFallbackSettings({
             />
             {draft.entries[0] && (
               <SettingsMenuSelectRow
+          disabled={disabled}
                 label="Fallback 1 model"
                 description="Exact model used on that provider."
                 value={draft.entries[0].model ?? fallbackEntryModel(connections.find(connection => connection.slug === draft.entries[0]?.connectionSlug)!)}
@@ -311,6 +342,7 @@ function ModelFallbackSettings({
             )}
             {draft.entries[0] && (
               <SettingsMenuSelectRow
+          disabled={disabled}
                 label="Fallback 2"
                 description="Used only if the first backup also fails."
                 value={draft.entries[1]?.connectionSlug ?? 'none'}
@@ -320,6 +352,7 @@ function ModelFallbackSettings({
             )}
             {draft.entries[1] && (
               <SettingsMenuSelectRow
+          disabled={disabled}
                 label="Fallback 2 model"
                 description="Exact model used on that provider."
                 value={draft.entries[1].model ?? fallbackEntryModel(connections.find(connection => connection.slug === draft.entries[1]?.connectionSlug)!)}
@@ -337,6 +370,9 @@ function ModelFallbackSettings({
             )}
           </>
         )}
+        {!loaded && <div className="px-4 py-2 text-xs text-muted-foreground">
+          {loadError ? <>Could not load backup settings. <Button variant="ghost" size="sm" onClick={() => setLoadAttempt(value => value + 1)}>Retry</Button></> : 'Loading backup settings…'}
+        </div>}
         {saving && <div className="px-4 py-2 text-[11px] text-white/34">Saving…</div>}
       </SettingsCard>
     </SettingsSection>

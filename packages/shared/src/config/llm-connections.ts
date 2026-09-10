@@ -118,11 +118,20 @@ export interface ModelFallbackEntry {
   model?: string;
 }
 
-export interface ModelFallbackChain {
+export type ModelFallbackRole = 'reasoning' | 'fast';
+
+export interface ModelFallbackProfile {
   /** Ordered fallbacks. V1 supports at most two. */
   entries: ModelFallbackEntry[];
   /** Disabled chains preserve fail-fast behavior. */
   enabled: boolean;
+}
+
+export interface ModelFallbackChain extends ModelFallbackProfile {
+  /** Role-specific lists never fall back to the general list. */
+  profiles?: Partial<Record<ModelFallbackRole, ModelFallbackProfile>>;
+  /** Provider role-only overrides retain global general backups. */
+  inheritGeneral?: true;
 }
 
 export interface ModelAttempt {

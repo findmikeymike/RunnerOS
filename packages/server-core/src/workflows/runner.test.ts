@@ -2796,3 +2796,18 @@ describe('WorkflowRunner', () => {
     expect(opts.workflowRunId).toBe(snap.id);
   });
 });
+
+test('workflow model role reaches each legacy step session explicitly', async () => {
+  const h = makeHarness();
+  const roles: unknown[] = [];
+  const create = h.deps.createSession;
+  h.deps.createSession = async (workspaceId, options) => { roles.push(options?.modelFallbackRole); return create(workspaceId, options); };
+  const workflow = makeWorkflow({ steps: [
+    { id: 'plan', agent: 'researcher', input: 'Plan', modelRole: 'reasoning' },
+    { id: 'format', agent: 'researcher', input: 'Format', modelRole: 'fast' },
+    { id: 'ordinary', agent: 'researcher', input: 'Read' },
+  ] });
+  await new WorkflowRunner(h.deps).start({ workflow, workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'test' } });
+  await waitFor(() => lastCompleted(h.events) !== undefined);
+  expect(roles).toEqual(['reasoning', 'fast', undefined]);
+});

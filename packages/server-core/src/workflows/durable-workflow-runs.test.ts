@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, test, spyOn } from 'bun:test';
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -109,4 +109,29 @@ test('multi-step history keeps completed outputs while later steps are interrupt
   const failed = await f.service().get('w', 'multi', actor);
   expect(failed?.steps.map(step => step.state)).toEqual(['succeeded', 'failed', 'skipped']);
   expect(failed?.steps[0]?.output).toBe('Kept result'); expect(failed?.steps[1]?.output).toBeUndefined();
+});
+
+test('provider attention exposes safe model receipts and expired-run recovery guidance', async () => {
+  const f = fixture();
+  const spec: DurableRunSpec = { ...f.spec, runId: 'fallback', commandId: 'fallback',
+    workflowSteps: [{ id: 'read' }], authority: { adapter: 'pi-local-read-multi-1', stepCount: 1, completion: 'journal-only' },
+    fallbackPlan: { steps: [{ candidates: [{ connectionSlug: 'saved-connection', model: 'saved-model', credentialIdentity: f.spec.credentialIdentity }] }] },
+    context: { ...(f.spec.context as object), modelPlans: [{ role: 'reasoning' }] },
+  };
+  f.journal.admit(spec); let claim = f.journal.claim('fallback', 'w');
+  await f.journal.bridge(claim).checkpoint({ kind: 'workflow-step-start', step: 0, input: {} });
+  claim = f.journal.beginStepAttempt(claim, { step: 0, candidateIndex: 0 });
+  claim = f.journal.recordProviderFailure(claim, { step: 0, candidateIndex: 0, code: 'credits-exhausted', exhausted: true });
+  f.journal.release(claim);
+  const available = await f.service().get('w', 'fallback', actor);
+  expect(available?.steps[0]?.error?.message).toContain('Add credits');
+  expect(available?.durable?.resumeBlockedReason).toBeUndefined();
+  expect(available?.durable?.providerAttempts).toEqual([{ step: 'read', role: 'reasoning', connectionSlug: 'saved-connection', model: 'saved-model', candidateIndex: 0, retries: 0, error: 'credits-exhausted' }]);
+  expect(JSON.stringify(available)).not.toContain(f.spec.credentialIdentity);
+  const clock = spyOn(Date, 'now').mockReturnValue(spec.deadlineAt + 1);
+  try {
+    const expired = await f.service().get('w', 'fallback', actor);
+    expect(expired?.durable?.resumeBlockedReason).toContain('Stop this saved run');
+    expect(expired?.steps[0]?.error?.message).toContain('time limit expired');
+  } finally { clock.mockRestore(); }
 });

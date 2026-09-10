@@ -3,6 +3,8 @@ import type { LlmConnectionWithStatus, ModelFallbackChain } from '../llm-connect
 import {
   resolveModelFallbackChain,
   validateModelFallbackChain,
+  updateModelFallbackProfile,
+  selectModelFallbackProfile,
 } from '../model-fallback.ts';
 
 function connection(
@@ -133,4 +135,58 @@ describe('model fallback chain config', () => {
     expect(duplicate.candidates).toHaveLength(1);
     expect(duplicate.skipped[0]?.reason).toBe('duplicate-entry');
   });
+});
+
+describe('work-type fallback profiles', () => {
+  const primary = connection('primary', 'model-a');
+  const backup = connection('backup', 'model-b');
+  const profile = { enabled: true, entries: [{ connectionSlug: 'backup', model: 'model-b' }] };
+  const input = { primaryConnectionSlug: 'primary', primaryModel: 'model-a', connections: [primary, backup] };
+
+  test('explicit work types never borrow general or another role', () => {
+    expect(resolveModelFallbackChain({ ...input, role: 'reasoning', globalChain: profile }).candidates).toEqual([]);
+    expect(resolveModelFallbackChain({ ...input, role: 'fast', globalChain: { ...profile, profiles: { reasoning: profile } } }).candidates).toEqual([]);
+    expect(resolveModelFallbackChain({ ...input, globalChain: profile }).candidates).toHaveLength(1);
+  });
+
+  test('each role inherits independently and an explicit disabled override wins', () => {
+    const local = { enabled: false, entries: [], profiles: { reasoning: { enabled: false, entries: [] } } };
+    const args = { ...input, connections: [{ ...primary, fallbackChain: local }, backup], globalChain: { enabled: false, entries: [], profiles: { reasoning: profile, fast: profile } } };
+    expect(resolveModelFallbackChain({ ...args, role: 'reasoning' }).candidates).toEqual([]);
+    expect(resolveModelFallbackChain({ ...args, role: 'fast' }).candidates).toHaveLength(1);
+  });
+
+  test('role-only provider settings preserve general inheritance', () => {
+    expect(resolveModelFallbackChain({ ...input, connections: [{ ...primary, fallbackChain: { enabled: false, entries: [], inheritGeneral: true, profiles: { reasoning: profile } } }, backup], globalChain: profile }).candidates).toHaveLength(1);
+  });
+
+  test('validates both profiles with the same limits', () => {
+    expect(validateModelFallbackChain({ ...profile, profiles: { fast: { ...profile, entries: [...profile.entries, ...profile.entries, ...profile.entries] } } })).toEqual(expect.arrayContaining(['too-many-entries', 'duplicate-entry']));
+    expect(validateModelFallbackChain({ ...profile, profiles: { reasoning: { enabled: true, entries: [{ connectionSlug: 'primary', model: 'model-a' }] } } }, { connectionSlug: 'primary', model: 'model-a' })).toContain('self-reference');
+  });
+
+  test('malformed runtime profiles fail closed without throwing or inheriting', () => {
+    for (const malformed of [null, true, {}, { enabled: true, entries: null }, { enabled: true, entries: [null] }, { enabled: 'true', entries: [] }]) {
+      const local = { ...profile, profiles: { reasoning: malformed } } as unknown as ModelFallbackChain;
+      expect(validateModelFallbackChain(local)).toContain('invalid-chain');
+      expect(selectModelFallbackProfile(local, { ...profile, profiles: { reasoning: profile } }, 'reasoning')).toBeUndefined();
+      expect(resolveModelFallbackChain({ ...input, connections: [{ ...primary, fallbackChain: local }, backup], role: 'reasoning', globalChain: { ...profile, profiles: { reasoning: profile } } }).candidates).toEqual([]);
+    }
+  });
+});
+
+
+test('editing and removing one Settings work type preserves all siblings', () => {
+  const general = { enabled: true, entries: [{ connectionSlug: 'general', model: 'g' }] };
+  const reasoning = { enabled: true, entries: [{ connectionSlug: 'reasoning', model: 'r' }] };
+  const fast = { enabled: true, entries: [{ connectionSlug: 'fast', model: 'f' }] };
+  const original = { ...general, profiles: { reasoning, fast } };
+  expect(updateModelFallbackProfile(original, 'reasoning', undefined)).toEqual({ ...general, profiles: { fast } });
+  expect(updateModelFallbackProfile(original, undefined, undefined)).toEqual({ enabled: false, entries: [], inheritGeneral: true, profiles: { reasoning, fast } });
+  expect(updateModelFallbackProfile(original, undefined, { enabled: false, entries: [] })?.profiles).toEqual({ reasoning, fast });
+  const roleOnly = updateModelFallbackProfile(undefined, 'reasoning', reasoning);
+  expect(roleOnly?.inheritGeneral).toBe(true);
+  expect(updateModelFallbackProfile(roleOnly, 'reasoning', undefined)).toBeUndefined();
+  expect(updateModelFallbackProfile(original, undefined, { ...general, profiles: { fast: { enabled: false, entries: [] } } } as ModelFallbackChain)?.profiles).toEqual({ reasoning, fast });
+  expect(original).toEqual({ ...general, profiles: { reasoning, fast } });
 });
