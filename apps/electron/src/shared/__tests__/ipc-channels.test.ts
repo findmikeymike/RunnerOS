@@ -522,6 +522,7 @@ const EXPECTED_CHANNELS: string[] = [
   "workflow-runs:attention-updated",
   "workflow-runs:cancel",
   "workflow-runs:delete",
+  "workflow-runs:durable-control",
   "workflow-runs:get",
   "workflow-runs:list",
   "workflow-runs:list-attention",

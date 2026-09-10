@@ -81,6 +81,197 @@ async function collect(backend: AgentBackend, message = 'hello'): Promise<AgentE
 }
 
 describe('model fallback backend', () => {
+  test.each(['chat', 'mini', 'query'] as const)('%s records actual auth failure and skips it on the next operation', async (operation) => {
+    const primary = fakeBackend([{ type: 'error', message: '401 invalid api key' }]);
+    let primaryCalls = 0;
+    primary.runMiniCompletion = async () => { primaryCalls++; throw new Error('401 invalid api key'); };
+    primary.queryLlm = async () => { primaryCalls++; throw new Error('401 invalid api key'); };
+    const attention: string[] = [];
+    let fallbackCalls = 0;
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      onAttention: notice => attention.push(`${notice.operation}:${notice.connectionSlug}:${notice.attentionReason}`),
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => {
+        fallbackCalls++;
+        return fakeBackend([{ type: 'text_complete', text: 'fallback ok' }]);
+      } }],
+    });
+    const run = () => operation === 'chat' ? collect(backend)
+      : operation === 'mini' ? backend.runMiniCompletion('review')
+      : (backend as FakeBackend).queryLlm({ prompt: 'review' });
+    await run();
+    expect(modelCooldownRegistry.get('primary', 'model-a')?.reason).toBe('invalid_api_key');
+    expect(attention).toEqual([`${operation}:primary:connection-auth-failed`]);
+    await run();
+    expect(primaryCalls + primary.prompts.length).toBe(1);
+    expect(fallbackCalls).toBe(2);
+    expect(attention).toEqual([`${operation}:primary:connection-auth-failed`]);
+  });
+
+  test.each(['chat', 'mini', 'query'] as const)('%s can probe auth route while transient route remains cooling', async (operation) => {
+    const primary = fakeBackend([{ type: 'text_complete', text: 'recovered' }]);
+    let primaryCalls = 0;
+    primary.runMiniCompletion = async () => { primaryCalls++; return 'recovered'; };
+    primary.queryLlm = async () => { primaryCalls++; return { text: 'recovered' }; };
+    let fallbackCalls = 0;
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => {
+        fallbackCalls++;
+        return fakeBackend([]);
+      } }],
+    });
+    modelCooldownRegistry.markFailure({ connectionSlug: 'primary', model: 'model-a', reason: 'invalid_api_key' });
+    modelCooldownRegistry.markFailure({ connectionSlug: 'fallback', model: 'model-b', reason: 'service_error' });
+    if (operation === 'chat') await collect(backend);
+    else if (operation === 'mini') await backend.runMiniCompletion('review');
+    else await (backend as FakeBackend).queryLlm({ prompt: 'review' });
+    expect(primaryCalls + primary.prompts.length).toBe(1);
+    expect(fallbackCalls).toBe(0);
+  });
+
+  test.each(['chat', 'mini', 'query'] as const)('%s preserves primary-only execution despite attention cooldown', async (operation) => {
+    const primary = fakeBackend([{ type: 'text_complete', text: 'recovered' }]);
+    let primaryCalls = 0;
+    primary.runMiniCompletion = async () => { primaryCalls++; return 'recovered'; };
+    primary.queryLlm = async () => { primaryCalls++; return { text: 'recovered' }; };
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a', resolveCandidates: async () => [],
+    });
+    modelCooldownRegistry.markFailure({ connectionSlug: 'primary', model: 'model-a', reason: 'invalid_api_key' });
+    if (operation === 'chat') await collect(backend);
+    else if (operation === 'mini') await backend.runMiniCompletion('review');
+    else await (backend as FakeBackend).queryLlm({ prompt: 'review' });
+    expect(primaryCalls + primary.prompts.length).toBe(1);
+  });
+
+  test.each(['chat', 'mini', 'query'] as const)('%s prefers healthy routes but probes when all routes need attention', async (operation) => {
+    const primary = fakeBackend([{ type: 'text_complete', text: 'primary ok' }]);
+    const fallback = fakeBackend([{ type: 'text_complete', text: 'fallback ok' }]);
+    let primaryCalls = 0;
+    primary.runMiniCompletion = async () => { primaryCalls++; return 'primary ok'; };
+    primary.queryLlm = async () => { primaryCalls++; return { text: 'primary ok' }; };
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fallback }],
+    });
+    const run = () => operation === 'chat' ? collect(backend)
+      : operation === 'mini' ? backend.runMiniCompletion('review')
+      : (backend as FakeBackend).queryLlm({ prompt: 'review' });
+    modelCooldownRegistry.markFailure({ connectionSlug: 'primary', model: 'model-a', reason: 'invalid_api_key' });
+    await run();
+    expect(primaryCalls + primary.prompts.length).toBe(0);
+    expect(fallback.postInitCalls).toBe(1);
+    modelCooldownRegistry.markFailure({ connectionSlug: 'fallback', model: 'model-b', reason: 'billing_error' });
+    await run();
+    expect(primaryCalls + primary.prompts.length).toBe(1);
+  });
+
+  test.each(['primary', 'fallback'] as const)('concurrent %s mini cannot redirect or release the active chat', async (miniTarget) => {
+    let releaseMini!: () => void;
+    let miniStarted!: () => void;
+    const waiting = new Promise<void>(resolve => { releaseMini = resolve; });
+    const started = new Promise<void>(resolve => { miniStarted = resolve; });
+    const primary = fakeBackend([{ type: 'error', message: '503 service unavailable' }]);
+    const chat = fakeBackend([{ type: 'text_delta', text: 'working' }, { type: 'text_complete', text: 'done' }]);
+    const mini = fakeBackend([]);
+    const recipients: string[] = [];
+    primary.redirect = () => { recipients.push('primary'); return true; };
+    chat.redirect = () => { recipients.push('chat'); return true; };
+    mini.redirect = () => { recipients.push('mini'); return true; };
+    const runMini = async () => { miniStarted(); await waiting; return 'summary'; };
+    primary.runMiniCompletion = runMini;
+    mini.runMiniCompletion = runMini;
+    let creations = 0;
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => ++creations === 1 ? chat : mini }],
+    });
+    const iterator = backend.chat('hello');
+    let reachedChat = false;
+    for (let step = 0; step < 10; step++) {
+      const next = await iterator.next();
+      if (next.value?.type === 'text_delta') { reachedChat = true; break; }
+      if (next.done) break;
+    }
+    expect(reachedChat).toBe(true);
+    if (miniTarget === 'primary') modelCooldownRegistry.clearAll();
+    const completion = backend.runMiniCompletion('memory review');
+    await started;
+    expect(backend.redirect('first correction')).toBe(true);
+    releaseMini();
+    expect(await completion).toBe('summary');
+    expect(backend.redirect('second correction')).toBe(true);
+    expect(recipients).toEqual(['chat', 'chat']);
+    expect(chat.destroyCalls).toBe(0);
+    expect(mini.destroyCalls).toBe(miniTarget === 'fallback' ? 1 : 0);
+    while (!(await iterator.next()).done) {}
+    expect(chat.destroyCalls).toBe(1);
+  });
+
+  test.each(['abort', 'forceAbort', 'interruptForHandoff', 'destroy'] as const)('%s cancels concurrent chat and auxiliary candidates', async (method) => {
+    let releaseMini!: () => void;
+    let miniStarted!: () => void;
+    const waiting = new Promise<void>(resolve => { releaseMini = resolve; });
+    const started = new Promise<void>(resolve => { miniStarted = resolve; });
+    const primary = fakeBackend([{ type: 'error', message: '503 service unavailable' }]);
+    const chat = fakeBackend([{ type: 'text_delta', text: 'working' }, { type: 'text_complete', text: 'done' }]);
+    const mini = fakeBackend([]);
+    mini.runMiniCompletion = async () => { miniStarted(); await waiting; return 'obsolete'; };
+    const cancelled: string[] = [];
+    for (const [name, provider] of [['primary', primary], ['chat', chat], ['mini', mini]] as const) {
+      provider.abort = async () => { cancelled.push(name); releaseMini(); };
+      provider.forceAbort = () => { cancelled.push(name); releaseMini(); };
+      provider.interruptForHandoff = () => { cancelled.push(name); releaseMini(); };
+      const destroy = provider.destroy.bind(provider);
+      provider.destroy = () => { cancelled.push(name); releaseMini(); destroy(); };
+    }
+    let creations = 0;
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => ++creations === 1 ? chat : mini }],
+    });
+    const iterator = backend.chat('hello');
+    let reachedChat = false;
+    for (let step = 0; step < 10; step++) {
+      const next = await iterator.next();
+      if (next.value?.type === 'text_delta') { reachedChat = true; break; }
+      if (next.done) break;
+    }
+    expect(reachedChat).toBe(true);
+    const completion = backend.runMiniCompletion('memory review');
+    await started;
+    const outcome = completion.catch(error => error);
+    if (method === 'destroy') backend.destroy();
+    else await backend[method]('user_stop' as never);
+    expect((await outcome).message).toContain('aborted');
+    while (!(await iterator.next()).done) {}
+    expect(new Set(cancelled)).toEqual(new Set(['primary', 'chat', 'mini']));
+    expect(chat.destroyCalls).toBe(1);
+    expect(mini.destroyCalls).toBe(1);
+  });
+
+  test.each(['generateTitle', 'regenerateTitle'] as const)('%s uses fallback while preserving language and title cleanup', async (method) => {
+    const primary = fakeBackend([]);
+    primary.runMiniCompletion = async () => { throw new Error('503 service unavailable'); };
+    const fallback = fakeBackend([]);
+    let prompt = '';
+    fallback.runMiniCompletion = async (input) => { prompt = input; return 'Title: **Campaña Nueva**'; };
+    const backend = createModelFallbackBackend({
+      primary, primaryConnectionSlug: 'primary', primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fallback }],
+    });
+    const result = method === 'generateTitle'
+      ? await backend.generateTitle('release plan', { language: 'Spanish' })
+      : await backend.regenerateTitle(['release plan'], 'artwork ready', { language: 'Spanish' });
+    expect(result).toBe('Campaña Nueva');
+    expect(prompt).toContain('Reply in Spanish.');
+    expect(prompt).toContain('release plan');
+    if (method === 'regenerateTitle') expect(prompt).toContain('artwork ready');
+    expect(fallback.postInitCalls).toBe(1);
+    expect(fallback.destroyCalls).toBe(1);
+  });
+
   test('seeds conversation when a cooling primary is skipped', async () => {
     modelCooldownRegistry.markFailure({ connectionSlug: 'primary', model: 'model-a', reason: 'service_error' });
     const fallback = fakeBackend([{ type: 'text_complete', text: 'ok' }]);
