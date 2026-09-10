@@ -3197,7 +3197,7 @@ function AppShellContent({
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
           onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
-          workspaceNavigation={usesWorkspaceHeader && !showsWorkspaceSidebar && !isAutoCompact ? (
+          workspaceNavigation={usesWorkspaceHeader && !isAutoCompact ? (
             <WorkspaceRail
               workspaces={workspaces}
               activeWorkspaceId={activeWorkspaceId}
@@ -3206,10 +3206,11 @@ function AppShellContent({
               onWorkspaceRemoved={() => onRefreshWorkspaces?.()}
               workspaceUnreadMap={workspaceUnreadMap}
               orientation="horizontal"
+              compact
             />
           ) : undefined}
           workspaceNavigationLeftInset={usesWorkspaceHeader && !isAutoCompact
-            ? 86
+            ? (showsWorkspaceSidebar ? effectiveSidebarWidth + 12 : 86)
             : undefined}
           showSidebarButton={!usesWorkspaceHeader}
           showProductMenu={!usesWorkspaceHeader}
@@ -3301,25 +3302,6 @@ function AppShellContent({
               </button>
             )}
             <div className="flex h-full flex-col select-none">
-              {showsWorkspaceSidebar && (
-                <div
-                  data-testid="sidebar-workspace-navigation"
-                  className="shrink-0 px-3 pt-4 pb-2 xl:pt-5"
-                  // The selector and its portaled menus own their keyboard navigation.
-                  onKeyDown={(event) => event.stopPropagation()}
-                >
-                  <WorkspaceRail
-                    workspaces={workspaces}
-                    activeWorkspaceId={activeWorkspaceId}
-                    onSelect={onSelectWorkspace}
-                    onWorkspaceCreated={() => onRefreshWorkspaces?.()}
-                    onWorkspaceRemoved={() => onRefreshWorkspaces?.()}
-                    workspaceUnreadMap={workspaceUnreadMap}
-                    orientation="horizontal"
-                    compact
-                  />
-                </div>
-              )}
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
                 {/* Primary Nav */}

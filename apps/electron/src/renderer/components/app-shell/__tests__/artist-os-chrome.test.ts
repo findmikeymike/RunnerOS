@@ -47,16 +47,17 @@ describe('Artist OS persistent shell chrome', () => {
     expect(windowManager).toContain('managed.window.setWindowButtonVisibility(visible)')
   })
 
-  test('groups HQ, Campaigns, and Lab above sidebar navigation with a hidden-sidebar fallback', () => {
+  test('keeps the compact HQ, Campaigns, and Lab switcher in the header aligned after the sidebar', () => {
     const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
     const rail = readFileSync(join(import.meta.dir, '..', 'WorkspaceRail.tsx'), 'utf8')
     const topBar = readFileSync(join(import.meta.dir, '..', 'TopBar.tsx'), 'utf8')
     const styles = readFileSync(join(import.meta.dir, '..', '..', '..', 'index.css'), 'utf8')
 
     expect(shell).toContain('usesWorkspaceHeader ? 186 : usesWorkspaceRail ? 150 : sidebarWidth')
-    expect(shell).toContain('data-testid="sidebar-workspace-navigation"')
-    expect(shell).toMatch(/data-testid="sidebar-workspace-navigation"[\s\S]*?onKeyDown=\{\(event\) => event.stopPropagation\(\)\}/)
-    expect(shell).toContain('workspaceNavigation={usesWorkspaceHeader && !showsWorkspaceSidebar && !isAutoCompact')
+    expect(shell).not.toContain('data-testid="sidebar-workspace-navigation"')
+    expect(shell).toContain('workspaceNavigation={usesWorkspaceHeader && !isAutoCompact')
+    expect(shell).toContain('? (showsWorkspaceSidebar ? effectiveSidebarWidth + 12 : 86)')
+    expect(shell).toMatch(/workspaceNavigation=\{usesWorkspaceHeader[\s\S]*?orientation="horizontal"[\s\S]*?compact/)
     expect(topBar).toContain('workspaceNavigationLeftInset - menuLeftPadding')
     expect(rail).toContain('data-testid="artist-place-switcher"')
     expect(rail).toContain("<span className={compact ? 'sr-only' : undefined}>HQ</span>")
