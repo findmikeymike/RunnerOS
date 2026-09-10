@@ -7,12 +7,19 @@ import { join, resolve } from 'node:path';
 import { durableCredentialIdentity } from '../../../../../shared/src/protocol/durable-execution.ts';
 import { getCredentialManager } from '../../../../../shared/src/credentials/manager.ts';
 import { type DurableReadBinding } from '../../durable-read-runner.ts';
+import { resolveDurableLocalSources } from '../../durable-workflow-sources.ts';
 
 const [root, endpoint, mode] = process.argv.slice(2) as [string, string, string];
 if (readFileSync(join(root, 'synthetic-only'), 'utf8') !== 'approval-fixture' || process.env.CRAFT_CONFIG_DIR !== join(root, 'config')) throw new Error('isolated-approval-fixture-required');
 const key = 'synthetic-approval-provider-key';
 getCredentialManager().getLlmApiKey = async slug => { if (slug !== 'approval-fixture') throw new Error('unexpected-key-read'); return key; };
 const identity = await durableCredentialIdentity({ provider: 'custom-endpoint', credential: { type: 'api_key', key } });
+if (mode === 'sources') {
+  mkdirSync(join(root, 'sources/notes'), { recursive: true });
+  writeFileSync(join(root, 'sources/notes/config.json'), JSON.stringify({ id: 'notes', slug: 'notes', name: 'Notes', enabled: true, provider: 'local', type: 'local', local: { format: 'filesystem', path: root } }));
+  writeFileSync(join(root, 'sources/notes/guide.md'), 'SOURCE_CONTEXT_NATIVE_READ');
+}
+const localSources = mode === 'sources' ? resolveDurableLocalSources(root, ['notes'], []) : [];
 const binding: DurableReadBinding = { credentialIdentity: identity,
   workspace: { id: 'approval-workspace', name: 'Fixture', slug: 'fixture', rootPath: root, createdAt: 1 },
   context: { provider: 'pi', resolvedModel: 'approval-fixture', authType: 'api_key', capabilities: { needsHttpPoolServer: false }, connection: {
@@ -26,7 +33,7 @@ const host = DurableWorkflowHost.open({ configRoot: join(root, 'config'), protec
   authorizeTool: async () => ({ principalId: 'fixture-principal', policyRevision: 'fixture', credentialIdentity: identity, allowed: true, requiresApproval: false, approvalExpiresAt: Date.now() + 60000 }),
 } });
 try {
-  const runner = new WorkflowRunner({ durableStart: createDurableWorkflowStart({ host, getWorkspaceRootPath: () => root, resolveBundle: async () => ({ connectionSlug: 'approval-fixture', model: 'approval-fixture', systemPrompt: 'Use the native read tool to read fixture.txt, then summarize.' }) }),
+  const runner = new WorkflowRunner({ durableStart: createDurableWorkflowStart({ host, getWorkspaceRootPath: () => root, resolveBundle: async () => ({ connectionSlug: 'approval-fixture', model: 'approval-fixture', localSources, systemPrompt: 'Use the native read tool to read fixture.txt, then summarize.\n' + localSources.map(source => source.guide).join('\n') }) }),
     getWorkspaceRootPath: () => root, createSession: async () => { throw new Error('legacy-session-forbidden'); }, sendMessage: async () => {}, getLastAssistantText: () => '', abortSession: async () => {},
   });
   const actor = { clientId: 'fixture-client', workspaceId: 'approval-workspace' };

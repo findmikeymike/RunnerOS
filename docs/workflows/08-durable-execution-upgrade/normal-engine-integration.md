@@ -106,7 +106,15 @@ Publication failures pause with saved text and an explicit Resume path. Publicat
 
 The SIGKILL proof stops after the bundle is saved but before its receipt. Explicit Resume keeps one bundle and one model execution, preserving file bytes and modification times. This does not certify out-of-band deletion before the receipt, external services, packaged Electron, or desktop UI recovery. Model execution remains read-only; the publication writer is host-owned.
 
-Further slices extend source/tool capabilities, mixed transports and child delegation with their own effect/reconciliation proofs. None inherit certification merely by calling the shared start function.
+## Slice 6: workspace filesystem source context (implemented, bounded)
+
+Supported agents can now declare/select enabled local sources with explicit `local.format: filesystem` and an existing directory inside the workspace. Required sources, selected optional sources and inherited defaults are validated before admission. Missing, disabled, external, API, MCP, generic local/CLI sources, or linked paths below the workspace root fail closed. Workspace-root aliases are normalized. Other agent restrictions remain unchanged.
+
+The composed prompt includes frozen source names, paths and guide text. A saved descriptor pins configuration, guide and directory identity. All steps' descriptors are checked before new execution and again after asynchronous tool authorization; changes pause the run. Restore the original configuration to Resume, or cancel and start a new run with changed sources. Final text already awaiting publication remains independently recoverable.
+
+This activates no connectors or command tools: the backend still receives an empty enabled-source list and uses only the existing Read/Grep/Find/Ls tools. Saved tool results retain normal journal replay. Source files themselves are not snapshotted: a fresh read can observe current file content. Source containment validates this source contract, not a new global filesystem sandbox for all native reads.
+
+Further slices extend remote source/tool capabilities, mixed transports and child delegation with their own effect/reconciliation proofs. None inherit certification merely by calling the shared start function.
 
 ## Follow-up review corrections
 

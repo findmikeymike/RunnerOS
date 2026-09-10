@@ -1,6 +1,6 @@
 import { createDurableWorkflowStart } from '../workflows/durable-workflow-start'
 import { DurableWorkflowStartupGate } from '../workflows/durable-workflow-startup-gate'
-import { assertDurableWorkflowAgentMetadata, resolveDurableWorkflowBundle } from '../workflows/durable-workflow-bundle'
+import { assertDurableWorkflowAgentMetadata, assertDurableWorkflowSourcesBeforeComposition, resolveDurableWorkflowBundle } from '../workflows/durable-workflow-bundle'
 import type { DurableWorkflowHost } from '../workflows/durable-workflow-host'
 import { resolveRuntimeIdentity } from '@craft-agent/shared/config/runtime-identity'
 import { sanitizePrivateSkillActivityInput, sanitizePrivateSkillResultPaths, isPrivateSkillLoaderTool } from '@craft-agent/shared/agent/core/private-skill-activity'
@@ -3552,7 +3552,12 @@ export class SessionManager implements ISessionManager {
       resolveBundle: async (workspaceId, agentSlug) => {
         const agent = loadGlobalAgent(agentSlug)
         if (!agent) return null
-        try { assertDurableWorkflowAgentMetadata(agent.metadata) }
+        try {
+          assertDurableWorkflowAgentMetadata(agent.metadata)
+          const workspace = getWorkspaceByNameOrId(workspaceId)
+          if (!workspace || workspace.remoteServer) return null
+          assertDurableWorkflowSourcesBeforeComposition(workspace.rootPath, agent.metadata)
+        }
         catch (error) {
           if (error instanceof Error && error.message === 'unsupported-durable-agent-bundle') return null
           throw error

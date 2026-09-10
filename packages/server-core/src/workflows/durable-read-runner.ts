@@ -11,6 +11,7 @@ import type { ResolvedBackendContext } from '../../../shared/src/agent/backend/f
 import { canonical, digest, type DurableClaim, type DurableJournal, type DurableRunSnapshot, type DurableRunSpec } from '../../../shared/src/durable-execution/index.ts';
 import { DURABLE_RUNTIME_MANIFEST, type DurableCheckpoint, type DurableControlCommand, type DurableControlReceipt, type DurableDecisionCommand, type DurableDecisionReceipt, type DurableJson, type DurableSteeringCommand, type DurableSteeringReceipt, type DurableToolAuthorization } from '../../../shared/src/protocol/durable-execution.ts';
 import type { LoadedWorkflow } from '../../../shared/src/workflows/types.ts';
+import { assertDurableLocalSourcesCurrent, type DurableLocalSource } from './durable-workflow-sources.ts';
 
 export interface DurableReadBinding {
   workspace: Workspace; context: ResolvedBackendContext;
@@ -24,6 +25,7 @@ export interface DurableReadInput {
   maxOutputTokens: number; deadlineAt: number; maxModelAttempts: number;
   /** Opt-in trusted authorization binding. Omit for the existing certified read path. */
   approvalPrincipalId?: string;
+  localSources?: DurableLocalSource[];
   /** Certified by the host, never estimated from renderer input. */
   costPolicy: DurableRunSpec['costPolicy'];
 }
@@ -68,6 +70,7 @@ interface FrozenReadContext {
   prompt: string; systemPrompt: string; connectionSlug: string; workspaceRoot: string; bindingDigest: string;
   requireNonEmptyOutput: boolean;
   workflow: DurableJson;
+  localSources?: DurableLocalSource[];
   steps?: Array<{ id: string; prompt: string; systemPrompt: string; requireNonEmptyOutput: boolean }>;
 }
 
@@ -209,10 +212,12 @@ export class DurableReadRunner {
     const binding = JSON.parse(JSON.stringify(await this.options.resolveBinding(requested.workspaceId, requested.connectionSlug, requested.model))) as DurableReadBinding;
     this.assertOpen();
     this.checkBinding(binding, requested.workspaceId, requested.connectionSlug, requested.model);
+    assertDurableLocalSourcesCurrent(binding.workspace.rootPath, requested.localSources ?? []);
     const context: FrozenReadContext = { prompt: requested.prompt, systemPrompt: requested.systemPrompt,
       connectionSlug: requested.connectionSlug, workspaceRoot: realpathSync(binding.workspace.rootPath), bindingDigest: bindingDigest(binding),
       requireNonEmptyOutput: workflow?.metadata.steps[0]?.completion?.requireNonEmptyOutput !== false,
       workflow: workflow ? JSON.parse(JSON.stringify(workflow)) as DurableJson : null,
+      ...(requested.localSources?.length ? { localSources: requested.localSources } : {}),
       ...(workflow && workflow.metadata.steps.length > 1 ? { steps: workflow.metadata.steps.map((step, i) => ({ id: step.id, prompt: step.input,
         systemPrompt: resolvedSteps![i]!.systemPrompt, requireNonEmptyOutput: step.completion?.requireNonEmptyOutput !== false })) } : {}) };
     let createdAt = Date.now();
@@ -396,6 +401,7 @@ export class DurableReadRunner {
           this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId! });
           this.checkBinding(current, workspaceId, frozen.connectionSlug, initial.spec.model);
           if (bindingDigest(current) !== frozen.bindingDigest) throw new Error('durable-authorization-blocked');
+          assertDurableLocalSourcesCurrent(frozen.workspaceRoot, frozen.localSources ?? []);
           permissionsConfigCache.invalidateDefaults();
           permissionsConfigCache.invalidateWorkspace(frozen.workspaceRoot);
           const policyTool = { read: 'Read', grep: 'Grep', find: 'Glob', ls: 'Glob' }[request.tool];
@@ -415,9 +421,16 @@ export class DurableReadRunner {
       if (state.status === 'paused') throw new Error('durable-run-paused');
       if (state.status === 'waiting-approval') throw new Error('durable-approval-required');
       if (state.status !== 'running' || Date.now() >= state.spec.deadlineAt) throw new Error('durable-read-dispatch-blocked');
+      const frozen = frozenContext(initial.spec);
+      try { assertDurableLocalSourcesCurrent(frozen.workspaceRoot, frozen.localSources ?? []); }
+      catch (error) {
+        journal.command({ runId, workspaceId, commandId: randomUUID(), expectedVersion: state.version, action: 'pause' });
+        throw new Error('durable-authorization-blocked', { cause: error });
+      }
     };
     const bridge: typeof journalBridge = { ...journalBridge, checkpoint: async request => {
       if (request.kind === 'output-published') throw new Error('durable-workflow-host-checkpoint-required');
+      if (request.kind === 'tool-start' && frozenContext(initial.spec).localSources?.length) assertDispatch();
       if (request.kind === 'model-start') {
         try {
           const frozen = frozenContext(initial.spec);

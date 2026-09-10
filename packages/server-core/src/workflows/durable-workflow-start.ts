@@ -5,8 +5,9 @@ import type { WorkflowStartInput } from './runner.ts';
 import { supportsDurableReadWorkflow } from './durable-read-runner.ts';
 import type { DurableWorkflowHost } from './durable-workflow-host.ts';
 import { durableWorkflowOccurrenceIdentity } from './durable-workflow-occurrence.ts';
+import type { DurableLocalSource } from './durable-workflow-sources.ts';
 
-export interface DurableStartBundle { connectionSlug: string; model: string; systemPrompt: string }
+export interface DurableStartBundle { connectionSlug: string; model: string; systemPrompt: string; localSources?: DurableLocalSource[] }
 export interface DurableWorkflowStartOptions {
   host: DurableWorkflowHost;
   /** Null means unsupported capabilities; an explicitly selected durable workflow must reject. */
@@ -42,7 +43,7 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
       for (const step of workflow.metadata.steps) {
         if (bundles.has(step.agent)) continue;
         const resolved = await options.resolveBundle(workspaceId, step.agent);
-        if (!resolved) throw new Error('This agent is not supported for durable local reads. It requires read-only permission, thinking off, and no skills, connected sources or specialist tools.');
+        if (!resolved) throw new Error('This agent is not supported for durable local reads. It requires read-only permission, thinking off, supported workspace filesystem sources, and no skills or specialist tools.');
         bundles.set(step.agent, JSON.parse(canonical(resolved)) as DurableStartBundle);
       }
       const bundle = bundles.get(workflow.metadata.steps[0]!.agent)!;
@@ -55,6 +56,7 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
       const runId = scheduled ? durableWorkflowOccurrenceIdentity(workspaceId, pinned.occurrence!).runId : randomUUID();
       const admission = {
         ...bundle, workspaceId, runId, commandId: scheduled ? durableWorkflowOccurrenceIdentity(workspaceId, pinned.occurrence!).commandId : `manual-start:${runId}`,
+        localSources: [...new Map([...bundles.values()].flatMap(candidate => candidate.localSources ?? []).map(source => [canonical(source), source])).values()],
         resolvedAgentSlug: workflow.metadata.steps[0]!.agent,
         ...(workflow.metadata.steps.length > 1 ? { resolvedSteps: workflow.metadata.steps.map(step => ({ id: step.id, agent: step.agent, systemPrompt: bundles.get(step.agent)!.systemPrompt })) } : {}),
         allowedTools: ['read', 'grep', 'find', 'ls'] as const, maxOutputTokens: 4096,
