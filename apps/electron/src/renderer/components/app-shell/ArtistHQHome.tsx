@@ -151,6 +151,8 @@ import {
 } from '@/lib/artist-voice'
 import {
   ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG,
+  buildArtistSpotifyMonthlyListeners,
+  buildArtistSpotifyMonthlyStreams,
   buildArtistSpotifyStreamHistory,
   calculateArtistSpotifyGrowth,
   parseArtistSpotifySnapshotDocResult,
@@ -161,9 +163,11 @@ import {
 import {
   ARTIST_INSTAGRAM_SNAPSHOT_CONTEXT_SLUG,
   buildArtistInstagramGrowthHistory,
+  buildArtistInstagramMonthlyFollowers,
   parseArtistInstagramSnapshotDocResult,
   parseArtistInstagramSnapshotJsonResult,
   type ArtistInstagramGrowthPoint,
+  type ArtistInstagramMonthlyFollower,
   type ArtistInstagramSnapshot,
 } from '@/lib/artist-instagram'
 import {
@@ -382,6 +386,7 @@ export function ArtistHQHome({
   const [spotifyHistory, setSpotifyHistory] = React.useState<ArtistSpotifyHistoryPoint[]>([])
   const [instagramSyncBusy, setInstagramSyncBusy] = React.useState(false)
   const [instagramHistory, setInstagramHistory] = React.useState<ArtistInstagramGrowthPoint[]>([])
+  const [instagramMonthlyFollowers, setInstagramMonthlyFollowers] = React.useState<ArtistInstagramMonthlyFollower[]>([])
   const [socialAccounts, setSocialAccounts] = React.useState<SocialAccountsDoctorResult | null>(null)
   const [socialAccountsBusy, setSocialAccountsBusy] = React.useState(false)
   const [socialAccountsError, setSocialAccountsError] = React.useState<string | null>(null)
@@ -779,6 +784,7 @@ export function ArtistHQHome({
     let cancelled = false
     if (!workspaceRootPath) {
       setInstagramHistory([])
+      setInstagramMonthlyFollowers(buildArtistInstagramMonthlyFollowers(instagramSnapshot ? [instagramSnapshot] : []))
       return
     }
 
@@ -801,10 +807,12 @@ export function ArtistHQHome({
         const snapshots = parsed.filter((snapshot): snapshot is ArtistInstagramSnapshot => Boolean(snapshot))
         if (instagramSnapshot) snapshots.push(instagramSnapshot)
         setInstagramHistory(buildArtistInstagramGrowthHistory(snapshots))
+        setInstagramMonthlyFollowers(buildArtistInstagramMonthlyFollowers(snapshots))
       })
       .catch(() => {
         if (!cancelled) {
           setInstagramHistory(instagramSnapshot ? buildArtistInstagramGrowthHistory([instagramSnapshot]) : [])
+          setInstagramMonthlyFollowers(buildArtistInstagramMonthlyFollowers(instagramSnapshot ? [instagramSnapshot] : []))
         }
       })
 
@@ -2014,6 +2022,7 @@ export function ArtistHQHome({
                 socialDoctor={socialAccounts}
                 instagramSnapshot={instagramSnapshot}
                 instagramHistory={instagramHistory}
+                instagramMonthlyFollowers={instagramMonthlyFollowers}
                 instagramActive={instagramSyncActive}
                 instagramBusy={socialAccountsBusy || instagramSyncBusy}
                 instagramRunDisabled={!socialPublisher}
@@ -2698,6 +2707,7 @@ function SignalsStrip({
   socialDoctor,
   instagramSnapshot,
   instagramHistory,
+  instagramMonthlyFollowers,
   instagramActive,
   instagramBusy,
   instagramRunDisabled,
@@ -2719,6 +2729,7 @@ function SignalsStrip({
   socialDoctor: SocialAccountsDoctorResult | null
   instagramSnapshot: ArtistInstagramSnapshot | null
   instagramHistory: ArtistInstagramGrowthPoint[]
+  instagramMonthlyFollowers: ArtistInstagramMonthlyFollower[]
   instagramActive: boolean
   instagramBusy: boolean
   instagramRunDisabled: boolean
@@ -2730,18 +2741,31 @@ function SignalsStrip({
   const [spotifyOpen, setSpotifyOpen] = React.useState(false)
   const [socialOpen, setSocialOpen] = React.useState(false)
   const growth = calculateArtistSpotifyGrowth(spotifyHistory)
-  const streamTrend = (spotifySnapshot?.dailyStreams?.length ?? 0) >= 2
-    ? spotifySnapshot!.dailyStreams!.map((point) => point.streams)
-    : spotifyHistory.map((point) => point.streams)
-  const listenerTrend = spotifyHistory
+  const monthlyStreams = buildArtistSpotifyMonthlyStreams(spotifySnapshot)
+  const monthlyListeners = buildArtistSpotifyMonthlyListeners(spotifySnapshot)
+  const streamTrend = monthlyStreams.length > 0
+    ? monthlyStreams.map((point) => point.streams)
+    : (spotifySnapshot?.dailyStreams?.length ?? 0) >= 2
+      ? spotifySnapshot!.dailyStreams!.map((point) => point.streams)
+      : spotifyHistory.map((point) => point.streams)
+  const listenerTrend = monthlyListeners.length > 0
+    ? monthlyListeners.map((point) => point.listeners)
+    : spotifyHistory
     .map((point) => point.listeners)
     .filter((value): value is number => typeof value === 'number')
   const spotifyPending = spotifyActive ? `First read ${weeklyCronLabel(SPOTIFY_SYNC_CRON)}` : 'Run Spotify Pulse to start'
   const instagramPending = instagramActive ? `First read ${weeklyCronLabel(INSTAGRAM_SYNC_CRON)}` : 'Run Instagram Insights to start'
   const instagramProfiles = socialDoctor?.platforms.find((entry) => entry.platform === 'instagram')?.profiles ?? []
   const instagramReady = instagramProfiles.some((profile) => profile.ready)
+  const instagramFollowerTrend = instagramMonthlyFollowers
+    .map((point) => point.followers)
+    .filter((value): value is number => typeof value === 'number')
+  const instagramNetTrend = instagramMonthlyFollowers
+    .map((point) => point.net)
+    .filter((value): value is number => typeof value === 'number')
   const instagramFoot = instagramSnapshot
-    ? `${instagramSnapshot.profile.handle ?? instagramSnapshot.profile.profile}${instagramSnapshot.windowDays ? ` · ${instagramSnapshot.windowDays} days` : ''}`
+    ? monthlyRangeFoot(instagramMonthlyFollowers.map((point) => point.month))
+      ?? `${instagramSnapshot.profile.handle ?? instagramSnapshot.profile.profile}${instagramSnapshot.windowDays ? ` · ${instagramSnapshot.windowDays} days` : ''}`
     : instagramReady
       ? instagramPending
       : 'Instagram setup needed'
@@ -2771,26 +2795,34 @@ function SignalsStrip({
           <SignalTile
             embedded
             label={spotifyPublicApi ? 'Popularity' : 'Streams'}
-            value={formatMetric(spotifyPublicApi ? spotifySnapshot?.metrics.popularity : spotifySnapshot?.metrics.streams)}
+            value={formatMetric(spotifyPublicApi ? spotifySnapshot?.metrics.popularity : monthlyStreams.at(-1)?.streams ?? spotifySnapshot?.metrics.streams)}
             trend={spotifyPublicApi ? [] : streamTrend}
+            trendMode={monthlyStreams.length > 0 ? 'bars' : 'line'}
             foot={spotifySnapshot
               ? spotifyPublicApi
                 ? 'Public API · 0–100'
-                : growthFoot(growth?.streamsPercent, growth?.comparisonDate) ?? 'Baseline set'
+                : monthlyGrowthFoot(monthlyStreams, (point) => point.streams)
+                  ?? growthFoot(growth?.streamsPercent, growth?.comparisonDate)
+                  ?? monthlyRangeFoot(monthlyStreams.map((point) => point.month))
+                  ?? 'Baseline set'
               : spotifyPending}
-            footTone={growthTone(growth?.streamsPercent)}
+            footTone={monthlyGrowthTone(monthlyStreams, (point) => point.streams) ?? growthTone(growth?.streamsPercent)}
             ariaLabel="Open Spotify Pulse analysis"
             onOpen={() => setSpotifyOpen(true)}
           />
           <SignalTile
             embedded
             label="Listeners"
-            value={formatMetric(spotifySnapshot?.metrics.listeners)}
+            value={formatMetric(monthlyListeners.at(-1)?.listeners ?? spotifySnapshot?.metrics.listeners)}
             trend={listenerTrend}
+            trendMode={monthlyListeners.length > 0 ? 'bars' : 'line'}
             foot={spotifySnapshot
-              ? growthFoot(growth?.listenersPercent, growth?.comparisonDate) ?? topTrackFoot(spotifySnapshot)
+              ? monthlyGrowthFoot(monthlyListeners, (point) => point.listeners)
+                ?? growthFoot(growth?.listenersPercent, growth?.comparisonDate)
+                ?? monthlyRangeFoot(monthlyListeners.map((point) => point.month))
+                ?? 'Baseline set'
               : spotifyPending}
-            footTone={growthTone(growth?.listenersPercent)}
+            footTone={monthlyGrowthTone(monthlyListeners, (point) => point.listeners) ?? growthTone(growth?.listenersPercent)}
             ariaLabel="Open Spotify listener analysis"
             onOpen={() => setSpotifyOpen(true)}
           />
@@ -2827,18 +2859,22 @@ function SignalsStrip({
             embedded
             label="Followers"
             value={formatMetric(instagramSnapshot?.metrics.followers)}
-            trend={[]}
-            foot={instagramFoot}
+            trend={instagramFollowerTrend}
+            foot={monthlyGrowthFoot(instagramMonthlyFollowers, (point) => point.followers)
+              ?? instagramFoot}
+            footTone={monthlyGrowthTone(instagramMonthlyFollowers, (point) => point.followers) ?? 'muted'}
             ariaLabel="Open Instagram follower analysis"
             onOpen={() => setSocialOpen(true)}
           />
           <SignalTile
             embedded
-            label="Change"
-            value={formatSignedMetric(instagramSnapshot?.metrics.followerDelta)}
-            trend={instagramHistory.map((point) => point.followerDelta)}
+            label="Monthly growth"
+            value={formatSignedMetric(instagramMonthlyFollowers.at(-1)?.net ?? instagramSnapshot?.metrics.followerDelta)}
+            trend={instagramNetTrend.length > 0 ? instagramNetTrend : instagramHistory.map((point) => point.followerDelta)}
             trendMode="bars"
-            foot={instagramSnapshot?.windowDays ? `${instagramSnapshot.windowDays} days` : instagramPending}
+            signedTrend
+            foot={monthlyRangeFoot(instagramMonthlyFollowers.map((point) => point.month))
+              ?? (instagramSnapshot?.windowDays ? `${instagramSnapshot.windowDays} days` : instagramPending)}
             ariaLabel="Open Social Pulse analysis"
             onOpen={() => setSocialOpen(true)}
           />
@@ -2858,6 +2894,7 @@ function SignalsStrip({
         onOpenChange={setSocialOpen}
         snapshot={instagramSnapshot}
         history={instagramHistory}
+        monthlyFollowers={instagramMonthlyFollowers}
         busy={instagramBusy}
         readyProfiles={instagramProfiles.filter((profile) => profile.ready).length}
         error={instagramError}
@@ -2872,6 +2909,7 @@ function SignalTile({
   value,
   trend,
   trendMode = 'line',
+  signedTrend = false,
   foot,
   footTone = 'muted',
   ariaLabel,
@@ -2882,12 +2920,14 @@ function SignalTile({
   value: string
   trend: number[]
   trendMode?: 'line' | 'bars'
+  signedTrend?: boolean
   foot: string
   footTone?: 'muted' | 'up' | 'down'
   ariaLabel: string
   onOpen: () => void
 }) {
   const empty = value === '--'
+  const showTrend = trendMode === 'bars' ? trend.length >= 1 : trend.length >= 2
   return (
     <button
       type="button"
@@ -2912,9 +2952,9 @@ function SignalTile({
         )}>
           {foot}
         </span>
-        {trend.length >= 2 ? (
+        {showTrend ? (
           trendMode === 'bars'
-            ? <SignalBars values={trend} />
+            ? <SignalBars values={trend} signed={signedTrend} />
             : <Sparkline values={trend} />
         ) : null}
       </span>
@@ -2942,9 +2982,27 @@ function Sparkline({ values }: { values: number[] }) {
   )
 }
 
-function SignalBars({ values }: { values: number[] }) {
-  const recent = values.slice(-8)
+function SignalBars({ values, signed = false }: { values: number[]; signed?: boolean }) {
+  const recent = values.slice(-12)
   const maxMagnitude = Math.max(1, ...recent.map((value) => Math.abs(value)))
+  if (signed) {
+    return (
+      <span className="relative flex h-[22px] shrink-0 items-stretch gap-[2px]" aria-hidden="true">
+        <span className="absolute inset-x-0 top-1/2 h-px bg-white/15" />
+        {recent.map((value, index) => {
+          const height = Math.max(2, (Math.abs(value) / maxMagnitude) * 10)
+          return (
+            <span key={`${index}-${value}`} className="relative h-[22px] w-[4px]">
+              <span
+                className={cn('absolute inset-x-0 rounded-[2px]', value >= 0 ? 'bottom-1/2 bg-[#f97316]/90' : 'top-1/2 bg-red-300/75')}
+                style={{ height: `${height}px` }}
+              />
+            </span>
+          )
+        })}
+      </span>
+    )
+  }
   return (
     <span className="flex h-[22px] shrink-0 items-end gap-[3px]" aria-hidden="true">
       {recent.map((value, index) => (
@@ -2958,6 +3016,46 @@ function SignalBars({ values }: { values: number[] }) {
   )
 }
 
+function monthlyGrowthFoot<T>(points: T[], valueOf: (point: T) => number | undefined): string | null {
+  const values = points
+    .map((point) => ({ point, value: valueOf(point) }))
+    .filter((entry): entry is { point: T; value: number } => typeof entry.value === 'number')
+  if (values.length < 2) return null
+  const previous = values.at(-2)!.value
+  const current = values.at(-1)!.value
+  if (previous <= 0) return null
+  const percent = ((current - previous) / previous) * 100
+  const arrow = percent > 0 ? '↑' : percent < 0 ? '↓' : '→'
+  return `${arrow} ${Math.abs(percent).toFixed(1)}% MoM · ${points.length} mo`
+}
+
+function monthlyGrowthTone<T>(
+  points: T[],
+  valueOf: (point: T) => number | undefined,
+): 'muted' | 'up' | 'down' | null {
+  const values = points.map(valueOf).filter((value): value is number => typeof value === 'number')
+  if (values.length < 2) return null
+  const delta = values.at(-1)! - values.at(-2)!
+  return delta > 0 ? 'up' : delta < 0 ? 'down' : 'muted'
+}
+
+function monthlyRangeFoot(months: string[]): string | null {
+  const unique = [...new Set(months)].sort()
+  const latest = unique.at(-1)
+  if (!latest) return null
+  return `${unique.length} mo · through ${formatMonthKey(latest, false)}`
+}
+
+function formatMonthKey(month: string, includeYear = true): string {
+  const [year, monthNumber] = month.split('-').map(Number)
+  if (!year || !monthNumber) return month
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    ...(includeYear ? { year: 'numeric' as const } : {}),
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(year, monthNumber - 1, 1)))
+}
+
 function growthFoot(percent: number | undefined, comparisonDate: string | undefined): string | null {
   if (typeof percent !== 'number' || !comparisonDate) return null
   const arrow = percent > 0 ? '↑' : percent < 0 ? '↓' : '→'
@@ -2967,13 +3065,6 @@ function growthFoot(percent: number | undefined, comparisonDate: string | undefi
 function growthTone(percent: number | undefined): 'muted' | 'up' | 'down' {
   if (typeof percent !== 'number' || percent === 0) return 'muted'
   return percent > 0 ? 'up' : 'down'
-}
-
-function topTrackFoot(snapshot: ArtistSpotifySnapshot): string {
-  const lead = (snapshot.tracks ?? [])
-    .filter((track): track is typeof track & { streams: number } => typeof track.streams === 'number')
-    .sort((left, right) => right.streams - left.streams)[0]
-  return lead ? `${lead.name} leads` : 'Baseline set'
 }
 
 function weeklyCronLabel(cron: string): string {
@@ -3010,6 +3101,8 @@ function SpotifyPulseDetails({
         ? 'Manual'
         : 'No snapshot'
   const growth = calculateArtistSpotifyGrowth(history)
+  const monthlyStreams = buildArtistSpotifyMonthlyStreams(snapshot)
+  const monthlyListeners = buildArtistSpotifyMonthlyListeners(snapshot)
   const streamsPerListener = typeof snapshot?.metrics.streams === 'number'
     && typeof snapshot.metrics.listeners === 'number'
     && snapshot.metrics.listeners > 0
@@ -3034,6 +3127,16 @@ function SpotifyPulseDetails({
         <SignalStat label="Skip rate" value={formatRateMetric(snapshot?.metrics.skipRate)} />
         <SignalStat label="Stream change" value={formatPercentMetric(growth?.streamsPercent, true)} />
       </div>
+      <PulseDetailSection title="Monthly streams" empty="No monthly stream history captured yet.">
+        {monthlyStreams.slice().reverse().map((point) => (
+          <PulseDetailRow key={point.month} label={formatMonthKey(point.month)} value={formatMetric(point.streams)} />
+        ))}
+      </PulseDetailSection>
+      <PulseDetailSection title="Monthly listeners" empty="No monthly listener history captured yet.">
+        {monthlyListeners.slice().reverse().map((point) => (
+          <PulseDetailRow key={point.month} label={formatMonthKey(point.month)} value={formatMetric(point.listeners)} />
+        ))}
+      </PulseDetailSection>
       <PulseDetailSection title="Top tracks" empty="No track analysis yet.">
         {(snapshot?.tracks ?? []).slice(0, 8).map((track) => (
           <PulseDetailRow
@@ -3576,6 +3679,7 @@ function SocialPulseDetails({
   onOpenChange,
   snapshot,
   history,
+  monthlyFollowers,
   busy,
   readyProfiles,
   error,
@@ -3584,6 +3688,7 @@ function SocialPulseDetails({
   onOpenChange: (open: boolean) => void
   snapshot: ArtistInstagramSnapshot | null
   history: ArtistInstagramGrowthPoint[]
+  monthlyFollowers: ArtistInstagramMonthlyFollower[]
   busy: boolean
   readyProfiles: number
   error: string | null
@@ -3614,10 +3719,21 @@ function SocialPulseDetails({
         <SignalStat label="Comments" value={formatMetric(snapshot?.metrics.comments)} />
         <SignalStat label="Period" value={snapshot?.windowDays ? `${snapshot.windowDays} days` : '--'} />
       </div>
-      <PulseDetailSection title="Follower trend" empty="Run Social Pulse again to build a trend.">
-        {history.slice().reverse().map((point) => (
-          <PulseDetailRow key={point.date} label={formatShortDate(point.date)} value={formatSignedMetric(point.followerDelta)} />
-        ))}
+      <PulseDetailSection title="Monthly follower growth" empty="No monthly follower history captured yet.">
+        {monthlyFollowers.length > 0
+          ? monthlyFollowers.slice().reverse().map((point) => (
+            <PulseDetailRow
+              key={point.month}
+              label={formatMonthKey(point.month)}
+              value={[
+                typeof point.followers === 'number' ? `${formatMetric(point.followers)} followers` : null,
+                typeof point.net === 'number' ? `${formatSignedMetric(point.net)} net` : null,
+              ].filter(Boolean).join(' · ')}
+            />
+          ))
+          : history.slice().reverse().map((point) => (
+            <PulseDetailRow key={point.date} label={formatShortDate(point.date)} value={formatSignedMetric(point.followerDelta)} />
+          ))}
       </PulseDetailSection>
       {error || snapshot?.errors?.length ? (
         <PulseDetailNotice>{error ?? snapshot?.errors?.join(' · ')}</PulseDetailNotice>
@@ -4634,7 +4750,7 @@ function writeBooleanLocalStorage(key: string, value: boolean): void {
 function createSpotifySyncPrompt(): string {
   return `Run the Spotify snapshot for this Artist HQ workspace.
 
-Use Artist Profile first, then use @printing-press-social from its injected absolute Local path to resolve the exact connected Spotify profile. Do not search for or use another RunnerOS checkout. Verify the live account, request the bounded Spotify for Artists snapshot browser plan, capture only visible values, and normalize the capture through \`snapshot spotify\` into this workspace.
+Use Artist Profile first, then use @printing-press-social from its injected absolute Local path to resolve the exact connected Spotify profile. Do not search for or use another RunnerOS checkout. Verify the live account, request the bounded Spotify for Artists snapshot browser plan, capture current values plus up to 12 completed months of streams and listeners from the provider's history, and normalize the capture through \`snapshot spotify\` into this workspace.
 
 If the Spotify browser profile is missing, logged out, or points at the wrong account, stop with that exact setup issue. Do not ask for Spotify client credentials and do not fabricate unavailable metrics.
 
@@ -4665,7 +4781,7 @@ function createSpotifySyncMatcher(executionTarget: PulseExecutionTarget = {}): R
 function createInstagramSyncPrompt(): string {
   return `Run the read-only Instagram Growth Snapshot for this Artist HQ workspace.
 
-Load the instagram-growth-snapshot skill. If no exact Instagram profile was named, select the first ready Instagram profile returned by the live Printing Press Social catalog, preserving catalog order. Attach that saved browser session, verify the visible account identity, and read Instagram Insights for the last 14 completed days or the nearest visible supported range.
+Load the instagram-growth-snapshot skill. If no exact Instagram profile was named, select the first ready Instagram profile returned by the live Printing Press Social catalog, preserving catalog order. Attach that saved browser session, verify the visible account identity, and read current Instagram Insights plus every completed month of follower history the provider exposes, up to 12 months.
 
 Save an immutable snapshot under data/instagram/snapshots and write its context payload to Workspace Context slug ${ARTIST_INSTAGRAM_SNAPSHOT_CONTEXT_SLUG} so Social Pulse updates.
 

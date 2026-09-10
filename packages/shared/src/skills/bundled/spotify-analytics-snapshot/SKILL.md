@@ -26,7 +26,7 @@ node src/social.mjs profile status spotify --profile <id> --live --json
 node src/social.mjs snapshot spotify --profile <id> --json
 ```
 
-3. Run the returned `browserPlan` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, visible daily stream trend points, top cities/countries, top tracks, and source-of-streams. Save the observed values as JSON under `$CRAFT_WORKSPACE_PATH/data/spotify/captures/`.
+3. Run the returned `browserPlan` against the verified Spotify for Artists session with RunnerOS browser tools. Read streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams. Also select the longest useful historical range and capture up to 12 completed months of streams and monthly listeners. Provider chart labels/hover values are preferred; reasonable whole-number chart estimates are acceptable for the directional HQ visual. Never invent a month the provider does not show. Save the observed values as JSON under `$CRAFT_WORKSPACE_PATH/data/spotify/captures/`.
 
 4. Normalize and save the captured numbers:
 
@@ -52,6 +52,8 @@ The default output is `data/spotify/snapshots/<YYYY-MM-DD>-s4a.json` inside the 
   "artist": { "name": "...", "spotifyUrl": "...", "profile": "..." },
   "metrics": { "streams": 0, "listeners": 0, "followers": 0, "saves": 0 },
   "dailyStreams": [{ "date": "YYYY-MM-DD", "streams": 0 }],
+  "monthlyStreams": [{ "month": "YYYY-MM", "streams": 0 }],
+  "monthlyListeners": [{ "month": "YYYY-MM", "listeners": 0 }],
   "geo": { "topCities": [], "topCountries": [] },
   "tracks": [{ "name": "...", "streams": 0, "spotifyUrl": "..." }],
   "sources": {},
@@ -61,7 +63,7 @@ The default output is `data/spotify/snapshots/<YYYY-MM-DD>-s4a.json` inside the 
 }
 ```
 
-Any metric not visible on the page is `null`, and the snapshot is marked `partial: true` with the missing fields listed in `errors`. If the reporting window is unavailable, `windowDays` is also `null`. If the capture date is unavailable or invalid, finalization uses today's date only for safe file ownership and records that fallback in `errors`.
+Any metric not visible on the page is `null`, and missing monthly history is an empty array. The snapshot is marked `partial: true` with missing fields listed in `errors`. If the reporting window is unavailable, `windowDays` is also `null`. If the capture date is unavailable or invalid, finalization uses today's date only for safe file ownership and records that fallback in `errors`.
 
 `delta-brief.ts` discovers legacy `<date>.json`, API `<date>-web-api.json`, and browser `<date>-s4a.json` snapshots. It compares only compatible data sources/reporting windows and treats missing rates, playlists, tracks, sources, or metrics as unavailable rather than zero.
 
@@ -74,7 +76,7 @@ Any metric not visible on the page is `null`, and the snapshot is marked `partia
 
 ## Never
 
-- Never fabricate streams, listeners, followers, saves, cities, tracks, or source percentages.
+- Never fabricate streams, listeners, followers, saves, cities, tracks, source percentages, or months. Approximate monthly chart readings must still come from visible provider history.
 - Never modify a past snapshot. Snapshot writes fail closed when the target already exists.
 - Never bypass approvals — this skill is read-only.
 - Never silently drop a tracked playlist feature; surface its disappearance as an anomaly.

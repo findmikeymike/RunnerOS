@@ -2295,7 +2295,7 @@ Setup and identity:
 
 Snapshot flow:
 1. Run \`node src/social.mjs snapshot spotify --profile <id> --json\` to get the browser plan and capture contract.
-2. Confirm the browser plan names the same profile already attached with \`browser_tool profile spotify <id>\`. Read only visible values: snapshot date/window, streams, listeners, followers, saves, visible daily stream trend points, cities/countries, top tracks, and source-of-streams.
+2. Confirm the browser plan names the same profile already attached with \`browser_tool profile spotify <id>\`. Read current values plus up to 12 completed months of streams and listeners from provider history, then cities/countries, top tracks, and source-of-streams. Reasonable whole-number readings from visible provider charts are acceptable; never invent missing months.
 3. Save observed values inside \`$CRAFT_WORKSPACE_PATH/data/spotify/captures/\` and normalize with \`node src/social.mjs snapshot spotify --profile <id> --capture-file <file> --workspace "$CRAFT_WORKSPACE_PATH" --json\`.
 4. Write the returned \`contextPayload\` as Artist HQ context \`artist-spotify-snapshot\`.
 5. Use \`spotify-analytics-snapshot\` for compatible delta briefs and \`spotify-anomaly-watch\` for real drops, playlist removals, regional shifts, and source changes.
@@ -2319,6 +2319,8 @@ When you produce a fresh snapshot, also provide an Artist HQ context payload usi
   "artist": { "name": "...", "spotifyUrl": "...", "profile": "..." },
   "metrics": { "streams": 0, "listeners": 0, "followers": 0, "saves": 0 },
   "dailyStreams": [{ "date": "YYYY-MM-DD", "streams": 0 }],
+  "monthlyStreams": [{ "month": "YYYY-MM", "streams": 0 }],
+  "monthlyListeners": [{ "month": "YYYY-MM", "listeners": 0 }],
   "geo": { "topCities": [], "topCountries": [] },
   "tracks": [],
   "playlistsDriving": [],

@@ -300,8 +300,9 @@ async function handleSnapshot(flags) {
         steps: [
           `open Spotify for Artists (${S4A_HOME})`,
           'verify visible account matches profile',
-          'open the Audience/Home overview for the selected date range',
+          'open the Audience/Home overview and select the longest useful historical range',
           'read streams, listeners, followers, saves, the date range window, and visible daily stream trend points',
+          'capture up to 12 completed calendar months of streams and monthly listeners from visible labels, hover values, or reasonable whole-number chart estimates',
           'open Audience > Where they listen for top cities and top countries',
           'open Music > Songs for top tracks (streams per track)',
           'open the source-of-streams breakdown if available',
@@ -356,12 +357,14 @@ function snapshotCaptureContract(flags) {
       followers: 'integer|null',
       saves: 'integer|null',
       dailyStreams: '[{ date: YYYY-MM-DD, streams: integer }] for visible points in the selected reporting window',
+      monthlyStreams: '[{ month: YYYY-MM, streams: integer }] for up to 12 completed calendar months',
+      monthlyListeners: '[{ month: YYYY-MM, listeners: integer }] for up to 12 completed calendar months',
       topCities: '[{ city: string, country?: string, listeners?: number }]',
       topCountries: '[{ country: string, listeners?: number }]',
       topTracks: '[{ name: string, streams?: number, spotifyUrl?: string }]',
       sources: '{ [sourceName: string]: number } e.g. playlists/algorithmic/listener-own/editorial',
     },
-    rule: 'Only include numbers actually read from the page. Use null for anything not visible. Never estimate or fabricate.',
+    rule: 'Use provider values when shown. Reasonable whole-number estimates read from a provider chart are allowed for monthly history; never invent months or movement the page does not show.',
   };
 }
 
@@ -396,6 +399,10 @@ function normalizeSnapshot(captured, { profile }) {
   const tracks = normalizeTrackList(captured.topTracks, errors);
   const sources = normalizeSources(captured.sources, errors);
   const dailyStreams = normalizeDailyStreams(captured.dailyStreams, errors);
+  const monthlyStreams = normalizeMonthlySeries(captured.monthlyStreams, 'streams', errors);
+  const monthlyListeners = normalizeMonthlySeries(captured.monthlyListeners, 'listeners', errors);
+  if (monthlyStreams.length < 2) errors.push('Fewer than two completed months of stream history were captured.');
+  if (monthlyListeners.length < 2) errors.push('Fewer than two completed months of listener history were captured.');
 
   return {
     version: 1,
@@ -409,6 +416,8 @@ function normalizeSnapshot(captured, { profile }) {
     },
     metrics,
     dailyStreams,
+    monthlyStreams,
+    monthlyListeners,
     geo: {
       topCities,
       topCountries,
@@ -444,6 +453,32 @@ function normalizeDailyStreams(value, errors) {
   return [...byDate.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([date, streams]) => ({ date, streams }));
+}
+
+function normalizeMonthlySeries(value, metricName, errors) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    errors.push(`Monthly ${metricName} capture was not an array and was ignored.`);
+    return [];
+  }
+  const byMonth = new Map();
+  value.forEach((item, index) => {
+    const month = isPlainObject(item) ? cleanString(item.month) : null;
+    if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      errors.push(`Invalid monthly ${metricName}[${index}] month was ignored.`);
+      return;
+    }
+    const metricValue = nonnegativeIntegerOrNull(item[metricName]);
+    if (metricValue === null) {
+      errors.push(`Invalid monthly ${metricName}[${index}].${metricName} was ignored.`);
+      return;
+    }
+    byMonth.set(month, metricValue);
+  });
+  return [...byMonth.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .slice(-12)
+    .map(([month, value]) => ({ month, [metricName]: value }));
 }
 
 function normalizeCityList(value, errors) {

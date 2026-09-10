@@ -13,16 +13,45 @@ describe('Instagram snapshot normalizer', () => {
       windowDays: 14,
       profile: { profile: 'main', handle: '@artist' },
       metrics: { followers: 1000, followerDelta: -9, accountsReached: 250 },
+      monthlyFollowers: [
+        { month: '2026-07', followers: 975, net: 12 },
+        { month: '2026-08', net: -9 },
+      ],
     }, new Date('2026-08-28T12:00:00.000Z'))
 
     expect(snapshot.metrics.followerDelta).toBe(-9)
     expect(snapshot.metrics.interactions).toBeNull()
+    expect(snapshot.monthlyFollowers).toEqual([
+      { month: '2026-07', followers: 975, net: 12 },
+      { month: '2026-08', net: -9 },
+    ])
     expect(snapshot.partial).toBe(true)
     expect(snapshot.errors.join(' ')).toContain('interactions')
   })
 
   test('requires an exact profile and capture date', () => {
     expect(() => normalizeInstagramCapture({ profile: {}, metrics: {} })).toThrow()
+  })
+
+  test('normalizes signed monthly history without inventing missing totals', () => {
+    const snapshot = normalizeInstagramCapture({
+      snapshotDate: '2026-09-09',
+      windowDays: 30,
+      profile: { profile: 'main' },
+      metrics: {},
+      monthlyFollowers: [
+        { month: '2026-08', net: -4 },
+        { month: '2026-07', followers: 100 },
+        { month: '2026-08', net: -3 },
+        { month: 'bad', net: 9 },
+      ],
+    })
+
+    expect(snapshot.monthlyFollowers).toEqual([
+      { month: '2026-07', followers: 100 },
+      { month: '2026-08', net: -3 },
+    ])
+    expect(snapshot.errors.join(' ')).toContain('Invalid monthlyFollowers')
   })
 
   test('writes inside the workspace once and refuses overwrite or path escape', () => {
@@ -35,6 +64,10 @@ describe('Instagram snapshot normalizer', () => {
       windowDays: 14,
       profile: { profile: 'main' },
       metrics: { followers: 1000, followerDelta: 8 },
+      monthlyFollowers: [
+        { month: '2026-07', net: 5 },
+        { month: '2026-08', net: 8 },
+      ],
     }))
 
     const args = [process.execPath, script, '--capture', capture, '--workspace', workspace]

@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-09-08
+last_verified: 2026-09-09
 source_of_truth: true
 ---
 
@@ -49,6 +49,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [46 Electron Runtime Upgrade](./46-electron-runtime-upgrade-spec.md) — Electron 39 → 44.2.0 (Node 24, Chromium 152); sharp natives packaged; vendor dist integrity; macOS 12 dropped (decision recorded)
 
 - [47 Signals: Industry And Your World](./47-signals-your-world-spec.md) - all three slices and provider/reader hardening implemented and reviewed; live-account acceptance remains
+- [49 HQ Performance Monthly Widgets](./49-hq-performance-monthly-widgets-spec.md) — first-run Spotify streams/listeners and Instagram follower-growth month views implemented; live-account capture and Electron visual acceptance remain
 
 ## Not Yet Built
 

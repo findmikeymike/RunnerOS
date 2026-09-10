@@ -7,6 +7,8 @@
 export {
   ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG,
   artistSpotifySnapshotMetadata,
+  buildArtistSpotifyMonthlyListeners,
+  buildArtistSpotifyMonthlyStreams,
   buildArtistSpotifyStreamHistory,
   calculateArtistSpotifyGrowth,
   parseArtistSpotifySnapshotDocResult,
@@ -15,6 +17,8 @@ export {
   type ArtistSpotifyDataSource,
   type ArtistSpotifyGrowth,
   type ArtistSpotifyHistoryPoint,
+  type ArtistSpotifyMonthlyListener,
+  type ArtistSpotifyMonthlyStream,
   type ArtistSpotifySnapshot,
   type ArtistSpotifySnapshotParseResult,
 } from '@craft-agent/shared/artist-context'

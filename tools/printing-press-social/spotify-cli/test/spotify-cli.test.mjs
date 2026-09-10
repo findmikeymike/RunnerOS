@@ -109,6 +109,8 @@ test('snapshot without capture returns a browser plan + capture contract', () =>
   assert.equal(result.browserPlan.browserSession.partition, 'persist:social-spotify-artist01');
   assert.ok(result.capture.fields.streams);
   assert.ok(result.capture.fields.dailyStreams);
+  assert.ok(result.capture.fields.monthlyStreams);
+  assert.ok(result.capture.fields.monthlyListeners);
 });
 
 test('snapshot normalizes captured numbers and never fabricates missing ones', () => {
@@ -125,6 +127,14 @@ test('snapshot normalizes captured numbers and never fabricates missing ones', (
       { date: '2026-07-07', streams: 420 },
       { date: '2026-07-08', streams: 510 },
     ],
+    monthlyStreams: [
+      { month: '2026-06', streams: 10000 },
+      { month: '2026-07', streams: 12000 },
+    ],
+    monthlyListeners: [
+      { month: '2026-06', listeners: 3000 },
+      { month: '2026-07', listeners: 3400 },
+    ],
     topCities: [{ city: 'London', listeners: 900 }],
     topTracks: [{ name: 'Night Drive', streams: 5000 }],
     sources: { playlists: 40 },
@@ -137,6 +147,14 @@ test('snapshot normalizes captured numbers and never fabricates missing ones', (
   assert.deepEqual(result.snapshot.dailyStreams, [
     { date: '2026-07-07', streams: 420 },
     { date: '2026-07-08', streams: 510 },
+  ]);
+  assert.deepEqual(result.snapshot.monthlyStreams, [
+    { month: '2026-06', streams: 10000 },
+    { month: '2026-07', streams: 12000 },
+  ]);
+  assert.deepEqual(result.snapshot.monthlyListeners, [
+    { month: '2026-06', listeners: 3000 },
+    { month: '2026-07', listeners: 3400 },
   ]);
   assert.equal(result.snapshot.partial, true);
   assert.match(result.snapshot.errors.join(' '), /saves/);
@@ -180,6 +198,8 @@ test('snapshot marks missing date/window and malformed optional shapes as partia
     topCountries: [{ country: 'US', listeners: -2 }, {}],
     topTracks: [{ name: 'Track', streams: 1.5 }, { streams: 10 }],
     sources: ['not-an-object'],
+    monthlyStreams: [{ month: '2026-13', streams: 10 }],
+    monthlyListeners: 'not-an-array',
   }), '--json'], env));
   assert.equal(result.snapshot.windowDays, null);
   assert.equal(result.snapshot.metrics.streams, null);
@@ -191,6 +211,8 @@ test('snapshot marks missing date/window and malformed optional shapes as partia
   assert.match(result.snapshot.errors.join(' '), /topCountries\[1\] entry/);
   assert.match(result.snapshot.errors.join(' '), /topTracks\[0\]\.streams/);
   assert.match(result.snapshot.errors.join(' '), /topTracks\[1\] entry/);
+  assert.match(result.snapshot.errors.join(' '), /Invalid monthly streams/);
+  assert.match(result.snapshot.errors.join(' '), /Monthly listeners capture was not an array/);
 });
 
 test('snapshot refuses to overwrite an existing file', () => {

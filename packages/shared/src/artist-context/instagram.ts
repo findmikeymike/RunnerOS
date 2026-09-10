@@ -38,6 +38,7 @@ export interface ArtistInstagramSnapshot {
     likes?: number;
     comments?: number;
   };
+  monthlyFollowers?: ArtistInstagramMonthlyFollower[];
   partial?: boolean;
   errors?: string[];
   updatedAt: string;
@@ -48,6 +49,12 @@ export interface ArtistInstagramSnapshot {
 export interface ArtistInstagramGrowthPoint {
   date: string;
   followerDelta: number;
+}
+
+export interface ArtistInstagramMonthlyFollower {
+  month: string;
+  followers?: number;
+  net?: number;
 }
 
 export type ArtistInstagramSnapshotParseResult = ArtistSnapshotParse<ArtistInstagramSnapshot>;
@@ -107,6 +114,7 @@ export function parseArtistInstagramSnapshotJsonResult(
           likes: toNonNegativeNumber(parsed.metrics.likes),
           comments: toNonNegativeNumber(parsed.metrics.comments),
         },
+        monthlyFollowers: normalizeMonthlyFollowers(parsed.monthlyFollowers),
         partial: Boolean(parsed.partial),
         errors: Array.isArray(parsed.errors) ? parsed.errors.map(String).filter(Boolean) : [],
         updatedAt: normalizeTimestamp(parsed.updatedAt) ?? `${snapshotDate}T00:00:00.000Z`,
@@ -154,10 +162,98 @@ export function buildArtistInstagramGrowthHistory(
   return [...byDate.values()].slice(-Math.max(1, limit));
 }
 
+/**
+ * Combines provider-backed monthly history with local month-end snapshots.
+ * Missing follower totals may be directionally reconstructed from current
+ * followers and captured net movement when possible.
+ */
+export function buildArtistInstagramMonthlyFollowers(
+  snapshots: ArtistInstagramSnapshot[],
+  now = new Date(),
+): ArtistInstagramMonthlyFollower[] {
+  const ordered = [...snapshots]
+    .filter((snapshot) => isIsoDateString(snapshot.snapshotDate))
+    .sort((left, right) => left.snapshotDate.localeCompare(right.snapshotDate));
+  const latest = ordered.at(-1);
+  if (!latest) return [];
+
+  const compatible = ordered.filter(
+    (snapshot) => snapshot.profile.profile === latest.profile.profile,
+  );
+  const byMonth = new Map<string, ArtistInstagramMonthlyFollower>();
+
+  for (const snapshot of compatible) {
+    for (const point of normalizeMonthlyFollowers(snapshot.monthlyFollowers) ?? []) {
+      byMonth.set(point.month, { ...byMonth.get(point.month), ...point });
+    }
+    if (typeof snapshot.metrics.followers === 'number') {
+      const month = snapshot.snapshotDate.slice(0, 7);
+      const existing = byMonth.get(month) ?? { month };
+      byMonth.set(month, { ...existing, followers: snapshot.metrics.followers });
+    }
+  }
+
+  const currentMonth = Number.isNaN(now.getTime())
+    ? new Date().toISOString().slice(0, 7)
+    : now.toISOString().slice(0, 7);
+  const points = [...byMonth.values()]
+    .filter((point) => point.month < currentMonth)
+    .sort((left, right) => left.month.localeCompare(right.month))
+    .slice(-12);
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1]!;
+    const point = points[index]!;
+    if (
+      typeof point.net !== 'number'
+      && typeof point.followers === 'number'
+      && typeof previous.followers === 'number'
+    ) {
+      point.net = point.followers - previous.followers;
+    }
+  }
+
+  const latestFollowers = latest.metrics.followers;
+  const lastPoint = points.at(-1);
+  if (lastPoint && typeof lastPoint.followers !== 'number' && typeof latestFollowers === 'number') {
+    lastPoint.followers = latestFollowers;
+  }
+  for (let index = points.length - 1; index > 0; index -= 1) {
+    const current = points[index]!;
+    const previous = points[index - 1]!;
+    if (
+      typeof previous.followers !== 'number'
+      && typeof current.followers === 'number'
+      && typeof current.net === 'number'
+    ) {
+      previous.followers = current.followers - current.net;
+    }
+  }
+
+  return points;
+}
+
 export function serializeArtistInstagramSnapshotBody(snapshot: ArtistInstagramSnapshot): string {
   return buildContextDocBody(INSTAGRAM_PREAMBLE, {
     ...snapshot,
     version: 1,
     dataSource: INSTAGRAM_DATA_SOURCE,
   });
+}
+
+function normalizeMonthlyFollowers(value: unknown): ArtistInstagramSnapshot['monthlyFollowers'] {
+  if (!Array.isArray(value)) return undefined;
+  const byMonth = new Map<string, ArtistInstagramMonthlyFollower>();
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const candidate = item as { month?: unknown; followers?: unknown; net?: unknown };
+    const month = normalizeInlineText(candidate.month);
+    if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) continue;
+    const followers = toNonNegativeNumber(candidate.followers);
+    const net = toFiniteNumber(candidate.net);
+    if (followers === undefined && net === undefined) continue;
+    byMonth.set(month, { month, followers, net });
+  }
+  const points = [...byMonth.values()].sort((left, right) => left.month.localeCompare(right.month));
+  return points.length > 0 ? points : undefined;
 }

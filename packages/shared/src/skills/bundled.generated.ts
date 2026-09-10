@@ -28982,16 +28982,45 @@ describe('Instagram snapshot normalizer', () => {
       windowDays: 14,
       profile: { profile: 'main', handle: '@artist' },
       metrics: { followers: 1000, followerDelta: -9, accountsReached: 250 },
+      monthlyFollowers: [
+        { month: '2026-07', followers: 975, net: 12 },
+        { month: '2026-08', net: -9 },
+      ],
     }, new Date('2026-08-28T12:00:00.000Z'))
 
     expect(snapshot.metrics.followerDelta).toBe(-9)
     expect(snapshot.metrics.interactions).toBeNull()
+    expect(snapshot.monthlyFollowers).toEqual([
+      { month: '2026-07', followers: 975, net: 12 },
+      { month: '2026-08', net: -9 },
+    ])
     expect(snapshot.partial).toBe(true)
     expect(snapshot.errors.join(' ')).toContain('interactions')
   })
 
   test('requires an exact profile and capture date', () => {
     expect(() => normalizeInstagramCapture({ profile: {}, metrics: {} })).toThrow()
+  })
+
+  test('normalizes signed monthly history without inventing missing totals', () => {
+    const snapshot = normalizeInstagramCapture({
+      snapshotDate: '2026-09-09',
+      windowDays: 30,
+      profile: { profile: 'main' },
+      metrics: {},
+      monthlyFollowers: [
+        { month: '2026-08', net: -4 },
+        { month: '2026-07', followers: 100 },
+        { month: '2026-08', net: -3 },
+        { month: 'bad', net: 9 },
+      ],
+    })
+
+    expect(snapshot.monthlyFollowers).toEqual([
+      { month: '2026-07', followers: 100 },
+      { month: '2026-08', net: -3 },
+    ])
+    expect(snapshot.errors.join(' ')).toContain('Invalid monthlyFollowers')
   })
 
   test('writes inside the workspace once and refuses overwrite or path escape', () => {
@@ -29004,6 +29033,10 @@ describe('Instagram snapshot normalizer', () => {
       windowDays: 14,
       profile: { profile: 'main' },
       metrics: { followers: 1000, followerDelta: 8 },
+      monthlyFollowers: [
+        { month: '2026-07', net: 5 },
+        { month: '2026-08', net: 8 },
+      ],
     }))
 
     const args = [process.execPath, script, '--capture', capture, '--workspace', workspace]
@@ -29029,6 +29062,7 @@ export interface NormalizedInstagramSnapshot {
   windowDays: number | null
   profile: { profile: string; handle: string | null; accountUrl: string | null }
   metrics: Record<'followers' | 'followerDelta' | 'accountsReached' | 'accountsEngaged' | 'interactions' | 'profileVisits' | 'likes' | 'comments', number | null>
+  monthlyFollowers: Array<{ month: string; followers?: number; net?: number }>
   partial: boolean
   errors: string[]
   updatedAt: string
@@ -29049,6 +29083,8 @@ export function normalizeInstagramCapture(input: unknown, now = new Date()): Nor
   const normalizedMetrics = Object.fromEntries(metricNames.map((name) => [name, metric(metrics[name], name === 'followerDelta')])) as NormalizedInstagramSnapshot['metrics']
   const missing = metricNames.filter((name) => normalizedMetrics[name] === null)
   if (missing.length) errors.push(\`Metrics not visible: \${missing.join(', ')}.\`)
+  const monthlyFollowers = normalizeMonthlyFollowers(root.monthlyFollowers, errors)
+  if (monthlyFollowers.length < 2) errors.push('Fewer than two completed months of follower history were captured.')
 
   return {
     version: 1,
@@ -29061,7 +29097,8 @@ export function normalizeInstagramCapture(input: unknown, now = new Date()): Nor
       accountUrl: string(profile.accountUrl),
     },
     metrics: normalizedMetrics,
-    partial: root.partial === true || missing.length > 0 || positiveInteger(root.windowDays) === null,
+    monthlyFollowers,
+    partial: root.partial === true || missing.length > 0 || positiveInteger(root.windowDays) === null || monthlyFollowers.length < 2,
     errors: [...new Set(errors)],
     updatedAt: now.toISOString(),
   }
@@ -29127,6 +29164,40 @@ function positiveInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
 }
 
+function normalizeMonthlyFollowers(
+  value: unknown,
+  errors: string[],
+): Array<{ month: string; followers?: number; net?: number }> {
+  if (value == null) return []
+  if (!Array.isArray(value)) {
+    errors.push('Monthly follower history was not an array and was ignored.')
+    return []
+  }
+  const byMonth = new Map<string, { month: string; followers?: number; net?: number }>()
+  value.forEach((item, index) => {
+    const candidate = record(item)
+    const month = string(candidate.month)
+    if (!month || !/^\\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      errors.push(\`Invalid monthlyFollowers[\${index}] month was ignored.\`)
+      return
+    }
+    const followers = metric(candidate.followers, false)
+    const net = metric(candidate.net, true)
+    if (followers === null && net === null) {
+      errors.push(\`monthlyFollowers[\${index}] had no usable follower value and was ignored.\`)
+      return
+    }
+    byMonth.set(month, {
+      month,
+      ...(followers === null ? {} : { followers }),
+      ...(net === null ? {} : { net }),
+    })
+  })
+  return [...byMonth.values()]
+    .sort((left, right) => left.month.localeCompare(right.month))
+    .slice(-12)
+}
+
 if (import.meta.main) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error))
@@ -29171,8 +29242,9 @@ Use this skill for manual or weekly read-only Instagram Insights checks. One Soc
    - content interactions
    - profile visits
    - aggregate likes and comments, when visible
-6. Do not scan individual posts when aggregate Insights are available. If aggregate likes/comments are unavailable and a post-level fallback is genuinely useful, inspect only posts published inside the reporting window, mark the snapshot partial, and state the limitation.
-7. Save the raw observed JSON under \`$CRAFT_WORKSPACE_PATH/data/instagram/captures/<YYYY-MM-DD>.json\`.
+6. Open the follower-history view and capture every completed month Instagram exposes, up to 12 months. Capture month-end followers, net follower change, or both. Provider chart labels/hover values are preferred; reasonable whole-number chart estimates are acceptable for the directional HQ visual. Never invent a month the provider does not show.
+7. Do not scan individual posts when aggregate Insights are available. If aggregate likes/comments are unavailable and a post-level fallback is genuinely useful, inspect only posts published inside the reporting window, mark the snapshot partial, and state the limitation.
+8. Save the raw observed JSON under \`$CRAFT_WORKSPACE_PATH/data/instagram/captures/<YYYY-MM-DD>.json\`.
 
 Use this raw capture shape. Missing values are \`null\`, never zero:
 
@@ -29191,6 +29263,10 @@ Use this raw capture shape. Missing values are \`null\`, never zero:
     "likes": 330,
     "comments": 60
   },
+  "monthlyFollowers": [
+    { "month": "2026-06", "followers": 4150, "net": 24 },
+    { "month": "2026-07", "followers": 4187, "net": 37 }
+  ],
   "partial": false,
   "errors": []
 }
@@ -29208,14 +29284,14 @@ Normalize the capture into an immutable snapshot:
 
 The script writes \`data/instagram/snapshots/<YYYY-MM-DD>-insights.json\` and returns a \`contextPayload\`. Write that payload to Workspace Context slug \`artist-instagram-snapshot\` so Artist HQ Social Pulse updates immediately.
 
-Finish with a short private note: reporting window, follower growth/decline, reach, interactions, and any missing data.
+Finish with a short private note: reporting window, captured month range, follower growth/decline, reach, interactions, and any missing data.
 
 ## Failure Rules
 
 - This job is read-only and needs no approval.
 - Never publish, reply, DM, follow, edit, or change account settings.
 - Never record passwords, cookies, tokens, recovery codes, or 2FA secrets.
-- Never fabricate hidden or unavailable metrics.
+- Never fabricate hidden metrics or months. Approximate monthly chart readings must still come from visible provider history.
 - Never overwrite a past snapshot. Same-date reruns must stop or use a later capture date after confirming the data is actually newer.
 - If the visible account does not match the saved profile, stop without reading analytics.
 `,
@@ -42791,7 +42867,7 @@ node src/social.mjs profile status spotify --profile <id> --live --json
 node src/social.mjs snapshot spotify --profile <id> --json
 \`\`\`
 
-3. Run the returned \`browserPlan\` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, visible daily stream trend points, top cities/countries, top tracks, and source-of-streams. Save the observed values as JSON under \`$CRAFT_WORKSPACE_PATH/data/spotify/captures/\`.
+3. Run the returned \`browserPlan\` against the verified Spotify for Artists session with RunnerOS browser tools. Read streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams. Also select the longest useful historical range and capture up to 12 completed months of streams and monthly listeners. Provider chart labels/hover values are preferred; reasonable whole-number chart estimates are acceptable for the directional HQ visual. Never invent a month the provider does not show. Save the observed values as JSON under \`$CRAFT_WORKSPACE_PATH/data/spotify/captures/\`.
 
 4. Normalize and save the captured numbers:
 
@@ -42817,6 +42893,8 @@ The default output is \`data/spotify/snapshots/<YYYY-MM-DD>-s4a.json\` inside th
   "artist": { "name": "...", "spotifyUrl": "...", "profile": "..." },
   "metrics": { "streams": 0, "listeners": 0, "followers": 0, "saves": 0 },
   "dailyStreams": [{ "date": "YYYY-MM-DD", "streams": 0 }],
+  "monthlyStreams": [{ "month": "YYYY-MM", "streams": 0 }],
+  "monthlyListeners": [{ "month": "YYYY-MM", "listeners": 0 }],
   "geo": { "topCities": [], "topCountries": [] },
   "tracks": [{ "name": "...", "streams": 0, "spotifyUrl": "..." }],
   "sources": {},
@@ -42826,7 +42904,7 @@ The default output is \`data/spotify/snapshots/<YYYY-MM-DD>-s4a.json\` inside th
 }
 \`\`\`
 
-Any metric not visible on the page is \`null\`, and the snapshot is marked \`partial: true\` with the missing fields listed in \`errors\`. If the reporting window is unavailable, \`windowDays\` is also \`null\`. If the capture date is unavailable or invalid, finalization uses today's date only for safe file ownership and records that fallback in \`errors\`.
+Any metric not visible on the page is \`null\`, and missing monthly history is an empty array. The snapshot is marked \`partial: true\` with missing fields listed in \`errors\`. If the reporting window is unavailable, \`windowDays\` is also \`null\`. If the capture date is unavailable or invalid, finalization uses today's date only for safe file ownership and records that fallback in \`errors\`.
 
 \`delta-brief.ts\` discovers legacy \`<date>.json\`, API \`<date>-web-api.json\`, and browser \`<date>-s4a.json\` snapshots. It compares only compatible data sources/reporting windows and treats missing rates, playlists, tracks, sources, or metrics as unavailable rather than zero.
 
@@ -42839,7 +42917,7 @@ Any metric not visible on the page is \`null\`, and the snapshot is marked \`par
 
 ## Never
 
-- Never fabricate streams, listeners, followers, saves, cities, tracks, or source percentages.
+- Never fabricate streams, listeners, followers, saves, cities, tracks, source percentages, or months. Approximate monthly chart readings must still come from visible provider history.
 - Never modify a past snapshot. Snapshot writes fail closed when the target already exists.
 - Never bypass approvals — this skill is read-only.
 - Never silently drop a tracked playlist feature; surface its disappearance as an anomaly.

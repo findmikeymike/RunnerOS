@@ -36,6 +36,8 @@ export interface ArtistSpotifySnapshot {
     skipRate?: number;
   };
   dailyStreams?: Array<{ date: string; streams: number }>;
+  monthlyStreams?: ArtistSpotifyMonthlyStream[];
+  monthlyListeners?: ArtistSpotifyMonthlyListener[];
   geo?: {
     topCities?: Array<{ city: string; country?: string; listeners?: number }>;
   };
@@ -66,6 +68,16 @@ export interface ArtistSpotifyGrowth {
   streamsPercent?: number;
   listenersDelta?: number;
   listenersPercent?: number;
+}
+
+export interface ArtistSpotifyMonthlyStream {
+  month: string;
+  streams: number;
+}
+
+export interface ArtistSpotifyMonthlyListener {
+  month: string;
+  listeners: number;
 }
 
 export function artistSpotifySnapshotMetadata(): ContextDocMetadata {
@@ -114,6 +126,8 @@ export function parseArtistSpotifySnapshotJsonResult(body: string): ArtistSpotif
           skipRate: toFiniteNumber(parsed.metrics.skipRate),
         },
         dailyStreams: normalizeDailyStreams(parsed.dailyStreams),
+        monthlyStreams: normalizeMonthlyStreams(parsed.monthlyStreams),
+        monthlyListeners: normalizeMonthlyListeners(parsed.monthlyListeners),
         dataSource: normalizeDataSource(parsed.dataSource),
         geo: normalizeGeo(parsed.geo),
         tracks: normalizeTracks(parsed.tracks),
@@ -189,6 +203,28 @@ export function calculateArtistSpotifyGrowth(
         ? ((current.listeners! - previous.listeners!) / previous.listeners!) * 100
         : undefined,
   };
+}
+
+/** Provider-backed calendar-month streams, oldest first. */
+export function buildArtistSpotifyMonthlyStreams(
+  snapshot: ArtistSpotifySnapshot | null | undefined,
+  now = new Date(),
+): ArtistSpotifyMonthlyStream[] {
+  if (!snapshot) return [];
+  const captured = normalizeMonthlyStreams(snapshot.monthlyStreams) ?? [];
+  const derived = captured.length > 0
+    ? captured
+    : bucketDailyStreamsByMonth(snapshot.dailyStreams ?? []);
+  return completedMonths(derived, now).slice(-12);
+}
+
+/** Provider-backed calendar-month listener history, oldest first. */
+export function buildArtistSpotifyMonthlyListeners(
+  snapshot: ArtistSpotifySnapshot | null | undefined,
+  now = new Date(),
+): ArtistSpotifyMonthlyListener[] {
+  if (!snapshot) return [];
+  return completedMonths(normalizeMonthlyListeners(snapshot.monthlyListeners) ?? [], now).slice(-12);
 }
 
 export function serializeArtistSpotifySnapshotBody(
@@ -271,4 +307,65 @@ function normalizeDailyStreams(value: unknown): ArtistSpotifySnapshot['dailyStre
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([date, streams]) => ({ date, streams }));
   return points.length > 0 ? points : undefined;
+}
+
+function normalizeMonthlyStreams(value: unknown): ArtistSpotifySnapshot['monthlyStreams'] {
+  if (!Array.isArray(value)) return undefined;
+  const byMonth = new Map<string, number>();
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const candidate = item as { month?: unknown; streams?: unknown };
+    const month = normalizeMonth(candidate.month);
+    const streams = toFiniteNumber(candidate.streams);
+    if (!month || streams === undefined || streams < 0) continue;
+    byMonth.set(month, streams);
+  }
+  const points = [...byMonth.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([month, streams]) => ({ month, streams }));
+  return points.length > 0 ? points : undefined;
+}
+
+function normalizeMonthlyListeners(value: unknown): ArtistSpotifySnapshot['monthlyListeners'] {
+  if (!Array.isArray(value)) return undefined;
+  const byMonth = new Map<string, number>();
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const candidate = item as { month?: unknown; listeners?: unknown };
+    const month = normalizeMonth(candidate.month);
+    const listeners = toFiniteNumber(candidate.listeners);
+    if (!month || listeners === undefined || listeners < 0) continue;
+    byMonth.set(month, listeners);
+  }
+  const points = [...byMonth.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([month, listeners]) => ({ month, listeners }));
+  return points.length > 0 ? points : undefined;
+}
+
+function bucketDailyStreamsByMonth(
+  dailyStreams: NonNullable<ArtistSpotifySnapshot['dailyStreams']>,
+): ArtistSpotifyMonthlyStream[] {
+  const byMonth = new Map<string, number>();
+  for (const point of dailyStreams) {
+    const month = point.date.slice(0, 7);
+    if (!normalizeMonth(month)) continue;
+    byMonth.set(month, (byMonth.get(month) ?? 0) + point.streams);
+  }
+  return [...byMonth.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([month, streams]) => ({ month, streams }));
+}
+
+function completedMonths<T extends { month: string }>(points: T[], now: Date): T[] {
+  const currentMonth = Number.isNaN(now.getTime())
+    ? new Date().toISOString().slice(0, 7)
+    : now.toISOString().slice(0, 7);
+  return points.filter((point) => point.month < currentMonth);
+}
+
+function normalizeMonth(value: unknown): string | undefined {
+  const month = normalizeInlineText(value);
+  if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return undefined;
+  return month;
 }

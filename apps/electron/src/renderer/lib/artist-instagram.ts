@@ -8,10 +8,12 @@ export {
   ARTIST_INSTAGRAM_SNAPSHOT_CONTEXT_SLUG,
   artistInstagramSnapshotMetadata,
   buildArtistInstagramGrowthHistory,
+  buildArtistInstagramMonthlyFollowers,
   parseArtistInstagramSnapshotDocResult,
   parseArtistInstagramSnapshotJsonResult,
   serializeArtistInstagramSnapshotBody,
   type ArtistInstagramGrowthPoint,
+  type ArtistInstagramMonthlyFollower,
   type ArtistInstagramSnapshot,
   type ArtistInstagramSnapshotParseResult,
 } from '@craft-agent/shared/artist-context'

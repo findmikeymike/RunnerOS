@@ -59,7 +59,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
           thinkingLevel: 'high',
           prompt: `Run the read-only Instagram Growth Snapshot for this Artist HQ workspace.
 
-Load the instagram-growth-snapshot skill. If no exact Instagram profile was named, select the first ready Instagram profile returned by the live Printing Press Social catalog, preserving catalog order. Verify the visible account, read its Insights for the last 14 completed days or the nearest visible supported range, save an immutable snapshot, and update Workspace Context slug artist-instagram-snapshot.
+Load the instagram-growth-snapshot skill. If no exact Instagram profile was named, select the first ready Instagram profile returned by the live Printing Press Social catalog, preserving catalog order. Verify the visible account, read its current Insights plus every completed month of follower history the provider exposes, save an immutable snapshot, and update Workspace Context slug artist-instagram-snapshot.
 
 Do not publish, reply, DM, follow, or change account settings. Never fabricate missing metrics. Keep the final note short: profile, actual reporting window, follower growth or decline, reach, interactions, and blockers.`,
         },

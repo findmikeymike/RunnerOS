@@ -11,6 +11,7 @@ export interface NormalizedInstagramSnapshot {
   windowDays: number | null
   profile: { profile: string; handle: string | null; accountUrl: string | null }
   metrics: Record<'followers' | 'followerDelta' | 'accountsReached' | 'accountsEngaged' | 'interactions' | 'profileVisits' | 'likes' | 'comments', number | null>
+  monthlyFollowers: Array<{ month: string; followers?: number; net?: number }>
   partial: boolean
   errors: string[]
   updatedAt: string
@@ -31,6 +32,8 @@ export function normalizeInstagramCapture(input: unknown, now = new Date()): Nor
   const normalizedMetrics = Object.fromEntries(metricNames.map((name) => [name, metric(metrics[name], name === 'followerDelta')])) as NormalizedInstagramSnapshot['metrics']
   const missing = metricNames.filter((name) => normalizedMetrics[name] === null)
   if (missing.length) errors.push(`Metrics not visible: ${missing.join(', ')}.`)
+  const monthlyFollowers = normalizeMonthlyFollowers(root.monthlyFollowers, errors)
+  if (monthlyFollowers.length < 2) errors.push('Fewer than two completed months of follower history were captured.')
 
   return {
     version: 1,
@@ -43,7 +46,8 @@ export function normalizeInstagramCapture(input: unknown, now = new Date()): Nor
       accountUrl: string(profile.accountUrl),
     },
     metrics: normalizedMetrics,
-    partial: root.partial === true || missing.length > 0 || positiveInteger(root.windowDays) === null,
+    monthlyFollowers,
+    partial: root.partial === true || missing.length > 0 || positiveInteger(root.windowDays) === null || monthlyFollowers.length < 2,
     errors: [...new Set(errors)],
     updatedAt: now.toISOString(),
   }
@@ -107,6 +111,40 @@ function metric(value: unknown, signed: boolean): number | null {
 
 function positiveInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+}
+
+function normalizeMonthlyFollowers(
+  value: unknown,
+  errors: string[],
+): Array<{ month: string; followers?: number; net?: number }> {
+  if (value == null) return []
+  if (!Array.isArray(value)) {
+    errors.push('Monthly follower history was not an array and was ignored.')
+    return []
+  }
+  const byMonth = new Map<string, { month: string; followers?: number; net?: number }>()
+  value.forEach((item, index) => {
+    const candidate = record(item)
+    const month = string(candidate.month)
+    if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      errors.push(`Invalid monthlyFollowers[${index}] month was ignored.`)
+      return
+    }
+    const followers = metric(candidate.followers, false)
+    const net = metric(candidate.net, true)
+    if (followers === null && net === null) {
+      errors.push(`monthlyFollowers[${index}] had no usable follower value and was ignored.`)
+      return
+    }
+    byMonth.set(month, {
+      month,
+      ...(followers === null ? {} : { followers }),
+      ...(net === null ? {} : { net }),
+    })
+  })
+  return [...byMonth.values()]
+    .sort((left, right) => left.month.localeCompare(right.month))
+    .slice(-12)
 }
 
 if (import.meta.main) {

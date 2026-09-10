@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   artistInstagramSnapshotMetadata,
   buildArtistInstagramGrowthHistory,
+  buildArtistInstagramMonthlyFollowers,
   parseArtistInstagramSnapshotDocResult,
   parseArtistInstagramSnapshotJsonResult,
   serializeArtistInstagramSnapshotBody,
@@ -9,6 +10,8 @@ import {
 } from './instagram.ts';
 import {
   artistSpotifySnapshotMetadata,
+  buildArtistSpotifyMonthlyListeners,
+  buildArtistSpotifyMonthlyStreams,
   buildArtistSpotifyStreamHistory,
   calculateArtistSpotifyGrowth,
   parseArtistSpotifySnapshotDocResult,
@@ -93,6 +96,57 @@ describe('spotify snapshot', () => {
     expect(result.snapshot?.dailyStreams).toEqual([
       { date: '2026-08-01', streams: 15 },
       { date: '2026-08-02', streams: 20 },
+    ]);
+  });
+
+  test('monthly Spotify history is normalized and available from one snapshot', () => {
+    const result = parseArtistSpotifySnapshotJsonResult(
+      json({
+        snapshotDate: '2026-09-09',
+        metrics: {},
+        monthlyStreams: [
+          { month: '2026-08', streams: 1200 },
+          { month: '2026-07', streams: 900 },
+          { month: '2026-08', streams: 1250 },
+          { month: '2026-09', streams: 9999 },
+          { month: '2026-13', streams: 9999 },
+        ],
+        monthlyListeners: [
+          { month: '2026-07', listeners: 400 },
+          { month: '2026-08', listeners: 550 },
+          { month: '2026-09', listeners: 9999 },
+          { month: 'bad', listeners: 9999 },
+        ],
+      }),
+    );
+
+    expect(buildArtistSpotifyMonthlyStreams(result.snapshot, new Date('2026-09-09T12:00:00Z'))).toEqual([
+      { month: '2026-07', streams: 900 },
+      { month: '2026-08', streams: 1250 },
+    ]);
+    expect(buildArtistSpotifyMonthlyListeners(result.snapshot, new Date('2026-09-09T12:00:00Z'))).toEqual([
+      { month: '2026-07', listeners: 400 },
+      { month: '2026-08', listeners: 550 },
+    ]);
+  });
+
+  test('monthly streams can be derived immediately from captured daily history', () => {
+    const snapshot = parseArtistSpotifySnapshotJsonResult(
+      json({
+        snapshotDate: '2026-09-09',
+        metrics: {},
+        dailyStreams: [
+          { date: '2026-07-30', streams: 10 },
+          { date: '2026-07-31', streams: 20 },
+          { date: '2026-08-01', streams: 30 },
+          { date: '2026-09-01', streams: 999 },
+        ],
+      }),
+    ).snapshot;
+
+    expect(buildArtistSpotifyMonthlyStreams(snapshot, new Date('2026-09-09T12:00:00Z'))).toEqual([
+      { month: '2026-07', streams: 30 },
+      { month: '2026-08', streams: 30 },
     ]);
   });
 
@@ -267,6 +321,55 @@ describe('instagram snapshot', () => {
     expect(history).toEqual([
       { date: '2026-07-01', followerDelta: 4 },
       { date: '2026-08-01', followerDelta: 10 },
+    ]);
+  });
+
+  test('monthly Instagram history works on first capture and derives totals', () => {
+    const snapshot = parseArtistInstagramSnapshotJsonResult(
+      json({
+        snapshotDate: '2026-09-09',
+        profile: { profile: 'a' },
+        metrics: { followers: 1100 },
+        monthlyFollowers: [
+          { month: '2026-06', net: 20 },
+          { month: '2026-07', net: -5 },
+          { month: '2026-08', net: 35 },
+          { month: '2026-08', net: 40 },
+          { month: '2026-09', net: 999 },
+          { month: 'bad', net: 999 },
+        ],
+      }),
+    ).snapshot!;
+
+    expect(buildArtistInstagramMonthlyFollowers(
+      [snapshot],
+      new Date('2026-09-09T12:00:00Z'),
+    )).toEqual([
+      { month: '2026-06', followers: 1065, net: 20 },
+      { month: '2026-07', followers: 1060, net: -5 },
+      { month: '2026-08', followers: 1100, net: 40 },
+    ]);
+  });
+
+  test('monthly Instagram net movement derives from month-end totals', () => {
+    const snapshot = parseArtistInstagramSnapshotJsonResult(
+      json({
+        snapshotDate: '2026-09-09',
+        profile: { profile: 'a' },
+        metrics: { followers: 120 },
+        monthlyFollowers: [
+          { month: '2026-07', followers: 100 },
+          { month: '2026-08', followers: 120 },
+        ],
+      }),
+    ).snapshot!;
+
+    expect(buildArtistInstagramMonthlyFollowers(
+      [snapshot],
+      new Date('2026-09-09T12:00:00Z'),
+    )).toEqual([
+      { month: '2026-07', followers: 100, net: undefined },
+      { month: '2026-08', followers: 120, net: 20 },
     ]);
   });
 });

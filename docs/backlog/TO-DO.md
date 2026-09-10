@@ -1,7 +1,7 @@
 ---
 status: current
 owner: unassigned
-last_verified: 2026-09-08
+last_verified: 2026-09-09
 source_of_truth: true
 ---
 
@@ -32,6 +32,7 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 
 ### Product Intelligence
 
+- [ ] **Finish HQ monthly performance live acceptance.** Monthly Spotify streams/listeners and Instagram follower-growth capture contracts, normalization, first-run charts, month-over-month summaries, and modal detail rows are implemented. Remaining: one real Spotify for Artists capture, one real Instagram Insights capture, and visual verification in the canonical Electron app. Source: [HQ Performance Monthly Widgets](../creator-command-center/49-hq-performance-monthly-widgets-spec.md).
 - [ ] **Finish Signals live acceptance.** `NOW`. The three implementation slices and report/recovery hardening are integrated. UX commit `fc3a793fa` adds shared Channels & schedule, distinct one-off review, report selection, and Saved insights; its combined landing/checks are tracked in the [consolidation audit](../audits/artist-os-consolidation-2026-09-08.md). Remaining: approved live-account collection, spoken-summary, failure/recovery, and handoff acceptance. Source: [Signals](../creator-command-center/47-signals-your-world-spec.md).
 
 - [ ] **Finish the State of Play V2 release gate.** Implemented: operational adapters for Outputs, Scheduled Work, workflows, automations, approvals, campaign deadlines, and release-critical asset gaps; source health and stale-evidence windows; durable ranked recommendations and lifecycle history; guarded launch/retry/defer actions; objective outcome evidence and usefulness feedback; exact semantic-intent duplicate suppression with legacy migration; same-server launch serialization; rendered control coverage; and explicit regeneration. Remaining: live Electron smoke, campaign-scoped source-health UI, additional domain-specific completion-criterion generators, and a distributed Team Mode lease. Source: [State of Play Opportunity Engine](../creator-command-center/14-state-of-play-opportunity-engine-spec.md).

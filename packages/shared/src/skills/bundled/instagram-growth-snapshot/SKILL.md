@@ -32,8 +32,9 @@ Use this skill for manual or weekly read-only Instagram Insights checks. One Soc
    - content interactions
    - profile visits
    - aggregate likes and comments, when visible
-6. Do not scan individual posts when aggregate Insights are available. If aggregate likes/comments are unavailable and a post-level fallback is genuinely useful, inspect only posts published inside the reporting window, mark the snapshot partial, and state the limitation.
-7. Save the raw observed JSON under `$CRAFT_WORKSPACE_PATH/data/instagram/captures/<YYYY-MM-DD>.json`.
+6. Open the follower-history view and capture every completed month Instagram exposes, up to 12 months. Capture month-end followers, net follower change, or both. Provider chart labels/hover values are preferred; reasonable whole-number chart estimates are acceptable for the directional HQ visual. Never invent a month the provider does not show.
+7. Do not scan individual posts when aggregate Insights are available. If aggregate likes/comments are unavailable and a post-level fallback is genuinely useful, inspect only posts published inside the reporting window, mark the snapshot partial, and state the limitation.
+8. Save the raw observed JSON under `$CRAFT_WORKSPACE_PATH/data/instagram/captures/<YYYY-MM-DD>.json`.
 
 Use this raw capture shape. Missing values are `null`, never zero:
 
@@ -52,6 +53,10 @@ Use this raw capture shape. Missing values are `null`, never zero:
     "likes": 330,
     "comments": 60
   },
+  "monthlyFollowers": [
+    { "month": "2026-06", "followers": 4150, "net": 24 },
+    { "month": "2026-07", "followers": 4187, "net": 37 }
+  ],
   "partial": false,
   "errors": []
 }
@@ -69,13 +74,13 @@ Normalize the capture into an immutable snapshot:
 
 The script writes `data/instagram/snapshots/<YYYY-MM-DD>-insights.json` and returns a `contextPayload`. Write that payload to Workspace Context slug `artist-instagram-snapshot` so Artist HQ Social Pulse updates immediately.
 
-Finish with a short private note: reporting window, follower growth/decline, reach, interactions, and any missing data.
+Finish with a short private note: reporting window, captured month range, follower growth/decline, reach, interactions, and any missing data.
 
 ## Failure Rules
 
 - This job is read-only and needs no approval.
 - Never publish, reply, DM, follow, edit, or change account settings.
 - Never record passwords, cookies, tokens, recovery codes, or 2FA secrets.
-- Never fabricate hidden or unavailable metrics.
+- Never fabricate hidden metrics or months. Approximate monthly chart readings must still come from visible provider history.
 - Never overwrite a past snapshot. Same-date reruns must stop or use a later capture date after confirming the data is actually newer.
 - If the visible account does not match the saved profile, stop without reading analytics.
