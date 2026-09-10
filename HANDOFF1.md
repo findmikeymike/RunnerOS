@@ -124,8 +124,12 @@ blocks, stored per workspace.
 - `packages/shared/src/hq-state/composer.ts` aggregates them into the HQ "State
   of Play" and the "Needs attention" list.
 - System prompt composition: `packages/shared/src/agent-prompt/compose.ts`.
-  Note: prompt assembly is **duplicated** in `SessionManager.ts` — known drift
-  risk, check both if prompts behave oddly.
+  Chat and server launches share verified context preparation in
+  `packages/server-core/src/agent-launch/context.ts` and reference/skill-selection
+  policy in `packages/shared/src/agent-definitions/references.ts`. Focused and
+  default background launches use strict references; unfocused interactive chat
+  warns and omits unavailable references. Keep transport-specific skill permission
+  checks and broadcasts intact.
 - Memory is markdown files (`~/.agents/USER.md`, `agents/<slug>/MEMORY.md`) with
   lexical recall and tombstones, not a vector store.
 - `get_artist_context` is **HNIC-only** (Artist Manager). Every other agent uses

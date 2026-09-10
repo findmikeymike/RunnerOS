@@ -476,3 +476,32 @@ describe('focused optional adapters', () => {
     expect(options.launchReceipt?.injected.sources).toEqual([]);
   });
 });
+
+test('unfocused launch replaces caller cached canon with freshly prepared server context', async () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  let refreshes = 0
+  const doc = (body: string) => ({ slug: 'release-kit', metadata: { name: 'Release Kit', enabled: true, routing: { mode: 'broadcast' as const } }, body, path: '/tmp/context', workspaceRootPath: '/tmp/ws' })
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { electronAPI: {
+    listWorkspaceContextDocsForAgent: async () => { refreshes++; return [doc('Fresh approved canon')] },
+    listUserMemory: async () => [], listAgentMemory: async () => [], listAgentSessions: async () => [], getWorkspaces: async () => [],
+  } } })
+  try {
+    let created: CreateSessionOptions | undefined
+    await openAgentSessionComposer({ workspaceId: 'ws-1', agent: makeAgent(), skills: [], sources: [], contextDocs: [doc('Stale cached canon')],
+      navigateOnCreate: false, onInputChange: () => {}, onCreateSession: async (_workspace, options) => { created = options; return { id: 'session' } as Session },
+    })
+    expect(refreshes).toBe(1)
+    expect(created?.customSystemPrompt).toContain('Fresh approved canon')
+    expect(created?.customSystemPrompt).not.toContain('Stale cached canon')
+  } finally {
+    if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow)
+    else Reflect.deleteProperty(globalThis, 'window')
+  }
+})
+
+test('unfocused launch excludes disconnected required sources from prompt and receipt', () => {
+  const agent = { ...makeAgent(), metadata: { ...makeAgent().metadata, sources: ['disconnected'] } }
+  const options = buildAgentCreateSessionOptions(agent, { skills: [], sources: [makeSource('disconnected', false)] })
+  expect(options.launchReceipt?.injected.sources).toEqual([])
+  expect(options.customSystemPrompt).not.toContain('https://example.com')
+})
