@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from 'bun:test';
+import * as policy from '../../../shared/src/agent/mode-manager.ts';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -102,7 +103,49 @@ test('certified web reads use current owner and bounded WebFetch approval', asyn
   const f = fixture(); let current = true;
   const authorize = createDurableReadAuthorization({ configRoot: f.configRoot, resolveBinding: () => f.binding, assertRunPrincipal() { if (!current) throw new Error('principal-revoked'); }, now: () => 1000 });
   const request = { ...f.request, tool: 'web_fetch', input: { url: 'https://example.com/article' } };
-  const approval = await authorize(request, { ...f.context, deadlineAt: 2000 });
+  const approval = await authorize(request, { ...f.context, deadlineAt: 2000, webReadUrls: ['https://example.com/article'] });
   expect(approval.allowed).toBe(true); expect(approval.requiresApproval).toBe(true); expect(approval.approvalExpiresAt).toBe(2000);
   current = false; await expect(authorize(request, f.context)).rejects.toThrow('principal-revoked');
+});
+
+test('redirect authorization checks every pinned destination against current policy', async () => {
+  const f = fixture(), first = 'https://example.com/article', destination = 'https://example.com/moved';
+  const checked: unknown[] = [], original = policy.shouldAllowToolInMode;
+  const spy = spyOn(policy, 'shouldAllowToolInMode').mockImplementation((tool, input, mode, options) => {
+    checked.push(input); if (tool === 'WebFetch' && (input as { url?: string }).url === destination) return { allowed: false, reason: 'current-policy-denial' };
+    return original(tool, input, mode, options);
+  }); cleanup.push(() => spy.mockRestore());
+  const authorize = createDurableReadAuthorization({ configRoot: f.configRoot, resolveBinding: () => f.binding, assertRunPrincipal() {} });
+  const request = { ...f.request, tool: 'web_fetch', input: { url: first } }, context = { ...f.context, webReadUrls: [first, destination] };
+  expect((await authorize(request, context)).allowed).toBe(true);
+  expect((await authorize(request, { ...context, webReadRedirects: false })).allowed).toBe(true);
+  checked.length = 0;
+  expect((await authorize(request, { ...context, webReadRedirects: true })).allowed).toBe(false);
+  expect(checked).toEqual([{ url: first }, { url: destination }]);
+  expect((await authorize(request, { ...f.context, webReadRedirects: true })).allowed).toBe(false);
+});
+
+test('runner rechecks redirect destination policy after asynchronous authorization before dispatch', async () => {
+  const f = fixture(), url = 'https://example.com/article', destination = 'https://example.com/moved';
+  const journal = new DurableJournal({ configRoot: f.configRoot, key: randomBytes(32) }); cleanup.push(() => journal.close());
+  let denyDestination = false, dispatches = 0;
+  const original = policy.shouldAllowToolInMode;
+  const spy = spyOn(policy, 'shouldAllowToolInMode').mockImplementation((tool, input, mode, options) => denyDestination && tool === 'WebFetch' && (input as { url?: string }).url === destination ? { allowed: false, reason: 'revoked-target' } : original(tool, input, mode, options));
+  cleanup.push(() => spy.mockRestore());
+  const runner = new DurableReadRunner({ journal, hostRuntime: { appRootPath: f.root, isPackaged: false }, resolveBinding: () => f.binding,
+    authorizeTool: async (_request, context) => {
+      expect(context.webReadRedirects).toBe(true); expect(context.webReadUrls).toEqual([url, destination]); expect(Object.isFrozen(context.webReadUrls)).toBe(true);
+      denyDestination = true;
+      return { principalId: 'alice', credentialIdentity: f.binding.credentialIdentity, policyRevision: 'p', allowed: true, requiresApproval: false, approvalExpiresAt: f.context.deadlineAt };
+    },
+    createBackend: args => ({ async *chat() { const bridge = args.coreConfig.durableExecution!;
+      await bridge.checkpoint({ kind: 'model-start', turn: 0, context: {} });
+      await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'toolUse', content: [{ type: 'toolCall', id: 'web', name: 'web_fetch', arguments: { url } }] } });
+      await bridge.checkpoint({ kind: 'tool-start', turn: 0, callId: 'web', tool: 'web_fetch', input: { url } }); dispatches++;
+    }, async abort() {}, destroy() {} }),
+  });
+  const input: DurableReadInput = { runId: randomUUID(), commandId: 'admit', workspaceId: 'workspace', connectionSlug: 'fixture', model: 'model', prompt: 'Read', systemPrompt: 'Read only', allowedTools: ['web_fetch'], webReadUrls: [url, destination], webReadRedirects: true, maxOutputTokens: 100, maxModelAttempts: 4, deadlineAt: f.context.deadlineAt, approvalPrincipalId: 'alice', costPolicy: { unit: 'verified-free', maxTotalUnits: 0, maxUnitsPerAttempt: 0 } };
+  const workflow = { slug: 'web', source: 'global' as const, path: f.root, body: '', metadata: { execution: 'durable-local-read' as const, name: 'Web', description: '', trigger: { type: 'manual' as const }, outputs: { mode: 'none' as const }, webReadUrls: [url, destination], webReadRedirects: true, steps: [{ id: 'read', agent: 'reader', input: 'Read article' }] } };
+  await expect(runner.admitWorkflow(workflow, { ...input, resolvedAgentSlug: 'reader', webReadRedirects: false })).rejects.toThrow('unsupported-durable-read-workflow');
+  const saved = await runner.start(input); expect(saved.status).toBe('paused'); expect(dispatches).toBe(0); expect(saved.turns[0]!.calls[0]!.attempts).toBe(0); await runner.quiesce();
 });

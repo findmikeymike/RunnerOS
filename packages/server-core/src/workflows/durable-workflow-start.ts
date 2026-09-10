@@ -92,6 +92,7 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
         ...(workflow.metadata.steps[0]!.taskModeId ? { resolvedTaskModeId: workflow.metadata.steps[0]!.taskModeId } : {}),
         ...(workflow.metadata.steps.length > 1 || roleRouting ? { resolvedSteps } : {}),
         ...(workflow.metadata.webReadUrls ? { webReadUrls: [...workflow.metadata.webReadUrls] } : {}),
+        ...(workflow.metadata.webReadRedirects !== undefined ? { webReadRedirects: workflow.metadata.webReadRedirects } : {}),
         allowedTools: ['read', 'grep', 'find', 'ls', ...(workflow.metadata.webReadUrls ? ['web_fetch' as const] : [])] as const, maxOutputTokens: 4096,
         maxModelAttempts: 8, deadlineAt: Date.now() + 10 * 60_000,
         costPolicy: { unit: 'model-requests' as const, maxTotalUnits: 8, maxUnitsPerAttempt: 1 },

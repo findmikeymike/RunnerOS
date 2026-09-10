@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { digest } from '../../../shared/src/durable-execution/index.ts';
 import { getAppPermissionsDir, getWorkspacePermissionsPath, PermissionsConfigSchema, permissionsConfigCache } from '../../../shared/src/agent/permissions-config.ts';
+import { isDurableWebReadInput } from '../../../shared/src/protocol/durable-execution.ts';
 import { shouldAllowToolInMode } from '../../../shared/src/agent/mode-manager.ts';
 import type { DurableReadRunnerOptions } from './durable-read-runner.ts';
 
@@ -36,7 +37,11 @@ export function createDurableReadAuthorization(options: {
     permissionsConfigCache.invalidateWorkspace(binding.workspace.rootPath);
     const tool = { read: 'Read', grep: 'Grep', find: 'Glob', ls: 'Glob', web_fetch: 'WebFetch' }[request.tool];
     const now = (options.now ?? Date.now)();
-    const allowed = !!tool && now < context.deadlineAt && shouldAllowToolInMode(tool, request.input, 'safe', { permissionsContext: { workspaceRootPath: binding.workspace.rootPath, activeSourceSlugs: [] } }).allowed;
+    const webGrantValid = request.tool !== 'web_fetch' || isDurableWebReadInput(request.input, context.webReadUrls)
+      && (context.webReadRedirects === undefined || typeof context.webReadRedirects === 'boolean');
+    const policyInputs = request.tool === 'web_fetch' && context.webReadRedirects === true
+      ? (context.webReadUrls ?? []).map(url => ({ url })) : [request.input];
+    const allowed = !!tool && webGrantValid && now < context.deadlineAt && policyInputs.every(input => shouldAllowToolInMode(tool, input, 'safe', { permissionsContext: { workspaceRootPath: binding.workspace.rootPath, activeSourceSlugs: [] } }).allowed);
     return { principalId: context.approvalPrincipalId, credentialIdentity: binding.credentialIdentity, policyRevision: revision,
       allowed, requiresApproval: true, approvalExpiresAt: Math.min(context.deadlineAt, now + 15 * 60_000) };
   };

@@ -130,6 +130,8 @@ export interface WorkflowMetadata {
   execution?: 'durable-local-read';
   /** Exact public HTTPS pages approved for durable text reads; no search or downloads. */
   webReadUrls?: string[];
+  /** Follow up to three redirects, exclusively between approved URLs. Default false. */
+  webReadRedirects?: boolean;
   name: string;
   description: string;
   /** Single emoji shown in pickers. */

@@ -26,6 +26,7 @@ export interface DurableReadInput {
   runId: string; commandId: string; workspaceId: string; connectionSlug: string; model: string;
   prompt: string; systemPrompt: string; allowedTools: DurableRunSpec['allowedTools'];
   webReadUrls?: string[];
+  webReadRedirects?: boolean;
   maxOutputTokens: number; deadlineAt: number; maxModelAttempts: number;
   /** Opt-in trusted authorization binding. Omit for the existing certified read path. */
   approvalPrincipalId?: string;
@@ -63,7 +64,7 @@ export interface DurableReadRunnerOptions {
   publishOutput?: typeof ensureDurableTextOutput;
   onOutputPublished?: (workspaceId: string, outputId: string) => void;
   authorizeRun?: (context: { runId: string; workspaceId: string; approvalPrincipalId: string }) => void;
-  authorizeTool?: (request: Extract<DurableCheckpoint, { kind: 'tool-start' }>, context: { runId: string; workspaceId: string; approvalPrincipalId: string; connectionSlug: string; model: string; credentialIdentity: string; deadlineAt: number }) => Promise<DurableToolAuthorization>;
+  authorizeTool?: (request: Extract<DurableCheckpoint, { kind: 'tool-start' }>, context: { runId: string; workspaceId: string; approvalPrincipalId: string; connectionSlug: string; model: string; credentialIdentity: string; deadlineAt: number; webReadUrls?: readonly string[]; webReadRedirects?: boolean }) => Promise<DurableToolAuthorization>;
 }
 export interface DurableReadControlResult {
   receipt: DurableControlReceipt;
@@ -133,6 +134,7 @@ function publicationId(workspaceId: string, runId: string): string {
 export function supportsDurableReadWorkflow(workflow: LoadedWorkflow): boolean {
   try { assertDurableTriggerDeclarations(workflow); } catch { return false; }
   if (workflow.metadata.webReadUrls !== undefined && !isDurableWebReadUrls(workflow.metadata.webReadUrls)) return false;
+  if (workflow.metadata.webReadRedirects !== undefined && (typeof workflow.metadata.webReadRedirects !== 'boolean' || workflow.metadata.webReadUrls === undefined)) return false;
   const triggerNames = new Set((workflow.metadata.trigger.inputs ?? []).map(definition => definition.name));
   if (workflow.parseWarnings?.length || workflow.metadata.trigger.type !== 'manual' || !supportsPublication(workflow)
     || workflow.metadata.steps.length < 1 || workflow.metadata.steps.length > 8) return false;
@@ -226,7 +228,7 @@ export class DurableReadRunner {
     if (!supportsDurableReadWorkflow(workflow) || step?.agent !== input.resolvedAgentSlug || step?.taskModeId !== input.resolvedTaskModeId) {
       return Promise.reject(new Error('unsupported-durable-read-workflow'));
     }
-    if (canonical(input.webReadUrls ?? null) !== canonical(workflow.metadata.webReadUrls ?? null)) return Promise.reject(new Error('unsupported-durable-read-workflow'));
+    if (canonical(input.webReadUrls ?? null) !== canonical(workflow.metadata.webReadUrls ?? null) || input.webReadRedirects !== workflow.metadata.webReadRedirects) return Promise.reject(new Error('unsupported-durable-read-workflow'));
     const { resolvedAgentSlug: _slug, resolvedTaskModeId: _mode, resolvedSteps, ...rest } = input;
     if ((workflow.metadata.steps.length > 1 || workflow.metadata.steps.some(step => step.modelRole)) && (!resolvedSteps || resolvedSteps.length !== workflow.metadata.steps.length
       || resolvedSteps.some((resolved, i) => resolved.id !== workflow.metadata.steps[i]!.id || resolved.agent !== workflow.metadata.steps[i]!.agent || resolved.taskModeId !== workflow.metadata.steps[i]!.taskModeId || resolved.modelPlan?.role !== workflow.metadata.steps[i]!.modelRole || !resolved.systemPrompt?.trim()))) {
@@ -280,6 +282,7 @@ export class DurableReadRunner {
       credentialIdentity: binding.credentialIdentity, runtimeManifest: { ...DURABLE_RUNTIME_MANIFEST },
       createdAt, commandId: requested.commandId, model: requested.model, allowedTools: requested.allowedTools,
       ...(requested.webReadUrls ? { webReadUrls: requested.webReadUrls } : {}),
+      ...(requested.webReadRedirects !== undefined ? { webReadRedirects: requested.webReadRedirects } : {}),
       maxOutputTokens: requested.maxOutputTokens, maxModelAttempts: requested.maxModelAttempts, deadlineAt: requested.deadlineAt,
       ...(output?.mode === 'final-step' ? { publication: { outputId: publicationId(requested.workspaceId, requested.runId),
         kind: (output.kind ?? 'document') as 'report' | 'document', title: output.title?.trim() || workflow!.metadata.name.trim(),
@@ -466,11 +469,13 @@ export class DurableReadRunner {
           permissionsConfigCache.invalidateWorkspace(frozen.workspaceRoot);
           if (request.tool === 'web_fetch' && !isDurableWebReadInput(request.input, initial.spec.webReadUrls)) throw new Error('durable-web-read-not-authorized');
           const policyTool = { read: 'Read', grep: 'Grep', find: 'Glob', ls: 'Glob', web_fetch: 'WebFetch' }[request.tool];
-          if (!policyTool || !shouldAllowToolInMode(policyTool, request.input, 'safe', { permissionsContext: { workspaceRootPath: frozen.workspaceRoot, activeSourceSlugs: [] } }).allowed) throw new Error('durable-authorization-blocked');
+          const policyInputs = request.tool === 'web_fetch' && initial.spec.webReadRedirects === true
+            ? initial.spec.webReadUrls!.map(url => ({ url })) : [request.input];
+          if (!policyTool || policyInputs.some(input => !shouldAllowToolInMode(policyTool, input, 'safe', { permissionsContext: { workspaceRootPath: frozen.workspaceRoot, activeSourceSlugs: [] } }).allowed)) throw new Error('durable-authorization-blocked');
         };
         await checkCurrent();
         if (!this.options.authorizeTool) throw new Error('durable-authorization-blocked');
-        const authorization = await this.options.authorizeTool(request, { runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId!, connectionSlug: candidate.connectionSlug, model: candidate.model, credentialIdentity: candidate.credentialIdentity, deadlineAt: initial.spec.deadlineAt });
+        const authorization = await this.options.authorizeTool(request, { runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId!, connectionSlug: candidate.connectionSlug, model: candidate.model, credentialIdentity: candidate.credentialIdentity, deadlineAt: initial.spec.deadlineAt, ...(initial.spec.webReadUrls ? { webReadUrls: Object.freeze([...initial.spec.webReadUrls]) } : {}), ...(initial.spec.webReadRedirects !== undefined ? { webReadRedirects: initial.spec.webReadRedirects } : {}) });
         await checkCurrent();
         if (this.options.readPolicyRevision && this.options.readPolicyRevision(frozen.workspaceRoot) !== authorization.policyRevision) throw new Error('durable-authorization-blocked');
         return authorization;

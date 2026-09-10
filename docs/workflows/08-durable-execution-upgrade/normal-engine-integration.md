@@ -180,3 +180,19 @@ Only this explicit grant enables `web_fetch`; local-only workflows keep their cu
 Each request has a 15-second total DNS/connection/body deadline, a 512 KiB body ceiling and a 50,000-character text ceiling. HTML scripts/styles are removed; returned text is wrapped as untrusted source data. Supported responses are uncompressed HTML, XHTML, JSON and plain text. Remote HTTP/tool failures retain existing tool-failure behavior; model-provider fallback is not a remote-tool retry policy.
 
 Saved tool results replay without contacting the website. A process death before the result is saved may repeat the GET within the existing read-attempt limits. This is bounded read recovery, not an exactly-once network guarantee. The public page may change between unsaved attempts; the committed response becomes the replay authority. Journal schema 5 fences older writers on reopen without rewriting old local-run manifests. Connected-account reads and remote writes still require separate certified adapters and are not enabled by this slice.
+
+## Slice 12 — redirects between approved public pages
+
+Workflows can explicitly enable `webReadRedirects: true` alongside `webReadUrls`. Both the starting URL and every redirect destination must already appear in that exact list. Relative redirect locations resolve against the current URL before membership validation. Only HTTP 301, 302, 303, 307 and 308 are supported, with at most three redirects; loops, unapproved destinations and unsafe URLs fail closed. No hostname wildcard or new browsing authority is added.
+
+Each hop resolves and checks its public IPv4 address anew, pins that address into the TLS connection, and verifies the destination certificate. The entire chain shares the original 15-second deadline. Previous responses/connections are destroyed, cookies and credentials are never forwarded, and late errors from superseded connections cannot fail the current hop. The final result identifies its approved source URL. Current WebFetch policy is checked for every possible approved target before dispatch and after awaited authorization; the frozen workflow grant remains the authority for the list, while the per-call approval input identifies the initial URL.
+
+Omitting the flag or setting it false preserves the existing redirect rejection and original tool description byte-for-byte, since saved model contexts include that description. The explicit flag is frozen with the run and preserved on replay. Schema 6 prevents older writers reopening this format while preserving saved earlier runs; already-open mixed-version journal consumers remain unsupported. Recovery still reuses a committed result; an unsaved chain may repeat within the existing read-attempt bounds. This does not enable connected accounts, search, remote writes or automatic redirects for existing workflows.
+
+```yaml
+execution: durable-local-read
+webReadUrls:
+  - https://example.com/old-article
+  - https://example.com/article
+webReadRedirects: true
+```

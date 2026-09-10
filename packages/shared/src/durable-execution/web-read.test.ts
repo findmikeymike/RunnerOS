@@ -49,5 +49,22 @@ test('unavailable host authorization pauses remote read without dispatch', async
 test('schema four upgrades while preserving old local run contents', () => {
   const f = fixture(); const local = { ...f.spec, allowedTools: ['read'] as const, webReadUrls: undefined };
   f.journal.admit(JSON.parse(JSON.stringify({ ...local, allowedTools: [...local.allowedTools] }))); (f.journal as any).db.exec('PRAGMA user_version=4'); f.reopen();
-  expect((f.journal as any).db.prepare('PRAGMA user_version').get().user_version).toBe(5); expect(f.journal.get('r', 'w').spec.allowedTools).toEqual(['read']);
+  expect((f.journal as any).db.prepare('PRAGMA user_version').get().user_version).toBe(6); expect(f.journal.get('r', 'w').spec.allowedTools).toEqual(['read']);
+});
+
+test('redirect grants are frozen, opt-in, and require an existing URL scope', () => {
+  for (const flag of [undefined, false, true]) {
+    const f = fixture(); if (flag !== undefined) f.spec.webReadRedirects = flag;
+    f.journal.admit(f.spec); const claim = f.journal.claim('r', 'w');
+    expect(f.journal.bridge(claim).descriptor.webReadRedirects).toBe(flag);
+    f.journal.release(claim); f.reopen(); expect(f.journal.get('r', 'w').spec.webReadRedirects).toBe(flag);
+  }
+  for (const flag of ['true', 1, null]) { const f = fixture(); expect(() => f.journal.admit({ ...f.spec, webReadRedirects: flag } as unknown as DurableRunSpec)).toThrow('invalid-durable-admission'); }
+  const f = fixture(), { webReadUrls: _urls, ...local } = f.spec;
+  expect(() => f.journal.admit({ ...local, allowedTools: ['read'], webReadRedirects: false })).toThrow('invalid-durable-admission');
+});
+test('schema five web reads migrate with redirects still disabled by default', () => {
+  const f = fixture(); f.journal.admit(f.spec); (f.journal as any).db.exec('PRAGMA user_version=5'); f.reopen();
+  expect((f.journal as any).db.prepare('PRAGMA user_version').get().user_version).toBe(6);
+  expect(f.journal.get('r', 'w').spec.webReadRedirects).toBeUndefined(); expect(f.journal.get('r', 'w').spec.webReadUrls).toEqual(f.spec.webReadUrls);
 });

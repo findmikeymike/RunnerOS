@@ -362,3 +362,11 @@ test('normal Start pins explicit public web URLs and enables only the certified 
   try { const spec = journal.get(run.id, 'w').spec; expect(spec.webReadUrls).toEqual(['https://example.com/article']); expect(spec.allowedTools).toEqual(['read', 'grep', 'find', 'ls', 'web_fetch']); expect(spec.approvalPrincipalId).toBe('alice'); } finally { journal.close(); f.release(); }
   await f.done;
 });
+
+for (const redirects of [false, true]) test(`normal Start pins explicit redirect opt-in (${redirects})`, async () => {
+  const f = fixture(); Object.assign(f.workflow.metadata, { webReadUrls: ['https://example.com/article'], webReadRedirects: redirects });
+  const run = await f.createRunner().start(f.input); await f.ready;
+  const journal = new DurableJournal({ configRoot: f.root, key: loadDurableKey(f.root, protection) });
+  try { expect(journal.get(run.id, 'w').spec.webReadRedirects).toBe(redirects); } finally { journal.close(); f.release(); }
+  await f.done;
+});

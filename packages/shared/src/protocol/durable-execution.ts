@@ -92,7 +92,7 @@ export async function durableCredentialIdentity(transport: { provider: string; c
   const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }
-/** Exact public-read targets; transport additionally checks DNS and rejects redirects. */
+/** Exact public-read targets; transport checks DNS and permits only explicitly granted redirects. */
 export function isDurableWebReadUrls(value: unknown): value is string[] {
   return Array.isArray(value) && value.length > 0 && value.length <= 8 && new Set(value).size === value.length && value.every(raw => {
     if (typeof raw !== 'string' || raw.length > 4096) return false;
@@ -117,6 +117,8 @@ export interface DurableExecutionDescriptor {
   /** Explicitly certified reads only. Remote reads require an exact frozen URL list. */
   allowedTools: Array<'read' | 'grep' | 'find' | 'ls' | 'web_fetch'>;
   webReadUrls?: string[];
+  /** Opt in to bounded redirects within the same frozen exact URL list. */
+  webReadRedirects?: boolean;
   model: string;
   maxOutputTokens: number;
 }

@@ -30,6 +30,7 @@ export class DurableTurnController {
     if (descriptor.engine !== 'sqlite-v2-readonly-1' || !Number.isSafeInteger(descriptor.createdAt)
       || !Number.isSafeInteger(descriptor.maxOutputTokens) || descriptor.maxOutputTokens < 1
       || descriptor.allowedTools.some(name => !['read', 'grep', 'find', 'ls', 'web_fetch'].includes(name))
+      || (descriptor.webReadRedirects !== undefined && (typeof descriptor.webReadRedirects !== 'boolean' || descriptor.webReadUrls === undefined))
       || (descriptor.allowedTools.includes('web_fetch') ? !isDurableWebReadUrls(descriptor.webReadUrls) : descriptor.webReadUrls !== undefined)) {
       throw new Error('Invalid durable execution descriptor');
     }

@@ -42,3 +42,18 @@ test('approved durable web URLs roundtrip and cannot leak into legacy workflows'
   }
   expect(() => serializeWorkflow({ ...metadata, webReadUrls: valid.webReadUrls }, '')).toThrow('web read');
 });
+
+test('web redirects require an explicit boolean and a durable URL grant', () => {
+  const valid = { ...metadata, execution: 'durable-local-read' as const, webReadUrls: ['https://example.com/article'] };
+  for (const webReadRedirects of [true, false]) {
+    expect(parseWorkflowFile(serializeWorkflow({ ...valid, webReadRedirects }, ''))?.metadata.webReadRedirects).toBe(webReadRedirects);
+    expect(() => serializeWorkflow({ ...metadata, webReadRedirects }, '')).toThrow('web read');
+  }
+  expect(parseWorkflowFile(serializeWorkflow(valid, ''))?.metadata.webReadRedirects).toBeUndefined();
+  for (const webReadRedirects of ['true', 1, null, {}]) {
+    expect(() => serializeWorkflow({ ...valid, webReadRedirects } as unknown as WorkflowMetadata, '')).toThrow('web read');
+    const source = serializeWorkflow(valid, '').replace('webReadUrls:', `webReadRedirects: ${JSON.stringify(webReadRedirects)}\nwebReadUrls:`);
+    expect(parseWorkflowFile(source)).toBeNull();
+  }
+  expect(parseWorkflowFile(serializeWorkflow(metadata, '').replace('name:', 'webReadRedirects: true\nname:'))).toBeNull();
+});

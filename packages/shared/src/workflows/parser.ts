@@ -337,6 +337,7 @@ export function parseWorkflowFile(
   const data = parsed.data as Record<string, unknown>;
   if (hasUnsupportedExecutionField(data)) return null;
   if (data.execution !== undefined && data.execution !== 'durable-local-read') return null;
+  if (data.webReadRedirects !== undefined && (typeof data.webReadRedirects !== 'boolean' || data.webReadUrls === undefined)) return null;
   if (data.webReadUrls !== undefined && (data.execution !== 'durable-local-read' || !isDurableWebReadUrls(data.webReadUrls))) return null;
 
   const name = typeof data.name === 'string' ? data.name.trim() : '';
@@ -436,6 +437,7 @@ export function parseWorkflowFile(
   return {
     metadata: {
       ...(data.execution === 'durable-local-read' ? { execution: data.execution } : {}),
+      ...(data.webReadRedirects !== undefined ? { webReadRedirects: data.webReadRedirects as boolean } : {}),
       ...(data.webReadUrls !== undefined ? { webReadUrls: [...data.webReadUrls as string[]] } : {}),
       name,
       description,
@@ -457,6 +459,7 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
   };
   if (metadata.avatar) data.avatar = metadata.avatar;
   if (metadata.execution !== undefined) data.execution = metadata.execution;
+  if (metadata.webReadRedirects !== undefined) data.webReadRedirects = metadata.webReadRedirects;
   if (metadata.webReadUrls !== undefined) data.webReadUrls = metadata.webReadUrls;
 
   const trigger: Record<string, unknown> = { type: metadata.trigger.type };
@@ -500,6 +503,7 @@ function hasUnsupportedExecutionField(data: Record<string, unknown>): boolean {
 
 function validateSerializableWorkflowMetadata(metadata: WorkflowMetadata): void {
   if (metadata.execution !== undefined && metadata.execution !== 'durable-local-read') throw new Error('Unsupported workflow execution engine.');
+  if (metadata.webReadRedirects !== undefined && (typeof metadata.webReadRedirects !== 'boolean' || metadata.webReadUrls === undefined)) throw new Error('Invalid web read redirect grant.');
   if (metadata.webReadUrls !== undefined && (metadata.execution !== 'durable-local-read' || !isDurableWebReadUrls(metadata.webReadUrls))) throw new Error('Invalid approved web read URLs.');
   if (hasUnsupportedExecutionField(metadata as unknown as Record<string, unknown>)) {
     throw new Error('Unsupported workflow execution fields are not implemented.');

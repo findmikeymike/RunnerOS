@@ -577,7 +577,7 @@ async function ensureSession(): Promise<AgentSession> {
   ];
   const proxyTools = initConfig.durableExecution ? [] : buildProxyTools();
   const permitted = initConfig.durableExecution
-    ? [...builtinDefs, ...(initConfig.durableExecution.webReadUrls ? [createDurableWebFetchTool(initConfig.durableExecution.webReadUrls)] : [])].filter(tool => initConfig!.durableExecution!.allowedTools.includes(tool.name as 'read'))
+    ? [...builtinDefs, ...(initConfig.durableExecution.webReadUrls ? [createDurableWebFetchTool(initConfig.durableExecution.webReadUrls, initConfig.durableExecution.webReadRedirects)] : [])].filter(tool => initConfig!.durableExecution!.allowedTools.includes(tool.name as 'read'))
     : [...builtinDefs, ...webTools, ...proxyTools];
   const wrappedAll = wrapToolsWithHooks(permitted);
   const toolAllowlist = wrappedAll.map(t => t.name);
