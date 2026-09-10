@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadDurableKey } from '@craft-agent/shared/durable-execution';
-import { createElectronDurableProtection } from './durable-workflow-storage';
+import { createElectronDurableProtection, hasSavedDurableWorkflowStorage } from './durable-workflow-storage';
 
 function fixture() {
   let ready = true, available = true, backend = 'keychain', locked = false;
@@ -44,4 +44,22 @@ test('reopens the same protected key and preserves its envelope when the keychai
     f.lock(); expect(() => loadDurableKey(root, f.protection)).toThrow('keychain locked');
     expect(readFileSync(path)).toEqual(envelope);
   } finally { keys.forEach(key => key.fill(0)); rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('disabled-host startup detects saved and partially unavailable recovery storage without opening it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'durable-presence-'));
+  try {
+    expect(hasSavedDurableWorkflowStorage(root)).toBe(false);
+    const directory = join(root, 'durable-execution'); mkdirSync(directory);
+    expect(hasSavedDurableWorkflowStorage(root)).toBe(false);
+    for (const name of ['journal.sqlite', 'journal.sqlite-wal', 'key.envelope']) {
+      writeFileSync(join(directory, name), 'synthetic');
+      expect(hasSavedDurableWorkflowStorage(root)).toBe(true);
+      expect(readFileSync(join(directory, name), 'utf8')).toBe('synthetic');
+      unlinkSync(join(directory, name));
+    }
+    rmSync(directory, { recursive: true }); writeFileSync(directory, 'invalid-directory');
+    expect(hasSavedDurableWorkflowStorage(root)).toBe(true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

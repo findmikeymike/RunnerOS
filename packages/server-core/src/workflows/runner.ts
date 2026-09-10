@@ -103,9 +103,11 @@ export interface WorkflowStartInput {
   triggerInputs: Record<string, unknown>;
   untrustedTriggerInputs?: string[];
   runId?: string;
-  /** Set only by trusted UI transport; internal/automatic callers omit this. */
-  invocation?: 'manual-ui';
+  /** Set by trusted UI transport or the tracked-work scheduler; other callers omit this. */
+  invocation?: 'manual-ui' | 'scheduled-work';
   actor?: { clientId: string; workspaceId?: string };
+  /** Supplied only by the host scheduler from its already persisted attempt. */
+  occurrence?: import('./durable-workflow-occurrence').DurableWorkflowOccurrence;
 }
 
 function freezeStartInput<T>(value: T): T {

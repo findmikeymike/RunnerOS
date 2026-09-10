@@ -9,6 +9,7 @@ interface LocalAuthorityOptions {
   getWorkspaces: () => ReadonlyArray<{ id: string }>;
   /** Current team agent.chat authority; presence in the workspace list is insufficient. */
   assertWorkspacePermission: (workspaceId: string) => void;
+  assertWorkspaceWritePermission?: (workspaceId: string) => void;
 }
 
 /** Single-owner desktop profile only; installation identity is an identifier, not a credential. */
@@ -35,11 +36,20 @@ export function createLocalDurableWorkflowAuthority(options: LocalAuthorityOptio
       return true;
     },
   });
-  return Object.assign(resolvePrincipal, { assertRunPrincipal });
+  const resolveScheduledPrincipal = (workspaceId: string) => {
+    assertRunPrincipal(workspaceId, principal);
+    return principal;
+  };
+  const assertPublicationPrincipal = (workspaceId: string, candidate: string) => {
+    assertRunPrincipal(workspaceId, candidate);
+    if (!options.assertWorkspaceWritePermission) throw new Error('durable-output-permission-unavailable');
+    options.assertWorkspaceWritePermission(workspaceId);
+  };
+  return Object.assign(resolvePrincipal, { assertRunPrincipal, resolveScheduledPrincipal, assertPublicationPrincipal });
 }
 
 /** Called later by startup wiring; does not create or activate a workflow host. */
-export async function createElectronDurableWorkflowAuthority(options: Omit<LocalAuthorityOptions, 'installationId' | 'getWorkspaces' | 'assertWorkspacePermission'>) {
+export async function createElectronDurableWorkflowAuthority(options: Omit<LocalAuthorityOptions, 'installationId' | 'getWorkspaces' | 'assertWorkspacePermission' | 'assertWorkspaceWritePermission'>) {
   const [{ ElectronInstallationIdentityStore }, { getWorkspaces }, { assertTeamPermission }] = await Promise.all([
     import('./licensing/protected-store'), import('@craft-agent/shared/config'), import('@craft-agent/shared/workspaces'),
   ]);
@@ -48,5 +58,9 @@ export async function createElectronDurableWorkflowAuthority(options: Omit<Local
     const workspace = getWorkspaces().find(item => item.id === workspaceId);
     if (!workspace) throw new Error('durable-authority-access-denied');
     assertTeamPermission(workspace.rootPath, 'agent.chat');
+  }, assertWorkspaceWritePermission(workspaceId) {
+    const workspace = getWorkspaces().find(item => item.id === workspaceId);
+    if (!workspace) throw new Error('durable-authority-access-denied');
+    assertTeamPermission(workspace.rootPath, 'files.write');
   } });
 }

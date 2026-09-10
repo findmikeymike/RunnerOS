@@ -2,6 +2,19 @@ import { electronDurableWorkflowLifetime } from './durable-workflow-lifetime';
 import { DurableWorkflowHost, type DurableWorkflowHostOptions } from '@craft-agent/server-core/workflows/durable-workflow-host';
 import type { DurableSafeStorage } from '@craft-agent/shared/durable-execution';
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity';
+import { lstatSync } from 'node:fs';
+import { join } from 'node:path';
+
+/** Presence only: never decrypt or open storage just to decide whether scans may run. */
+export function hasSavedDurableWorkflowStorage(configRoot: string): boolean {
+  for (const name of ['journal.sqlite', 'journal.sqlite-wal', 'key.envelope']) {
+    try { lstatSync(join(configRoot, 'durable-execution', name)); return true; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return true; // unreadable is unknown, not absent
+    }
+  }
+  return false;
+}
 
 /** Narrow Electron surface permits tests without mocking the process-global electron module. */
 export function createElectronDurableProtection(runtime: {

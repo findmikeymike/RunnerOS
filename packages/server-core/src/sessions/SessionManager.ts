@@ -1,4 +1,5 @@
 import { createDurableWorkflowStart } from '../workflows/durable-workflow-start'
+import { DurableWorkflowStartupGate } from '../workflows/durable-workflow-startup-gate'
 import { assertDurableWorkflowAgentMetadata, resolveDurableWorkflowBundle } from '../workflows/durable-workflow-bundle'
 import type { DurableWorkflowHost } from '../workflows/durable-workflow-host'
 import { resolveRuntimeIdentity } from '@craft-agent/shared/config/runtime-identity'
@@ -2253,6 +2254,8 @@ export class SessionManager implements ISessionManager {
   /** Workflow runner — bootstrapped during `initialize()`. */
   private workflowRunner!: WorkflowRunner
   private durableWorkflowStart?: WorkflowRunnerDeps['durableStart']
+  private durableWorkflowHost?: DurableWorkflowHost
+  private readonly scheduledWorkflowStartup = new DurableWorkflowStartupGate()
   private durableWorkflowAdmissionGuard?: (workspaceId: string, workflowSlug: string) => Promise<void>
   private scheduledWorkRunner?: ScheduledWorkRunner
   private automaticPromptAdmissionTail: Promise<void> = Promise.resolve()
@@ -3514,7 +3517,26 @@ export class SessionManager implements ISessionManager {
   }
 
   /** Installed by the local desktop host only after protected durable storage opens. */
+  notifyDurableOutputPublished(workspaceId: string, _outputId: string): void {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (workspace) scheduleHqStateContextRefresh(workspace.rootPath)
+    this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId)
+  }
+
+  deferScheduledWorkForDurableHost(): void { this.scheduledWorkflowStartup.defer() }
+
+  finishDurableWorkflowStartup(): void {
+    // Unknown journal state must not be mistaken for missing runs. Keep scheduled
+    // work deferred if the explicitly enabled recovery host could not open.
+    if (!this.scheduledWorkflowStartup.finish(Boolean(this.durableWorkflowHost))) return
+    for (const workspace of getWorkspaces()) {
+      void this.getScheduledWorkRunner().scanWorkspace(workspace.id, workspace.rootPath)
+        .catch(error => sessionLog.error('[ScheduledWork] Deferred startup scan failed:', error))
+    }
+  }
+
   setDurableWorkflowHost(host: DurableWorkflowHost): void {
+    this.durableWorkflowHost = host
     this.durableWorkflowAdmissionGuard = async (workspaceId, workflowSlug) => {
       if (await host.hasUnfinishedWorkflow(workspaceId, workflowSlug)) {
         throw new Error('This workflow has unfinished work. Open its saved run to continue or stop it.')
@@ -3606,7 +3628,7 @@ export class SessionManager implements ISessionManager {
   private getScheduledWorkRunner(): ScheduledWorkRunner {
     if (!this.scheduledWorkRunner) {
       this.scheduledWorkRunner = new ScheduledWorkRunner({
-        canRunBackgroundWork: canRunWorkspaceBackgroundWork,
+        canRunBackgroundWork: root => this.scheduledWorkflowStartup.allowsScheduledWork() && canRunWorkspaceBackgroundWork(root),
         hasExternalBackgroundWork: () => this.automaticPromptLaneOccupied,
         listWorkspaceRoots: () => getWorkspaces().map(({ id, rootPath }) => ({ id, rootPath })),
         getBackgroundFenceToken: getWorkspaceBackgroundFenceToken,
@@ -3627,7 +3649,7 @@ export class SessionManager implements ISessionManager {
             onSessionCreated: input.onStarted,
           })
         },
-        startWorkflow: async ({ workOrderId, workspace, workflowSlug, workflowDigest, triggerInputs, untrustedTriggerInputs }) => {
+        startWorkflow: async ({ workOrderId, attemptId, workspace, workflowSlug, workflowDigest, triggerInputs, untrustedTriggerInputs }) => {
           if (triggerInputs.signalContract === 'signals-v1') {
             return this.getSignalService().startAdmitted(workspace.id, workOrderId, workflowSlug, workflowDigest, triggerInputs,
               (workflow, request) => this.workflowRunner.start({ workflow, workspaceId: workspace.id, runId: request.identity.workflowRunId,
@@ -3640,16 +3662,38 @@ export class SessionManager implements ISessionManager {
           if (!workflow) throw new Error(`Workflow not found: ${workflowSlug}`)
           const currentDigest = scheduledWorkDefinitionDigest({ metadata: workflow.metadata, body: workflow.body })
           if (currentDigest !== workflowDigest) throw new Error(`Workflow "${workflowSlug}" changed after scheduling.`)
+          const occurrence = { workOrderId, attemptId, workflowSlug, workflowDigest }
+          if (workflow.metadata.execution === 'durable-local-read' && this.durableWorkflowHost) {
+            const existing = await this.durableWorkflowHost.getScheduledRun(workspace.id, occurrence)
+            if (existing) return { runId: existing.id }
+          }
           const run = await this.workflowRunner.start({
             workflow,
             workspaceId: workspace.id,
             triggerInputs: normalizeWorkflowTriggerInputs(workflow, triggerInputs),
             untrustedTriggerInputs,
+            ...(workflow.metadata.execution === 'durable-local-read' ? { invocation: 'scheduled-work' as const, occurrence } : {}),
           })
           sessionLog.info(`[ScheduledWork] started workflow run=${run.id} workOrder=${workOrderId}`)
           return { runId: run.id }
         },
-        readWorkflowRun: readWorkflowRun,
+        recoverWorkflow: async ({ workspace, ...occurrence }) => {
+          if (!this.durableWorkflowHost) return null
+          const run = await this.durableWorkflowHost.getScheduledRun(workspace.id, occurrence)
+          return run ? { runId: run.id } : null
+        },
+        readWorkflowRun: async (root, runId) => {
+          const workspace = getWorkspaces().find(item => item.rootPath === root)
+          if (this.durableWorkflowHost && workspace) {
+            const run = await this.durableWorkflowHost.getRunForScheduler(workspace.id, runId)
+            if (run) return run
+          }
+          return readWorkflowRun(root, runId)
+        },
+        isWorkflowRunActive: async (root, runId) => {
+          const workspace = getWorkspaces().find(item => item.rootPath === root)
+          return this.durableWorkflowHost && workspace ? this.durableWorkflowHost.isRunActive(workspace.id, runId) : false
+        },
         listOutputManifests,
         postProcessAgentTask: (input) => this.postProcessScheduledAgentTask(input),
         readAgentSession: async (sessionId) => {

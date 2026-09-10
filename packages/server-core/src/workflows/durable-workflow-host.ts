@@ -1,4 +1,5 @@
 import { canonical } from '../../../shared/src/durable-execution/index.ts';
+import { durableWorkflowOccurrenceIdentity, type DurableWorkflowOccurrence } from './durable-workflow-occurrence.ts';
 import type { DurableWorkflowActor } from './durable-workflow-controls.ts';
 import { DurableWorkflowRuns } from './durable-workflow-runs.ts';
 import type { LoadedWorkflow } from '../../../shared/src/workflows/types.ts';
@@ -12,6 +13,8 @@ export interface DurableWorkflowHostOptions {
   protection: DurableSafeStorage;
   runnerOptions: Omit<DurableReadRunnerOptions, 'journal'>;
   resolvePrincipal: DurableWorkflowControlsOptions['resolvePrincipal'];
+  /** Local scheduler authority; independent of any connected renderer. */
+  resolveScheduledPrincipal?: (workspaceId: string) => string;
 }
 export type DurableWorkflowHostControls = Pick<DurableWorkflowControls, 'listAttention' | 'resolveAttention' | 'control'>;
 
@@ -32,12 +35,13 @@ export class DurableWorkflowHost {
       const runner = new DurableReadRunner({ ...options.runnerOptions, journal });
       const service = new DurableWorkflowControls({ journal, runner, resolvePrincipal: options.resolvePrincipal });
       const runs = new DurableWorkflowRuns({ journal, resolvePrincipal: options.resolvePrincipal, isActive: (runId, workspaceId) => runner.isActive(runId, workspaceId) });
-      return new DurableWorkflowHost(journal, runner, service, runs, options.resolvePrincipal);
+      return new DurableWorkflowHost(journal, runner, service, runs, options.resolvePrincipal, options.resolveScheduledPrincipal);
     } catch (error) { journal?.close(); throw error; }
     finally { key.fill(0); }
   }
 
-  private constructor(private readonly journal: DurableJournal, private readonly runner: DurableReadRunner, service: DurableWorkflowControls, runs: DurableWorkflowRuns, private readonly resolvePrincipal: DurableWorkflowHostOptions['resolvePrincipal']) {
+  private constructor(private readonly journal: DurableJournal, private readonly runner: DurableReadRunner, service: DurableWorkflowControls, private readonly runService: DurableWorkflowRuns, private readonly resolvePrincipal: DurableWorkflowHostOptions['resolvePrincipal'], private readonly resolveScheduledPrincipal?: (workspaceId: string) => string) {
+    const runs = this.runService;
     this.runs = Object.freeze({
       get: (...args: Parameters<DurableWorkflowRuns['get']>) => this.track(() => runs.get(...args)),
       list: (...args: Parameters<DurableWorkflowRuns['list']>) => this.track(() => runs.list(...args)),
@@ -82,6 +86,42 @@ export class DurableWorkflowHost {
       if (typeof principal !== 'string' || !principal.trim()) throw new Error('durable-authority-unauthenticated');
       return this.admitWorkflow(pinnedWorkflow, { ...pinnedInput, approvalPrincipalId: principal });
     });
+  }
+
+  private scheduledPrincipal(workspaceId: string): string {
+    const principal = this.resolveScheduledPrincipal?.(workspaceId);
+    if (typeof principal !== 'string' || !principal.trim()) throw new Error('durable-scheduler-authority-unavailable');
+    return principal;
+  }
+
+  /** Reconcile only: never dispatches, resumes, or resets the original deadline/budget. */
+  getScheduledRun(workspaceId: string, occurrence: DurableWorkflowOccurrence) {
+    const identity = durableWorkflowOccurrenceIdentity(workspaceId, occurrence);
+    return this.track(async () => {
+      const principal = this.scheduledPrincipal(workspaceId);
+      const run = this.runService.getForPrincipal(workspaceId, identity.runId, principal);
+      if (run && (this.journal.get(identity.runId, workspaceId).spec.commandId !== identity.commandId || run.workflowSlug !== occurrence.workflowSlug)) throw new Error('durable-scheduled-occurrence-mismatch');
+      return run;
+    });
+  }
+
+  getRunForScheduler(workspaceId: string, runId: string) {
+    return this.track(async () => this.runService.getForPrincipal(workspaceId, runId, this.scheduledPrincipal(workspaceId)));
+  }
+
+  /** Scheduler ownership includes terminal or paused runs whose backend is still draining. */
+  isRunActive(workspaceId: string, runId: string): Promise<boolean> {
+    return this.track(async () => {
+      this.scheduledPrincipal(workspaceId);
+      return this.runner.isActive(runId, workspaceId);
+    });
+  }
+
+  admitWorkflowForScheduler(workflow: LoadedWorkflow, input: Omit<DurableReadWorkflowInput, 'approvalPrincipalId'>, occurrence: DurableWorkflowOccurrence): Promise<DurableReadAdmission> {
+    const identity = durableWorkflowOccurrenceIdentity(input.workspaceId, occurrence);
+    if (input.runId !== identity.runId || input.commandId !== identity.commandId || workflow.slug !== occurrence.workflowSlug) return Promise.reject(new Error('durable-scheduled-occurrence-mismatch'));
+    const principal = this.scheduledPrincipal(input.workspaceId);
+    return this.admitWorkflow(workflow, { ...input, approvalPrincipalId: principal });
   }
 
   async startWorkflow(workflow: LoadedWorkflow, input: DurableReadWorkflowInput): Promise<DurableRunSnapshot> {

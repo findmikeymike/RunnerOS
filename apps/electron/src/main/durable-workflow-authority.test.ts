@@ -49,3 +49,24 @@ test('listed workspace cannot grant a viewer or revoked team member execution au
   expect(() => f.resolve.assertRunPrincipal('w', principal)).toThrow('team-permission-denied');
   expect(() => createLocalDurableWorkflowAuthority({ ...f.options, assertWorkspacePermission: undefined } as never)).toThrow('permission-required');
 });
+
+
+test('scheduler uses current desktop ownership without borrowing a connected renderer', () => {
+  const f = fixture(); f.clients.clear();
+  expect(f.resolve.resolveScheduledPrincipal('w')).toBe(`desktop-owner:${installationId}`);
+  f.binding.serverModeEnabled = true;
+  expect(() => f.resolve.resolveScheduledPrincipal('w')).toThrow('access-denied');
+  f.binding.serverModeEnabled = false; f.revokePermission();
+  expect(() => f.resolve.resolveScheduledPrincipal('w')).toThrow('team-permission-denied');
+});
+
+
+test('output publication requires current file-write permission in addition to workflow ownership', () => {
+  const f = fixture(); let write = true;
+  const authority = createLocalDurableWorkflowAuthority({ ...f.options, assertWorkspaceWritePermission: () => { if (!write) throw new Error('write-denied'); } });
+  const principal = authority.resolveScheduledPrincipal('w'); authority.assertPublicationPrincipal('w', principal);
+  write = false; expect(() => authority.assertPublicationPrincipal('w', principal)).toThrow('write-denied');
+  expect(authority.resolveScheduledPrincipal('w')).toBe(principal);
+  expect(() => f.resolve.assertPublicationPrincipal('w', principal)).toThrow('permission-unavailable');
+  write = true; f.revokePermission(); expect(() => authority.assertPublicationPrincipal('w', principal)).toThrow('team-permission-denied');
+});

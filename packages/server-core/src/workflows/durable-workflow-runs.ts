@@ -1,5 +1,5 @@
 import { canonical, type DurableJournal, type DurableRunSnapshot } from '../../../shared/src/durable-execution/index.ts';
-import type { WorkflowRunSnapshot } from '../../../shared/src/workflows/run-types.ts';
+import type { WorkflowRunSnapshot, WorkflowRunStep } from '../../../shared/src/workflows/run-types.ts';
 import type { LoadedWorkflow } from '../../../shared/src/workflows/types.ts';
 import type { DurableWorkflowActor, DurableWorkflowControlsOptions } from './durable-workflow-controls.ts';
 
@@ -24,6 +24,12 @@ export class DurableWorkflowRuns {
 
   async get(workspaceId: string, runId: string, actor: DurableWorkflowActor): Promise<WorkflowRunSnapshot | null> {
     const principal = await this.principal(workspaceId, actor);
+    return this.getForPrincipal(workspaceId, runId, principal);
+  }
+
+  /** Internal host seam; principal must already have passed current workspace authorization. */
+  getForPrincipal(workspaceId: string, runId: string, principal: string): WorkflowRunSnapshot | null {
+    if (!principal.trim()) throw new Error('durable-runs-principal-required');
     let snapshot: DurableRunSnapshot;
     try { snapshot = this.options.journal.get(runId, workspaceId); }
     catch (error) { if (error instanceof Error && error.message === 'durable-run-not-found') return null; throw error; }
@@ -52,26 +58,45 @@ export class DurableWorkflowRuns {
     const context = spec.context as unknown as { workflow?: LoadedWorkflow };
     const workflow = context?.workflow;
     const authority = spec.authority as unknown as { adapter?: string; stepCount?: number; completion?: string };
+    const multi = authority?.adapter === 'pi-local-read-multi-1';
     if (spec.parent || !workflow || typeof workflow.slug !== 'string' || typeof workflow.body !== 'string'
-      || !workflow.metadata || workflow.metadata.steps?.length !== 1
-      || authority?.adapter !== 'pi-local-read-1' || authority.stepCount !== 1 || authority.completion !== 'journal-only') return null;
+      || !workflow.metadata || !workflow.metadata.steps?.length
+      || authority?.completion !== 'journal-only'
+      || (multi ? spec.workflowSteps?.length !== workflow.metadata.steps.length || authority.stepCount !== workflow.metadata.steps.length
+        || spec.workflowSteps.some((step, index) => step.id !== workflow.metadata.steps[index]?.id)
+        : authority?.adapter !== 'pi-local-read-1' || authority.stepCount !== 1 || workflow.metadata.steps.length !== 1)) return null;
     const definition = workflow.metadata.steps[0]!;
     const waiting = status === 'waiting-approval';
     const active = status === 'running' && this.options.isActive?.(spec.runId, spec.workspaceId) === true;
     const state = waiting ? 'paused' : status === 'running' ? active ? 'running' : 'interrupted' : status;
     const stepState = waiting ? 'awaiting-human' : state === 'paused' || state === 'cancelled' ? 'interrupted' : state;
     const message = snapshot.turns.at(-1)?.message as unknown as { content?: Array<{ type?: string; text?: string }> } | undefined;
-    const output = status === 'succeeded' ? message?.content?.filter(part => part.type === 'text' && typeof part.text === 'string').map(part => part.text).join('\n') ?? '' : undefined;
+    const output = snapshot.publication?.content ?? (status === 'succeeded' ? message?.content?.filter(part => part.type === 'text' && typeof part.text === 'string').map(part => part.text).join('\n') ?? '' : undefined);
+    const firstIncomplete = snapshot.workflowSteps?.findIndex(step => step.endTurn === undefined) ?? -1;
+    const currentStep = firstIncomplete >= 0 ? firstIncomplete : snapshot.workflowSteps?.length ?? 0;
+    const steps: WorkflowRunStep[] = multi ? workflow.metadata.steps.map((step, index) => {
+      const saved = snapshot.workflowSteps?.[index];
+      const completed = saved?.endTurn !== undefined;
+      const terminal = status === 'failed' || status === 'cancelled';
+      const projectedState = completed ? 'succeeded' : index === currentStep ? stepState : terminal ? 'skipped' : 'queued';
+      const turns = saved ? snapshot.turns.slice(saved.startTurn, saved.endTurn) : [];
+      return { id: step.id, state: projectedState, attempts: turns.length > 0 ? 1 : 0,
+        ...(completed && typeof saved.output === 'string' ? { output: saved.output, completion: { outputChars: saved.output.length, toolUseCount: turns.flatMap(turn => turn.calls).filter(call => call.result !== undefined).length, satisfied: true } } : {}),
+        ...(projectedState === 'failed' ? { error: { code: 'durable-execution-failed', message: 'The durable workflow could not complete.' } } : {}),
+      };
+    }) : [{ id: definition.id, state: snapshot.publication ? 'succeeded' : stepState, attempts: snapshot.modelAttempts > 0 ? 1 : 0,
+      ...(output !== undefined ? { output, completion: { outputChars: output.length, toolUseCount: snapshot.turns.flatMap(turn => turn.calls).filter(call => call.result !== undefined).length, satisfied: true } } : {}),
+      ...(status === 'failed' ? { error: { code: 'durable-execution-failed', message: 'The durable workflow could not complete.' } } : {}),
+    }];
     // The journal currently has no wall-clock mutation timestamps. Do not invent completion times.
     const createdAt = new Date(spec.createdAt).toISOString();
     return {
       id: spec.runId, workspaceId: spec.workspaceId, workflowSlug: workflow.slug, state,
       trigger: { type: workflow.metadata.trigger.type, inputs: {}, firedAt: createdAt },
       workflowSnapshot: JSON.parse(canonical({ metadata: workflow.metadata, body: workflow.body })),
-      steps: [{ id: definition.id, state: stepState, attempts: snapshot.modelAttempts > 0 ? 1 : 0,
-        ...(output !== undefined ? { output, completion: { outputChars: output.length, toolUseCount: snapshot.turns.flatMap(turn => turn.calls).filter(call => call.result !== undefined).length, satisfied: true } } : {}),
-        ...(status === 'failed' ? { error: { code: 'durable-execution-failed', message: 'The durable workflow could not complete.' } } : {}),
-      }], createdAt, updatedAt: createdAt,
+      steps, createdAt, updatedAt: createdAt,
+      ...(snapshot.publication?.status === 'published' ? { finalOutputId: snapshot.publication.outputId, outputIds: [snapshot.publication.outputId] } : {}),
+      ...(snapshot.publication?.status === 'pending' && ['paused', 'interrupted'].includes(state) ? { outputError: 'The result is saved, but its final Output still needs to be published. Resume to retry without repeating the model work.' } : {}),
       ...(state === 'interrupted' ? { interruptionReason: 'No worker is currently executing this saved run. Resume to continue.' } : {}),
       durable: { engine: spec.engine, version: snapshot.version, status, controlRevision: snapshot.controlRevision, continuationRevision: snapshot.continuationRevision ?? 0 },
     };

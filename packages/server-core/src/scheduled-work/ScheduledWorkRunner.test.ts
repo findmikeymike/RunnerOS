@@ -25,6 +25,7 @@ import {
 import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import type { WorkflowRunSnapshot } from '@craft-agent/shared/workflows'
 import { ScheduledWorkRunner } from './ScheduledWorkRunner'
+import { DurableWorkflowStartupGate } from '../workflows/durable-workflow-startup-gate'
 
 const workspaceId = 'campaign-1'
 
@@ -1155,6 +1156,223 @@ describe('ScheduledWorkRunner', () => {
     const savedChild = readWork(root).items.find((order) => order.id === 'ambiguous-child')!
     expect(savedChild.attention?.reason).toBe('produced-output-ambiguous')
     expect(savedChild.inputRefs[0]).not.toHaveProperty('resolution')
+  })
+
+  test('startup gate preserves an unattached occurrence until protected journal becomes available', async () => {
+    const root = makeRoot()
+    const order = buildOrder({ id: 'opening-journal', type: 'workflow-run', status: 'running',
+      execution: { type: 'workflow-run', workflowSlug: 'weekly-content', workflowDigest: 'digest', triggerInputs: {} },
+      runs: [{ id: 'attempt', jobId: 'opening-journal', startedAt: '2026-07-10T14:00:00.000Z', status: 'running' }] })
+    writeWork(root, [order])
+    const before = readWork(root)
+    const gate = new DurableWorkflowStartupGate()
+    gate.defer()
+    let recoveries = 0
+    let starts = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => gate.allowsScheduledWork(), withLock: createLock(), executeAgentTask: async () => {},
+      startWorkflow: async () => { starts++; return { runId: 'replacement' } },
+      recoverWorkflow: async () => { recoveries++; return { runId: 'saved-run' } },
+      readWorkflowRun: async () => ({ id: 'saved-run', state: 'running', steps: [] } as unknown as WorkflowRunSnapshot),
+      listOutputManifests: () => [],
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    expect(readWork(root)).toEqual(before)
+    expect(gate.finish(false)).toBe(false)
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
+    expect(readWork(root)).toEqual(before)
+    expect(recoveries).toBe(0)
+    expect(starts).toBe(0)
+    expect(gate.finish(true)).toBe(true)
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:03:00.000Z'))
+    expect(recoveries).toBe(1)
+    expect(starts).toBe(0)
+    expect(readWork(root).items[0]!.runs.at(-1)!.workflowRunId).toBe('saved-run')
+  })
+
+  for (const lostReply of [false, true]) test(`reconciles persisted workflow occurrence after ${lostReply ? 'lost reply' : 'restart'} without dispatching twice`, async () => {
+    const root = makeRoot()
+    const execution = { type: 'workflow-run' as const, workflowSlug: 'weekly-content', workflowDigest: 'digest-weekly', triggerInputs: {} }
+    const order = buildOrder({ id: 'reconcile-workflow', type: 'workflow-run', execution })
+    if (!lostReply) {
+      order.status = 'running'
+      order.runs = [{ id: 'prior', jobId: order.id, startedAt: order.startAt, status: 'failed', workflowRunId: 'old-run' },
+        { id: 'current-attempt', jobId: order.id, startedAt: order.startAt, status: 'running' }]
+    }
+    writeWork(root, [order])
+    let starts = 0
+    let recoveries = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async input => {
+        starts++
+        expect(input.attemptId).toBe(readWork(root).items[0]!.runs.at(-1)!.id)
+        throw new Error('reply lost after admission')
+      },
+      recoverWorkflow: async input => {
+        recoveries++
+        expect(input.attemptId).toBe(readWork(root).items[0]!.runs.at(-1)!.id)
+        return { runId: 'admitted-run' }
+      },
+      readWorkflowRun: async (_root, id) => {
+        expect(id).toBe('admitted-run')
+        return { id, workspaceId, workflowSlug: execution.workflowSlug, state: 'succeeded', steps: [] } as unknown as WorkflowRunSnapshot
+      }, listOutputManifests: () => [],
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    expect(starts).toBe(lostReply ? 1 : 0)
+    expect(recoveries).toBe(1)
+    expect(readWork(root).items[0]!.status).toBe('done')
+    expect(readWork(root).items[0]!.runs.at(-1)!.workflowRunId).toBe('admitted-run')
+  })
+
+  test('uncertain recovery retains the running claim; missing admission never dispatches replacement work', async () => {
+    const root = makeRoot()
+    const order = buildOrder({ id: 'uncertain-workflow', type: 'workflow-run', status: 'running',
+      execution: { type: 'workflow-run', workflowSlug: 'weekly-content', workflowDigest: 'digest-weekly', triggerInputs: {} },
+      runs: [{ id: 'attempt', jobId: 'uncertain-workflow', startedAt: '2026-07-10T14:00:00.000Z', status: 'running' }] })
+    writeWork(root, [order])
+    let unavailable = true
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, withLock: createLock(), executeAgentTask: async () => {},
+      startWorkflow: async () => { throw new Error('must not dispatch') },
+      recoverWorkflow: async () => { if (unavailable) throw new Error('journal unavailable'); return null },
+      readWorkflowRun: async () => null, listOutputManifests: () => [],
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    expect(readWork(root).items[0]!.status).toBe('running')
+    unavailable = false
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
+    expect(readWork(root).items[0]!.status).toBe('needs-attention')
+  })
+
+  test('known absent admission preserves the original workflow validation error', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({ id: 'invalid-workflow', type: 'workflow-run',
+      execution: { type: 'workflow-run', workflowSlug: 'weekly-content', workflowDigest: 'old-digest', triggerInputs: {} } })])
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, withLock: createLock(), executeAgentTask: async () => {},
+      startWorkflow: async () => { throw new Error('Workflow changed after scheduling.') },
+      recoverWorkflow: async () => null, readWorkflowRun: async () => null, listOutputManifests: () => [],
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    expect(readWork(root).items[0]!.attention?.message).toBe('Workflow changed after scheduling.')
+  })
+
+  test('interrupted durable occurrence stays tracked until explicit resume completes it', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({ id: 'paused-workflow', type: 'workflow-run', status: 'running',
+      execution: { type: 'workflow-run', workflowSlug: 'weekly-content', workflowDigest: 'digest', triggerInputs: {} },
+      runs: [{ id: 'attempt', jobId: 'paused-workflow', startedAt: '2026-07-10T14:00:00.000Z', status: 'running', workflowRunId: 'durable-run' }] })])
+    let state: WorkflowRunSnapshot['state'] = 'interrupted'
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, withLock: createLock(), executeAgentTask: async () => {},
+      startWorkflow: async () => { throw new Error('must not restart') },
+      readWorkflowRun: async () => ({ id: 'durable-run', state, durable: { engine: 'durable-local-read' }, steps: [] } as unknown as WorkflowRunSnapshot),
+      listOutputManifests: () => [],
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    expect(readWork(root).items[0]!.status).toBe('running')
+    expect(await runner.isBackgroundLaneOccupied(root, workspaceId)).toBe(false)
+    state = 'succeeded'
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
+    expect(readWork(root).items[0]!.status).toBe('done')
+  })
+
+  for (const state of ['cancelled', 'paused'] as const) test(`durable ${state} retains the background lane while its backend drains`, async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({ id: 'draining-workflow', type: 'workflow-run', status: 'running',
+      execution: { type: 'workflow-run', workflowSlug: 'weekly-content', workflowDigest: 'digest', triggerInputs: {} },
+      runs: [{ id: 'attempt', jobId: 'draining-workflow', startedAt: '2026-07-10T14:00:00.000Z', status: 'running', workflowRunId: 'durable-run' }] })])
+    let active = true
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, withLock: createLock(), executeAgentTask: async () => {},
+      startWorkflow: async () => { throw new Error('must not restart') },
+      isWorkflowRunActive: async (_root, runId) => { expect(runId).toBe('durable-run'); return active },
+      readWorkflowRun: async () => ({ id: 'durable-run', state, durable: { engine: 'durable-local-read' }, steps: [] } as unknown as WorkflowRunSnapshot),
+      listOutputManifests: () => [],
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    expect(readWork(root).items[0]!.status).toBe('running')
+    expect(await runner.isBackgroundLaneOccupied(root, workspaceId)).toBe(true)
+    active = false
+    expect(await runner.isBackgroundLaneOccupied(root, workspaceId)).toBe(false)
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
+    expect(readWork(root).items[0]!.status).toBe(state === 'paused' ? 'running' : 'needs-attention')
+  })
+
+  test('attempt replacement during awaited drain check keeps the lane and cannot be settled by old status', async () => {
+    const root = makeRoot()
+    const order = buildOrder({ id: 'drain-replacement', type: 'workflow-run', status: 'running',
+      execution: { type: 'workflow-run', workflowSlug: 'weekly-content', workflowDigest: 'digest', triggerInputs: {} },
+      runs: [{ id: 'attempt', jobId: 'drain-replacement', startedAt: '2026-07-10T14:00:00.000Z', status: 'running', workflowRunId: 'old-run' }] })
+    writeWork(root, [order])
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, withLock: createLock(), executeAgentTask: async () => {},
+      startWorkflow: async () => { throw new Error('must not start') },
+      readWorkflowRun: async () => ({ id: 'old-run', state: 'cancelled', durable: { engine: 'durable-local-read' }, steps: [] } as unknown as WorkflowRunSnapshot),
+      isWorkflowRunActive: async () => {
+        const latest = readWork(root).items[0]!
+        if (latest.runs.at(-1)!.id === 'attempt') {
+          latest.runs.at(-1)!.status = 'failed'
+          latest.runs.push({ id: 'replacement', jobId: latest.id, startedAt: latest.startAt, status: 'running' })
+          writeWork(root, [latest])
+        }
+        return false
+      }, listOutputManifests: () => [],
+    })
+    expect(await runner.isBackgroundLaneOccupied(root, workspaceId)).toBe(true)
+    writeWork(root, [order])
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    expect(readWork(root).items[0]!.status).toBe('running')
+    expect(readWork(root).items[0]!.runs.at(-1)!.id).toBe('replacement')
+  })
+
+  test('late start acknowledgement cannot overwrite a replacement attempt', async () => {
+    const root = makeRoot()
+    const order = buildOrder({ id: 'late-start', type: 'workflow-run',
+      execution: { type: 'workflow-run', workflowSlug: 'weekly-content', workflowDigest: 'digest-weekly', triggerInputs: {} } })
+    writeWork(root, [order])
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, withLock: createLock(), executeAgentTask: async () => {},
+      startWorkflow: async () => {
+        const replacement = readWork(root).items[0]!
+        replacement.runs.at(-1)!.status = 'failed'
+        replacement.runs.push({ id: 'replacement', jobId: order.id, startedAt: order.startAt, status: 'running' })
+        writeWork(root, [replacement])
+        return { runId: 'old-admission' }
+      }, readWorkflowRun: async () => null, listOutputManifests: () => [],
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    const latest = readWork(root).items[0]!
+    expect(latest.status).toBe('running')
+    expect(latest.runs.at(-1)!.id).toBe('replacement')
+    expect(latest.runs.at(-1)!.workflowRunId).toBeUndefined()
+  })
+
+  test('late occurrence recovery cannot attach its run to a replacement attempt', async () => {
+    const root = makeRoot()
+    const order = buildOrder({ id: 'replaced-workflow', type: 'workflow-run', status: 'running',
+      execution: { type: 'workflow-run', workflowSlug: 'weekly-content', workflowDigest: 'digest-weekly', triggerInputs: {} },
+      runs: [{ id: 'attempt', jobId: 'replaced-workflow', startedAt: '2026-07-10T14:00:00.000Z', status: 'running' }] })
+    writeWork(root, [order])
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, withLock: createLock(), executeAgentTask: async () => {},
+      startWorkflow: async () => { throw new Error('must not dispatch') },
+      recoverWorkflow: async () => {
+        const replacement = readWork(root).items[0]!
+        replacement.runs[0]!.status = 'failed'
+        replacement.runs.push({ id: 'replacement', jobId: order.id, startedAt: order.startAt, status: 'running' })
+        writeWork(root, [replacement])
+        return { runId: 'old-admission' }
+      }, readWorkflowRun: async () => { throw new Error('must not poll stale admission') }, listOutputManifests: () => [],
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    const latest = readWork(root).items[0]!
+    expect(latest.status).toBe('running')
+    expect(latest.runs.at(-1)!.id).toBe('replacement')
+    expect(latest.runs.at(-1)!.workflowRunId).toBeUndefined()
   })
 
   test('starts workflow jobs without marking them done, then completes them on a later poll', async () => {

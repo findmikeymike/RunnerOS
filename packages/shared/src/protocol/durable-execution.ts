@@ -105,12 +105,15 @@ export interface DurableExecutionDescriptor {
   maxOutputTokens: number;
 }
 export type DurableCheckpoint =
+  | { kind: 'workflow-step-start'; step: number; input: DurableJson }
+  | { kind: 'workflow-step-complete'; step: number }
   | { kind: 'model-start'; turn: number; context: DurableJson }
   | { kind: 'model-result'; turn: number; message: DurableJson }
   | { kind: 'tool-disposition'; turn: number; callId: string; tool: string }
   | { kind: 'tool-start'; turn: number; callId: string; tool: string; input: DurableJson }
   | { kind: 'tool-result'; turn: number; callId: string; result: DurableJson }
   | { kind: 'turn-boundary'; turn: number }
+  | { kind: 'output-published'; outputId: string }
   | { kind: 'complete' };
 export interface DurableCheckpointReply {
   cached?: DurableJson;

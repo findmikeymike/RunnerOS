@@ -39,3 +39,31 @@ The final real-host regression also proves that an older failed legacy run canno
 All four follow-up findings are fixed: admission stays blocked until cancelled execution actually drains (both engines); mounted history discovers work after lost Start replies and reconnect; fresh authorized detail reads recover from transient errors; and approval badges refresh from saved progress. Request ownership now survives slow replies across polling ticks, while decisions, route changes and unmount still fence stale replies. No additional START is issued during discovery recovery.
 
 Fresh checks: **155 tests passed / 660 assertions** across runner, host, routing, history and renderer request/discovery controllers; changed renderer lint passed. Rival independently verified the drain fixes and final request-lifecycle fix, with no remaining scoped findings. Controller lifecycle tests do not constitute mounted React or desktop smoke proof; no app restart, live provider call or commit was performed.
+
+
+### Scheduled adoption slice — 2026-09-09
+
+Canonical `main` verified at `bd3dd7684`; existing manual integration is the baseline. Tracked Scheduled Work now routes explicitly marked single local-read definitions into the durable host using its persisted attempt identity. Reconciliation repairs the admission/returned-ID write gap without a second dispatch, and journal projections drive scheduled completion. Other automatic entrypoints, multi-step runs, output publishing, and external effects remain outside this slice.
+
+Cold review found unavailable/disabled-host restart ambiguity and early background-lane release during cancel/pause cleanup. Fixes retain startup gating whenever recovery storage is present but unavailable, preserve saved claims, and consult actual worker ownership before releasing the lane or settling terminal status. Late asynchronous replies remain attempt-fenced. The optional flag still controls opening the host; saved data does not silently enable new execution.
+
+Verification is recorded after the final checks below. The current app was not restarted; no live provider calls or user-profile workflow changes were made. An unrelated ArtistHQHome renderer edit was preserved.
+
+Final checks: **220 tests passed / 930 assertions across 12 targeted files**, including the real SIGKILL admission-gap process test; server-core and Electron typechecks passed; changed Electron main-process files passed ESLint; `git diff --check` passed. Rival closure review found no remaining scoped findings after both fixes and the disabled-host restart correction. No commit or app restart was performed in this slice. Next adoption boundary: multi-step execution, with its own pinned step inputs, completion and replay proofs.
+
+
+### Sequential multi-step adoption — 2026-09-09
+
+Continued from the uncommitted scheduled slice on canonical `main` (`bd3dd7684`). One to eight sequential local-read steps now share a journal and the original total budget/deadline. All agent bundles resolve before admission and must share a model/connection. Earlier text-output references are frozen and validated; per-step outputs survive restart and later-step failure. Last-step completion and run success are atomic. Scheduled occurrence reconciliation applies to the same multi-step run identity.
+
+Cold Rival reviewed journal ordering, model-turn offsets, steering, cancellation, templates and history without actionable findings. Parent additionally checked compatibility for explicitly allowed empty results. SIGKILL recovery and real default-Pi/native-read process tests use synthetic profiles/providers only; desktop acceptance remains open. No app restart, commit, or unrelated renderer edits were performed.
+
+Final verification: **344 tests / 1,595 assertions** across 19 targeted files passed, plus **2 real default-Pi process tests / 15 assertions** (346 distinct tests total). Shared, server-core, Pi agent server, and Electron typechecks passed; `git diff --check` passed. Rival's focused review and empty-result compatibility closure reported no remaining actionable findings. Next adoption boundary is durable output publishing and supported source/tool capabilities; mixed providers and arbitrary external actions remain separate.
+
+### Final text Output publication — 2026-09-09
+
+Continued on canonical main at `62c70cfba`, preserving the uncommitted scheduled/multi-step slices. Explicit final-step report/document contracts now publish through a host-owned atomic bundle writer. Saved text remains recoverable until a journal receipt certifies success. Manual and tracked scheduled starts share this path. Same-title runs have distinct output slugs; exact replay preserves the original bundle, while modifications conflict safely. No model write tools or external publishing were enabled.
+
+Rival found provider credentials incorrectly gating finished text publication and late backend failures stranding pending results. Recovery now resolves the current local workspace independently of the provider, and pending results pause through stream, direct backend-fail and destroy errors. Fresh review closed both findings. Current local authority and files.write permission remain required.
+
+Final checks: **279 tests / 1,384 assertions across 24 files**, including real SIGKILL publication, multi-step and scheduled-admission recovery; shared, server-core and Electron typechecks passed. Changed Electron files passed targeted ESLint; a broader lint invocation encountered two existing shadow-class errors in untouched settings pages (SecretsSettingsPage and SettingsPageSwitcher). No unrelated lint edits were made. `git diff --check` passed. This slice used injected synthetic backends; prior real-Pi evidence remains scoped to the preceding slice. No app restart, desktop smoke, live provider call, commit or push was performed.

@@ -1,3 +1,4 @@
+import { getOutputDir, readOutputManifest, listOutputs } from '../../../shared/src/outputs/storage';
 import { writeRun, getRunFile, listRuns } from '../../../shared/src/workflows/run-storage';
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
@@ -26,20 +27,21 @@ function fixture() {
   const bundle = { connectionSlug: 'route', model: 'fixture', systemPrompt: 'Read only' };
   let release!: () => void, entered!: () => void, finished!: () => void, modelCalls = 0, legacyCalls = 0;
   const gate = new Promise<void>(resolve => release = resolve), ready = new Promise<void>(resolve => entered = resolve), done = new Promise<void>(resolve => finished = resolve);
-  const runnerOptions: Omit<DurableReadRunnerOptions, 'journal'> = { hostRuntime: { appRootPath: root, isPackaged: false }, resolveBinding: () => ({ workspace, credentialIdentity: 'a'.repeat(64), context: { provider: 'pi', authType: 'api_key', resolvedModel: 'fixture', capabilities: { needsHttpPoolServer: false }, connection: { slug: 'route', name: 'route', providerType: 'pi', authType: 'api_key', piAuthProvider: 'openai', createdAt: 1 } } }), createBackend: args => ({ async *chat() {
+  const runnerOptions: Omit<DurableReadRunnerOptions, 'journal'> = { resolvePublicationWorkspace: () => workspace, authorizePublication: () => {}, hostRuntime: { appRootPath: root, isPackaged: false }, resolveBinding: () => ({ workspace, credentialIdentity: 'a'.repeat(64), context: { provider: 'pi', authType: 'api_key', resolvedModel: 'fixture', capabilities: { needsHttpPoolServer: false }, connection: { slug: 'route', name: 'route', providerType: 'pi', authType: 'api_key', piAuthProvider: 'openai', createdAt: 1 } } }), createBackend: args => ({ async *chat() {
     const bridge = args.coreConfig.durableExecution!; const reply = await bridge.checkpoint({ kind: 'model-start', turn: 0, context: {} });
     if (reply.cached === undefined) { modelCalls++; entered(); await gate;
       await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'done' }] } }); }
     await bridge.checkpoint({ kind: 'complete' });
   }, async abort() {}, destroy() { finished(); } }) };
-  const open = () => DurableWorkflowHost.open({ configRoot: root, protection, runnerOptions, resolvePrincipal: () => 'alice' });
+  let scheduledPrincipal = 'alice';
+  const open = () => DurableWorkflowHost.open({ configRoot: root, protection, runnerOptions, resolvePrincipal: () => 'alice', resolveScheduledPrincipal: () => scheduledPrincipal });
   const host = open(); cleanup.push(async () => { release(); await host.close(); });
   const input: WorkflowStartInput = { workspaceId: 'w', workflow, triggerInputs: {}, invocation: 'manual-ui', actor: { clientId: 'c', workspaceId: 'w' } };
   const createStart = (resolveBundle: () => Promise<DurableStartBundle | null> = async () => bundle) => createDurableWorkflowStart({ host, resolveBundle, getWorkspaceRootPath: () => root });
   const createRunner = (durableStart = createStart()) => new WorkflowRunner({ durableStart, getWorkspaceRootPath: () => root,
     assertWorkflowAdmissionAvailable: async (workspaceId, workflowSlug) => { if (await host.hasUnfinishedWorkflow(workspaceId, workflowSlug)) throw new Error('This workflow has unfinished work.'); },
     createSession: async () => { legacyCalls++; return { id: 'legacy' }; }, sendMessage: async () => {}, getLastAssistantText: () => 'legacy output', abortSession: async () => {} });
-  return { root, workspace, workflow, bundle, host, open, input, createStart, createRunner, ready, done, release, modelCalls: () => modelCalls, legacyCalls: () => legacyCalls };
+  return { setScheduledPrincipal: (value: string) => { scheduledPrincipal = value; }, root, workspace, workflow, bundle, host, open, input, createStart, createRunner, ready, done, release, modelCalls: () => modelCalls, legacyCalls: () => legacyCalls };
 }
 
 test('normal START returns committed durable identity before completion and GET/LIST expose that identity', async () => {
@@ -122,4 +124,130 @@ test('rerunning an older legacy failure cannot bypass active durable work or mut
   expect(readFileSync(getRunFile(f.root, oldId))).toEqual(original);
   expect(listRuns(f.root).map(run => run.id)).toEqual([oldId]);
   f.release(); await f.done;
+});
+
+
+test('scheduled local read admits once and reconnects the same saved attempt after reopening', async () => {
+  const f = fixture();
+  const occurrence = { workOrderId: 'order', attemptId: 'attempt', workflowSlug: f.workflow.slug, workflowDigest: 'fixture-digest' };
+  const input = { ...f.input, invocation: 'scheduled-work' as const, actor: undefined, occurrence };
+  const saved = await f.createRunner().start(input); await f.ready;
+  expect(saved.durable).toBeDefined(); expect(f.legacyCalls()).toBe(0);
+  expect((await f.host.getScheduledRun('w', occurrence))?.id).toBe(saved.id);
+  await expect(f.host.getScheduledRun('w', { ...occurrence, workflowDigest: 'changed' })).rejects.toThrow('occurrence-mismatch');
+  await expect(f.host.getScheduledRun('w', { ...occurrence, workflowSlug: 'changed' })).rejects.toThrow('occurrence-mismatch');
+  expect(await f.host.getScheduledRun('w', { ...occurrence, attemptId: 'different' })).toBeNull();
+  f.release(); await f.done; await f.host.close();
+  const reopened = f.open(); cleanup.push(() => reopened.close());
+  expect((await reopened.getScheduledRun('w', occurrence))?.id).toBe(saved.id);
+  expect((await reopened.getRunForScheduler('w', saved.id))?.state).toBe('succeeded');
+  expect(f.modelCalls()).toBe(1);
+});
+
+
+test('scheduled identity reads and admission require current owner authority', async () => {
+  const f = fixture();
+  const occurrence = { workOrderId: 'order', attemptId: 'attempt', workflowSlug: f.workflow.slug, workflowDigest: 'fixture-digest' };
+  f.setScheduledPrincipal('');
+  await expect(f.createRunner().start({ ...f.input, invocation: 'scheduled-work', actor: undefined, occurrence })).rejects.toThrow('authority-unavailable');
+  expect(f.modelCalls()).toBe(0); expect(f.legacyCalls()).toBe(0);
+  f.setScheduledPrincipal('alice');
+  const saved = await f.createRunner().start({ ...f.input, invocation: 'scheduled-work', actor: undefined, occurrence }); await f.ready;
+  f.setScheduledPrincipal('bob');
+  await expect(f.host.getScheduledRun('w', occurrence)).rejects.toThrow('principal-mismatch');
+  await expect(f.host.getRunForScheduler('w', saved.id)).rejects.toThrow('principal-mismatch');
+  f.release(); await f.done;
+});
+
+test('scheduled cancellation retains actual worker ownership until cleanup finishes', async () => {
+  const f = fixture();
+  const occurrence = { workOrderId: 'order', attemptId: 'attempt', workflowSlug: f.workflow.slug, workflowDigest: 'fixture-digest' };
+  const run = await f.createRunner().start({ ...f.input, invocation: 'scheduled-work', actor: undefined, occurrence }); await f.ready;
+  const current = await f.host.getScheduledRun('w', occurrence);
+  await f.host.controls.control('w', run.id, { action: 'cancel', commandId: 'cancel-scheduled', expectedVersion: current!.durable!.version }, f.input.actor!);
+  expect((await f.host.getScheduledRun('w', occurrence))?.state).toBe('cancelled');
+  expect(await f.host.isRunActive('w', run.id)).toBe(true);
+  f.release(); await f.done;
+  for (let i = 0; i < 100 && await f.host.isRunActive('w', run.id); i++) await new Promise(resolve => setTimeout(resolve, 1));
+  expect(await f.host.isRunActive('w', run.id)).toBe(false);
+});
+
+test('normal manual multi-step admission resolves all agents and exposes each saved result', async () => {
+  const f = fixture(), resolved: string[] = [];
+  const workflow = { ...f.workflow, metadata: { ...f.workflow.metadata, steps: [
+    f.workflow.metadata.steps[0]!, { id: 'summary', agent: 'summarizer', input: 'Summarize {{steps.read.output | escape}}' },
+  ] } };
+  const start = createDurableWorkflowStart({ host: f.host, getWorkspaceRootPath: () => f.root, resolveBundle: async (_workspace, agent) => {
+    resolved.push(agent); return { ...f.bundle, systemPrompt: `PRIVATE instructions for ${agent}` };
+  } });
+  const saved = await f.createRunner(start).start({ ...f.input, workflow });
+  expect(saved.steps.map(step => step.id)).toEqual(['read', 'summary']);
+  expect(resolved).toEqual(['reader', 'summarizer']);
+  f.release();
+  for (let i = 0; i < 100 && (await f.host.runs.get('w', saved.id, f.input.actor!))?.state !== 'succeeded'; i++) await new Promise(resolve => setTimeout(resolve, 1));
+  const complete = await f.host.runs.get('w', saved.id, f.input.actor!);
+  expect(complete?.state).toBe('succeeded');
+  expect(complete?.steps.map(step => [step.state, step.output])).toEqual([['succeeded', 'done'], ['succeeded', 'done']]);
+  expect(JSON.stringify(complete)).not.toContain('PRIVATE'); expect(f.modelCalls()).toBe(2); expect(f.legacyCalls()).toBe(0);
+});
+
+test('a later unsupported or differently routed agent rejects the whole workflow before admission', async () => {
+  for (const second of [null, { connectionSlug: 'other', model: 'fixture', systemPrompt: 'read only' }, { connectionSlug: 'route', model: 'other', systemPrompt: 'read only' }]) {
+    const f = fixture();
+    const workflow = { ...f.workflow, metadata: { ...f.workflow.metadata, steps: [f.workflow.metadata.steps[0]!, { id: 'second', agent: 'second', input: 'Read more' }] } };
+    const start = createDurableWorkflowStart({ host: f.host, getWorkspaceRootPath: () => f.root, resolveBundle: async (_workspace, agent) => agent === 'reader' ? f.bundle : second });
+    await expect(f.createRunner(start).start({ ...f.input, workflow })).rejects.toThrow();
+    expect(await f.host.runs.list('w', f.input.actor!)).toEqual([]);
+    expect(f.modelCalls()).toBe(0); expect(f.legacyCalls()).toBe(0);
+  }
+});
+
+test('tracked schedules admit multi-step reads under one occurrence identity', async () => {
+  const f = fixture();
+  const workflow = { ...f.workflow, metadata: { ...f.workflow.metadata, steps: [f.workflow.metadata.steps[0]!, { id: 'second', agent: 'reader', input: '{{steps.read.output}}' }] } };
+  const occurrence = { workOrderId: 'order', attemptId: 'multi-attempt', workflowSlug: workflow.slug, workflowDigest: 'multi-definition' };
+  const saved = await f.createRunner().start({ ...f.input, workflow, invocation: 'scheduled-work', actor: undefined, occurrence });
+  expect(saved.steps).toHaveLength(2); f.release();
+  for (let i = 0; i < 100 && (await f.host.getScheduledRun('w', occurrence))?.state !== 'succeeded'; i++) await new Promise(resolve => setTimeout(resolve, 1));
+  const complete = await f.host.getScheduledRun('w', occurrence);
+  expect(complete?.id).toBe(saved.id); expect(complete?.state).toBe('succeeded'); expect(complete?.steps.every(step => step.state === 'succeeded')).toBe(true);
+  expect(f.modelCalls()).toBe(2); expect(f.legacyCalls()).toBe(0);
+});
+
+
+test.each(['manual-ui', 'scheduled-work'] as const)('normal %s final-step output publishes one real bundle and survives reopening', async invocation => {
+  const f = fixture();
+  const workflow = { ...f.workflow, metadata: { ...f.workflow.metadata,
+    outputs: { mode: 'final-step' as const, kind: 'report' as const, title: 'Release research', summary: 'Saved local research', primary: { from: 'step-output' as const, step: 'summary' } },
+    steps: [f.workflow.metadata.steps[0]!, { id: 'summary', agent: 'reader', input: '{{steps.read.output}}' }],
+  } };
+  const occurrence = { workOrderId: 'output-order', attemptId: 'output-attempt', workflowSlug: workflow.slug, workflowDigest: 'output-definition' };
+  const input: WorkflowStartInput = { ...f.input, workflow, invocation, ...(invocation === 'scheduled-work' ? { actor: undefined, occurrence } : {}) };
+  const saved = await f.createRunner().start(input);
+  await f.ready;
+  expect(saved.state).toBe('running'); expect(listOutputs(f.root)).toEqual([]);
+  f.release();
+  for (let i = 0; i < 100 && await f.host.isRunActive('w', saved.id); i++) await new Promise(resolve => setTimeout(resolve, 1));
+  const complete = await f.host.runs.get('w', saved.id, f.input.actor!);
+  expect(complete?.state).toBe('succeeded');
+  expect(complete?.finalOutputId).toBeDefined();
+  expect(complete?.outputIds).toEqual([complete!.finalOutputId!]);
+  const outputId = complete!.finalOutputId!;
+  const manifest = readOutputManifest(f.root, outputId);
+  expect(manifest?.status).toBe('published'); expect(manifest?.title).toBe('Release research');
+  expect(manifest?.origin).toMatchObject({ workflowRunId: saved.id, workflowSlug: workflow.slug, stepId: 'summary' });
+  expect(readFileSync(join(getOutputDir(f.root, outputId), 'content.md'), 'utf8')).toBe('done');
+  expect(listOutputs(f.root).map(output => output.id)).toEqual([outputId]);
+  expect(f.modelCalls()).toBe(2); expect(f.legacyCalls()).toBe(0);
+  await f.host.close();
+  const reopened = f.open(); cleanup.push(() => reopened.close());
+  const recovered = invocation === 'scheduled-work' ? await reopened.getScheduledRun('w', occurrence) : await reopened.runs.get('w', saved.id, f.input.actor!);
+  expect(recovered?.id).toBe(saved.id); expect(recovered?.finalOutputId).toBe(outputId); expect(recovered?.state).toBe('succeeded');
+  if (invocation === 'scheduled-work') {
+    const replayStart = createDurableWorkflowStart({ host: reopened, getWorkspaceRootPath: () => f.root, resolveBundle: async () => { throw new Error('saved occurrence must not resolve model'); } });
+    const replayRunner = new WorkflowRunner({ durableStart: replayStart, getWorkspaceRootPath: () => f.root,
+      createSession: async () => { throw new Error('must not start legacy'); }, sendMessage: async () => {}, getLastAssistantText: () => '', abortSession: async () => {} });
+    expect((await replayRunner.start(input)).id).toBe(saved.id);
+  }
+  expect(f.modelCalls()).toBe(2); expect(listOutputs(f.root).map(output => output.id)).toEqual([outputId]);
 });

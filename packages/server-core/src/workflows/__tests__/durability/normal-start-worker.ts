@@ -8,7 +8,7 @@ import { durableCredentialIdentity } from '../../../../../shared/src/protocol/du
 import { getCredentialManager } from '../../../../../shared/src/credentials/manager.ts';
 import { type DurableReadBinding } from '../../durable-read-runner.ts';
 
-const [root, endpoint] = process.argv.slice(2) as [string, string];
+const [root, endpoint, mode] = process.argv.slice(2) as [string, string, string];
 if (readFileSync(join(root, 'synthetic-only'), 'utf8') !== 'approval-fixture' || process.env.CRAFT_CONFIG_DIR !== join(root, 'config')) throw new Error('isolated-approval-fixture-required');
 const key = 'synthetic-approval-provider-key';
 getCredentialManager().getLlmApiKey = async slug => { if (slug !== 'approval-fixture') throw new Error('unexpected-key-read'); return key; };
@@ -30,11 +30,11 @@ try {
     getWorkspaceRootPath: () => root, createSession: async () => { throw new Error('legacy-session-forbidden'); }, sendMessage: async () => {}, getLastAssistantText: () => '', abortSession: async () => {},
   });
   const actor = { clientId: 'fixture-client', workspaceId: 'approval-workspace' };
-  const state = await runner.start({ invocation: 'manual-ui', actor, workspaceId: actor.workspaceId, triggerInputs: {}, workflow: { slug: 'approval-fixture', path: root, source: 'global', body: '', metadata: { execution: 'durable-local-read' as const, name: 'Fixture', description: '', trigger: { type: 'manual' }, outputs: { mode: 'none' }, steps: [{ id: 'read', agent: 'reader', input: 'Read fixture.txt.' }] } } });
+  const state = await runner.start({ invocation: 'manual-ui', actor, workspaceId: actor.workspaceId, triggerInputs: {}, workflow: { slug: 'approval-fixture', path: root, source: 'global', body: '', metadata: { execution: 'durable-local-read' as const, name: 'Fixture', description: '', trigger: { type: 'manual' }, outputs: { mode: 'none' }, steps: [{ id: 'read', agent: 'reader', input: 'Read fixture.txt.' }, ...(mode === 'multi' ? [{ id: 'second', agent: 'reader', input: 'Use {{steps.read.output}} and read fixture.txt again.' }] : [])] } } });
   console.log(JSON.stringify({ barrier: 'admitted', runId: state.id, state: state.state }));
   for (let i = 0; i < 1000; i++) {
     const current = await host.runs.get(actor.workspaceId, state.id, actor);
-    if (current?.state === 'succeeded') { console.log(JSON.stringify({ result: current.state, runId: current.id })); break; }
+    if (current?.state === 'succeeded') { console.log(JSON.stringify({ result: current.state, runId: current.id, steps: current.steps.map(step => ({ id: step.id, state: step.state, output: step.output })) })); break; }
     if (current?.state === 'failed') throw new Error(JSON.stringify(current));
     if (i === 999) throw new Error('completion-timeout');
     await new Promise(resolve => setTimeout(resolve, 10));

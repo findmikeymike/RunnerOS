@@ -40,6 +40,9 @@ export function canonicalContext(context: DurableJson): DurableJson {
 }
 export interface DurableRunSpec extends DurableExecutionDescriptor {
   commandId: string;
+  /** Ordered local-read steps share this run's fencing, deadline and request budget. */
+  workflowSteps?: Array<{ id: string }>;
+  publication?: { outputId: string; kind: 'report' | 'document'; title: string; summary?: string; stepId: string };
   parent?: { runId: string; slotId: string; mode: 'required' | 'detached' };
   /** Trusted principal whose tool authorization must be resolved before every dispatch. */
   approvalPrincipalId?: string;
@@ -61,6 +64,8 @@ export interface DurableRunSnapshot {
   modelAttempts: number;
   reservedUnits: number;
   turns: Turn[];
+  workflowSteps?: Array<{ id: string; startTurn: number; inputDigest: string; endTurn?: number; output?: string }>;
+  publication?: { status: 'pending' | 'published'; content: string; outputId: string };
   approvals?: DurableApproval[];
   steering?: DurableSteeringEntry[];
   continuationRevision?: number;
@@ -176,6 +181,11 @@ export class DurableJournal {
     canonical(spec);
     if (spec.parent !== undefined) throw new Error('durable-child-atomic-admission-required');
     const policy = spec.costPolicy;
+    if (spec.workflowSteps !== undefined && (!Array.isArray(spec.workflowSteps) || spec.workflowSteps.length < 1 || spec.workflowSteps.length > 8 || spec.workflowSteps.some(step => !step || typeof step.id !== 'string' || !step.id.trim() || Object.keys(step).some(key => key !== 'id')) || new Set(spec.workflowSteps.map(step => step.id)).size !== spec.workflowSteps.length)) throw new Error('invalid-durable-workflow-steps');
+    if (spec.publication !== undefined) {
+      const publication = spec.publication;
+      if (!publication || typeof publication !== 'object' || Object.keys(publication).some(key => !['outputId', 'kind', 'title', 'summary', 'stepId'].includes(key)) || typeof publication.outputId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(publication.outputId) || !['report', 'document'].includes(publication.kind) || typeof publication.title !== 'string' || !publication.title.trim() || typeof publication.stepId !== 'string' || !publication.stepId.trim() || publication.summary !== undefined && typeof publication.summary !== 'string' || spec.workflowSteps && publication.stepId !== spec.workflowSteps.at(-1)!.id) throw new Error('invalid-durable-publication');
+    }
     if (spec.approvalPrincipalId !== undefined && (typeof spec.approvalPrincipalId !== 'string' || !spec.approvalPrincipalId.trim())) throw new Error('invalid-approval-principal');
     if (!/^[a-f0-9]{64}$/.test(spec.credentialIdentity) || !spec.runtimeManifest || Object.values(spec.runtimeManifest).some(value => typeof value !== 'string') || spec.engine !== 'sqlite-v2-readonly-1' || !spec.runId || !spec.workspaceId || !spec.commandId || !spec.model || !Number.isSafeInteger(spec.maxOutputTokens) || spec.maxOutputTokens < 1 || !Number.isSafeInteger(spec.maxModelAttempts) || spec.maxModelAttempts < 1 || !Number.isFinite(spec.deadlineAt) || !Array.isArray(spec.allowedTools) || spec.allowedTools.some(t => !['read', 'grep', 'find', 'ls'].includes(t)) || !policy || !['verified-free', 'trusted-upper-bound', 'model-requests'].includes(policy.unit) || !Number.isSafeInteger(policy.maxTotalUnits) || !Number.isSafeInteger(policy.maxUnitsPerAttempt) || policy.maxTotalUnits < 0 || policy.maxUnitsPerAttempt < 0 || (policy.unit === 'verified-free' ? policy.maxTotalUnits !== 0 || policy.maxUnitsPerAttempt !== 0 : policy.maxUnitsPerAttempt === 0) || (policy.unit === 'model-requests' && (policy.maxUnitsPerAttempt !== 1 || policy.maxTotalUnits !== spec.maxModelAttempts))) throw new Error('invalid-durable-admission');
     return this.transaction(() => {
@@ -258,7 +268,7 @@ export class DurableJournal {
       const terminal = !['running', 'paused', 'waiting-approval'].includes(state.status);
       if (terminal && command.action !== 'cancel') throw new Error('durable-run-terminal');
       if (command.action === 'resume') this.assertChildParent(state);
-      if (command.action === 'resume' && Date.now() >= state.spec.deadlineAt) throw new Error('durable-dispatch-blocked');
+      if (command.action === 'resume' && Date.now() >= state.spec.deadlineAt && state.publication?.status !== 'pending') throw new Error('durable-dispatch-blocked');
       if (command.action === 'resume' && digest(state.spec.runtimeManifest) !== digest(DURABLE_RUNTIME_MANIFEST)) throw new Error('durable-runtime-manifest-changed');
       // Resume never grants a pending approval. Expired waits may reopen solely to reauthorize.
       const pendingApproval = state.approvals?.some(approval => approval.status === 'pending' && approval.expiresAt > Date.now());
@@ -287,6 +297,7 @@ export class DurableJournal {
       }
       if (state.version !== command.expectedVersion) throw new Error('durable-control-version-conflict');
       if (!['running', 'paused', 'waiting-approval'].includes(state.status)) throw new Error('durable-run-terminal');
+      if (state.publication) throw new Error('durable-publication-model-finished');
       const sequence = (state.continuationRevision ?? 0) + 1;
       state.continuationRevision = sequence;
       (state.steering ??= []).push({ commandId: command.commandId, sequence, text: command.text });
@@ -407,7 +418,12 @@ export class DurableJournal {
       fail: async (_reason: string) => this.transaction(() => {
         const state = this.fenced(claim);
         // An old execution cannot turn a later Pause/Resume/Cancel into a failure.
-        if (state.status === 'running' && state.controlRevision === claim.controlRevision) { state.status = 'failed'; this.save(state, 'failed'); }
+        if (state.status === 'running' && state.controlRevision === claim.controlRevision) {
+          // Model teardown cannot strand a completed result awaiting local publication.
+          state.status = state.publication?.status === 'pending' ? 'paused' : 'failed';
+          if (state.status === 'paused') state.controlRevision++;
+          this.save(state, state.status);
+        }
       }),
     });
   }
@@ -416,12 +432,22 @@ export class DurableJournal {
       const state = this.fenced(claim);
       if (digest(state.spec.runtimeManifest) !== digest(DURABLE_RUNTIME_MANIFEST)) throw new Error('durable-runtime-manifest-changed');
       const isResult = request.kind === 'model-result' || request.kind === 'tool-result';
+      const finalStepReplay = request.kind === 'workflow-step-complete' && state.status === 'succeeded' && state.spec.workflowSteps !== undefined && request.step === state.spec.workflowSteps.length - 1 && state.workflowSteps?.[request.step]?.endTurn !== undefined;
+      const publicationReplay = request.kind === 'output-published' && state.status === 'succeeded' && state.publication?.status === 'published';
+      const localPublication = request.kind === 'output-published' || state.publication?.status === 'pending' && (request.kind === 'complete' || request.kind === 'workflow-step-complete');
       if (!isResult) {
         this.assertChildParent(state);
         if (state.status === 'paused') throw new Error('durable-run-paused');
-        if (state.status !== 'running' || Date.now() >= state.spec.deadlineAt) throw new Error('durable-dispatch-blocked');
+        if (state.status !== 'running' && !finalStepReplay && !publicationReplay || !localPublication && Date.now() >= state.spec.deadlineAt) throw new Error('durable-dispatch-blocked');
         if (state.controlRevision !== claim.controlRevision) throw new Error('durable-control-changed');
       } else if (!['running', 'paused', 'waiting-approval', 'cancelled'].includes(state.status)) throw new Error('durable-dispatch-blocked');
+      if (request.kind === 'output-published') {
+        if (!state.spec.publication || !state.publication || request.outputId !== state.spec.publication.outputId || request.outputId !== state.publication.outputId) throw new Error('durable-publication-mismatch');
+        if (state.publication.status === 'published') return {};
+        state.publication.status = 'published'; state.status = 'succeeded';
+        this.save(state, 'output-published'); return {};
+      }
+      if (state.publication && !isResult && !['complete', 'workflow-step-complete'].includes(request.kind)) throw new Error('durable-publication-model-finished');
       const priorDone = (turn: Turn) => turn.message !== undefined && turn.calls.every(call => call.result !== undefined || call.skipped);
       const pending = () => state.steering!.some(entry => entry.appliedAfterTurn === undefined);
       const steeringBlocked = () => { state.controlRevision++; this.save(state, 'steering-replay-required'); return { blocked: 'durable-steering-pending' }; };
@@ -438,16 +464,61 @@ export class DurableJournal {
         if (changed) this.save(state, 'turn-boundary');
         return { steering: state.steering!.filter(entry => boundary!.sequences.includes(entry.sequence)) };
       }
+      if (request.kind === 'workflow-step-start' || request.kind === 'workflow-step-complete') {
+        const definitions = state.spec.workflowSteps;
+        if (!definitions || !Number.isSafeInteger(request.step) || request.step < 0 || request.step >= definitions.length) throw new Error('durable-invalid-workflow-step');
+        const steps = state.workflowSteps ??= [];
+        const step = steps[request.step];
+        if (steps.slice(0, request.step).some(prior => prior.endTurn === undefined) || request.step > steps.length) throw new Error('durable-workflow-step-order');
+        if (request.kind === 'workflow-step-start') {
+          const inputDigest = digest(request.input);
+          if (step) {
+            if (step.inputDigest !== inputDigest) throw new Error('durable-workflow-step-input-changed');
+            return step.output === undefined ? {} : { cached: step.output };
+          }
+          if (steps.some(prior => prior.endTurn === undefined) || !state.turns.every(priorDone)) throw new Error('durable-workflow-step-order');
+          steps.push({ id: definitions[request.step]!.id, startTurn: state.turns.length, inputDigest });
+          this.save(state, 'workflow-step-start'); return {};
+        }
+        if (!step) throw new Error('durable-workflow-step-not-started');
+        if (step.endTurn !== undefined) return { cached: step.output! };
+        if (pending() || state.steering!.some(entry => !state.turns[entry.appliedAfterTurn! + 1])) return steeringBlocked();
+        if (state.children?.some(child => child.mode === 'required' && child.status !== 'joined')) throw new Error('durable-child-join-required');
+        if (state.operations?.some(operation => operation.status !== 'succeeded')) throw new Error('durable-operation-incomplete');
+        const turns = state.turns.slice(step.startTurn);
+        if (!turns.length || !turns.every(priorDone) || turns[turns.length - 1]!.calls.length) throw new Error('durable-incomplete');
+        const message = turns[turns.length - 1]!.message as { content?: Array<{ type?: string; text?: string }> };
+        // The host enforces the pinned requireNonEmptyOutput policy before this checkpoint.
+        const text = message.content?.filter(item => item.type === 'text' && typeof item.text === 'string').map(item => item.text).join('') ?? '';
+        step.output = text; step.endTurn = state.turns.length;
+        if (request.step === definitions.length - 1) {
+          if (state.spec.publication) state.publication = { status: 'pending', content: text, outputId: state.spec.publication.outputId };
+          else state.status = 'succeeded';
+        }
+        this.save(state, 'workflow-step-complete'); return { cached: text };
+      }
       if (request.kind === 'complete') {
+        if (state.spec.workflowSteps) throw new Error('durable-workflow-step-completion-required');
+        if (state.publication) return {};
         if (state.children?.some(child => child.mode === 'required' && child.status !== 'joined')) throw new Error('durable-child-join-required');
         if (state.operations?.some(operation => operation.status !== 'succeeded')) throw new Error('durable-operation-incomplete');
         if (pending() || state.steering!.some(entry => !state.turns[entry.appliedAfterTurn! + 1])) return steeringBlocked();
         if (!state.turns.length || !state.turns.every(priorDone) || state.turns[state.turns.length - 1]!.calls.length) throw new Error('durable-incomplete');
-        state.status = 'succeeded'; this.save(state, 'succeeded'); return {};
+        if (state.spec.publication) {
+          const message = state.turns.at(-1)!.message as { content?: Array<{ type?: string; text?: string }> };
+          const content = message.content?.filter(item => item.type === 'text' && typeof item.text === 'string').map(item => item.text).join('') ?? '';
+          state.publication = { status: 'pending', content, outputId: state.spec.publication.outputId };
+          this.save(state, 'publication-pending');
+        } else { state.status = 'succeeded'; this.save(state, 'succeeded'); }
+        return {};
       }
       if (!Number.isSafeInteger(request.turn) || request.turn < 0 || request.turn > state.turns.length) throw new Error('durable-invalid-turn');
       let turn = state.turns[request.turn];
       if (request.kind === 'model-start') {
+        if (state.spec.workflowSteps) {
+          const step = state.workflowSteps?.find(step => step.endTurn === undefined);
+          if (!step || request.turn < step.startTurn) throw new Error('durable-workflow-step-not-started');
+        }
         if (!turn && state.children?.some(child => child.mode === 'required' && child.status !== 'joined')) throw new Error('durable-child-join-required');
         if (!turn && pending()) return steeringBlocked();
         const contextDigest = digest(canonicalContext(request.context));
@@ -575,6 +646,7 @@ export class DurableJournal {
   }
   private operationDispatch(state: DurableRunSnapshot, claim: DurableClaim): void {
     this.assertExecutionClaim(claim);
+    if (state.publication) throw new Error('durable-publication-model-finished');
     this.assertChildParent(state);
     if (state.status !== 'running' || state.controlRevision !== claim.controlRevision || Date.now() >= state.spec.deadlineAt) throw new Error('durable-operation-dispatch-blocked');
     if (digest(state.spec.runtimeManifest) !== digest(DURABLE_RUNTIME_MANIFEST)) throw new Error('durable-runtime-manifest-changed');

@@ -1,6 +1,7 @@
 import { createSafeRelaunch } from './safe-relaunch'
 import { waitForSafeShutdown } from './shutdown-wait'
 import { startElectronDurableWorkflowHost } from './durable-workflow-startup'
+import { hasSavedDurableWorkflowStorage } from './durable-workflow-storage'
 import { createDurableReadBindingResolver } from '@craft-agent/server-core/workflows/durable-read-binding'
 import { electronDurableWorkflowLifetime } from './durable-workflow-lifetime'
 import { artistStartupWindow } from './artist-startup-window'
@@ -864,6 +865,8 @@ app.whenReady().then(async () => {
 
       // Bootstrap the WS RPC server via shared bootstrap function.
       let durableHandlerDeps: HandlerDeps | undefined
+      const durableHostEnabled = RUNTIME_IDENTITY.variant === 'artist-os' && process.env.CRAFT_DURABLE_READ_HOST === '1'
+      const durableRecoveryRequired = RUNTIME_IDENTITY.variant === 'artist-os' && (durableHostEnabled || hasSavedDurableWorkflowStorage(RUNTIME_IDENTITY.dataRoot))
       const instance = await bootstrapServer<SessionManager, HandlerDeps>({
         serverToken,
         rpcHost,
@@ -1020,7 +1023,10 @@ app.whenReady().then(async () => {
           ? (server, deps, serverCtx) => registerCoreRpcHandlers(server, deps, serverCtx)
           : registerAllRpcHandlers,
         setSessionEventSink: (sm, sink) => sm.setEventSink(sink),
-        initializeSessionManager: (sm) => sm.initialize(),
+        initializeSessionManager: (sm) => {
+          if (durableRecoveryRequired) sm.deferScheduledWorkForDurableHost()
+          return sm.initialize()
+        },
         initModelRefreshService: () => initModelRefreshService(async (slug: string) => {
           const { getCredentialManager } = await import('@craft-agent/shared/credentials')
           const manager = getCredentialManager()
@@ -1046,8 +1052,8 @@ app.whenReady().then(async () => {
         },
       })
 
-      // Host opt-in: supported manual local reads use durable Start; other workflows keep their existing engine.
-      if (RUNTIME_IDENTITY.variant === 'artist-os' && process.env.CRAFT_DURABLE_READ_HOST === '1') {
+      // Host opt-in: supported manual and tracked scheduled reads use durable Start.
+      if (durableHostEnabled) {
         try {
           const durableHost = await startElectronDurableWorkflowHost({
             enabled: true,
@@ -1056,6 +1062,7 @@ app.whenReady().then(async () => {
             runnerOptions: {
               hostRuntime: { appRootPath: app.getAppPath(), resourcesPath: process.resourcesPath, isPackaged: app.isPackaged },
               resolveBinding: createDurableReadBindingResolver(),
+              onOutputPublished: (workspaceId, outputId) => instance.sessionManager.notifyDurableOutputPublished(workspaceId, outputId),
             },
           })
           if (durableHost && durableHandlerDeps) {
@@ -1069,10 +1076,20 @@ app.whenReady().then(async () => {
           void dialog.showMessageBox({
             type: 'warning', title: 'Workflow recovery unavailable',
             message: 'The optional workflow recovery host could not start.',
-            detail: 'Durable workflow controls are unavailable. Existing workflows remain available. Check secure-storage access and local-only server settings before trying again on the next launch.',
+            detail: 'Scheduled work is paused until recovery storage is available. Manual workflows remain available. Check secure-storage access and local-only server settings before trying again on the next launch.',
             buttons: ['OK'],
           }).catch(() => mainLog.warn('[durable-workflows] Startup notice could not be displayed'))
+        } finally {
+          instance.sessionManager.finishDurableWorkflowStartup()
         }
+      } else if (durableRecoveryRequired) {
+        mainLog.warn('[durable-workflows] Saved recovery storage exists; scheduled work remains paused while the host is disabled')
+        void dialog.showMessageBox({
+          type: 'warning', title: 'Scheduled work paused',
+          message: 'Saved workflow recovery data needs the recovery host.',
+          detail: 'Scheduled work is paused to preserve saved runs. Restart this development build with CRAFT_DURABLE_READ_HOST=1 to reconnect them. Manual workflows remain available.',
+          buttons: ['OK'],
+        }).catch(() => mainLog.warn('[durable-workflows] Disabled-host notice could not be displayed'))
       }
 
       // Capture module-level references for before-quit cleanup and deep-link handlers

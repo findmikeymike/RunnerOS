@@ -72,6 +72,7 @@ export interface ScheduledWorkRunnerDeps {
     continuation?: ScheduledWorkContinuation
   }): Promise<{ sessionId?: string } | void>
   startWorkflow(input: {
+    attemptId: string
     workOrderId: string
     workspace: { id: string; rootPath: string }
     workflowSlug: string
@@ -79,7 +80,17 @@ export interface ScheduledWorkRunnerDeps {
     triggerInputs: Record<string, unknown>
     untrustedTriggerInputs?: string[]
   }): Promise<{ runId: string }>
-  readWorkflowRun(workspaceRootPath: string, runId: string): WorkflowRunSnapshot | null | undefined
+  /** Reconcile an already admitted occurrence; this must never start replacement work. */
+  recoverWorkflow?(input: {
+    workspace: { id: string; rootPath: string }
+    workOrderId: string
+    attemptId: string
+    workflowSlug: string
+    workflowDigest: string
+  }): Promise<{ runId: string } | null>
+  /** A terminal journal state may still own a backend that is draining. */
+  isWorkflowRunActive?(workspaceRootPath: string, runId: string): boolean | Promise<boolean>
+  readWorkflowRun(workspaceRootPath: string, runId: string): WorkflowRunSnapshot | null | undefined | Promise<WorkflowRunSnapshot | null | undefined>
   listOutputManifests(workspaceRootPath: string): OutputManifest[]
   postProcessAgentTask?(input: {
     workspaceId: string
@@ -821,8 +832,11 @@ export class ScheduledWorkRunner {
     try {
       const execution = order.execution
       if (execution.type !== 'workflow-run') return 'failed'
+      const attemptId = currentWorkflowAttemptId(order)
+      if (!attemptId) throw new Error('Scheduled workflow is missing its persisted attempt identity.')
       if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before workflow execution.')
       const { runId } = await this.deps.startWorkflow({
+        attemptId,
         workOrderId: order.id,
         workspace: { id: workspaceId, rootPath: workspaceRootPath },
         workflowSlug: execution.workflowSlug,
@@ -832,14 +846,22 @@ export class ScheduledWorkRunner {
       })
       const cleanedRunId = clean(runId)
       if (!cleanedRunId) throw new Error(`Workflow job ${order.id} did not return a run id.`)
-      await this.persistRunningWorkflowRunId(workspaceId, workspaceRootPath, order.id, cleanedRunId)
-      return 'started'
+      const persisted = await this.persistRunningWorkflowRunId(workspaceId, workspaceRootPath, order.id, cleanedRunId, attemptId)
+      return persisted.updated ? 'started' : 'failed'
     } catch (error) {
+      const latest = this.getCurrentOrder(workspaceRootPath, workspaceId, order.id)
+      if (!latest || latest.status !== 'running' || currentWorkflowAttemptId(latest) !== currentWorkflowAttemptId(order)) return 'failed'
+      // A lost reply may hide a committed admission. Reconcile, never dispatch again.
+      if (this.deps.recoverWorkflow && currentWorkflowAttemptId(latest)) {
+        const outcome = await this.pollWorkflowRun(workspaceId, workspaceRootPath, latest, this.buildAttention('execution-failed', errorMessage(error)))
+        return outcome === 'failed' ? 'failed' : 'started'
+      }
       await this.finishWithAttention(
         workspaceId,
         workspaceRootPath,
         order.id,
         this.buildAttention('execution-failed', errorMessage(error)),
+        undefined, currentWorkflowAttemptId(order) ?? null,
       )
       return 'failed'
     }
@@ -849,28 +871,59 @@ export class ScheduledWorkRunner {
     workspaceId: string,
     workspaceRootPath: string,
     order: ScheduledWorkOrder,
+    missingAdmissionAttention?: ScheduledWorkAttention,
   ): Promise<'running' | 'done' | 'failed'> {
-    const runId = currentWorkflowRunId(order)
+    let runId = currentWorkflowRunId(order)
+    const attemptId = currentWorkflowAttemptId(order)
+    if (!runId && attemptId && this.deps.recoverWorkflow && order.execution.type === 'workflow-run') {
+      let recovered: { runId: string } | null
+      try {
+        recovered = await this.deps.recoverWorkflow({
+          workspace: { id: workspaceId, rootPath: workspaceRootPath },
+          workOrderId: order.id, attemptId,
+          workflowSlug: order.execution.workflowSlug,
+          workflowDigest: order.execution.workflowDigest,
+        })
+      } catch {
+        // Unknown admission state must retain the claim until a later scan can prove it.
+        return 'running'
+      }
+      if (recovered && clean(recovered.runId)) {
+        const persisted = await this.persistRunningWorkflowRunId(workspaceId, workspaceRootPath, order.id, recovered.runId, attemptId)
+        if (!persisted.updated) return 'running'
+        runId = recovered.runId
+      }
+    }
+    // An async lookup may outlive a user retry/cancel. Never settle the replacement attempt.
+    const latest = this.getCurrentOrder(workspaceRootPath, workspaceId, order.id)
+    if (!latest || latest.status !== 'running' || currentWorkflowAttemptId(latest) !== attemptId) return 'running'
     if (!runId) {
       await this.finishWithAttention(
         workspaceId,
         workspaceRootPath,
         order.id,
-        this.buildAttention('execution-failed', `Workflow run for ${order.title} is missing its run id.`),
+        missingAdmissionAttention ?? this.buildAttention('execution-failed', `Workflow run for ${order.title} is missing its run id.`),
+        undefined, attemptId ?? null,
       )
       return 'failed'
     }
-    const run = this.deps.readWorkflowRun(workspaceRootPath, runId)
+    const run = await this.deps.readWorkflowRun(workspaceRootPath, runId)
+    const afterRead = this.getCurrentOrder(workspaceRootPath, workspaceId, order.id)
+    if (!afterRead || afterRead.status !== 'running' || currentWorkflowAttemptId(afterRead) !== attemptId) return 'running'
     if (!run) {
       await this.finishWithAttention(
         workspaceId,
         workspaceRootPath,
         order.id,
         this.buildAttention('execution-failed', `Workflow run ${runId} could not be found.`),
+        undefined, attemptId ?? null,
       )
       return 'failed'
     }
-    if (ACTIVE_WORKFLOW_STATES.has(run.state)) return 'running'
+    if (run.durable && await this.deps.isWorkflowRunActive?.(workspaceRootPath, runId)) return 'running'
+    const afterActive = this.getCurrentOrder(workspaceRootPath, workspaceId, order.id)
+    if (!afterActive || afterActive.status !== 'running' || currentWorkflowAttemptId(afterActive) !== attemptId) return 'running'
+    if (ACTIVE_WORKFLOW_STATES.has(run.state) || (run.durable && run.state === 'interrupted')) return 'running'
     if (run.state === 'succeeded') {
       if (run.outputError) {
         await this.finishWithAttention(
@@ -878,6 +931,7 @@ export class ScheduledWorkRunner {
           workspaceRootPath,
           order.id,
           this.buildAttention('execution-failed', run.outputError),
+          undefined, attemptId ?? null,
         )
         return 'failed'
       }
@@ -888,6 +942,7 @@ export class ScheduledWorkRunner {
         order.id,
         run.id,
         outputIds,
+        attemptId ?? null,
       )
       return 'done'
     }
@@ -896,6 +951,7 @@ export class ScheduledWorkRunner {
       workspaceRootPath,
       order.id,
       this.buildAttention('execution-failed', summarizeWorkflowFailure(run)),
+      undefined, attemptId ?? null,
     )
     return 'failed'
   }
@@ -970,9 +1026,10 @@ export class ScheduledWorkRunner {
     workspaceRootPath: string,
     orderId: string,
     workflowRunId: string,
+    attemptId: string,
   ): Promise<PersistResult> {
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
-      if (order.status !== 'running') return null
+      if (order.status !== 'running' || currentWorkflowAttemptId(order) !== attemptId) return null
       return {
         ...order,
         updatedAt: nowIso,
@@ -1035,9 +1092,10 @@ export class ScheduledWorkRunner {
     orderId: string,
     workflowRunId: string,
     outputIds: string[],
+    expectedAttemptId: string | null,
   ): Promise<PersistResult> {
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
-      if (order.status !== 'running' || order.execution.type !== 'workflow-run') return null
+      if (order.status !== 'running' || order.execution.type !== 'workflow-run' || (currentWorkflowAttemptId(order) ?? null) !== expectedAttemptId) return null
       return {
         ...order,
         status: 'done',
@@ -1062,9 +1120,10 @@ export class ScheduledWorkRunner {
     orderId: string,
     attention: ScheduledWorkAttention,
     modelAttempts?: ModelAttempt[],
+    expectedAttemptId?: string | null,
   ): Promise<PersistResult> {
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
-      if (order.deletedAt || order.status !== 'running') return null
+      if (order.deletedAt || order.status !== 'running' || (expectedAttemptId !== undefined && (currentWorkflowAttemptId(order) ?? null) !== expectedAttemptId)) return null
       const summary = attention.message
       return {
         ...order,
@@ -1470,7 +1529,7 @@ export class ScheduledWorkRunner {
     const visited = new Set<string>();
     while (ancestor.id !== previousId && ancestor.resumedFromRunId && visited.size < 64 && !visited.has(ancestor.id)) {
       visited.add(ancestor.id);
-      const parent = this.deps.readWorkflowRun(root, ancestor.resumedFromRunId);
+      const parent = await this.deps.readWorkflowRun(root, ancestor.resumedFromRunId);
       if (!parent || parent.resumedByRunId !== ancestor.id || parent.workspaceId !== original.workspaceId || parent.workflowSlug !== original.workflowSlug
         || scheduledWorkDefinitionDigest(parent.trigger) !== scheduledWorkDefinitionDigest(original.trigger)
         || scheduledWorkDefinitionDigest(parent.workflowSnapshot) !== scheduledWorkDefinitionDigest(original.workflowSnapshot)) break;
@@ -1600,7 +1659,11 @@ export class ScheduledWorkRunner {
     if (order.execution.type !== 'workflow-run') return false
     const runId = currentWorkflowRunId(order)
     if (!runId) return true
-    const run = this.deps.readWorkflowRun(workspaceRootPath, runId)
+    const run = await this.deps.readWorkflowRun(workspaceRootPath, runId)
+    if (run?.durable && await this.deps.isWorkflowRunActive?.(workspaceRootPath, runId)) return true
+    const latest = this.getCurrentOrder(workspaceRootPath, order.owner.workspaceId, order.id)
+    // A replacement attempt admitted during the async reads must keep the lane.
+    if (latest?.status === 'running' && currentWorkflowAttemptId(latest) !== currentWorkflowAttemptId(order)) return true
     return !run || run.state === 'created' || run.state === 'queued' || run.state === 'running'
   }
 
@@ -1826,9 +1889,13 @@ function currentSessionId(order: ScheduledWorkOrder): string | undefined {
   return clean(fromRuns)
 }
 
+function currentWorkflowAttemptId(order: ScheduledWorkOrder): string | undefined {
+  const attempt = order.runs.at(-1)
+  return attempt?.jobId === order.id && attempt.status === 'running' ? clean(attempt.id) : undefined
+}
+
 function currentWorkflowRunId(order: ScheduledWorkOrder): string | undefined {
-  const fromRuns = [...order.runs].reverse().find((run) => run.workflowRunId)?.workflowRunId
-  return clean(fromRuns)
+  return clean(order.runs.at(-1)?.workflowRunId)
 }
 
 function updateLatestRun(

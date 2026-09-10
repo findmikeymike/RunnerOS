@@ -33,6 +33,20 @@ test('running is interrupted without a live owner and paused remains paused', as
   f.journal.command({ runId: 'r', workspaceId: 'w', commandId: 'pause', expectedVersion: f.journal.get('r', 'w').version, action: 'pause' });
   expect((await f.service().get('w', 'r', actor))?.state).toBe('paused');
 });
+test('pending publication shows saved step text but exposes final Output only after receipt', async () => {
+  const f = fixture(), outputId = 'dd38148b-74d8-5fce-9f33-47886ead6297';
+  f.journal.admit({ ...f.spec, runId: 'publish', commandId: 'publish', publication: { outputId, kind: 'report', title: 'Report', stepId: 'read' } });
+  const claim = f.journal.claim('publish', 'w'), bridge = f.journal.bridge(claim);
+  await bridge.checkpoint({ kind: 'model-start', turn: 0, context: {} });
+  await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'Saved report' }] } });
+  await bridge.checkpoint({ kind: 'complete' });
+  const pending = await f.service().get('w', 'publish', actor);
+  expect(pending?.state).toBe('interrupted'); expect(pending?.steps[0]?.state).toBe('succeeded');
+  expect(pending?.steps[0]?.output).toBe('Saved report'); expect(pending?.outputError).toContain('Resume'); expect(pending?.finalOutputId).toBeUndefined();
+  await bridge.checkpoint({ kind: 'output-published', outputId });
+  const published = await f.service().get('w', 'publish', actor);
+  expect(published?.state).toBe('succeeded'); expect(published?.finalOutputId).toBe(outputId); expect(published?.outputError).toBeUndefined();
+});
 test('authority filters list, rejects foreign direct reads and distinguishes internal IDs from missing', async () => {
   const f = fixture(); f.journal.admit({ ...f.spec, runId: 'foreign', commandId: 'foreign', approvalPrincipalId: 'bob' });
   f.journal.admit({ ...f.spec, runId: 'internal', commandId: 'internal', context: {} });
@@ -76,4 +90,23 @@ test('legacy list input is frozen before authority awaits', async () => {
   const legacy = [{ ...template, id: 'legacy', workspaceId: 'elsewhere' }];
   const pending = service.list('w', actor, legacy); legacy[0]!.workspaceId = 'w'; release();
   expect((await pending).map(run => run.id)).toEqual(['r']);
+});
+
+test('multi-step history keeps completed outputs while later steps are interrupted or fail', async () => {
+  const f = fixture();
+  const steps = [{ id: 'first', agent: 'reader', input: 'Read notes' }, { id: 'second', agent: 'reader', input: '{{steps.first.output}}' }, { id: 'third', agent: 'reader', input: 'Finish' }];
+  const spec: DurableRunSpec = { ...f.spec, runId: 'multi', commandId: 'multi', workflowSteps: steps.map(({ id }) => ({ id })), authority: { adapter: 'pi-local-read-multi-1', stepCount: 3, completion: 'journal-only' }, context: { workflow: { slug: 'multi', body: '', metadata: { steps, name: 'Multi', trigger: { type: 'manual' }, outputs: { mode: 'none' } } } } };
+  f.journal.admit(spec); const claim = f.journal.claim('multi', 'w'), bridge = f.journal.bridge(claim);
+  await bridge.checkpoint({ kind: 'workflow-step-start', step: 0, input: { prompt: 'Read notes' } });
+  await bridge.checkpoint({ kind: 'model-start', turn: 0, context: {} });
+  await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'Kept result' }] } });
+  await bridge.checkpoint({ kind: 'workflow-step-complete', step: 0 }); f.journal.release(claim); f.reopen();
+  const interrupted = await f.service().get('w', 'multi', actor);
+  expect(interrupted?.state).toBe('interrupted');
+  expect(interrupted?.steps.map(step => step.state)).toEqual(['succeeded', 'interrupted', 'queued']);
+  expect(interrupted?.steps[0]?.output).toBe('Kept result');
+  const next = f.journal.claim('multi', 'w'); await f.journal.bridge(next).fail('fixture'); f.journal.release(next);
+  const failed = await f.service().get('w', 'multi', actor);
+  expect(failed?.steps.map(step => step.state)).toEqual(['succeeded', 'failed', 'skipped']);
+  expect(failed?.steps[0]?.output).toBe('Kept result'); expect(failed?.steps[1]?.output).toBeUndefined();
 });

@@ -1,5 +1,6 @@
 import { createDurableReadAuthorization, readDurablePolicyRevision } from '@craft-agent/server-core/workflows/durable-read-authorization';
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity';
+import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
 import type { DurableWorkflowHostOptions } from '@craft-agent/server-core/workflows/durable-workflow-host';
 import { createElectronDurableWorkflowAuthority } from './durable-workflow-authority';
 import { openElectronDurableWorkflowHost } from './durable-workflow-storage';
@@ -32,7 +33,12 @@ export function createDurableWorkflowStartup(deps = {
     return deps.openHost({ runnerOptions: { ...runnerOptions, readPolicyRevision: workspaceRoot => readDurablePolicyRevision(RUNTIME_IDENTITY.dataRoot, workspaceRoot), authorizeRun: context => resolvePrincipal.assertRunPrincipal(context.workspaceId, context.approvalPrincipalId), authorizeTool: createDurableReadAuthorization({
       configRoot: RUNTIME_IDENTITY.dataRoot, resolveBinding: runnerOptions.resolveBinding,
       assertRunPrincipal: resolvePrincipal.assertRunPrincipal,
-    }) }, resolvePrincipal });
+    }), authorizePublication: context => resolvePrincipal.assertPublicationPrincipal(context.workspaceId, context.approvalPrincipalId),
+    resolvePublicationWorkspace: workspaceId => {
+      const workspace = getWorkspaceByNameOrId(workspaceId);
+      if (!workspace || workspace.remoteServer) throw new Error('durable-output-workspace-unavailable');
+      return { id: workspace.id, rootPath: workspace.rootPath };
+    } }, resolvePrincipal, resolveScheduledPrincipal: resolvePrincipal.resolveScheduledPrincipal });
   };
 }
 

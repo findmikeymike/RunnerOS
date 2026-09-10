@@ -1,8 +1,10 @@
+import { resolveTemplate } from '../../../shared/src/workflows/template.ts';
 import { DurableChildRunner, type DurableChildRequest, type DurableChildResult } from './durable-child-runner.ts';
 import { shouldAllowToolInMode } from '../../../shared/src/agent/mode-manager.ts';
 import { permissionsConfigCache } from '../../../shared/src/agent/permissions-config.ts';
 import { realpathSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
+import { ensureDurableTextOutput } from '../../../shared/src/outputs/durable-text.ts';
 import type { AgentEvent, Workspace } from '@craft-agent/core/types';
 import type { AgentBackend, BackendHostRuntimeContext, CoreBackendConfig } from '../../../shared/src/agent/backend/types.ts';
 import type { ResolvedBackendContext } from '../../../shared/src/agent/backend/factory.ts';
@@ -25,7 +27,7 @@ export interface DurableReadInput {
   /** Certified by the host, never estimated from renderer input. */
   costPolicy: DurableRunSpec['costPolicy'];
 }
-export type DurableReadWorkflowInput = Omit<DurableReadInput, 'prompt'> & { resolvedAgentSlug: string };
+export type DurableReadWorkflowInput = Omit<DurableReadInput, 'prompt'> & { resolvedAgentSlug: string; resolvedSteps?: Array<{ id: string; agent: string; systemPrompt: string }> };
 export interface DurableReadAdmission {
   snapshot: DurableRunSnapshot;
   /** Observed internally; callers may separately await completion or failure. */
@@ -44,6 +46,10 @@ export interface DurableReadRunnerOptions {
   onEvent?: (runId: string, event: AgentEvent) => void;
   /** Synchronous source revision after the last awaited authorization/binding lookup. */
   readPolicyRevision?: (workspaceRoot: string) => string;
+  resolvePublicationWorkspace?: (workspaceId: string) => { id: string; rootPath: string } | Promise<{ id: string; rootPath: string }>;
+  authorizePublication?: (context: { workspaceId: string; approvalPrincipalId: string }) => void;
+  publishOutput?: typeof ensureDurableTextOutput;
+  onOutputPublished?: (workspaceId: string, outputId: string) => void;
   authorizeRun?: (context: { runId: string; workspaceId: string; approvalPrincipalId: string }) => void;
   authorizeTool?: (request: Extract<DurableCheckpoint, { kind: 'tool-start' }>, context: { runId: string; workspaceId: string; approvalPrincipalId: string; connectionSlug: string; model: string; credentialIdentity: string; deadlineAt: number }) => Promise<DurableToolAuthorization>;
 }
@@ -62,6 +68,7 @@ interface FrozenReadContext {
   prompt: string; systemPrompt: string; connectionSlug: string; workspaceRoot: string; bindingDigest: string;
   requireNonEmptyOutput: boolean;
   workflow: DurableJson;
+  steps?: Array<{ id: string; prompt: string; systemPrompt: string; requireNonEmptyOutput: boolean }>;
 }
 
 /** Reuse the existing Pi provider driver and runtime resolver, with model fallback disabled. */
@@ -85,18 +92,50 @@ function frozenContext(spec: DurableRunSpec): FrozenReadContext {
   return value;
 }
 
+function supportsPublication(workflow: LoadedWorkflow): boolean {
+  const output = workflow.metadata.outputs;
+  if (output?.mode === 'none') return true;
+  if (output?.mode !== 'final-step' || !['report', 'document'].includes(output.kind ?? 'document')
+    || Object.keys(output).some(key => !['mode', 'kind', 'title', 'summary', 'primary'].includes(key))) return false;
+  for (const value of [output.title, output.summary]) {
+    if (value !== undefined && (typeof value !== 'string' || value.includes('{{') || value.includes('}}'))) return false;
+  }
+  if (output.primary && (output.primary.from !== 'step-output'
+    || (output.primary.step !== undefined && output.primary.step !== workflow.metadata.steps.at(-1)?.id)
+    || Object.keys(output.primary).some(key => !['from', 'step'].includes(key)))) return false;
+  return true;
+}
+function publicationId(workspaceId: string, runId: string): string {
+  const bytes = createHash('sha256').update(canonical(['artist-os-durable-output', workspaceId, runId])).digest().subarray(0, 16);
+  bytes[6] = (bytes[6]! & 15) | 80;
+  bytes[8] = (bytes[8]! & 63) | 128;
+  const value = bytes.toString('hex');
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+}
+
 /** The narrow workflow shape whose execution semantics are implemented by this adapter. */
 export function supportsDurableReadWorkflow(workflow: LoadedWorkflow): boolean {
-  const step = workflow.metadata.steps[0];
-  return !(workflow.parseWarnings?.length || workflow.metadata.trigger.type !== 'manual' || workflow.metadata.steps.length !== 1 || !step
-      || workflow.metadata.outputs?.mode !== 'none' || workflow.metadata.trigger.inputs?.length
+  if (workflow.parseWarnings?.length || workflow.metadata.trigger.type !== 'manual' || !supportsPublication(workflow)
+    || workflow.metadata.trigger.inputs?.length || workflow.metadata.steps.length < 1 || workflow.metadata.steps.length > 8) return false;
+  const prior = new Set<string>();
+  for (const step of workflow.metadata.steps) {
+    if (!step || !/^[a-zA-Z0-9_-]+$/.test(step.id) || prior.has(step.id) || !step.input?.trim()
       || step.taskModeId || step.outputSchema || step.timeout !== undefined
       || (step.retries ?? 0) !== 0 || (step.onFailure ?? 'stop') !== 'stop' || step.legacySkillReferences?.length
       || Object.keys(step).some(key => !['id', 'agent', 'input', 'description', 'retries', 'onFailure', 'completion', 'legacySkillReferences', 'legacySkillPromptHash'].includes(key))
-      || /\{\{/.test(step.input) || Object.keys(step.completion ?? {}).some(key => key !== 'requireNonEmptyOutput'));
+      || Object.keys(step.completion ?? {}).some(key => key !== 'requireNonEmptyOutput')) return false;
+    let valid = true;
+    const remaining = step.input.replace(/\{\{\s*steps\.([a-zA-Z0-9_-]+)\.output\s*(?:\|\s*escape\s*)?\}\}/g, (_match, id: string) => {
+      if (!prior.has(id)) valid = false;
+      return '';
+    });
+    if (!valid || remaining.includes('{{') || remaining.includes('}}')) return false;
+    prior.add(step.id);
+  }
+  return true;
 }
 
-/** Single-step local read execution. Only journal checkpoints authorize success. */
+/** Sequential local read execution. Only journal checkpoints authorize success. */
 export class DurableReadRunner {
   private readonly active = new Map<string, ActiveReadExecution>();
   private closing = false;
@@ -153,13 +192,17 @@ export class DurableReadRunner {
     if (!supportsDurableReadWorkflow(workflow) || step?.agent !== input.resolvedAgentSlug) {
       return Promise.reject(new Error('unsupported-durable-read-workflow'));
     }
-    const { resolvedAgentSlug: _slug, ...rest } = input;
-    return this.admit({ ...rest, prompt: step.input }, workflow);
+    const { resolvedAgentSlug: _slug, resolvedSteps, ...rest } = input;
+    if (workflow.metadata.steps.length > 1 && (!resolvedSteps || resolvedSteps.length !== workflow.metadata.steps.length
+      || resolvedSteps.some((resolved, i) => resolved.id !== workflow.metadata.steps[i]!.id || resolved.agent !== workflow.metadata.steps[i]!.agent || !resolved.systemPrompt?.trim()))) {
+      return Promise.reject(new Error('unsupported-durable-read-workflow'));
+    }
+    return this.admit({ ...rest, prompt: step.input }, workflow, resolvedSteps ? JSON.parse(canonical(resolvedSteps)) : undefined);
   }
 
   async start(input: DurableReadInput): Promise<DurableRunSnapshot> { return (await this.admit(input)).execution; }
 
-  private async admit(input: DurableReadInput, workflow?: LoadedWorkflow): Promise<DurableReadAdmission> {
+  private async admit(input: DurableReadInput, workflow?: LoadedWorkflow, resolvedSteps?: DurableReadWorkflowInput['resolvedSteps']): Promise<DurableReadAdmission> {
     this.assertOpen();
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.runId) || !input.prompt.trim() || !input.systemPrompt.trim()) throw new Error('invalid-durable-read-input');
     const requested = JSON.parse(canonical(input)) as DurableReadInput;
@@ -169,17 +212,28 @@ export class DurableReadRunner {
     const context: FrozenReadContext = { prompt: requested.prompt, systemPrompt: requested.systemPrompt,
       connectionSlug: requested.connectionSlug, workspaceRoot: realpathSync(binding.workspace.rootPath), bindingDigest: bindingDigest(binding),
       requireNonEmptyOutput: workflow?.metadata.steps[0]?.completion?.requireNonEmptyOutput !== false,
-      workflow: workflow ? JSON.parse(JSON.stringify(workflow)) as DurableJson : null };
+      workflow: workflow ? JSON.parse(JSON.stringify(workflow)) as DurableJson : null,
+      ...(workflow && workflow.metadata.steps.length > 1 ? { steps: workflow.metadata.steps.map((step, i) => ({ id: step.id, prompt: step.input,
+        systemPrompt: resolvedSteps![i]!.systemPrompt, requireNonEmptyOutput: step.completion?.requireNonEmptyOutput !== false })) } : {}) };
     let createdAt = Date.now();
     try { createdAt = this.options.journal.get(requested.runId, requested.workspaceId).spec.createdAt; }
     catch (error) { if (!(error instanceof Error) || error.message !== 'durable-run-not-found') throw error; }
+    const output = workflow?.metadata.outputs;
+    if (output?.mode === 'final-step') {
+      if (!requested.approvalPrincipalId || !this.options.authorizePublication || !this.options.resolvePublicationWorkspace) throw new Error('unsupported-durable-read-workflow');
+      this.options.authorizePublication({ workspaceId: requested.workspaceId, approvalPrincipalId: requested.approvalPrincipalId });
+    }
     const spec: DurableRunSpec = { engine: 'sqlite-v2-readonly-1', runId: requested.runId, workspaceId: requested.workspaceId,
       credentialIdentity: binding.credentialIdentity, runtimeManifest: { ...DURABLE_RUNTIME_MANIFEST },
       createdAt, commandId: requested.commandId, model: requested.model, allowedTools: requested.allowedTools,
       maxOutputTokens: requested.maxOutputTokens, maxModelAttempts: requested.maxModelAttempts, deadlineAt: requested.deadlineAt,
+      ...(output?.mode === 'final-step' ? { publication: { outputId: publicationId(requested.workspaceId, requested.runId),
+        kind: (output.kind ?? 'document') as 'report' | 'document', title: output.title?.trim() || workflow!.metadata.name.trim(),
+        ...(output.summary?.trim() ? { summary: output.summary.trim() } : {}), stepId: workflow!.metadata.steps.at(-1)!.id } } : {}),
       costPolicy: requested.costPolicy, context: context as unknown as DurableJson,
       ...(requested.approvalPrincipalId !== undefined ? { approvalPrincipalId: requested.approvalPrincipalId } : {}),
-      authority: { adapter: 'pi-local-read-1', stepCount: 1, completion: 'journal-only' } };
+      authority: { adapter: context.steps ? 'pi-local-read-multi-1' : 'pi-local-read-1', stepCount: context.steps?.length ?? 1, completion: 'journal-only' },
+      ...(context.steps ? { workflowSteps: context.steps.map(step => ({ id: step.id })) } : {}) };
     const snapshot = this.options.journal.admit(spec);
     const execution = this.resume(spec.runId, spec.workspaceId);
     void execution.catch(() => {});
@@ -298,6 +352,36 @@ export class DurableReadRunner {
     bindingDigest(binding);
   }
 
+  private async publishPending(state: DurableRunSnapshot, claim: DurableClaim, bridge: ReturnType<DurableJournal['bridge']>): Promise<DurableRunSnapshot> {
+    const { journal } = this.options, { runId, workspaceId } = state.spec;
+    if (state.publication?.status !== 'pending' || state.status !== 'running') return state;
+    try {
+      const frozen = frozenContext(state.spec), publication = state.spec.publication;
+      if (!publication || !state.spec.approvalPrincipalId || !this.options.authorizePublication || !this.options.resolvePublicationWorkspace) throw new Error('durable-output-authorization-required');
+      const current = await this.options.resolvePublicationWorkspace(workspaceId);
+      if (current.id !== workspaceId || realpathSync(current.rootPath) !== frozen.workspaceRoot) throw new Error('durable-output-workspace-changed');
+      this.options.authorizePublication({ workspaceId, approvalPrincipalId: state.spec.approvalPrincipalId });
+      state = journal.get(runId, workspaceId);
+      if (state.status !== 'running' || state.controlRevision !== claim.controlRevision) return state;
+      const workflow = frozen.workflow as unknown as LoadedWorkflow;
+      const result = (this.options.publishOutput ?? ensureDurableTextOutput)(frozen.workspaceRoot, {
+        id: publication.outputId, workspaceId, workflowRunId: runId, workflowSlug: workflow.slug, stepId: publication.stepId,
+        title: publication.title, ...(publication.summary ? { summary: publication.summary } : {}), kind: publication.kind,
+        content: state.publication!.content, createdAt: new Date(state.spec.createdAt).toISOString(),
+      });
+      if (result.outputId !== publication.outputId) throw new Error('durable-output-identity-mismatch');
+      await bridge.checkpoint({ kind: 'output-published', outputId: publication.outputId });
+      try { this.options.onOutputPublished?.(workspaceId, publication.outputId); } catch { /* Observer failures cannot undo publication. */ }
+      return journal.get(runId, workspaceId);
+    } catch {
+      const current = journal.get(runId, workspaceId);
+      if (current.status === 'running' && current.controlRevision === claim.controlRevision) {
+        journal.command({ runId, workspaceId, commandId: randomUUID(), expectedVersion: current.version, action: 'pause' });
+      }
+      return journal.get(runId, workspaceId);
+    }
+  }
+
   private async execute(runId: string, workspaceId: string, entry: ActiveReadExecution): Promise<DurableRunSnapshot> {
     const { journal } = this.options, initial = journal.get(runId, workspaceId);
     if (initial.status !== 'running') return initial;
@@ -333,6 +417,7 @@ export class DurableReadRunner {
       if (state.status !== 'running' || Date.now() >= state.spec.deadlineAt) throw new Error('durable-read-dispatch-blocked');
     };
     const bridge: typeof journalBridge = { ...journalBridge, checkpoint: async request => {
+      if (request.kind === 'output-published') throw new Error('durable-workflow-host-checkpoint-required');
       if (request.kind === 'model-start') {
         try {
           const frozen = frozenContext(initial.spec);
@@ -359,33 +444,71 @@ export class DurableReadRunner {
     let failed = false;
     try {
       const spec = initial.spec, frozen = frozenContext(spec);
-      if (spec.engine !== 'sqlite-v2-readonly-1' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(spec.runId) || canonical(spec.authority) !== canonical({ adapter: 'pi-local-read-1', stepCount: 1, completion: 'journal-only' })) throw new Error('unsupported-durable-read-authority');
+      if (spec.engine !== 'sqlite-v2-readonly-1' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(spec.runId) || canonical(spec.authority) !== canonical({ adapter: frozen.steps ? 'pi-local-read-multi-1' : 'pi-local-read-1', stepCount: frozen.steps?.length ?? 1, completion: 'journal-only' })) throw new Error('unsupported-durable-read-authority');
+      if (initial.publication?.status === 'pending') return await this.publishPending(initial, claim, journalBridge);
       const binding = JSON.parse(JSON.stringify(await this.options.resolveBinding(workspaceId, frozen.connectionSlug, spec.model))) as DurableReadBinding;
       this.checkBinding(binding, workspaceId, frozen.connectionSlug, spec.model);
       if (bindingDigest(binding) !== frozen.bindingDigest) throw new Error('durable-read-binding-changed');
       assertDispatch();
-      entry.backend = await (this.options.createBackend ?? createDurableReadBackend)({ context: binding.context, hostRuntime: this.options.hostRuntime,
-        coreConfig: { workspace: { ...binding.workspace, rootPath: frozen.workspaceRoot }, model: spec.model, customSystemPrompt: frozen.systemPrompt,
-          thinkingLevel: 'off', isHeadless: true, skipConfigWatcher: true, agentSkillSlugs: [], modelFallback: { enabled: false },
-          durableExecution: bridge, session: { id: spec.runId, workspaceRootPath: frozen.workspaceRoot,
-            workingDirectory: frozen.workspaceRoot, sdkCwd: frozen.workspaceRoot, createdAt: spec.createdAt, lastUsedAt: spec.createdAt,
-            model: spec.model, llmConnection: frozen.connectionSlug, permissionMode: 'safe', enabledSourceSlugs: [], hidden: true } } });
-      assertDispatch();
-      let streamError: Error | undefined;
-      for await (const event of entry.backend.chat(frozen.prompt)) {
-        if (event.type === 'error') streamError ??= new Error(event.message);
-        if (event.type === 'typed_error') streamError ??= new Error(event.error.message);
-        try { this.options.onEvent?.(runId, event); } catch { /* Observers may reconnect; they cannot control execution. */ }
+      const steps = frozen.steps ?? [{ id: '', prompt: frozen.prompt, systemPrompt: frozen.systemPrompt, requireNonEmptyOutput: frozen.requireNonEmptyOutput }];
+      for (let index = 0; index < steps.length; index++) {
+        const step = steps[index]!;
+        let state = journal.get(runId, workspaceId);
+        if (frozen.steps && state.workflowSteps?.[index]?.endTurn !== undefined) continue;
+        assertDispatch();
+        const outputs = Object.fromEntries((state.workflowSteps ?? []).filter(record => record.endTurn !== undefined).map(record => [record.id, { output: record.output }]));
+        const resolved = frozen.steps ? resolveTemplate(step.prompt, { steps: outputs }) : { output: step.prompt, warnings: [] };
+        if (resolved.warnings.length) throw new Error('durable-workflow-template-unresolved');
+        if (frozen.steps) await bridge.checkpoint({ kind: 'workflow-step-start', step: index, input: { prompt: resolved.output, systemPrompt: step.systemPrompt } });
+        state = journal.get(runId, workspaceId);
+        const offset = frozen.steps ? state.workflowSteps![index]!.startTurn : 0;
+        const stepBridge: typeof bridge = !frozen.steps ? bridge : { ...bridge, checkpoint: async request => {
+          if (request.kind === 'complete') {
+            assertDispatch();
+            if (step.requireNonEmptyOutput) {
+              const message = journal.get(runId, workspaceId).turns.at(-1)?.message as { content?: Array<{ type?: string; text?: string }> } | undefined;
+              if (!message?.content?.filter(item => item.type === 'text').map(item => item.text ?? '').join('').trim()) throw new Error('durable-read-empty-output');
+            }
+            return bridge.checkpoint({ kind: 'workflow-step-complete', step: index });
+          }
+          if (request.kind === 'workflow-step-start' || request.kind === 'workflow-step-complete' || request.kind === 'output-published') throw new Error('durable-workflow-host-checkpoint-required');
+          if (!Number.isSafeInteger(request.turn) || request.turn < (request.kind === 'turn-boundary' ? -1 : 0)) throw new Error('durable-invalid-turn');
+          return bridge.checkpoint({ ...request, turn: request.turn + offset });
+        } };
+        entry.backend = await (this.options.createBackend ?? createDurableReadBackend)({ context: binding.context, hostRuntime: this.options.hostRuntime,
+          coreConfig: { workspace: { ...binding.workspace, rootPath: frozen.workspaceRoot }, model: spec.model, customSystemPrompt: step.systemPrompt,
+            thinkingLevel: 'off', isHeadless: true, skipConfigWatcher: true, agentSkillSlugs: [], modelFallback: { enabled: false },
+            durableExecution: stepBridge, session: { id: spec.runId, workspaceRootPath: frozen.workspaceRoot,
+              workingDirectory: frozen.workspaceRoot, sdkCwd: frozen.workspaceRoot, createdAt: spec.createdAt, lastUsedAt: spec.createdAt,
+              model: spec.model, llmConnection: frozen.connectionSlug, permissionMode: 'safe', enabledSourceSlugs: [], hidden: true } } });
+        assertDispatch();
+        let streamError: Error | undefined;
+        for await (const event of entry.backend.chat(resolved.output)) {
+          if (event.type === 'error') streamError ??= new Error(event.message);
+          if (event.type === 'typed_error') streamError ??= new Error(event.error.message);
+          try { this.options.onEvent?.(runId, event); } catch { /* Observers cannot control execution. */ }
+        }
+        if (streamError) {
+          let cancelled = false;
+          try { cancelled = journal.get(runId, workspaceId).status === 'cancelled'; } catch { /* Retain original error. */ }
+          if (!cancelled) throw streamError;
+        }
+        const finalState = journal.get(runId, workspaceId);
+        if (finalState.status === 'running' && finalState.controlRevision === claim.controlRevision
+          && finalState.publication?.status !== 'pending' && (!frozen.steps || finalState.workflowSteps?.[index]?.endTurn === undefined)) throw new Error('durable-read-missing-completion-checkpoint');
+        entry.backend.destroy();
+        entry.backend = undefined;
+        if (finalState.status !== 'running' || finalState.controlRevision !== claim.controlRevision) return finalState;
       }
-      if (streamError) {
-        let cancelled = false;
-        try { cancelled = journal.get(runId, workspaceId).status === 'cancelled'; } catch { /* Retain the earlier stream failure if storage also fails. */ }
-        if (!cancelled) throw streamError;
-      }
-      const finalState = journal.get(runId, workspaceId);
-      if (finalState.status === 'running' && finalState.controlRevision === claim.controlRevision) throw new Error('durable-read-missing-completion-checkpoint');
-      return finalState;
+      return await this.publishPending(journal.get(runId, workspaceId), claim, journalBridge);
     } catch (error) {
+      const pending = journal.get(runId, workspaceId);
+      if (pending.publication?.status === 'pending') {
+        if (pending.status === 'running' && pending.controlRevision === claim.controlRevision) {
+          journal.command({ runId, workspaceId, commandId: randomUUID(), expectedVersion: pending.version, action: 'pause' });
+        }
+        return journal.get(runId, workspaceId);
+      }
       if (error instanceof Error && error.message.includes('durable-steering-pending')) {
         const current = journal.get(runId, workspaceId);
         entry.replayForSteering = current.status === 'running';

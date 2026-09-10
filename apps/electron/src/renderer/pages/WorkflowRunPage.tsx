@@ -211,7 +211,7 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
           <div className="flex items-start gap-2 rounded-[8px] border border-orange-400/20 bg-orange-400/[0.08] px-3 py-2.5 text-sm text-orange-100/90">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-300" />
             <div>
-              <div className="font-medium">Run finished, but finalization needs attention</div>
+              <div className="font-medium">{run.durable ? 'Final Output needs attention' : 'Run finished, but finalization needs attention'}</div>
               <div className="mt-0.5 text-xs text-orange-100/65">{run.outputError}</div>
             </div>
           </div>
