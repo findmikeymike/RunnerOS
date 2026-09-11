@@ -2,15 +2,42 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync } from 'nod
 import { dirname, join, resolve } from 'node:path';
 import { matter, stringifyFrontmatter } from '../config/frontmatter.ts';
 import { resolveRuntimeIdentity, type RuntimeProductVariant } from '../config/runtime-identity.ts';
-import { atomicWriteFileSync } from '../utils/files.ts';
 import { expandPath } from '../utils/paths.ts';
 import { getManagedSkillsRoot, skillDigest, type ManagedSkillStorageOptions } from './managed.ts';
-import { migrateManagedSkillScope, rewriteLegacySkillAssignments } from './migration.ts';
+import { migrateManagedSkillScope, rewriteLegacySkillAssignments, writeSkillMigrationFile, setManagedSkillMigrationDeferred } from './migration.ts';
 import { invalidateSkillsCache } from './storage.ts';
 import { markLegacyAuthoredSkillReferences } from './authored-reference-migration.ts';
 
-interface StartupState { version: 1; startedAt: number; completedScopes: string[]; eligibleRecords?: Record<string, string>; pending?: { scopes: string[]; agents: string[]; sessions: string[]; authored?: string[] } }
+interface StartupState { recordWrite?: { path: string; before: string; after: string }; version: 1; startedAt: number; completedScopes: string[]; eligibleRecords?: Record<string, string>; pending?: { scopes: string[]; agents: string[]; sessions: string[]; authored?: string[] } }
 export interface ManagedSkillStartupOptions extends ManagedSkillStorageOptions { workspaceRoots: string[]; projectRoots?: string[]; agentsDir?: string; workflowsDir?: string; runtimeVariant?: RuntimeProductVariant }
+function validateStartupState(value: unknown): asserts value is StartupState {
+  const record = (input: unknown): input is Record<string, unknown> =>
+    !!input && typeof input === 'object' && !Array.isArray(input);
+  const absolutePath = (input: unknown): input is string =>
+    typeof input === 'string' && !input.includes('\0') && resolve(input) === input;
+  const paths = (input: unknown): input is string[] => Array.isArray(input) && input.every(absolutePath);
+  const hash = (input: unknown): input is string => typeof input === 'string' && /^[a-f0-9]{64}$/.test(input);
+  function fail(): never { throw new Error('Managed skill startup journal needs recovery'); }
+  if (!record(value) || value.version !== 1 || typeof value.startedAt !== 'number'
+    || !Number.isFinite(value.startedAt) || !paths(value.completedScopes)) fail();
+  // Older journals without eligibility cannot distinguish old references from
+  // deliberate new choices. Leave them intact for recovery rather than guessing.
+  if (!record(value.eligibleRecords)
+    || !Object.entries(value.eligibleRecords).every(([path, digest]) => absolutePath(path) && hash(digest))) fail();
+  if ('pending' in value) {
+    const pending = value.pending;
+    if (!record(pending) || !paths(pending.scopes) || !paths(pending.agents) || !paths(pending.sessions)
+      || ('authored' in pending && !paths(pending.authored))) fail();
+  }
+  if ('recordWrite' in value) {
+    const intent = value.recordWrite;
+    const pending = value.pending;
+    if (!record(intent) || !absolutePath(intent.path) || !hash(intent.before) || !hash(intent.after)
+      || !record(pending) || !paths(pending.agents) || !paths(pending.sessions)
+      || ![...pending.agents, ...pending.sessions, ...(paths(pending.authored) ? pending.authored : [])].includes(intent.path)) fail();
+  }
+}
+
 function childFiles(root: string, filename: string): string[] {
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => join(root, entry.name, filename)).filter(existsSync);
@@ -32,10 +59,10 @@ export function migrateManagedSkillsAtStartup(options: ManagedSkillStartupOption
   const statePath = join(managedRoot, '.startup-migration.json');
   mkdirSync(managedRoot, { recursive: true });
   const firstMigration = !existsSync(statePath);
-  const state: StartupState = !firstMigration ? JSON.parse(readFileSync(statePath, 'utf8')) : { version: 1, startedAt: Date.now(), completedScopes: [] };
-  if (state.version !== 1 || !Number.isFinite(state.startedAt) || !Array.isArray(state.completedScopes)
-    || state.completedScopes.some(path => typeof path !== 'string')) throw new Error('Managed skill startup journal needs recovery');
-  const saveState = () => atomicWriteFileSync(statePath, JSON.stringify(state, null, 2) + '\n');
+  const loadedState: unknown = !firstMigration ? JSON.parse(readFileSync(statePath, 'utf8')) : { version: 1, startedAt: Date.now(), completedScopes: [], eligibleRecords: {} };
+  validateStartupState(loadedState);
+  const state = loadedState;
+  const saveState = () => writeSkillMigrationFile(statePath, JSON.stringify(state, null, 2) + '\n');
   const workspaces = [...new Set(options.workspaceRoots.map(root => resolve(root)))];
   const sessionFiles = workspaces.flatMap(root => childFiles(join(root, 'sessions'), 'session.jsonl'));
   const agentFiles = childFiles(options.agentsDir ?? identity.agentsDir, 'AGENT.md');
@@ -58,6 +85,16 @@ export function migrateManagedSkillsAtStartup(options: ManagedSkillStartupOption
   if (!state.pending) return { migratedScopes: 0, rewrittenFiles: 0, startedAt: state.startedAt };
   const batch = state.pending;
   if (![batch.scopes, batch.agents, batch.sessions, batch.authored ?? []].every(paths => Array.isArray(paths) && paths.every(path => typeof path === 'string' && resolve(path) === path))) throw new Error('Managed skill startup journal needs recovery');
+  if (state.recordWrite) {
+    const intent = state.recordWrite;
+    if (![...batch.agents, ...batch.sessions, ...(batch.authored ?? [])].includes(intent.path)
+      || !/^[a-f0-9]{64}$/.test(intent.before) || !/^[a-f0-9]{64}$/.test(intent.after)) throw new Error('Managed skill record journal needs recovery');
+    const current = existsSync(intent.path) ? skillDigest(readFileSync(intent.path, 'utf8')) : null;
+    if (current === intent.after) (state.eligibleRecords ??= {})[intent.path] = intent.after;
+    else if (current !== intent.before) delete state.eligibleRecords?.[intent.path];
+    delete state.recordWrite;
+    saveState();
+  }
   const affected = new Set<string>();
   // Every original remains present until all mutable references are durable.
   for (const scope of batch.scopes) {
@@ -70,10 +107,14 @@ export function migrateManagedSkillsAtStartup(options: ManagedSkillStartupOption
     if (lstatSync(path).isSymbolicLink()) throw new Error('Skill migration cannot rewrite linked records');
     const backup = join(managedRoot, '.record-backups', skillDigest(path), skillDigest(original));
     mkdirSync(dirname(backup), { recursive: true });
-    if (!existsSync(backup)) atomicWriteFileSync(backup, original);
+    if (!existsSync(backup)) writeSkillMigrationFile(backup, original);
     if (readFileSync(backup, 'utf8') !== original || readFileSync(path, 'utf8') !== original) throw new Error('Record changed during skill migration; original was retained');
-    atomicWriteFileSync(path, updated);
+    state.recordWrite = { path, before: skillDigest(original), after: skillDigest(updated) };
+    saveState();
+    if (lstatSync(path).isSymbolicLink() || readFileSync(path, 'utf8') !== original) throw new Error('Record changed during skill migration; original was retained');
+    writeSkillMigrationFile(path, updated);
     if (state.eligibleRecords?.[path]) state.eligibleRecords[path] = skillDigest(updated);
+    delete state.recordWrite;
     saveState();
     rewrittenFiles++;
   };
@@ -128,4 +169,19 @@ export function migrateManagedSkillsAtStartup(options: ManagedSkillStartupOption
   saveState();
   invalidateSkillsCache();
   return { migratedScopes: batch.scopes.length, rewrittenFiles, startedAt: state.startedAt };
+}
+
+/** Startup can continue without normalizing away unresolved legacy ownership. */
+export function runManagedSkillStartupMigration(options: ManagedSkillStartupOptions):
+  { ok: true; result: ReturnType<typeof migrateManagedSkillsAtStartup> } | { ok: false; error: string } {
+  try {
+    const result = migrateManagedSkillsAtStartup(options);
+    setManagedSkillMigrationDeferred(false);
+    invalidateSkillsCache();
+    return { ok: true, result };
+  } catch (error) {
+    setManagedSkillMigrationDeferred(true);
+    invalidateSkillsCache();
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
