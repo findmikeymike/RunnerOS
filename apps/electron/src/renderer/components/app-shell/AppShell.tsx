@@ -1987,7 +1987,10 @@ function AppShellContent({
       return
     }
 
-    const agent = commandAgentCatalog.find((candidate) => candidate.slug === commandAgentSlug)
+    // Command is a required product front door, not an optional worker. Resolve
+    // its definition from the library while keeping delegation limited to the
+    // workspace's explicitly active worker catalog.
+    const agent = allAgents.find((candidate) => candidate.slug === commandAgentSlug)
     if (!agent) {
       toast.error(`${isLabCommand ? 'Song Director' : 'Artist Manager'} is unavailable.`)
       return

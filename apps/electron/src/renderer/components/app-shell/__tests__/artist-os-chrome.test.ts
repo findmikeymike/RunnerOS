@@ -77,6 +77,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(shell).toContain("{isLabWorkspace ? 'New Command' : 'New Chat'}")
     expect(shell).toContain("if (artistGuideWorkspaceKind === 'lab' || !newPanel)")
     expect(shell).toContain('void openWorkCommand(false)')
+    expect(shell).toContain('allAgents.find((candidate) => candidate.slug === commandAgentSlug)')
   })
 
   test('keeps Command conversation history bounded, newest-first, and topic-labelled', () => {
