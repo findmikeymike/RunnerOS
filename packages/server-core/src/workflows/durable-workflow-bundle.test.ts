@@ -100,6 +100,36 @@ test('mode selection rejects primary skills and adjacent expansions before compo
   expect(() => assertDurableWorkflowAgentMetadata(f.metadata, 'read')).toThrow('unsupported-durable-agent-bundle');
 });
 
+test('certified skills require exact resolved and injected lists before freezing their private prompt', () => {
+  const f = fixture(), slugs = ['artist-belief-system', 'artist-brand-expression-strategist'];
+  f.metadata.skills = slugs;
+  const calls: unknown[] = [];
+  f.deps.resolveDurableWorkflowSkills = (root, selected) => { calls.push([root, selected]); return '\nPRIVATE_FROZEN_SKILL_CONTEXT'; };
+  const options = { ...f.options, agentSkillSlugs: slugs, launchReceipt: { injected: { skills: slugs } } } as Partial<CreateSessionOptions>;
+  expect(f.resolve('w', 'reader', options).systemPrompt).toBe(f.options.customSystemPrompt + '\nPRIVATE_FROZEN_SKILL_CONTEXT');
+  expect(calls).toEqual([['/fixture', slugs]]);
+  for (const override of [{ agentSkillSlugs: [] }, { agentSkillSlugs: [...slugs].reverse() }, { launchReceipt: undefined }, { launchReceipt: { injected: { skills: [slugs[0]] } } }]) {
+    expect(() => f.resolve('w', 'reader', { ...options, ...override } as Partial<CreateSessionOptions>)).toThrow('unsupported-durable-agent-bundle');
+  }
+  expect(calls).toHaveLength(1);
+});
+
+test('explicit certified skill mode verifies its frozen primary receipt and rejects expansion', () => {
+  const f = fixture(), skills = ['artist-belief-system'];
+  f.metadata.skills = ['unsupported-base-skill', ...skills];
+  f.metadata.taskModes = [{ id: 'belief', label: 'Belief', description: 'Read-only doctrine', kind: 'focus', primarySkillSlugs: skills }];
+  const mode = assertDurableWorkflowAgentMetadata(f.metadata, 'belief')!;
+  f.deps.resolveDurableWorkflowSkills = (_root, selected) => { expect(selected).toEqual(skills); return '\nFROZEN_BELIEF'; };
+  const options = { ...f.options, agentSkillSlugs: skills, enabledSourceSlugs: [], launchReceipt: { injected: { skills }, taskMode: {
+    schemaVersion: 1, id: mode.id, label: mode.label, definitionRevision: mode.definitionRevision, selectionSource: 'workflow', primarySkills: skills, adjacentSkills: [], fullMode: false,
+  } } } as unknown as Partial<CreateSessionOptions>;
+  expect(f.resolve('w', 'reader', options, 'belief').systemPrompt).toContain('FROZEN_BELIEF');
+  options.launchReceipt!.taskMode!.primarySkills = [];
+  expect(() => f.resolve('w', 'reader', options, 'belief')).toThrow('unsupported-durable-agent-bundle');
+  f.metadata.taskModes[0]!.adjacentSkills = [{ slug: 'artist-brand-expression-strategist', when: 'later', expansion: 'same-session' }];
+  expect(() => assertDurableWorkflowAgentMetadata(f.metadata, 'belief')).toThrow('unsupported-durable-agent-bundle');
+});
+
 test('mode uses selected required filesystem sources and refuses missing composed requirements', () => {
   const f = fixture(), root = mkdtempSync(join(tmpdir(), 'durable-mode-source-')); roots.push(root);
   f.deps.getWorkspaceByNameOrId = () => ({ id: 'w', name: 'w', slug: 'w', rootPath: root, createdAt: 1 });

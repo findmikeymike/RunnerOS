@@ -4,8 +4,9 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { startProcess } from './process-support';
+import { getManagedSkillManifest } from '../../../../../shared/src/skills/managed.ts';
 
-test.each(['start', 'multi', 'sources', 'inputs', 'structured', 'fallback', 'credits'])('normal runner %s reaches default Pi backend and performs native reads in isolated configuration', async (mode) => {
+test.each(['start', 'multi', 'sources', 'inputs', 'structured', 'fallback', 'credits', 'skills'])('normal runner %s reaches default Pi backend and performs native reads in isolated configuration', async (mode) => {
   const root = mkdtempSync(join(tmpdir(), 'artist-normal-pi-')); let requests = 0, nativeReads = 0, usedPriorOutput = false;
   const server = createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk;
@@ -17,6 +18,15 @@ test.each(['start', 'multi', 'sources', 'inputs', 'structured', 'fallback', 'cre
     }
  if (raw.includes('Use Read completed and read fixture.txt again.')) usedPriorOutput = true; const done = body.messages.some((message: { role: string }) => message.role === 'tool');
     if (mode === 'sources') expect(raw).toContain('SOURCE_CONTEXT_NATIVE_READ');
+    if (mode === 'skills') {
+      const skill = getManagedSkillManifest().get('artist-belief-system')!;
+      const prompt = body.messages.map((message: { content: unknown }) => typeof message.content === 'string' ? message.content : JSON.stringify(message.content)).join('\n');
+      // Booleans prevent a failing assertion from printing private prompt snapshots.
+      expect(prompt.includes(JSON.stringify(skill.content))).toBe(true);
+      expect(skill.files.filter(file => file.path !== 'SKILL.md').every(file => prompt.includes(JSON.stringify(file.content)))).toBe(true);
+      expect(prompt.includes('SKILL_PERSONAL_NATIVE_READ')).toBe(true);
+      expect(body.tools.map((tool: { function: { name: string } }) => tool.function.name).sort()).toEqual(['find', 'grep', 'ls', 'read']);
+    }
     if (mode === 'inputs') { expect(raw).toContain('INPUT_FIXTURE Read fixture.txt.'); expect(raw).not.toContain('{{trigger.file}}'); }
     if (done) { nativeReads++; expect(raw).toContain('NORMAL_START_NATIVE_READ'); }
     const delta = done ? { role: 'assistant', content: mode === 'structured' ? '{"summary":"Read completed"}' : 'Read completed' } : { role: 'assistant', tool_calls: [{ index: 0, id: 'read-1', type: 'function', function: { name: 'read', arguments: JSON.stringify({ path: join(root, 'fixture.txt') }) } }] };
@@ -32,6 +42,7 @@ test.each(['start', 'multi', 'sources', 'inputs', 'structured', 'fallback', 'cre
     expect(result.stdout).toContain('"barrier":"admitted"'); expect(result.stdout).toContain('"result":"succeeded"'); expect(requests).toBe(mode === 'multi' || mode === 'fallback' ? 4 : mode === 'credits' ? 3 : 2); expect(nativeReads).toBe(mode === 'multi' ? 2 : 1);
     if (['fallback', 'credits'].includes(mode)) { const complete = JSON.parse(result.stdout.split('\n').find(line => line.includes('\"result\":\"succeeded\"'))!); expect(complete.providerAttempts.map((attempt: { model: string }) => attempt.model)).toEqual(['approval-fixture', 'backup-fixture']); }
     if (mode === 'structured') { const complete = JSON.parse(result.stdout.split('\n').find(line => line.includes('\"result\":\"succeeded\"'))!); expect(complete.steps[0].output).toEqual({ summary: 'Read completed' }); }
+    if (mode === 'skills') { expect(result.stdout.includes('SKILL_PERSONAL_NATIVE_READ')).toBe(false); expect(result.stdout.includes('private-durable-skill-guidance')).toBe(false); }
     if (mode === 'multi') { expect(usedPriorOutput).toBe(true); const complete = JSON.parse(result.stdout.split('\n').find(line => line.includes('\"result\":\"succeeded\"'))!); expect(complete.steps.map((step: { state: string }) => step.state)).toEqual(['succeeded', 'succeeded']); }
   } finally { server.closeAllConnections(); await new Promise<void>(yes => server.close(() => yes())); rmSync(root, { recursive: true, force: true }); }
 }, 30000);

@@ -8,6 +8,9 @@ import { durableCredentialIdentity } from '../../../../../shared/src/protocol/du
 import { getCredentialManager } from '../../../../../shared/src/credentials/manager.ts';
 import { type DurableReadBinding } from '../../durable-read-runner.ts';
 import { resolveDurableLocalSources } from '../../durable-workflow-sources.ts';
+import { createDurableWorkflowBundleResolver } from '../../durable-workflow-bundle.ts';
+import { savePersonalInstruction } from '../../../../../shared/src/skills/personal-instructions.ts';
+import { setGlobalSkillEnabled } from '../../../../../shared/src/skills/storage.ts';
 
 const [root, endpoint, mode] = process.argv.slice(2) as [string, string, string];
 if (readFileSync(join(root, 'synthetic-only'), 'utf8') !== 'approval-fixture' || process.env.CRAFT_CONFIG_DIR !== join(root, 'config')) throw new Error('isolated-approval-fixture-required');
@@ -26,6 +29,23 @@ const binding: DurableReadBinding = { credentialIdentity: identity,
     slug: 'approval-fixture', name: 'Fixture', providerType: 'pi_compat', authType: 'api_key', piAuthProvider: 'openai', baseUrl: endpoint + '/v1', customEndpoint: { api: 'openai-completions' }, models: ['approval-fixture', 'backup-fixture'], createdAt: 1,
   } },
 };
+const resolveBundle = async () => {
+  const systemPrompt = 'Use the native read tool to read fixture.txt, then summarize.\n' + localSources.map(source => source.guide).join('\n');
+  if (mode !== 'skills') return { connectionSlug: 'approval-fixture', model: 'approval-fixture', localSources, systemPrompt };
+  const slug = 'artist-belief-system';
+  setGlobalSkillEnabled(root, slug, true);
+  savePersonalInstruction(root, slug, { scope: 'workspace', text: 'SKILL_PERSONAL_NATIVE_READ keep the answer concise.' });
+  type Dependencies = NonNullable<Parameters<typeof createDurableWorkflowBundleResolver>[0]>;
+  const resolver = createDurableWorkflowBundleResolver({
+    getWorkspaceByNameOrId: () => binding.workspace,
+    loadGlobalAgent: () => ({ slug: 'reader', metadata: { name: 'Reader', description: '', skills: [slug] } }),
+    loadWorkspaceConfig: () => ({ defaults: { permissionMode: 'safe', thinkingLevel: 'off' } }),
+    resolveBackendContext: () => binding.context,
+    getDefaultThinkingLevel: () => 'off', loadConfigDefaults: () => ({ workspaceDefaults: { permissionMode: 'safe' } }),
+  } as unknown as Dependencies);
+  return resolver(binding.workspace.id, 'reader', { customSystemPrompt: systemPrompt, model: 'approval-fixture', llmConnection: 'approval-fixture',
+    agentSkillSlugs: [slug], launchReceipt: { injected: { skills: [slug] } } } as Parameters<typeof resolver>[2]);
+};
 const folder = join(root, 'app/packages/pi-agent-server/dist'); mkdirSync(folder, { recursive: true });
 writeFileSync(join(folder, 'index.js'), `import ${JSON.stringify(resolve(import.meta.dir, '../../../../../pi-agent-server/src/index.ts'))};\n`);
 const host = DurableWorkflowHost.open({ configRoot: join(root, 'config'), protection: { isEncryptionAvailable: () => true, encryptString: value => Buffer.from(value), decryptString: value => value.toString() }, resolvePrincipal: () => 'fixture-principal', runnerOptions: {
@@ -33,7 +53,7 @@ const host = DurableWorkflowHost.open({ configRoot: join(root, 'config'), protec
   authorizeTool: async () => ({ principalId: 'fixture-principal', policyRevision: 'fixture', credentialIdentity: identity, allowed: true, requiresApproval: false, approvalExpiresAt: Date.now() + 60000 }),
 } });
 try {
-  const runner = new WorkflowRunner({ durableStart: createDurableWorkflowStart({ resolveFallbackCandidates: async () => [{ connectionSlug: 'backup-fixture', model: 'backup-fixture' }], host, getWorkspaceRootPath: () => root, resolveBundle: async () => ({ connectionSlug: 'approval-fixture', model: 'approval-fixture', localSources, systemPrompt: 'Use the native read tool to read fixture.txt, then summarize.\n' + localSources.map(source => source.guide).join('\n') }) }),
+  const runner = new WorkflowRunner({ durableStart: createDurableWorkflowStart({ resolveFallbackCandidates: async () => [{ connectionSlug: 'backup-fixture', model: 'backup-fixture' }], host, getWorkspaceRootPath: () => root, resolveBundle }),
     getWorkspaceRootPath: () => root, createSession: async () => { throw new Error('legacy-session-forbidden'); }, sendMessage: async () => {}, getLastAssistantText: () => '', abortSession: async () => {},
   });
   const actor = { clientId: 'fixture-client', workspaceId: 'approval-workspace' };

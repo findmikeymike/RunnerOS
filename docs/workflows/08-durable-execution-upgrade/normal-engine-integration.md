@@ -196,3 +196,11 @@ webReadUrls:
   - https://example.com/article
 webReadRedirects: true
 ```
+
+## Slice 13 — certified instruction-only skill snapshots
+
+Compatible safe, thinking-off read-only workers can now declare `artist-belief-system` and/or `artist-brand-expression-strategist` as primary skills. The adapter certifies their exact shipped revisions, including every reference file. Updated skill bundles require explicit recertification before new admission. User/legacy overrides, executable helpers, source activation, tool grants and adjacent skill expansion are not supported. Existing built-in Branding modes remain outside this pilot because their mode expansions and defaults exceed these bounds; no user workflow or worker definition is changed automatically.
+
+Before ordinary launch composition, the host checks that selected skills can be resolved as the certified managed originals. Final bundle resolution verifies the selected skill list and launch receipt, then freezes the complete core, references, enabled personal preferences and revision identities into the private system prompt. Shared preferences come before workspace preferences; workspace preferences take precedence only within existing permissions and core rules. The appendix states that references are already loaded and dynamic skill loaders are unavailable. No extra tool is registered or permitted.
+
+The existing encrypted journal stores this prompt with the run. Recovery uses those saved bytes without loading current skill files or preferences; a newly admitted run reads the current preferences. No-skill workflows retain their original prompt byte-for-byte. Private instruction bodies and filesystem paths are not added to public run receipts. All existing local-source checks, provider limits, current authorization, Outputs and remote-read restrictions remain in force. This adds instruction snapshot support, not general skill execution or external-action certification.
