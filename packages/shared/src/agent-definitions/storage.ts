@@ -19,6 +19,9 @@
 
 import {
   existsSync,
+  copyFileSync,
+  constants,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -27,6 +30,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { BUILT_IN_TASK_MODE_BASELINES } from './task-mode-migration-baselines.ts';
 import { validateTrustedWorkerToolNames } from '@craft-agent/session-tools-core';
 import { isDeepStrictEqual } from 'node:util';
 import { matter, stringifyFrontmatter, type GrayMatterFile } from '../config/frontmatter';
@@ -713,11 +718,58 @@ function writeBuiltInAgentMigration(
   const oldBody = original.content.trim();
   const body = original.content.replace(oldBody, () => input.systemPrompt);
   const header = stringifyFrontmatter('', data);
-  writeFileSync(file, header.slice(0, header.length - matter(header).content.length) + body, 'utf-8');
+  atomicWriteFileSync(file, header.slice(0, header.length - matter(header).content.length) + body);
 
   const loaded = loadGlobalAgent(input.slug, options);
   if (!loaded) throw new Error(`Failed to re-load migrated agent "${input.slug}"`);
   return loaded;
+}
+
+function reportBuiltInMigrationFailure(slug: string, error: unknown): void {
+  console.warn(`[agent-definitions] Migration failed for ${slug}: ${error instanceof Error ? error.message : String(error)}`);
+}
+
+function migrationFingerprint(value: unknown): string {
+  const stable = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map(stable);
+    if (input && typeof input === 'object') {
+      const record = input as Record<string, unknown>;
+      return Object.fromEntries(Object.keys(record).sort().filter(key => record[key] !== undefined).map(key => [key, stable(record[key])]));
+    }
+    return input;
+  };
+  return createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
+}
+
+/** Upgrade only recognized shipped recipes; explicit removals and edits are owned by the user. */
+export function migrateBuiltInAgentTaskModes(starter: CreateAgentInput, options?: AgentStorageOptions): { updated: boolean } {
+  const baselines = BUILT_IN_TASK_MODE_BASELINES[starter.slug];
+  if (!baselines || !starter.metadata.taskModes?.length) return { updated: false };
+  const installed = loadGlobalAgent(starter.slug, options);
+  if (!installed) return { updated: false };
+  try {
+    const original = matter(readFileSync(getGlobalAgentFile(starter.slug, options), 'utf8'));
+    const rawModes = original.data.taskModes;
+    if (agentMetadataValueEquals(rawModes, starter.metadata.taskModes)) return { updated: false };
+    if (Object.hasOwn(original.data, 'taskModes')) {
+      if (!baselines.recipeHashes.includes(migrationFingerprint(rawModes))) return { updated: false };
+    } else {
+      const { taskModes: _taskModes, ...stockMetadata } = starter.metadata;
+      const stock = parseAgentFile(serializeAgent(stockMetadata, starter.systemPrompt))!;
+      const installedFingerprint = migrationFingerprint({ metadata: installed.metadata, systemPrompt: installed.systemPrompt });
+      const currentStockFingerprint = migrationFingerprint({ metadata: stock.metadata, systemPrompt: stock.systemPrompt });
+      if (installedFingerprint !== currentStockFingerprint && !baselines.withoutRecipesHashes.includes(installedFingerprint)) return { updated: false };
+    }
+    const next = { ...installed.metadata, taskModes: starter.metadata.taskModes };
+    // A customized skill inventory must not receive recipes it cannot execute.
+    const parsed = parseAgentFile(serializeAgent(next, installed.systemPrompt));
+    if (!agentMetadataValueEquals(parsed?.metadata.taskModes, starter.metadata.taskModes)) return { updated: false };
+    writeBuiltInAgentMigration({ slug: starter.slug, metadata: next, systemPrompt: installed.systemPrompt }, options);
+    return { updated: true };
+  } catch (error) {
+    reportBuiltInMigrationFailure(starter.slug, error);
+    return { updated: false };
+  }
 }
 
 /**
@@ -792,6 +844,18 @@ export function ensureRequiredAgents(
       continue;
     }
     mkdirSync(dir, { recursive: true });
+    if (existsSync(file)) {
+      try {
+        const stat = lstatSync(file);
+        if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Existing definition is not a regular file');
+        const backup = join(dir, `AGENT.unreadable-${Date.now()}-${randomUUID()}.md`);
+        copyFileSync(file, backup, constants.COPYFILE_EXCL);
+        console.warn(`[agent-definitions] Preserved unreadable ${a.slug} definition at ${backup} before restoring its starter.`);
+      } catch (error) {
+        console.warn(`[agent-definitions] Could not preserve unreadable ${a.slug}; recovery skipped: ${error instanceof Error ? error.message : String(error)}`);
+        continue;
+      }
+    }
     atomicWriteFileSync(file, serializeAgent(a.metadata, a.systemPrompt));
     ensured += 1;
   }
@@ -885,7 +949,8 @@ export function ensureBuiltInAgentSkillsForSlug(
   try {
     writeBuiltInAgentMigration({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
     return { updated: true };
-  } catch {
+  } catch (error) {
+    reportBuiltInMigrationFailure(slug, error);
     // Best-effort migration; loading must not fail because of a malformed write.
     return { updated: false };
   }
@@ -936,7 +1001,8 @@ export function ensureBuiltInAgentMetadataSlugs(
   try {
     writeBuiltInAgentMigration({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
     return { updated: true };
-  } catch {
+  } catch (error) {
+    reportBuiltInMigrationFailure(slug, error);
     return { updated: false };
   }
 }
@@ -956,6 +1022,7 @@ export function replaceBuiltInAgentMetadata(
     'concierge',
     'orchestrator',
     'social-publisher',
+    'comms-agent',
     'ads-agent',
     'ads-strategist',
     'ad-creative-agent',
@@ -1008,7 +1075,8 @@ export function replaceBuiltInAgentMetadata(
   try {
     writeBuiltInAgentMigration({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
     return { updated: true };
-  } catch {
+  } catch (error) {
+    reportBuiltInMigrationFailure(slug, error);
     return { updated: false };
   }
 }
@@ -1028,7 +1096,7 @@ export function replaceBuiltInAgentPromptText(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['anything-agent', 'concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'record-doctor', 'x-editorial', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'youtube-research-agent', 'youtube-intelligence-agent', 'trypost-agent', 'content-director', 'content-genius', 'print-agent', 'signal-scout-agent', 'signal-analyst-agent', 'raw-video-editor']);
+  const builtIns = new Set(['anything-agent', 'concierge', 'orchestrator', 'social-publisher', 'comms-agent', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'record-doctor', 'x-editorial', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'youtube-research-agent', 'youtube-intelligence-agent', 'trypost-agent', 'content-director', 'content-genius', 'print-agent', 'signal-scout-agent', 'signal-analyst-agent', 'raw-video-editor']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (
@@ -1048,7 +1116,8 @@ export function replaceBuiltInAgentPromptText(
       options,
     );
     return { updated: true };
-  } catch {
+  } catch (error) {
+    reportBuiltInMigrationFailure(slug, error);
     return { updated: false };
   }
 }
@@ -1090,7 +1159,8 @@ export function dedupeBuiltInAgentPromptText(
       options,
     );
     return { updated: true };
-  } catch {
+  } catch (error) {
+    reportBuiltInMigrationFailure(slug, error);
     return { updated: false };
   }
 }
@@ -1120,7 +1190,8 @@ export function replaceBuiltInAgentPromptPattern(
       options,
     );
     return { updated: true };
-  } catch {
+  } catch (error) {
+    reportBuiltInMigrationFailure(slug, error);
     return { updated: false };
   }
 }
@@ -1148,7 +1219,8 @@ export function removeBuiltInAgentSkills(
     try {
       writeBuiltInAgentMigration({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
       updated += 1;
-    } catch {
+    } catch (error) {
+      reportBuiltInMigrationFailure(slug, error);
       // Best-effort migration; loading must not fail because of a malformed write.
     }
   }

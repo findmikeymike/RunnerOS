@@ -4236,9 +4236,16 @@ export class SessionManager implements ISessionManager {
 
       // Preserve customized skill files and their existing assignments before
       // starter defaults, watchers, or session restoration can see new ownership.
-      const { migrateManagedSkillsAtStartup } = await import('@craft-agent/shared/skills')
+      const { runManagedSkillStartupMigration } = await import('@craft-agent/shared/skills')
+      let managedSkillMigrationReady = true
+      let managedSkillRecoveryMessage: string | undefined
       if (resolveRuntimeIdentity().variant === 'artist-os') {
-        migrateManagedSkillsAtStartup({ workspaceRoots: getWorkspaces().filter(workspace => !workspace.remoteServer).map(workspace => workspace.rootPath) })
+        const migration = runManagedSkillStartupMigration({ workspaceRoots: getWorkspaces().filter(workspace => !workspace.remoteServer).map(workspace => workspace.rootPath) })
+        managedSkillMigrationReady = migration.ok
+        if (!migration.ok) {
+          managedSkillRecoveryMessage = `Some skill updates could not finish. Existing customizations were retained; unrelated work remains available. ${String(migration.error)}`
+          sessionLog.warn('[skills] Startup migration deferred:', migration.error)
+        }
       }
 
       // Seed the global agent-definitions library on first run (idempotent —
@@ -4246,7 +4253,8 @@ export class SessionManager implements ISessionManager {
       // Then ensure load-bearing agents (Orchestrator) exist on EVERY startup
       // — these are foundational to the sidebar UX and shouldn't be missing
       // even on installs that pre-date the agents feature.
-      try {
+      // Do not normalize references or replace defaults until preservation completes.
+      if (managedSkillMigrationReady) try {
         const {
           seedGlobalLibraryIfEmpty,
           ensureRequiredAgents,
@@ -4659,13 +4667,9 @@ export class SessionManager implements ISessionManager {
           }
           const brandingAgent = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')
           const brandingSkillSlugs = brandingAgent?.metadata.skills ?? []
+          const { migrateBuiltInAgentTaskModes } = await import('@craft-agent/shared/agent-definitions')
           for (const starter of STARTER_AGENTS) {
-            if (!starter.metadata.taskModes?.length) continue
-            const installed = loadGlobalAgent(starter.slug)
-            if (!installed || JSON.stringify(installed.metadata.taskModes) === JSON.stringify(starter.metadata.taskModes)) continue
-            if (replaceBuiltInAgentMetadata(starter.slug, {
-              taskModes: { from: installed.metadata.taskModes, to: starter.metadata.taskModes },
-            }).updated) sessionLog.info(`[agent-definitions] Updated focus recipes for ${starter.slug}`)
+            if (migrateBuiltInAgentTaskModes(starter).updated) sessionLog.info(`[agent-definitions] Updated stock focus recipes for ${starter.slug}`)
           }
           const missingBrandingSkills = brandingSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
           if (allowLegacyAgentActivation && brandingAgent && missingBrandingSkills.length === 0) {
@@ -5479,12 +5483,11 @@ Default report shape:`,
             }).updated) {
               sessionLog.info('[agent-definitions] Moved Spotify Analyst setup guidance to Spotify settings')
             }
-            if (replaceBuiltInAgentPromptPattern(
-              'spotify-analyst',
-              /^You are Spotify Analyst,[\s\S]*api-snapshot\.ts[\s\S]*$/,
-              spotifyAnalyst.systemPrompt,
-            ).updated) {
-              sessionLog.info('[agent-definitions] Replaced Spotify Analyst dev-only API prompt')
+            const { SPOTIFY_ANALYST_LEGACY_PROMPTS } = await import('@craft-agent/shared/agent-definitions')
+            for (const legacyPrompt of SPOTIFY_ANALYST_LEGACY_PROMPTS) {
+              if (replaceBuiltInAgentPromptText('spotify-analyst', legacyPrompt, spotifyAnalyst.systemPrompt).updated) {
+                sessionLog.info('[agent-definitions] Replaced exact shipped Spotify Analyst API guidance')
+              }
             }
             if (replaceBuiltInAgentPromptPattern(
               'spotify-analyst',
@@ -6248,7 +6251,7 @@ user a clickable link to where the thing now lives.`
       // Seed starter workflows on first run. Ensured starters are also added
       // to existing libraries once; ensureRequiredWorkflows honors deletion
       // tombstones and never overwrites a user-edited workflow.
-      try {
+      if (managedSkillMigrationReady) try {
         const {
           seedGlobalWorkflowLibraryIfEmpty,
           ensureRequiredWorkflows,
@@ -6441,7 +6444,7 @@ user a clickable link to where the thing now lives.`
       // client connect. This is critical for headless servers where no UI may
       // ever connect, yet scheduled/event-driven automations must still fire.
       const workspaces = getWorkspaces()
-      try {
+      if (managedSkillMigrationReady) try {
         const {
           ensureDefaultWorkflowActivations,
           INDUSTRY_OUTREACH_PIPELINE_SLUG,
@@ -6466,6 +6469,14 @@ user a clickable link to where the thing now lives.`
         }
       } catch (err) {
         sessionLog.warn('[workflows] Existing-workspace default activation skipped:', err as Error)
+      }
+      if (managedSkillRecoveryMessage) {
+        const hq = workspaces.find(workspace => workspace.artistWorkspaceScope === 'hq' && !workspace.remoteServer)
+        if (hq) {
+          try {
+            this.getNotificationService().add({ workspaceId: hq.id, source: 'system', title: 'Skill updates deferred', message: managedSkillRecoveryMessage, urgency: 'normal' })
+          } catch (error) { sessionLog.warn('[skills] Could not save migration recovery notice:', error) }
+        }
       }
       for (const workspace of workspaces) {
         this.setupConfigWatcher(workspace.rootPath, workspace.id)

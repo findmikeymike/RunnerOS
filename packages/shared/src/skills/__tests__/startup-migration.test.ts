@@ -1,13 +1,14 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import * as migration from '../migration';
+import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { matter } from '../../config/frontmatter';
-import { migrateManagedSkillsAtStartup } from '../startup-migration';
+import { migrateManagedSkillsAtStartup, runManagedSkillStartupMigration } from '../startup-migration';
 
 let root: string, workspace: string, globalSkillsDir: string, agentsDir: string;
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'skill-startup-')); workspace = join(root, 'workspace'); globalSkillsDir = join(root, 'global'); agentsDir = join(root, 'agents'); });
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+afterEach(() => { migration.setManagedSkillMigrationDeferred(false); rmSync(root, { recursive: true, force: true }); });
 function write(path: string, value: string) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, value); return path; }
 const options = () => ({ workspaceRoots: [workspace], globalSkillsDir, agentsDir, runtimeVariant: 'artist-os' as const });
 
@@ -104,3 +105,78 @@ test('later project discovery cannot rewrite new or deliberately edited current 
   expect(session.agentSkillSlugs).toEqual(['zero']);
   expect(session.legacySkillReferences).toBeUndefined();
 });
+
+
+test('committed record write recovers its digest before later discovered scopes', () => {
+  write(join(globalSkillsDir, 'zero', 'SKILL.md'), 'custom zero');
+  const agent = write(join(agentsDir, 'worker', 'AGENT.md'), '---\nname: Worker\nskills: [zero, agent-creator]\n---\nCustomized body\n');
+  const realWrite = migration.writeSkillMigrationFile;
+  let committed = false;
+  const writer = spyOn(migration, 'writeSkillMigrationFile').mockImplementation((path, data) => {
+    if (committed && path.endsWith('.startup-migration.json')) throw new Error('interrupted acknowledgement');
+    realWrite(path, data);
+    if (path === agent) committed = true;
+  });
+  try { expect(() => migrateManagedSkillsAtStartup(options())).toThrow('interrupted acknowledgement'); }
+  finally { writer.mockRestore(); }
+  expect(matter(readFileSync(agent, 'utf8')).data.skills).toEqual(['legacy:zero', 'agent-creator']);
+  migrateManagedSkillsAtStartup(options());
+  const project = join(root, 'later-project');
+  write(join(project, '.agents', 'skills', 'agent-creator', 'SKILL.md'), 'custom creator');
+  migrateManagedSkillsAtStartup({ ...options(), projectRoots: [project] });
+  expect(matter(readFileSync(agent, 'utf8')).data.skills).toEqual(['legacy:zero', 'legacy:agent-creator']);
+});
+
+test('user edits made while the record intent is saved survive failure and retry', () => {
+  write(join(globalSkillsDir, 'zero', 'SKILL.md'), 'custom zero');
+  const agent = write(join(agentsDir, 'worker', 'AGENT.md'), '---\nname: Worker\nskills: [zero]\n---\nOriginal body\n');
+  const edited = '---\nname: Worker\nskills: [zero]\n---\nNew deliberate user edit\n';
+  const realWrite = migration.writeSkillMigrationFile;
+  const writer = spyOn(migration, 'writeSkillMigrationFile').mockImplementation((path, data) => {
+    realWrite(path, data);
+    if (path.endsWith('.startup-migration.json') && JSON.parse(data).recordWrite) writeFileSync(agent, edited);
+  });
+  try { expect(() => migrateManagedSkillsAtStartup(options())).toThrow('Record changed'); }
+  finally { writer.mockRestore(); }
+  expect(readFileSync(agent, 'utf8')).toBe(edited);
+  expect(migrateManagedSkillsAtStartup(options()).rewrittenFiles).toBe(0);
+  expect(readFileSync(agent, 'utf8')).toBe(edited);
+});
+
+
+for (const corruption of [
+  { label: 'missing eligibility', patch: { eligibleRecords: undefined } },
+  { label: 'array eligibility', patch: { eligibleRecords: [] } },
+  { label: 'numeric eligibility', patch: { eligibleRecords: 42 } },
+  { label: 'null eligibility', patch: { eligibleRecords: null } },
+  { label: 'bad hash', patch: { eligibleRecords: { '/absolute/agent': 'not-a-hash' } } },
+  { label: 'relative eligibility path', patch: { eligibleRecords: { 'agent.md': 'a'.repeat(64) } } },
+  { label: 'null write intent', patch: { recordWrite: null } },
+  { label: 'array write intent', patch: { recordWrite: [] } },
+  { label: 'numeric write intent', patch: { recordWrite: 42 } },
+  { label: 'invalid write hashes', patch: { recordWrite: { path: '/absolute/agent', before: 'bad', after: 'a'.repeat(64) } } },
+  { label: 'null pending batch', patch: { pending: null } },
+  { label: 'array pending batch', patch: { pending: [] } },
+  { label: 'numeric pending batch', patch: { pending: 42 } },
+  { label: 'malformed pending paths', patch: { pending: { scopes: ['relative'], agents: [], sessions: [] } } },
+]) {
+  test(`corrupt journal ${corruption.label} defers without retiring skills or rewriting records`, () => {
+    const skill = write(join(globalSkillsDir, 'zero', 'SKILL.md'), 'custom zero');
+    const original = '---\nname: Worker\nskills: [zero]\n---\nCustomized body\n';
+    const agent = write(join(agentsDir, 'worker', 'AGENT.md'), original);
+    const state = {
+      version: 1, startedAt: 1, completedScopes: [],
+      eligibleRecords: { [agent]: 'a'.repeat(64) },
+      pending: { scopes: [globalSkillsDir], agents: [agent], sessions: [] },
+      ...corruption.patch,
+    };
+    const serialized = JSON.stringify(state);
+    const journal = write(join(globalSkillsDir, '.managed', '.startup-migration.json'), serialized);
+    const result = runManagedSkillStartupMigration(options());
+    expect(result).toEqual({ ok: false, error: 'Managed skill startup journal needs recovery' });
+    expect(readFileSync(skill, 'utf8')).toBe('custom zero');
+    expect(readFileSync(agent, 'utf8')).toBe(original);
+    expect(readFileSync(journal, 'utf8')).toBe(serialized);
+    expect(existsSync(join(globalSkillsDir, '.managed-skill-migration.json'))).toBe(false);
+  });
+}

@@ -1,12 +1,18 @@
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { closeSync, fsyncSync, openSync, writeFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getManagedSkillManifest, getManagedSkillsRoot, skillDigest, type ManagedSkillStorageOptions } from './managed.ts';
-import { atomicWriteFileSync } from '../utils/files.ts';
 import monidBaselines from '../agent-definitions/__fixtures__/monid-routing-v1/baselines.json';
 import helperBaselines from '../agent-definitions/__fixtures__/helper-guide-v1/baselines.json';
 
-interface MigrationEntry { digest: string; copySlug: string | null; retired: boolean }
+let startupMigrationDeferred = false;
+export function setManagedSkillMigrationDeferred(value: boolean): void { startupMigrationDeferred = value; }
+export function isManagedSkillMigrationDeferred(): boolean { return startupMigrationDeferred; }
+export function hasUnreadableSkillMigrationJournal(skillsDir: string): boolean {
+  try { readJournal(skillsDir); return false; } catch { return true; }
+}
+
+interface MigrationEntry { digest: string; copySlug: string | null; retired: boolean; retirement?: { name: string; dev: number; ino: number } }
 interface MigrationJournal { version: 1; entries: Record<string, MigrationEntry> }
 const JOURNAL = '.managed-skill-migration.json';
 const legalSlug = (slug: string) => /^[a-z0-9][a-z0-9-]{0,180}$/.test(slug);
@@ -24,9 +30,33 @@ function readJournal(root: string): MigrationJournal {
   for (const [slug, value] of Object.entries(journal.entries)) {
     if (!legalSlug(slug) || !value || !/^[a-f0-9]{64}$/.test(value.digest)
       || (value.copySlug !== null && (!legalSlug(value.copySlug) || value.copySlug === slug))
-      || typeof value.retired !== 'boolean') throw new Error('Skill migration journal needs recovery');
+      || typeof value.retired !== 'boolean'
+      || (value.retirement !== undefined && (!value.retirement || !new RegExp(`^\\.${slug}\\.retiring-[a-f0-9-]{36}$`).test(value.retirement.name) || !Number.isSafeInteger(value.retirement.dev) || !Number.isSafeInteger(value.retirement.ino)))) throw new Error('Skill migration journal needs recovery');
   }
   return journal;
+}
+
+/** Migration records must survive loss of the process after any committed rename. */
+export function writeSkillMigrationFile(path: string, data: string): void {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    const fd = openSync(temporary, 'wx', 0o600);
+    try { writeFileSync(fd, data); fsyncSync(fd); } finally { closeSync(fd); }
+    renameSync(temporary, path);
+    syncDirectory(dirname(path));
+  } finally { rmSync(temporary, { force: true }); }
+}
+function syncDirectory(path: string): void {
+  const fd = openSync(path, 'r');
+  try { fsyncSync(fd); } finally { closeSync(fd); }
+}
+function syncTree(path: string): void {
+  for (const entry of readdirSync(path, { withFileTypes: true })) {
+    const child = join(path, entry.name);
+    if (entry.isDirectory()) syncTree(child);
+    else { const fd = openSync(child, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); } }
+  }
+  syncDirectory(path);
 }
 
 /** Binary-safe inventory; refuse links/special files rather than copying outside the skill. */
@@ -53,7 +83,9 @@ function verifiedCopy(from: string, to: string, digest: string) {
     try {
       cpSync(from, pending, { recursive: true, errorOnExist: true, force: false });
       if (digestDirectory(pending) !== digest) throw new Error('Skill changed during preservation');
+      syncTree(pending);
       renameSync(pending, to);
+      syncDirectory(dirname(to));
     } finally { rmSync(pending, { recursive: true, force: true }); }
   }
   if (digestDirectory(to) !== digest) throw new Error('Preserved skill copy needs recovery; original was retained');
@@ -63,11 +95,32 @@ function verifiedCopy(from: string, to: string, digest: string) {
 export function migrateManagedSkillScope(skillsDir: string, options: ManagedSkillStorageOptions & { retireOriginals?: boolean } = {}): { aliases: Record<string, string>; retired: string[] } {
   if (!existsSync(skillsDir)) return { aliases: {}, retired: [] };
   const journal = readJournal(skillsDir);
-  const save = () => atomicWriteFileSync(join(skillsDir, JOURNAL), JSON.stringify(journal, null, 2) + '\n');
+  const save = () => writeSkillMigrationFile(join(skillsDir, JOURNAL), JSON.stringify(journal, null, 2) + '\n');
   const retired: string[] = [];
   for (const [slug, stock] of getManagedSkillManifest()) {
     const original = join(skillsDir, slug);
     let entry = journal.entries[slug];
+    if (entry?.retirement) {
+      const staged = join(skillsDir, entry.retirement.name);
+      if (existsSync(staged)) {
+        const identity = lstatSync(staged);
+        if (!identity.isDirectory() || identity.isSymbolicLink() || identity.dev !== entry.retirement.dev || identity.ino !== entry.retirement.ino || existsSync(original)) throw new Error('Skill retirement folder needs recovery; nothing was removed');
+        // A crash may leave only part of this owned staging directory. The
+        // complete copies were verified before the original was renamed.
+        const backup = join(getManagedSkillsRoot(options), '.legacy', skillDigest(resolve(skillsDir)), slug, entry.digest);
+        if (digestDirectory(backup) !== entry.digest) throw new Error('Preserved skill copy needs recovery');
+        if (entry.copySlug && digestDirectory(join(skillsDir, entry.copySlug)) !== entry.digest) throw new Error('Preserved personal skill needs recovery');
+        rmSync(staged, { recursive: true });
+        syncDirectory(skillsDir);
+      }
+      if (!existsSync(original)) {
+        entry.retired = true;
+        delete entry.retirement;
+        save();
+        retired.push(slug);
+        continue;
+      }
+    }
     if (!existsSync(original)) continue;
     const digest = digestDirectory(original);
     if (entry && entry.digest !== digest) throw new Error(`Skill ${slug} changed during migration; original was retained`);
@@ -92,8 +145,20 @@ export function migrateManagedSkillScope(skillsDir: string, options: ManagedSkil
     save();
     if (options.retireOriginals === false) continue;
     if (digestDirectory(original) !== digest) throw new Error(`Skill ${slug} changed during migration; original was retained`);
-    rmSync(original, { recursive: true });
+    const identity = lstatSync(original);
+    entry.retirement ??= { name: `.${slug}.retiring-${randomUUID()}`, dev: identity.dev, ino: identity.ino };
+    if (identity.dev !== entry.retirement.dev || identity.ino !== entry.retirement.ino) throw new Error('Skill changed before retirement; original was retained');
+    save();
+    const staged = join(skillsDir, entry.retirement.name);
+    const current = lstatSync(original);
+    if (current.isSymbolicLink() || current.dev !== entry.retirement.dev || current.ino !== entry.retirement.ino
+      || existsSync(staged) || digestDirectory(original) !== digest) throw new Error('Skill changed before retirement; original was retained');
+    renameSync(original, staged);
+    syncDirectory(skillsDir);
+    rmSync(staged, { recursive: true });
+    syncDirectory(skillsDir);
     entry.retired = true;
+    delete entry.retirement;
     save();
     retired.push(slug);
   }
@@ -103,12 +168,13 @@ export function migrateManagedSkillScope(skillsDir: string, options: ManagedSkil
 /** Scoped aliases only apply to explicit legacy references, never new bare stock selections. */
 export function resolveLegacySkillAlias(skillsDir: string, slug: string): string | null {
   if (!legalSlug(slug)) return null;
-  return readJournal(skillsDir).entries[slug]?.copySlug ?? null;
+  return getLegacySkillMigration(skillsDir, slug)?.copySlug ?? null;
 }
 
 export function getLegacySkillMigration(skillsDir: string, slug: string): MigrationEntry | null {
   if (!legalSlug(slug)) return null;
-  return readJournal(skillsDir).entries[slug] ?? null;
+  try { return readJournal(skillsDir).entries[slug] ?? null; }
+  catch (error) { if (startupMigrationDeferred) return null; throw error; }
 }
 
 /** Rewrite assignment fields, never historical text or arbitrary object strings. */

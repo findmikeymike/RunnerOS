@@ -8,21 +8,19 @@ import { MANAGER_TASK_MODES } from './manager.ts'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { loadGlobalAgent, writeGlobalAgent, replaceBuiltInAgentMetadata } from '../storage.ts'
+import { loadGlobalAgent, writeGlobalAgent, replaceBuiltInAgentMetadata, migrateBuiltInAgentTaskModes } from '../storage.ts'
 
 describe('shared agent focus rollout', () => {
-  test('startup updates every already-installed focused agent, preserving its other fields', () => {
+  test('startup adds recipes to stock agents and preserves their other fields', () => {
     const globalAgentsDir = mkdtempSync(join(tmpdir(), 'artist-focus-installed-'))
     const options = { globalAgentsDir }
     try {
       for (const starter of STARTER_AGENTS.filter(agent => agent.metadata.taskModes?.length)) {
         const { taskModes, ...metadata } = starter.metadata
-        const systemPrompt = `Existing installed prompt for ${starter.slug}`
+        const systemPrompt = starter.systemPrompt
         writeGlobalAgent({ slug: starter.slug, metadata, systemPrompt }, options)
         const installed = loadGlobalAgent(starter.slug, options)!
-        expect(replaceBuiltInAgentMetadata(starter.slug, {
-          taskModes: { from: installed.metadata.taskModes, to: taskModes },
-        }, options).updated, starter.slug).toBe(true)
+        expect(migrateBuiltInAgentTaskModes(starter, options).updated, starter.slug).toBe(true)
         const refreshed = loadGlobalAgent(starter.slug, options)!
         expect(refreshed.metadata.taskModes, starter.slug).toEqual(taskModes)
         expect(refreshed.systemPrompt, starter.slug).toBe(systemPrompt)
@@ -33,7 +31,7 @@ describe('shared agent focus rollout', () => {
         const revised = structuredClone(taskModes!)
         revised[0]!.helpText = 'Updated artist guidance'
         expect(replaceBuiltInAgentMetadata(starter.slug, {
-          taskModes: { from: refreshed.metadata.taskModes, to: revised },
+          taskModes: { from: taskModes, to: revised },
         }, options).updated, starter.slug).toBe(true)
         expect(loadGlobalAgent(starter.slug, options)!.metadata.taskModes, starter.slug).toEqual(revised)
         expect(replaceBuiltInAgentMetadata(starter.slug, {

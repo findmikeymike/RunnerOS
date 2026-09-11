@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import * as fs from 'node:fs';
+import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -178,4 +179,93 @@ test('Runner keeps loose skill precedence, seeding, deletion and never materiali
   const result = Bun.spawnSync([process.execPath, '-e', script], { env: { ...process.env, CRAFT_PRODUCT_VARIANT: 'runner', CRAFT_CONFIG_DIR: join(root, 'runner-config') } });
   expect(result.exitCode).toBe(0);
   expect(JSON.parse(result.stdout.toString().trim())).toEqual({ global: 'global user content', catalog: ['zero'], local: 'workspace user content', unchanged: true, deleted: true, direct: null, managedExists: false, isolated: true });
+});
+
+
+test('partially removed owned retirement staging resumes without touching replacement originals', () => {
+  write('zero', 'SKILL.md', 'custom');
+  write('zero', 'references/notes.txt', 'important');
+  const realRemove = fs.rmSync;
+  const remover = spyOn(fs, 'rmSync').mockImplementation((path, options) => {
+    if (String(path).includes('.zero.retiring-')) {
+      realRemove(join(String(path), 'references'), { recursive: true });
+      throw new Error('interrupted staged removal');
+    }
+    realRemove(path, options);
+  });
+  try { expect(() => migrateManagedSkillScope(scope, { globalSkillsDir })).toThrow('interrupted staged removal'); }
+  finally { remover.mockRestore(); }
+  const journal = JSON.parse(readFileSync(join(scope, '.managed-skill-migration.json'), 'utf8'));
+  const staged = join(scope, journal.entries.zero.retirement.name);
+  expect(existsSync(join(staged, 'SKILL.md'))).toBe(true);
+  expect(existsSync(join(staged, 'references'))).toBe(false);
+  write('zero', 'SKILL.md', 'new user replacement');
+  expect(() => migrateManagedSkillScope(scope, { globalSkillsDir })).toThrow('nothing was removed');
+  expect(readFileSync(join(scope, 'zero', 'SKILL.md'), 'utf8')).toBe('new user replacement');
+  realRemove(join(scope, 'zero'), { recursive: true });
+  const resumed = migrateManagedSkillScope(scope, { globalSkillsDir });
+  expect(resumed.retired).toEqual(['zero']);
+  expect(readFileSync(join(scope, resumed.aliases.zero!, 'references/notes.txt'), 'utf8')).toBe('important');
+  expect(existsSync(staged)).toBe(false);
+  expect(migrateManagedSkillScope(scope, { globalSkillsDir }).retired).toEqual([]);
+});
+
+test('startup containment keeps custom precedence and prepared aliases without hiding unrelated skills', () => {
+  const script = `
+    import {mkdirSync,writeFileSync} from 'node:fs';
+    import {join,dirname} from 'node:path';
+    import {GLOBAL_AGENT_SKILLS_DIR,loadGlobalSkillBySlug,loadSkillBySlug,loadAllSkills,setGlobalSkillEnabled} from ${JSON.stringify(import.meta.resolve('../storage.ts'))};
+    import {migrateManagedSkillScope} from ${JSON.stringify(import.meta.resolve('../migration.ts'))};
+    import {runManagedSkillStartupMigration} from ${JSON.stringify(import.meta.resolve('../startup-migration.ts'))};
+    const workspace=${JSON.stringify(join(root, 'containment-workspace'))},project=${JSON.stringify(join(root, 'containment-project'))},agentsDir=${JSON.stringify(join(root, 'containment-agents'))};
+    const put=(dir,slug,text)=>{mkdirSync(join(dir,slug),{recursive:true});writeFileSync(join(dir,slug,'SKILL.md'),'---\\nname: Custom\\ndescription: Custom\\n---\\n'+text)};
+    put(GLOBAL_AGENT_SKILLS_DIR,'zero','prepared global custom');
+    const alias=migrateManagedSkillScope(GLOBAL_AGENT_SKILLS_DIR).aliases.zero;
+    setGlobalSkillEnabled(workspace,'zero',true);
+    put(join(workspace,'skills'),'zero','workspace custom');
+    put(join(project,'.agents','skills'),'zero','project custom');
+    put(join(workspace,'skills'),'my-helper','unrelated user skill');
+    mkdirSync(join(agentsDir,'broken'),{recursive:true});writeFileSync(join(agentsDir,'broken','AGENT.md'),'broken frontmatter');
+    const result=runManagedSkillStartupMigration({workspaceRoots:[workspace],globalSkillsDir:GLOBAL_AGENT_SKILLS_DIR,agentsDir,runtimeVariant:'artist-os'});
+    const projectValue=loadSkillBySlug(workspace,'zero',project)?.content.trim();
+    const workspaceValue=loadSkillBySlug(workspace,'zero')?.content.trim();
+    const otherWorkspace=${JSON.stringify(join(root, 'other-workspace'))};setGlobalSkillEnabled(otherWorkspace,'zero',true);
+    const globalValue=loadSkillBySlug(otherWorkspace,'legacy:zero')?.content.trim();
+    const bareRemainsManaged=Boolean(loadSkillBySlug(otherWorkspace,'zero')?.managed);
+    writeFileSync(join(workspace,'skills','.managed-skill-migration.json'),'{broken');
+    const customWithBrokenJournal=loadSkillBySlug(workspace,'zero')?.content.trim();
+    const unrelated=loadSkillBySlug(workspace,'my-helper')?.content.trim();
+    const noGuess=loadSkillBySlug(workspace,'agent-creator')===null;
+    const catalog=loadAllSkills(workspace).some(skill=>skill.content.trim()==='workspace custom');
+    const catalogNoGuess=!loadAllSkills(workspace).some(skill=>skill.slug==='agent-creator');
+    const completedWorkspace=${JSON.stringify(join(root, 'completed-workspace'))};
+    put(join(completedWorkspace,'skills'),'zero','completed workspace custom');
+    migrateManagedSkillScope(join(completedWorkspace,'skills'));
+    put(GLOBAL_AGENT_SKILLS_DIR,'zero','pending global custom');
+    const completedScopeWins=Boolean(loadSkillBySlug(completedWorkspace,'zero')?.managed);
+    (await import('node:fs')).rmSync(join(GLOBAL_AGENT_SKILLS_DIR,'zero'),{recursive:true});
+    setGlobalSkillEnabled(otherWorkspace,'zero',false);setGlobalSkillEnabled(otherWorkspace,alias,true);
+    const customOnly=loadSkillBySlug(otherWorkspace,'legacy:zero')?.content.trim()==='prepared global custom';
+    writeFileSync(join(GLOBAL_AGENT_SKILLS_DIR,'.managed-skill-migration.json'),'{broken');
+    const directGlobalNoGuess=loadGlobalSkillBySlug('legacy:zero')===null;
+    console.log(JSON.stringify({ok:result.ok,projectValue,workspaceValue,globalValue,customWithBrokenJournal,unrelated,noGuess,catalog,customOnly,directGlobalNoGuess,bareRemainsManaged,catalogNoGuess,completedScopeWins}));
+  `;
+  const result = Bun.spawnSync([process.execPath, '-e', script], { env: { ...process.env, CRAFT_PRODUCT_VARIANT: 'artist-os', CRAFT_CONFIG_DIR: join(root, 'containment-profile') } });
+  expect(result.exitCode).toBe(0);
+  expect(JSON.parse(result.stdout.toString().trim())).toEqual({ ok: false, projectValue: 'project custom', workspaceValue: 'workspace custom', globalValue: 'prepared global custom', customWithBrokenJournal: 'workspace custom', unrelated: 'unrelated user skill', noGuess: true, catalog: true, customOnly: true, directGlobalNoGuess: true, bareRemainsManaged: true, catalogNoGuess: true, completedScopeWins: true });
+});
+
+test('edits during retirement intent publication leave the original in place', () => {
+  write('zero', 'SKILL.md', 'custom');
+  const realRename = fs.renameSync;
+  const rename = spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+    realRename(from, to);
+    if (String(to) === join(scope, '.managed-skill-migration.json')) {
+      const journal = JSON.parse(readFileSync(to, 'utf8'));
+      if (journal.entries.zero?.retirement) write('zero', 'SKILL.md', 'new user edit');
+    }
+  });
+  try { expect(() => migrateManagedSkillScope(scope, { globalSkillsDir })).toThrow('changed before retirement'); }
+  finally { rename.mockRestore(); }
+  expect(readFileSync(join(scope, 'zero', 'SKILL.md'), 'utf8')).toBe('new user edit');
 });

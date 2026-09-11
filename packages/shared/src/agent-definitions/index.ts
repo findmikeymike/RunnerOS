@@ -51,6 +51,7 @@ export {
   ensureBuiltInAgentSkillsForSlug,
   ensureBuiltInAgentMetadataSlugs,
   replaceBuiltInAgentMetadata,
+  migrateBuiltInAgentTaskModes,
   dedupeBuiltInAgentPromptText,
   replaceBuiltInAgentPromptText,
   replaceBuiltInAgentPromptPattern,
@@ -67,3 +68,5 @@ export { migrateMonidRouting } from './monid-routing-migration.ts';
 export { migrateHelperGuide } from './helper-guide-migration.ts';
 
 export { BUILTIN_AGENT_REGISTRATIONS, REQUIRED_BUILTIN_AGENT_SLUGS, BASE_DEFAULT_WORKER_SLUGS, HQ_DEFAULT_WORKER_SLUGS, CAMPAIGN_DEFAULT_WORKER_SLUGS, LAB_DEFAULT_WORKER_SLUGS, defaultWorkerSlugs, excludedWorkerSlugs, type BuiltinAgentRegistration, type ArtistWorkspaceScope } from './registration.ts';
+
+export { SPOTIFY_ANALYST_LEGACY_PROMPTS } from './spotify-analyst-prompt-baselines.ts';

@@ -28,7 +28,7 @@ import { isSystemGlobalSkillSlug } from './system.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
 import { resolveRuntimeIdentity } from '../config/runtime-identity.ts';
 import { getManagedSkill, getManagedSkillManifest, isManagedSkillFeatureEnabled } from './managed.ts';
-import { getLegacySkillMigration, resolveLegacySkillAlias } from './migration.ts';
+import { getLegacySkillMigration, resolveLegacySkillAlias, isManagedSkillMigrationDeferred, hasUnreadableSkillMigrationJournal } from './migration.ts';
 import {
   validateIconValue,
   findIconFile,
@@ -261,6 +261,23 @@ function loadSkillsFromDir(skillsDir: string, source: SkillSource): LoadedSkill[
   return skills;
 }
 
+/** Undefined means no legacy ownership here; null means unresolved ownership.
+ * Never replace an unreadable/missing customization with the bundled skill. */
+function deferredLegacySkill(skillsDir: string, slug: string, source: SkillSource, legacy = false): LoadedSkill | null | undefined {
+  if (!storageManagedManifest().has(slug) || !isManagedSkillMigrationDeferred()) return undefined;
+  if (existsSync(join(skillsDir, slug))) return loadSkillFromDir(skillsDir, slug, source);
+  if (hasUnreadableSkillMigrationJournal(skillsDir)) return null;
+  const entry = getLegacySkillMigration(skillsDir, slug);
+  if (entry?.copySlug) {
+    // Completed migrations leave bare selections pointing at managed stock.
+    // Only explicit historical assignments select a retired personal copy.
+    if (entry.retired && !legacy) return storageManagedSkill(slug);
+    return loadSkillFromDir(skillsDir, entry.copySlug, source);
+  }
+  if (entry) return storageManagedSkill(slug);
+  return undefined;
+}
+
 /**
  * Load a single skill from a workspace
  * @param workspaceRoot - Absolute path to workspace root
@@ -268,6 +285,8 @@ function loadSkillsFromDir(skillsDir: string, source: SkillSource): LoadedSkill[
  */
 export function loadSkill(workspaceRoot: string, slug: string): LoadedSkill | null {
   const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
+  const deferred = deferredLegacySkill(skillsDir, slug, 'workspace');
+  if (deferred !== undefined) return deferred;
   if (storageManagedManifest().has(slug)) return getLegacySkillMigration(skillsDir, slug) || existsSync(join(skillsDir, slug, 'SKILL.md')) ? storageManagedSkill(slug) : null;
   return loadSkillFromDir(skillsDir, slug, 'workspace');
 }
@@ -287,7 +306,7 @@ export function loadWorkspaceSkills(workspaceRoot: string): LoadedSkill[] {
 
 export function loadGlobalSkills(): LoadedSkill[] {
   const skills = [...loadSkillsFromDir(GLOBAL_AGENT_SKILLS_DIR, 'global').filter(skill => !storageManagedManifest().has(skill.slug)),
-    ...Array.from(storageManagedManifest().keys(), slug => storageManagedSkill(slug)!)];
+    ...Array.from(storageManagedManifest().keys()).flatMap(slug => { const skill = loadGlobalSkillBySlug(slug); return skill ? [skill] : []; })];
   const bySlug = new Map(skills.map(skill => [skill.slug, skill]));
   for (const slug of storageManagedManifest().keys()) {
     const target = resolveLegacySkillAlias(GLOBAL_AGENT_SKILLS_DIR, slug) ?? slug;
@@ -351,6 +370,12 @@ export function loadAllSkills(workspaceRoot: string, projectRoot?: string): Load
     skillsBySlug.set(skill.slug, skill);
   }
 
+  if (MANAGED_SKILLS_ENABLED && isManagedSkillMigrationDeferred()) {
+    for (const slug of storageManagedManifest().keys()) {
+      if (deferredLegacySkill(getWorkspaceSkillsPath(workspaceRoot), slug, 'workspace') === null) skillsBySlug.delete(slug);
+    }
+  }
+
   // 3. Project skills (highest priority): {projectRoot}/.agents/skills/
   if (projectRoot) {
     const projectSkillsDir = join(projectRoot, PROJECT_AGENT_SKILLS_DIR);
@@ -359,7 +384,9 @@ export function loadAllSkills(workspaceRoot: string, projectRoot?: string): Load
       skillsBySlug.set(skill.slug, skill);
     }
     for (const slug of storageManagedManifest().keys()) {
-      if (getLegacySkillMigration(projectSkillsDir, slug) || existsSync(join(projectSkillsDir, slug, 'SKILL.md'))) skillsBySlug.set(slug, storageManagedSkill(slug)!);
+      const deferred = deferredLegacySkill(projectSkillsDir, slug, 'project');
+      if (deferred !== undefined) { if (deferred) skillsBySlug.set(slug, deferred); else skillsBySlug.delete(slug); }
+      else if (getLegacySkillMigration(projectSkillsDir, slug) || existsSync(join(projectSkillsDir, slug, 'SKILL.md'))) skillsBySlug.set(slug, storageManagedSkill(slug)!);
     }
   }
 
@@ -392,6 +419,22 @@ export function isManagedSkillAvailable(workspaceRoot: string, slug: string, pro
 }
 
 export function loadSkillBySlug(workspaceRoot: string, slug: string, projectRoot?: string): LoadedSkill | null {
+  if (MANAGED_SKILLS_ENABLED && isManagedSkillMigrationDeferred()) {
+    const original = slug.replace(/^legacy:/, '');
+    for (const [root, source] of [
+      ...(projectRoot ? [[join(projectRoot, PROJECT_AGENT_SKILLS_DIR), 'project']] : []),
+      [getWorkspaceSkillsPath(workspaceRoot), 'workspace'],
+      [GLOBAL_AGENT_SKILLS_DIR, 'global'],
+    ] as Array<[string, SkillSource]>) {
+      if (source === 'global') {
+        const enabled = listEnabledGlobalSkillSlugs(workspaceRoot);
+        const alias = resolveLegacySkillAlias(root, original);
+        if (!enabled.includes(original) && !(alias && enabled.includes(alias))) continue;
+      }
+      const deferred = deferredLegacySkill(root, original, source, slug.startsWith('legacy:'));
+      if (deferred !== undefined) return deferred;
+    }
+  }
   if (MANAGED_SKILLS_ENABLED && slug.startsWith('legacy:')) {
     const original = slug.slice('legacy:'.length);
     for (const [root, source] of [
@@ -434,9 +477,13 @@ export function loadSkillBySlug(workspaceRoot: string, slug: string, projectRoot
 export function loadGlobalSkillBySlug(slug: string): LoadedSkill | null {
   if (MANAGED_SKILLS_ENABLED && slug.startsWith('legacy:')) {
     const original = slug.slice('legacy:'.length);
+    const deferred = deferredLegacySkill(GLOBAL_AGENT_SKILLS_DIR, original, 'global', true);
+    if (deferred !== undefined) return deferred;
     const alias = resolveLegacySkillAlias(GLOBAL_AGENT_SKILLS_DIR, original);
     return alias ? loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, alias, 'global') : storageManagedSkill(original);
   }
+  const deferred = deferredLegacySkill(GLOBAL_AGENT_SKILLS_DIR, slug, 'global');
+  if (deferred !== undefined) return deferred;
   if (storageManagedManifest().has(slug)) return storageManagedSkill(slug);
   return loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, slug, 'global');
 }
