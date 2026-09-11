@@ -1,7 +1,6 @@
-import * as React from 'react'
 import {
   Activity, AudioLines, BookOpen, CalendarDays, Captions, ChartNoAxesCombined,
-  Check, ChevronRight, CircleHelp, ClipboardList, Coins, Compass,
+  Check, CircleHelp, ClipboardList, Coins, Compass,
   Download, FileCheck, Fingerprint, Globe, Image, Layers3,
   Lightbulb, ListChecks, ListMusic, LoaderCircle, Map, Megaphone,
   MessageCircle, Mic, MousePointerClick, Orbit, Package, Palette,
@@ -77,31 +76,6 @@ export function ChatAgentTaskModeBar({
   openingConversation = false,
   onSelect,
 }: ChatAgentTaskModeBarProps) {
-  const scrollRef = React.useRef<HTMLDivElement>(null)
-  const [canScrollRight, setCanScrollRight] = React.useState(false)
-  const updateScroll = React.useCallback(() => {
-    const row = scrollRef.current
-    if (row) setCanScrollRight(row.scrollWidth - row.clientWidth - row.scrollLeft > 2)
-  }, [])
-  React.useEffect(() => {
-    const row = scrollRef.current
-    if (!row) return
-    const observer = new ResizeObserver(() => {
-      row.querySelector<HTMLButtonElement>('[aria-pressed="true"]')
-        ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-      updateScroll()
-    })
-    observer.observe(row)
-    updateScroll()
-    return () => observer.disconnect()
-  }, [modes, updateScroll])
-  React.useEffect(() => {
-    const row = scrollRef.current
-    const selected = row?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')
-    selected?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-    updateScroll()
-  }, [selectedModeId, updateScroll])
-
   const helperText = applyingModeId
     ? (conversationStarted ? 'Updating the next reply…' : 'Starting conversation…')
     : openingConversation
@@ -113,12 +87,7 @@ export function ChatAgentTaskModeBar({
   return (
     <div className="relative min-w-0" aria-label="Agent focus">
       <p className="sr-only" role="status">{helperText}</p>
-      <div
-        ref={scrollRef}
-        onScroll={updateScroll}
-        className="flex overflow-x-auto pt-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-        <div data-focus-options className="relative mx-auto flex shrink-0 items-center gap-1.5">
+      <div data-focus-options className="relative mx-auto flex flex-wrap items-center justify-center gap-1.5 px-1 pt-1 pb-2">
         {modes.map((mode) => {
           const selected = selectedModeId === mode.id
           const applying = applyingModeId === mode.id
@@ -136,7 +105,7 @@ export function ChatAgentTaskModeBar({
                     onClick={() => { if (!busy) onSelect(mode.id) }}
                     aria-disabled={busy}
                     className={cn(
-                      'group relative flex h-7 max-w-full shrink-0 items-center gap-2 rounded-lg border px-3 text-[11px] font-medium tracking-[-0.01em] shadow-hairline-top transition-[color,background-color,border-color] duration-150',
+                      'group relative flex min-h-7 max-w-full items-center gap-2 rounded-lg border px-3 py-1 text-[11px] font-medium tracking-[-0.01em] shadow-hairline-top transition-[color,background-color,border-color] duration-150',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fb923c]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#242424]',
                       'aria-disabled:cursor-wait motion-reduce:transition-none',
                       selected
@@ -167,21 +136,8 @@ export function ChatAgentTaskModeBar({
             </TooltipProvider>
           )
         })}
-          <div data-focus-divider aria-hidden="true" className="pointer-events-none absolute inset-x-0 -bottom-2 h-[0.5px] bg-[#fb923c]/45" />
-        </div>
+        <div data-focus-divider aria-hidden="true" className="pointer-events-none absolute inset-x-1 bottom-0 h-[0.5px] bg-[#fb923c]/45" />
       </div>
-      {canScrollRight && (
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex w-11 items-center justify-end bg-gradient-to-l from-[#1c1c1c] via-[#1c1c1c]/90 to-transparent">
-          <button
-            type="button"
-            aria-label="More focus options"
-            onClick={() => scrollRef.current?.scrollBy({ left: 220, behavior: 'instant' })}
-            className="pointer-events-auto flex size-7 items-center justify-center rounded-md border border-white/10 bg-[#303030] text-white/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fb923c]/70"
-          >
-            <ChevronRight className="size-3.5" />
-          </button>
-        </div>
-      )}
     </div>
   )
 }

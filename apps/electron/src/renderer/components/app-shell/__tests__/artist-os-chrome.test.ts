@@ -347,6 +347,8 @@ describe('Artist OS persistent shell chrome', () => {
     expect(chatPage).toContain('focusControls={showTaskModeBar ? (')
     expect(focusBar).toContain('applies to the next reply')
     expect(focusBar).toContain('{mode.label}')
+    expect(focusBar).toContain('flex flex-wrap items-center justify-center')
+    expect(focusBar).not.toContain('overflow-x-auto')
     expect(focusBar).not.toContain('<Dialog')
     expect(runAgent).toContain('taskModeSelectionPending: true')
   })
