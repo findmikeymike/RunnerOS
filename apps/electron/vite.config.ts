@@ -1,4 +1,6 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
+import { rmSync } from 'node:fs'
+import { createBuildProvenance, publishRendererBuild, rendererStagingDirectory } from '../../scripts/build-provenance'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
@@ -8,11 +10,36 @@ import { resolve } from 'path'
 // SENTRY_ORG, SENTRY_PROJECT to CI secrets. See CLAUDE.md "Sentry Error Tracking" section.
 // import { sentryVitePlugin } from '@sentry/vite-plugin'
 
-export default defineConfig({
+function publishCompleteRenderer(): Plugin {
+  let destination: string | undefined
+  let staged: string | undefined
+  let written = false
+  return {
+    name: 'publish-complete-renderer',
+    apply: 'build',
+    enforce: 'post',
+    config(config) {
+      destination = resolve(config.root ?? resolve(__dirname, 'src/renderer'), config.build?.outDir ?? resolve(__dirname, 'dist/renderer'))
+      staged = rendererStagingDirectory(destination)
+      return { build: { outDir: staged, emptyOutDir: true } }
+    },
+    writeBundle: { order: 'post', sequential: true, handler() { written = true } },
+    buildEnd(error) { if (error) written = false },
+    closeBundle: { order: 'post', sequential: true, handler() {
+      if (!staged || !destination) return
+      try { if (written) publishRendererBuild(staged, destination) }
+      finally { rmSync(staged, { recursive: true, force: true }) }
+    } },
+  }
+}
+
+export default defineConfig(({ command }) => ({
   define: {
-    __CRAFT_PRODUCT_VARIANT__: JSON.stringify(process.env.VITE_CRAFT_PRODUCT_VARIANT || 'runner'),
+    __ARTIST_OS_BUILD_INFO__: command === 'serve' ? 'undefined' : JSON.stringify(createBuildProvenance({ rootDir: resolve(__dirname, '../..'), component: 'renderer', product: process.env.VITE_CRAFT_PRODUCT_VARIANT || process.env.CRAFT_PRODUCT_VARIANT || 'runner' })),
+    __CRAFT_PRODUCT_VARIANT__: JSON.stringify(process.env.VITE_CRAFT_PRODUCT_VARIANT || process.env.CRAFT_PRODUCT_VARIANT || 'runner'),
   },
   plugins: [
+    publishCompleteRenderer(),
     react({
       babel: {
         plugins: [
@@ -50,7 +77,7 @@ export default defineConfig({
       if (/(?:input|output)-worklet\.js$/.test(filePath)) return false
     },
     outDir: resolve(__dirname, 'dist/renderer'),
-    emptyDirBeforeWrite: true,
+    // The publication plugin builds into a fresh sibling directory.
     sourcemap: true,  // Source maps generated for debugging. Not uploaded to Sentry (see CLAUDE.md).
     rollupOptions: {
       input: {
@@ -86,4 +113,4 @@ export default defineConfig({
     port: 5173,
     open: false
   }
-})
+}))

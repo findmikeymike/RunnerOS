@@ -1,4 +1,6 @@
 import { useTranslation } from 'react-i18next'
+import { useEffect, useState } from 'react'
+import { describeBuildAgreement, getEmbeddedBuildInfo, type DesktopBuildInfo } from '@craft-agent/shared/build-info'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { SettingsCard, SettingsRow, SettingsSection } from '@/components/settings'
@@ -23,6 +25,15 @@ const quietButtonClass = 'inline-flex h-8 items-center rounded-[8px] border bord
 export default function AboutSettingsPage() {
   const { t } = useTranslation()
   const isArtistOs = RENDERER_PRODUCT_VARIANT === 'artist-os'
+  const [desktopBuild, setDesktopBuild] = useState<DesktopBuildInfo>({ main: null, preload: null, isPackaged: null })
+  const rendererBuild = getEmbeddedBuildInfo()
+  useEffect(() => {
+    let active = true
+    if (typeof window.electronAPI.getBuildInfo === 'function') {
+      void window.electronAPI.getBuildInfo().then(info => { if (active) setDesktopBuild(info) }).catch(() => {})
+    }
+    return () => { active = false }
+  }, [])
 
   const openUrl = (url: string) => {
     void window.electronAPI.openUrl(url)
@@ -70,6 +81,28 @@ export default function AboutSettingsPage() {
                     action={<button type="button" onClick={() => openUrl(RUNNER_UPDATES_URL)} className={quietButtonClass}>Open updates</button>}
                   />
                 )}
+              </SettingsCard>
+            </SettingsSection>
+            <SettingsSection title="Build details">
+              <SettingsCard>
+                <div className="px-4 py-3 text-xs text-white/48">
+                  {describeBuildAgreement([desktopBuild.main, desktopBuild.preload, rendererBuild])}
+                  {desktopBuild.isPackaged !== null && <span> {desktopBuild.isPackaged ? 'Packaged app.' : 'Development app.'}</span>}
+                </div>
+                {([
+                  ['Main', desktopBuild.main], ['Preload', desktopBuild.preload], ['Renderer', rendererBuild],
+                ] as const).map(([label, info]) => (
+                  <SettingsRow key={label} label={label}>
+                    {info ? (
+                      <div className="min-w-0 text-right text-xs text-white/48">
+                        <div className="break-all font-mono" title={`Commit: ${info.commit ?? 'unavailable'}\nSource: ${info.sourceHash}`}>
+                          {info.commit?.slice(0, 12) ?? 'Commit unavailable'} · {info.sourceHash.slice(0, 12)}{info.dirty ? ' · modified' : ''}
+                        </div>
+                        <div className="mt-1">{info.product} · {info.builtAt}</div>
+                      </div>
+                    ) : <span className="text-xs text-white/38">Unavailable in this component</span>}
+                  </SettingsRow>
+                ))}
               </SettingsCard>
             </SettingsSection>
           </div>

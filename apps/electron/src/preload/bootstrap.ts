@@ -17,6 +17,7 @@
  */
 
 import '@sentry/electron/preload'
+import { getEmbeddedBuildInfo } from '@craft-agent/shared/build-info'
 import { contextBridge, ipcRenderer, shell, webUtils } from 'electron'
 import { WsRpcClient, type TransportConnectionState } from '../transport/client'
 import { RoutedClient } from '../transport/routed-client'
@@ -220,6 +221,11 @@ const authorizedClient: TransportClient = productVariant === 'artist-os'
   ? new LicensedTransportClient(client)
   : client
 const api = buildClientApi(authorizedClient, CHANNEL_MAP, (ch) => authorizedClient.isChannelAvailable(ch))
+// Provenance belongs to this desktop, including when its workspace uses a remote server.
+api.getBuildInfo = async () => {
+  const local = await ipcRenderer.invoke('__get-build-info').catch(() => null)
+  return { main: local?.main ?? null, preload: getEmbeddedBuildInfo(), isPackaged: local?.isPackaged ?? null }
+}
 
 ;(api as any).getRuntimeEnvironment = (): 'electron' | 'web' => 'electron'
 ;(api as any).webContentsId = webContentsId
