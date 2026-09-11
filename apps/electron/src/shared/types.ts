@@ -792,6 +792,7 @@ export interface ElectronAPI {
 
   // System
   getVersions(): { node: string; chrome: string; electron: string }
+  getBuildInfo(): Promise<import('@craft-agent/shared/build-info').DesktopBuildInfo>
   /** Returns the renderer host environment without going through RPC. */
   getRuntimeEnvironment(): 'electron' | 'web'
   getHomeDir(): Promise<string>

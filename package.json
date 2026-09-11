@@ -49,9 +49,10 @@
   },
   "scripts": {
     "test:signals-ui": "bun scripts/test-signals-ui.ts",
-    "test": "CRAFT_BUNDLED_ASSETS_ROOT=${CRAFT_BUNDLED_ASSETS_ROOT:-$PWD/apps/electron} PANGOCAIRO_BACKEND=${PANGOCAIRO_BACKEND:-fontconfig} bun test --path-ignore-patterns='**/release-artist-os/**' --path-ignore-patterns='**/dist/**' && for f in $(find ./packages ./apps ./tools -name '*.isolated.ts' -not -path '*/node_modules/*' -not -path '*/release-artist-os/*'); do bun test \"$f\" || exit 1; done",
+    "test": "CRAFT_BUNDLED_ASSETS_ROOT=${CRAFT_BUNDLED_ASSETS_ROOT:-$PWD/apps/electron} PANGOCAIRO_BACKEND=${PANGOCAIRO_BACKEND:-fontconfig} bun test --path-ignore-patterns='**/release-artist-os/**' --path-ignore-patterns='**/dist/**' && for f in $(find ./packages ./apps ./tools ./scripts -name '*.isolated.ts' -not -path '*/node_modules/*' -not -path '*/release-artist-os/*'); do bun test \"$f\" || exit 1; done",
     "typecheck": "bun run typecheck:shared",
     "typecheck:shared": "cd packages/shared && bun run tsc --noEmit",
+    "check:dependency-containment": "bun scripts/check-dependency-containment.ts",
     "typecheck:staged": "bash scripts/typecheck-staged.sh",
     "typecheck:all": "cd packages/core && bun run tsc --noEmit && cd ../shared && bun run tsc --noEmit && cd ../entitlement-service && bun run tsc --noEmit && cd ../server-core && bun run tsc --noEmit && cd ../server && bun run tsc --noEmit && cd ../session-tools-core && bun run tsc --noEmit && cd ../pi-agent-server && bun run typecheck && cd ../../apps/electron && bun run typecheck && cd ../../packages/ui && bun run tsc --noEmit",
     "skills:generate": "cd packages/shared && bun scripts/generate-bundled-skills.ts",
@@ -70,7 +71,7 @@
     "test:shared:config": "cd packages/shared && bun test src/config/__tests__/llm-connections.test.ts src/config/__tests__/storage-migrations.test.ts src/config/__tests__/storage-startup-migration.test.ts src/config/__tests__/default-thinking-level.test.ts",
     "test:shared:all": "bun run test:shared:llm-connections && bun run test:shared:models-pi && bun run test:shared:config",
     "test:doc-tools": "python3 -m unittest apps.electron.resources.scripts.tests.test_pdf_tool_smoke apps.electron.resources.scripts.tests.test_xlsx_tool_smoke apps.electron.resources.scripts.tests.test_docx_tool_smoke apps.electron.resources.scripts.tests.test_pptx_tool_smoke apps.electron.resources.scripts.tests.test_img_tool_smoke apps.electron.resources.scripts.tests.test_ical_tool_smoke apps.electron.resources.scripts.tests.test_doc_diff_smoke apps.electron.resources.scripts.tests.test_markitdown_smoke",
-    "validate:dev": "bun run typecheck:all && bun run test:shared:all && bun run test:doc-tools",
+    "validate:dev": "bun run check:dependency-containment && bun run typecheck:all && bun run test:shared:all && bun run test:doc-tools",
     "validate:ci": "bun run validate:dev && bun run lint:i18n:parity",
     "lint:ipc-sends": "bash scripts/check-raw-sends.sh",
     "lint:electron": "cd apps/electron && bun run lint",
@@ -267,6 +268,9 @@
     "@img/sharp-libvips-linux-x64": "1.2.4"
   },
   "patchedDependencies": {
-    "incr-regex-package@1.0.4": "patches/incr-regex-package@1.0.4.patch"
+    "incr-regex-package@1.0.4": "patches/incr-regex-package@1.0.4.patch",
+    "@anthropic-ai/sdk@0.91.1": "patches/@anthropic-ai%2Fsdk@0.91.1.patch",
+    "@anthropic-ai/sdk@0.106.0": "patches/@anthropic-ai%2Fsdk@0.106.0.patch",
+    "@google/genai@1.52.0": "patches/@google%2Fgenai@1.52.0.patch"
   }
 }

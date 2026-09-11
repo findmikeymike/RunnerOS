@@ -6,6 +6,7 @@
  */
 
 import { spawn } from "bun";
+import { createBuildProvenance } from "./build-provenance";
 import { existsSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join } from "path";
 
@@ -69,6 +70,7 @@ function getBuildDefines(): string[] {
   defines.push(
     `--define:__CRAFT_PRODUCT_VARIANT__="${process.env.CRAFT_PRODUCT_VARIANT || 'runner'}"`,
   );
+  defines.push(`--define:__ARTIST_OS_BUILD_INFO__=${JSON.stringify(createBuildProvenance({ rootDir: ROOT_DIR, component: 'main' }))}`);
   return defines;
 }
 

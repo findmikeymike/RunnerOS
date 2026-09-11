@@ -13,6 +13,7 @@
     "generate:bundled-skills": "bun scripts/generate-bundled-skills.ts"
   },
   "exports": {
+    "./build-info": "./src/build-info.ts",
     ".": "./src/index.ts",
     "./agent-messaging": "./src/agent-messaging/index.ts",
     "./agent": "./src/agent/index.ts",

@@ -1,0 +1,105 @@
+diff --git a/dist/genai.d.ts b/dist/genai.d.ts
+index a3757d33c98c32591d591d021699ff97555a2834..b0774a285117deecccb055282b7dff950196d7e8 100644
+--- a/dist/genai.d.ts
++++ b/dist/genai.d.ts
+@@ -8561,10 +8561,10 @@ export declare enum MusicGenerationMode {
+ declare type NeverToAny<T> = T extends never ? any : T;
+ 
+ /** @ts-ignore For users with node-fetch@2 */
+-declare type NodeFetch2RequestInit = NotAny<import('../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit>;
++declare type NodeFetch2RequestInit = NotAny<import('node-fetch').RequestInit>;
+ 
+ /** @ts-ignore For users with node-fetch@3, doesn't need file extension because types are at ./@types/index.d.ts */
+-declare type NodeFetch3RequestInit = NotAny<import('../node_modules/node-fetch').RequestInit> | NotAny<import('../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../../../../../node_modules/node-fetch').RequestInit>;
++declare type NodeFetch3RequestInit = NotAny<import('node-fetch').RequestInit>;
+ 
+ /** @ts-ignore */
+ declare type _NodeReadableStream<R = any> = ReadableStream_2<R>;
+@@ -11795,7 +11795,7 @@ declare namespace types {
+ }
+ 
+ /** @ts-ignore For users with undici */
+-declare type UndiciRequestInit = NotAny<import('../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../../node_modules/undici/index.d.ts').RequestInit>;
++declare type UndiciRequestInit = NotAny<import('undici').RequestInit>;
+ 
+ /**
+  * These imports attempt to get types from a parent package's dependencies.
+@@ -11820,7 +11820,7 @@ declare type UndiciRequestInit = NotAny<import('../node_modules/undici/index.d.t
+  * [1]: https://www.typescriptlang.org/tsconfig/#typeAcquisition
+  */
+ /** @ts-ignore For users with \@types/node */
+-declare type UndiciTypesRequestInit = NotAny<import('../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../../node_modules/undici-types/index.d.ts').RequestInit>;
++declare type UndiciTypesRequestInit = NotAny<import('undici-types').RequestInit>;
+ 
+ declare class UnprocessableEntityError extends APIError<422, Headers> {
+ }
+diff --git a/dist/node/node.d.ts b/dist/node/node.d.ts
+index 7effa1563bbff1413bada087e7a562df56f5aded..99c10498de15a047d66b736163d1036500fb893e 100644
+--- a/dist/node/node.d.ts
++++ b/dist/node/node.d.ts
+@@ -8573,10 +8573,10 @@ export declare enum MusicGenerationMode {
+ declare type NeverToAny<T> = T extends never ? any : T;
+ 
+ /** @ts-ignore For users with node-fetch@2 */
+-declare type NodeFetch2RequestInit = NotAny<import('../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit>;
++declare type NodeFetch2RequestInit = NotAny<import('node-fetch').RequestInit>;
+ 
+ /** @ts-ignore For users with node-fetch@3, doesn't need file extension because types are at ./@types/index.d.ts */
+-declare type NodeFetch3RequestInit = NotAny<import('../node_modules/node-fetch').RequestInit> | NotAny<import('../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../../../../../node_modules/node-fetch').RequestInit>;
++declare type NodeFetch3RequestInit = NotAny<import('node-fetch').RequestInit>;
+ 
+ /** @ts-ignore */
+ declare type _NodeReadableStream<R = any> = ReadableStream_2<R>;
+@@ -11807,7 +11807,7 @@ declare namespace types {
+ }
+ 
+ /** @ts-ignore For users with undici */
+-declare type UndiciRequestInit = NotAny<import('../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../../node_modules/undici/index.d.ts').RequestInit>;
++declare type UndiciRequestInit = NotAny<import('undici').RequestInit>;
+ 
+ /**
+  * These imports attempt to get types from a parent package's dependencies.
+@@ -11832,7 +11832,7 @@ declare type UndiciRequestInit = NotAny<import('../node_modules/undici/index.d.t
+  * [1]: https://www.typescriptlang.org/tsconfig/#typeAcquisition
+  */
+ /** @ts-ignore For users with \@types/node */
+-declare type UndiciTypesRequestInit = NotAny<import('../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../../node_modules/undici-types/index.d.ts').RequestInit>;
++declare type UndiciTypesRequestInit = NotAny<import('undici-types').RequestInit>;
+ 
+ declare class UnprocessableEntityError extends APIError<422, Headers> {
+ }
+diff --git a/dist/web/web.d.ts b/dist/web/web.d.ts
+index c9981bf06f8ad611134a769275cebb4a587a58c6..a2f1030623366e936867536dde0d0ba78e343657 100644
+--- a/dist/web/web.d.ts
++++ b/dist/web/web.d.ts
+@@ -8566,10 +8566,10 @@ export declare enum MusicGenerationMode {
+ declare type NeverToAny<T> = T extends never ? any : T;
+ 
+ /** @ts-ignore For users with node-fetch@2 */
+-declare type NodeFetch2RequestInit = NotAny<import('../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../../node_modules/@types/node-fetch/index.d.ts').RequestInit>;
++declare type NodeFetch2RequestInit = NotAny<import('node-fetch').RequestInit>;
+ 
+ /** @ts-ignore For users with node-fetch@3, doesn't need file extension because types are at ./@types/index.d.ts */
+-declare type NodeFetch3RequestInit = NotAny<import('../node_modules/node-fetch').RequestInit> | NotAny<import('../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../../../../node_modules/node-fetch').RequestInit> | NotAny<import('../../../../../../../../../../node_modules/node-fetch').RequestInit>;
++declare type NodeFetch3RequestInit = NotAny<import('node-fetch').RequestInit>;
+ 
+ /** @ts-ignore */
+ declare type _NodeReadableStream<R = any> = ReadableStream_2<R>;
+@@ -11800,7 +11800,7 @@ declare namespace types {
+ }
+ 
+ /** @ts-ignore For users with undici */
+-declare type UndiciRequestInit = NotAny<import('../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../node_modules/undici/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../../node_modules/undici/index.d.ts').RequestInit>;
++declare type UndiciRequestInit = NotAny<import('undici').RequestInit>;
+ 
+ /**
+  * These imports attempt to get types from a parent package's dependencies.
+@@ -11825,7 +11825,7 @@ declare type UndiciRequestInit = NotAny<import('../node_modules/undici/index.d.t
+  * [1]: https://www.typescriptlang.org/tsconfig/#typeAcquisition
+  */
+ /** @ts-ignore For users with \@types/node */
+-declare type UndiciTypesRequestInit = NotAny<import('../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../node_modules/undici-types/index.d.ts').RequestInit> | NotAny<import('../../../../../../../../../../node_modules/undici-types/index.d.ts').RequestInit>;
++declare type UndiciTypesRequestInit = NotAny<import('undici-types').RequestInit>;
+ 
+ declare class UnprocessableEntityError extends APIError<422, Headers> {
+ }

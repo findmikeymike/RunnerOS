@@ -18,6 +18,7 @@ type ApiToChannelMapKeys = Exclude<
   | 'performOAuth'
   | 'getTransportConnectionState'
   | 'getRuntimeEnvironment'
+  | 'getBuildInfo' // direct local IPC — identity of loaded desktop components
   | 'onTransportConnectionStateChanged'
   | 'reconnectTransport'
   | 'isChannelAvailable'

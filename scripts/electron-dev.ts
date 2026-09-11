@@ -7,6 +7,7 @@ import { spawn, type Subprocess } from "bun";
 import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join, basename } from "path";
 import * as esbuild from "esbuild";
+import { buildProvenancePlugin } from "./build-provenance-plugin";
 import { downloadUv, type Platform, type Arch } from "./build/common";
 
 const ROOT_DIR = join(import.meta.dir, "..");
@@ -339,6 +340,7 @@ async function runEsbuild(
       ...(options.packagesExternal ? { packages: "external" as const } : {}),
       ...(options.alias ? { alias: options.alias } : {}),
       define: defines,
+      plugins: entryPoint.includes("/main/") ? [buildProvenancePlugin(ROOT_DIR, "main")] : entryPoint.includes("/preload/") ? [buildProvenancePlugin(ROOT_DIR, "preload")] : [],
       logLevel: "warning",
     });
     return { success: true };
@@ -576,6 +578,7 @@ async function main(): Promise<void> {
     external: getMainProcessExternal(),
     alias: MAIN_PROCESS_ALIAS,
     define: oauthDefines,
+    plugins: [buildProvenancePlugin(ROOT_DIR, "main")],
     logLevel: "info",
   });
   await mainContext.watch();
@@ -590,6 +593,7 @@ async function main(): Promise<void> {
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/bootstrap-preload.cjs"),
     external: ["electron"],
+    plugins: [buildProvenancePlugin(ROOT_DIR, "preload")],
     logLevel: "info",
   });
   await preloadContext.watch();
@@ -604,6 +608,7 @@ async function main(): Promise<void> {
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/browser-toolbar-preload.cjs"),
     external: ["electron"],
+    plugins: [buildProvenancePlugin(ROOT_DIR, "preload")],
     logLevel: "info",
   });
   await toolbarPreloadContext.watch();

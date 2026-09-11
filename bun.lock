@@ -461,6 +461,9 @@
   ],
   "patchedDependencies": {
     "incr-regex-package@1.0.4": "patches/incr-regex-package@1.0.4.patch",
+    "@anthropic-ai/sdk@0.106.0": "patches/@anthropic-ai%2Fsdk@0.106.0.patch",
+    "@anthropic-ai/sdk@0.91.1": "patches/@anthropic-ai%2Fsdk@0.91.1.patch",
+    "@google/genai@1.52.0": "patches/@google%2Fgenai@1.52.0.patch",
   },
   "overrides": {
     "@humanfs/node": "^0.16.8",
