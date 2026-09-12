@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { buildHqStateContextDoc, parseHqStateOfPlay, buildCampaignManagerBrief, buildManagerBrief, serializeCampaignManagerBrief } from '@craft-agent/shared/hq-state'
-import { buildManagerBriefPromptSectionFromDocs } from '@craft-agent/shared/agent-prompt'
+import { ARTIST_OS_TEAM_MISSION, ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE, buildManagerBriefPromptSectionFromDocs } from '@craft-agent/shared/agent-prompt'
 import type { ContextDocDTO } from '../../shared/types'
 import { buildVoiceFocusPrompt } from './artist-manager-voice-focus-prompt'
 
@@ -22,6 +22,18 @@ function fixture(): ContextDocDTO {
 }
 
 describe('focused voice prompt', () => {
+  test('every conversational style shares the working Manager mission while retaining voice boundaries', () => {
+    for (const style of ['sharp', 'high-energy', 'laid-back'] as const) {
+      const prompt = buildVoiceFocusPrompt([fixture()], style, conversationTime)
+      expect(prompt.split(ARTIST_OS_TEAM_MISSION)).toHaveLength(2)
+      expect(prompt.split(ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE)).toHaveLength(2)
+      expect(prompt).toContain('cannot inspect files, search, save, schedule, contact anyone, delegate, or execute work')
+      expect(prompt).toContain('only opens an unsent draft')
+      expect(prompt).not.toContain('Give one useful angle, then stop')
+      expect(prompt).toContain('unless asked to explore or elaborate')
+    }
+  })
+
   test('keeps a near-limit valid brief intact without overflowing the voice session budget', () => {
     const source = fixture()
     const state = parseHqStateOfPlay(source.body)

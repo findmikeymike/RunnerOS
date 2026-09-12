@@ -48,6 +48,7 @@ import type { MemoryEntry } from '../memory/types.ts';
 import { buildRecentSessionsSection } from '../sessions-log/render.ts';
 import type { SessionLogEntry } from '../sessions-log/types.ts';
 import { buildSharedIntelPromptSection, isSharedIntelContextSlug } from '../shared-intel/index.ts';
+import { ARTIST_OS_TEAM_MISSION, ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE } from './artist-team-guidance.ts';
 
 const SECTION_DELIMITER = '\n\n---\n\n';
 
@@ -169,6 +170,11 @@ export function composeAgentSystemPrompt(
   const footer = buildAgentBundleFooter(agent, skills, sources);
 
   const parts: string[] = [body];
+  // Explicit workspace scope keeps this product mission out of general Runner sessions.
+  if (memory.artistWorkspaceScope === 'hq' || memory.artistWorkspaceScope === 'campaign' || memory.artistWorkspaceScope === 'lab') {
+    parts.push(ARTIST_OS_TEAM_MISSION);
+    if (agent.slug?.trim().toLowerCase() === CONCIERGE_SLUG) parts.push(ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE);
+  }
   if (taskModeSection) parts.push(taskModeSection);
   if (agent.slug === CONCIERGE_SLUG) parts.push('Start with artist-manager-operating-system only. Keep setup, creator, workflow, automation, and self-edit skills on demand; do not read them merely because they are in the Manager inventory. Stay conversational. For specialist work, discover the appropriate worker and its explicit focus with list_agents, then pass taskModeId when delegating.');
   if (managerBriefSection) parts.push(managerBriefSection);
