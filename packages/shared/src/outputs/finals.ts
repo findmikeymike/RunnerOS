@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync, statSync } from 'node:fs';
+import { lstatSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type {
   OutputFinalPointer,
@@ -10,6 +10,7 @@ import type {
   RemoveOutputFromFinalInput,
 } from './types.ts';
 import {
+  getContextDocFile,
   loadContextDoc,
   upsertContextDoc,
 } from '../workspace-context/storage.ts';
@@ -140,12 +141,39 @@ function invalidFinalsRegistryError(reason: string): Error {
   return new Error(`Finals registry is invalid; repair context/finals/CONTEXT.md before updating Finals. ${reason}`);
 }
 
+/** The forgiving context loader also returns null for corrupt/unreadable docs.
+ * Only a genuinely absent path can safely be initialized as an empty registry. */
+function finalsRegistryIsAbsent(workspaceRootPath: string): boolean {
+  const file = getContextDocFile(workspaceRootPath, OUTPUT_FINALS_CONTEXT_SLUG);
+  for (const path of [dirname(dirname(file)), dirname(file), file]) {
+    let entry: ReturnType<typeof lstatSync>;
+    try { entry = lstatSync(path); }
+    catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') return true;
+      throw invalidFinalsRegistryError('The registry path could not be inspected.');
+    }
+    // lstat distinguishes a missing path from a dangling link. Verify parent
+    // directories too, since lstat(file) alone misses dangling parent links.
+    if (entry.isSymbolicLink()) {
+      try { entry = statSync(path); }
+      catch { throw invalidFinalsRegistryError('The registry path contains an unreadable link.'); }
+    }
+    if (path !== file && !entry.isDirectory()) throw invalidFinalsRegistryError('The registry parent is not a directory.');
+  }
+  return false;
+}
+
 export function readOutputFinalsRegistry(
   workspaceRootPath: string,
   options: ReadOutputFinalsRegistryOptions = {},
 ): OutputFinalsRegistry {
   const doc = loadContextDoc(workspaceRootPath, OUTPUT_FINALS_CONTEXT_SLUG);
-  if (!doc) return { ...EMPTY_REGISTRY, finals: [] };
+  if (!doc) {
+    if (options.strict && !finalsRegistryIsAbsent(workspaceRootPath)) {
+      throw invalidFinalsRegistryError('The existing registry could not be read or parsed.');
+    }
+    return { ...EMPTY_REGISTRY, finals: [] };
+  }
   try {
     const parsed = JSON.parse(doc.body) as unknown;
     if (!isRecord(parsed) || parsed.schemaVersion !== 1 || !Array.isArray(parsed.finals)) {
