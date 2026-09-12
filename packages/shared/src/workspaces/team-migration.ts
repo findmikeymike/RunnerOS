@@ -9,6 +9,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  rmdirSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
@@ -527,8 +528,11 @@ function getPrivateSessionStageDir(journal: TeamMigrationJournal): string {
   return join(process.env.CRAFT_CONFIG_DIR || CONFIG_DIR, 'team', journal.workspaceId, '.migration', journal.migrationId, 'private-sessions');
 }
 
-function getPrivateMigrationStageRoot(workspaceId: string): string {
-  return join(process.env.CRAFT_CONFIG_DIR || CONFIG_DIR, 'team', workspaceId, '.migration');
+function removePrivateMigrationStage(journal: TeamMigrationJournal): void {
+  const transactionRoot = dirname(getPrivateSessionStageDir(journal));
+  rmSync(transactionRoot, { recursive: true, force: true });
+  // Remove only an empty parent; another journal may still own sibling stages.
+  try { rmdirSync(dirname(transactionRoot)); } catch { /* Nonempty or already removed. */ }
 }
 
 function getPrivateSessionsDir(workspaceId: string): string {
@@ -708,7 +712,7 @@ export function prepareWorkspaceMoveToSharedFolder(
     try {
       removeOwnedMigrationDirectory(tempRootPath, journal);
       removeOwnedMigrationDirectory(preflight.finalRootPath, journal);
-      rmSync(getPrivateMigrationStageRoot(journal.workspaceId), { recursive: true, force: true });
+      removePrivateMigrationStage(journal);
     } catch {
       // Original workspace remains authoritative when rollback cleanup fails.
     }
@@ -740,7 +744,7 @@ export function promotePreparedPrivateSessions(result: TeamSharedFolderMigration
   if (!existsSync(stage)) return;
   const destination = getPrivateSessionsDir(journal.workspaceId);
   copyDirectoryContents(stage, destination, true);
-  rmSync(getPrivateMigrationStageRoot(journal.workspaceId), { recursive: true, force: true });
+  removePrivateMigrationStage(journal);
 }
 
 function removeOwnedMigrationDirectory(rootPath: string, journal: TeamMigrationJournal): void {
@@ -759,7 +763,7 @@ export function rollbackPreparedWorkspaceMigration(journal: TeamMigrationJournal
   removeOwnedMigrationDirectory(journal.finalRootPath, journal);
   const tempRootPath = join(journal.destinationParentPath, `.craft-migrating-${journal.migrationId}`);
   removeOwnedMigrationDirectory(tempRootPath, journal);
-  rmSync(getPrivateMigrationStageRoot(journal.workspaceId), { recursive: true, force: true });
+  removePrivateMigrationStage(journal);
   return updateTeamMigrationJournal(journal, 'rolled-back');
 }
 

@@ -389,3 +389,33 @@ describe('migration publication and replay ownership', () => {
     expect(readFileSync(join(f.privateRoot, 'team', f.config.id, '.migration', result.migrationId, 'private-sessions', 'one.jsonl'), 'utf8')).toBe('original private');
   });
 });
+
+
+for (const cleanup of ['rollback', 'promotion', 'prepare-failure'] as const) {
+  it(`${cleanup} preserves another pending migration for the same workspace`, () => {
+    const root = makeDir('team-independent-journals-');
+    const source = join(root, 'campaign');
+    const privateRoot = join(root, 'private');
+    const destinationA = join(root, 'shared-a');
+    const destinationB = join(root, 'shared-b');
+    const destinationC = join(root, 'shared-c');
+    for (const directory of [source, destinationA, destinationB, destinationC]) mkdirSync(directory);
+    process.env.CRAFT_CONFIG_DIR = privateRoot;
+    const config = writeWorkspace(source);
+    mkdirSync(join(source, 'sessions'));
+    writeFileSync(join(source, 'sessions', 'private.jsonl'), 'private transcript');
+    const first = prepareWorkspaceMoveToSharedFolder(source, destinationA, { deferCompletion: true });
+    const second = prepareWorkspaceMoveToSharedFolder(source, destinationB, { deferCompletion: true });
+    const secondStage = join(privateRoot, 'team', config.id, '.migration', second.migrationId, 'private-sessions', 'private.jsonl');
+    if (cleanup === 'rollback') rollbackPreparedWorkspaceMigration(readTeamMigrationJournal(first.journalPath!)!);
+    else if (cleanup === 'promotion') promotePreparedPrivateSessions(first);
+    else expect(() => prepareWorkspaceMoveToSharedFolder(source, destinationC, {
+      onPhase(phase) { if (phase === 'destination-staged') throw new Error('third migration failure'); },
+    })).toThrow('third migration failure');
+    expect(existsSync(secondStage)).toBe(true);
+    expect(readFileSync(secondStage, 'utf8')).toBe('private transcript');
+    expect(readTeamMigrationJournal(second.journalPath!)?.phase).toBe('destination-staged');
+    completePreparedWorkspaceMigration(second);
+    expect(readFileSync(join(privateRoot, 'team', config.id, 'private-sessions', 'private.jsonl'), 'utf8')).toBe('private transcript');
+  });
+}
