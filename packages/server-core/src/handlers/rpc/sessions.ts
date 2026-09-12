@@ -18,6 +18,7 @@ interface ClientSessionWatchState {
   watcher: import('fs').FSWatcher
   sessionId: string
   debounceTimer: ReturnType<typeof setTimeout> | null
+  reconcileTimer: ReturnType<typeof setTimeout> | null
 }
 
 // Per-client session file watcher state (supports concurrent windows/clients safely)
@@ -34,6 +35,10 @@ export function cleanupSessionFileWatchForClient(clientId: string): void {
   if (state.debounceTimer) {
     clearTimeout(state.debounceTimer)
     state.debounceTimer = null
+  }
+  if (state.reconcileTimer) {
+    clearTimeout(state.reconcileTimer)
+    state.reconcileTimer = null
   }
 
   state.watcher.close()
@@ -563,6 +568,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         watcher: null as unknown as import('fs').FSWatcher,
         sessionId,
         debounceTimer: null,
+        reconcileTimer: null,
       }
 
       state.watcher = watch(sessionPath, { recursive: true }, (_eventType, filename) => {
@@ -580,6 +586,18 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
           pushTyped(server, RPC_CHANNELS.sessions.FILES_CHANGED, { to: 'client', clientId }, state.sessionId)
         }, 100)
       })
+
+      // Bun's native watcher can silently drop the first event reported after
+      // subscription (reproduced ~1/30 on macOS; Node fs.watch is unaffected,
+      // so the headless Bun server path is the exposed runtime). Reconcile once
+      // after the subscription settles so a first write lost between the
+      // client's initial GET_FILES snapshot and watcher readiness is still
+      // reported. FILES_CHANGED is an idempotent re-scan signal, so the extra
+      // notification when nothing was lost is harmless.
+      state.reconcileTimer = setTimeout(() => {
+        if (clientSessionWatches.get(clientId) !== state) return
+        pushTyped(server, RPC_CHANNELS.sessions.FILES_CHANGED, { to: 'client', clientId }, state.sessionId)
+      }, 250)
 
       clientSessionWatches.set(clientId, state)
     } catch (error) {

@@ -141,6 +141,9 @@ async function watchReady(
   if (!observed()) {
     throw new Error('Native recursive file watcher did not become ready; verify filesystem event access for this test process.')
   }
+  // Let the production post-subscribe reconciliation fire so later assertions
+  // count only lifecycle-change notifications.
+  await new Promise(resolve => setTimeout(resolve, 300))
   pushCalls.length = 0
 }
 
