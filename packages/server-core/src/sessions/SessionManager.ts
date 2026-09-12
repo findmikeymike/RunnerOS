@@ -1101,7 +1101,8 @@ async function buildServersFromSources(
   sources: LoadedSource[],
   sessionPath?: string,
   tokenRefreshManager?: TokenRefreshManager,
-  summarize?: SummarizeCallback
+  summarize?: SummarizeCallback,
+  isCurrent?: () => boolean
 ) {
   const span = perf.span('sources.buildServers', { count: sources.length })
   const credManager = getSourceCredentialManager()
@@ -1146,6 +1147,7 @@ async function buildServersFromSources(
 
   // Update source configs for auth errors so UI reflects actual state
   for (const error of result.errors) {
+    if (isCurrent?.() === false) break
     if (error.error === SERVER_BUILD_ERRORS.AUTH_REQUIRED) {
       const source = sources.find(s => s.config.slug === error.sourceSlug)
       if (source) {
@@ -1194,14 +1196,14 @@ async function refreshOAuthTokensIfNeeded(
   sources: LoadedSource[],
   sessionPath: string,
   tokenRefreshManager: TokenRefreshManager,
-  options?: { sessionId?: string; workspaceRootPath?: string; poolServerUrl?: string }
+  options?: { sessionId?: string; workspaceRootPath?: string; poolServerUrl?: string; isCurrent?: () => boolean }
 ): Promise<OAuthTokenRefreshResult> {
   sessionLog.debug('[OAuth] Checking if any OAuth tokens need refresh')
 
   // Use TokenRefreshManager to find sources needing refresh (handles rate limiting)
   const needRefresh = await tokenRefreshManager.getSourcesNeedingRefresh(sources)
 
-  if (needRefresh.length === 0) {
+  if (options?.isCurrent?.() === false || needRefresh.length === 0) {
     return { tokensRefreshed: false, failedSources: [] }
   }
 
@@ -1224,13 +1226,15 @@ async function refreshOAuthTokensIfNeeded(
       enabledSources,
       sessionPath,
       tokenRefreshManager,
-      agent.getSummarizeCallback()
+      agent.getSummarizeCallback(),
+      options?.isCurrent
     )
+    if (options?.isCurrent?.() === false) return { tokensRefreshed: false, failedSources }
     const intendedSlugs = enabledSources.map(s => s.config.slug)
     await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
 
     // Update bridge-mcp-server config/credentials for backends that need it
-    if (options?.sessionId && options?.workspaceRootPath) {
+    if (options?.isCurrent?.() !== false && options?.sessionId && options?.workspaceRootPath) {
       await applyBridgeUpdates(agent, sessionPath, enabledSources, mcpServers, options.sessionId, options.workspaceRootPath, 'token refresh', options.poolServerUrl)
     }
 
@@ -2083,6 +2087,7 @@ function isCreativeLabWorkspaceInfo(workspace: { id?: string; name?: string; roo
 
 export class SessionManager implements ISessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
+  private sourceUpdateVersions = new WeakMap<ManagedSession, number>()
   private sendMessageAdmissionLocks: Map<string, Promise<void>> = new Map()
   private taskModeOpenings = new Map<string, SendMessageOptions>()
   private canvasVisualReviewAttempts: Map<string, number> = new Map()
@@ -3268,18 +3273,14 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
-   * Reload sources for all sessions in a workspace, skipping those currently processing.
+   * Reload live source routing, including sessions currently processing.
    */
   private async reloadSourcesForWorkspace(workspaceRootPath: string): Promise<void> {
-    for (const [_, managed] of this.sessions) {
-      if (managed.workspace.rootPath === workspaceRootPath) {
-        if (managed.isProcessing) {
-          sessionLog.info(`Skipping source reload for session ${managed.id} (processing)`)
-          continue
-        }
-        await this.reloadSessionSources(managed)
-      }
-    }
+    // Start each reload immediately so one slow connection cannot delay revocation
+    // in another session. Pool retirement preserves already-admitted receipts.
+    await Promise.all(Array.from(this.sessions.values())
+      .filter(managed => managed.workspace.rootPath === workspaceRootPath)
+      .map(managed => this.reloadSessionSources(managed)))
   }
 
   private broadcastSourcesChanged(workspaceId: string, sources: LoadedSource[]): void {
@@ -4137,32 +4138,41 @@ export class SessionManager implements ISessionManager {
    * Called by ConfigWatcher when source files change on disk.
    * If agent is null (session hasn't sent any messages), skip - fresh build happens on next message.
    */
+  private beginSourceUpdate(managed: ManagedSession): () => boolean {
+    const version = (this.sourceUpdateVersions.get(managed) ?? 0) + 1
+    this.sourceUpdateVersions.set(managed, version)
+    const agent = managed.agent
+    const root = managed.workspace.rootPath
+    managed.mcpPool?.invalidatePendingConnections()
+    return () => this.sourceUpdateVersions.get(managed) === version
+      && this.sessions.get(managed.id) === managed
+      && (!agent || managed.agent === agent)
+      && managed.workspace.rootPath === root
+  }
+
+  private detachUnavailableSources(managed: ManagedSession, sources: LoadedSource[]): void {
+    const usable = new Set(sources.filter(isSourceUsable).map(source => source.config.slug))
+    for (const slug of managed.mcpPool?.getConnectedSlugs() ?? []) {
+      if (!usable.has(slug)) void managed.mcpPool!.disconnect(slug)
+    }
+  }
+
   private async reloadSessionSources(managed: ManagedSession): Promise<void> {
-    if (!managed.agent) return  // No agent = nothing to update (fresh build on next message)
-
+    const isCurrent = this.beginSourceUpdate(managed)
+    const agent = managed.agent
+    if (!agent) return // A pending initial build must still observe this revision.
     const workspaceRootPath = managed.workspace.rootPath
-    sessionLog.info(`Reloading sources for session ${managed.id}`)
-
-    // Reload all sources from disk (runner-docs is always available as MCP server)
     const allSources = loadAllSources(workspaceRootPath)
-    managed.agent.setAllSources(allSources)
-
-    // Rebuild MCP and API servers for session's enabled sources
+    agent.setAllSources(allSources)
     const enabledSlugs = managed.enabledSourceSlugs || []
-    const enabledSources = allSources.filter(s =>
-      enabledSlugs.includes(s.config.slug) && isSourceUsable(s)
-    )
-    // Pass session path so large API responses can be saved to session folder
+    const enabledSources = allSources.filter(source => enabledSlugs.includes(source.config.slug) && isSourceUsable(source))
+    this.detachUnavailableSources(managed, enabledSources)
     const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
-    const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager, managed.agent?.getSummarizeCallback())
-    const intendedSlugs = enabledSources.map(s => s.config.slug)
-
-    // Update bridge-mcp-server config/credentials for backends that need it
-    await applyBridgeUpdates(managed.agent, sessionPath, enabledSources, mcpServers, managed.id, workspaceRootPath, 'source reload', managed.poolServer?.url)
-
-    await managed.agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
-
-    sessionLog.info(`Sources reloaded for session ${managed.id}: ${Object.keys(mcpServers).length} MCP, ${Object.keys(apiServers).length} API`)
+    const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback(), isCurrent)
+    if (!isCurrent()) return
+    await agent.setSourceServers(mcpServers, apiServers, enabledSources.map(source => source.config.slug))
+    if (!isCurrent()) return
+    await applyBridgeUpdates(agent, sessionPath, enabledSources, mcpServers, managed.id, workspaceRootPath, 'source reload', managed.poolServer?.url)
   }
 
   /**
@@ -7106,19 +7116,8 @@ user a clickable link to where the thing now lives.`
     // Persist session with updated auth message and enabled sources
     this.persistSession(managed)
 
-    // Update bridge-mcp-server config/credentials for backends that need it
-    if (result.success && result.sourceSlug && managed.agent) {
-      const workspaceRootPath = managed.workspace.rootPath
-      const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
-      const enabledSlugs = managed.enabledSourceSlugs || []
-      const allSources = loadAllSources(workspaceRootPath)
-      const enabledSources = allSources.filter(s =>
-        enabledSlugs.includes(s.config.slug) && isSourceUsable(s)
-      )
-      const { mcpServers } = await buildServersFromSources(
-        enabledSources, sessionPath, managed.tokenRefreshManager
-      )
-      await applyBridgeUpdates(managed.agent, sessionPath, enabledSources, mcpServers, managed.id, workspaceRootPath, 'source auth', managed.poolServer?.url)
+    if (result.success && result.sourceSlug) {
+      await this.reloadSessionSources(managed)
     }
 
     // Send the result as a new message to resume conversation
@@ -8052,14 +8051,25 @@ user a clickable link to where the thing now lives.`
       // =====================================================      // Common setup: sources, MCP pool, session config
       // =====================================================
       const sessionPath = getSessionStoragePath(managed.workspace.rootPath, managed.id)
-      const enabledSlugs = turnContext.enabledSourceSlugs || []
-      const allSources = loadAllSources(managed.workspace.rootPath)
-      const enabledSources = allSources.filter(s =>
-        enabledSlugs.includes(s.config.slug) && isSourceUsable(s)
-      )
-
-      // Build server configs for enabled sources
-      const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager)
+      let sourceVersion: number | undefined
+      let enabledSources: LoadedSource[]
+      let enabledSlugs: string[]
+      let mcpServers: Awaited<ReturnType<typeof buildServersFromSources>>['mcpServers']
+      let apiServers: Awaited<ReturnType<typeof buildServersFromSources>>['apiServers']
+      do {
+        sourceVersion = this.sourceUpdateVersions.get(managed)
+        enabledSlugs = sourceVersion === undefined
+          ? turnContext.enabledSourceSlugs || []
+          : managed.enabledSourceSlugs || []
+        const allSources = loadAllSources(managed.workspace.rootPath)
+        enabledSources = allSources.filter(source => enabledSlugs.includes(source.config.slug) && isSourceUsable(source))
+        const built = await buildServersFromSources(
+          enabledSources, sessionPath, managed.tokenRefreshManager, undefined,
+          () => this.sourceUpdateVersions.get(managed) === sourceVersion,
+        )
+        mcpServers = built.mcpServers
+        apiServers = built.apiServers
+      } while (this.sourceUpdateVersions.get(managed) !== sourceVersion)
 
       // Create centralized MCP client pool (all backends use it)
       managed.mcpPool = new McpClientPool({ debug: (msg) => sessionLog.debug(msg), workspaceRootPath: managed.workspace.rootPath, sessionPath })
@@ -8070,7 +8080,9 @@ user a clickable link to where the thing now lives.`
         managed.poolServer = new McpPoolServer(managed.mcpPool, { debug: (msg) => sessionLog.debug(msg) })
         managed.mcpPool.onToolsChanged = () => managed.poolServer?.notifyToolsChanged()
         poolServerUrl = await managed.poolServer.start()
-        await managed.mcpPool.sync(mcpServers) // Ensure pool has tools before SDK connects
+        if (this.sourceUpdateVersions.get(managed) === sourceVersion) {
+          await managed.mcpPool.sync(mcpServers) // Ensure pool has tools before SDK connects
+        }
       }
 
       // Per-session env overrides
@@ -8310,10 +8322,10 @@ user a clickable link to where the thing now lives.`
         },
         // Source configs for postInit() — backends set up their own bridge/config
         initialSources: {
-          enabledSources,
-          mcpServers,
-          apiServers,
-          enabledSlugs,
+          enabledSources: this.sourceUpdateVersions.get(managed) === sourceVersion ? enabledSources : [],
+          mcpServers: this.sourceUpdateVersions.get(managed) === sourceVersion ? mcpServers : {},
+          apiServers: this.sourceUpdateVersions.get(managed) === sourceVersion ? apiServers : {},
+          enabledSlugs: this.sourceUpdateVersions.get(managed) === sourceVersion ? enabledSlugs : managed.enabledSourceSlugs || [],
         },
         },
       }) as AgentInstance
@@ -10740,6 +10752,9 @@ user a clickable link to where the thing now lives.`
           return false
         }
 
+        const isCurrent = this.beginSourceUpdate(managed)
+        const agent = managed.agent!
+
         // Track whether we added this slug (for rollback on failure)
         const slugSet = new Set(managed.enabledSourceSlugs || [])
         const wasAlreadyEnabled = slugSet.has(sourceSlug)
@@ -10755,8 +10770,9 @@ user a clickable link to where the thing now lives.`
         const allEnabledSources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs || [])
         // Pass session path so large API responses can be saved to session folder
         const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
-        const { mcpServers, apiServers, errors } = await buildServersFromSources(allEnabledSources, sessionPath, managed.tokenRefreshManager, managed.agent?.getSummarizeCallback())
+        const { mcpServers, apiServers, errors } = await buildServersFromSources(allEnabledSources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback(), isCurrent)
 
+        if (!isCurrent()) return false
         if (errors.length > 0) {
           sessionLog.warn(`Source build errors during auto-enable:`, errors)
         }
@@ -10779,9 +10795,10 @@ user a clickable link to where the thing now lives.`
           .map(s => s.config.slug)
 
         // Update bridge-mcp-server config/credentials for backends that need it
-        await applyBridgeUpdates(managed.agent!, sessionPath, allEnabledSources, mcpServers, managed.id, workspaceRootPath, 'source enable', managed.poolServer?.url)
-
-        await managed.agent!.setSourceServers(mcpServers, apiServers, intendedSlugs)
+        await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+        if (!isCurrent()) return false
+        await applyBridgeUpdates(agent, sessionPath, allEnabledSources, mcpServers, managed.id, workspaceRootPath, 'source enable', managed.poolServer?.url)
+        if (!isCurrent()) return false
 
         // Activation extends this admitted response's adapters, not its pending focus.
         if (managed.lastSentTurnContext) {
@@ -11667,6 +11684,9 @@ user a clickable link to where the thing now lives.`
       throw new Error(`Session not found: ${sessionId}`)
     }
 
+    sourceSlugs = [...sourceSlugs]
+    const isCurrent = this.beginSourceUpdate(managed)
+    const agent = managed.agent
     const workspaceRootPath = managed.workspace.rootPath
     sessionLog.info(`Setting sources for session ${sessionId}:`, sourceSlugs)
 
@@ -11675,6 +11695,8 @@ user a clickable link to where the thing now lives.`
     const previousSlugs = new Set(managed.enabledSourceSlugs || [])
     const newSlugs = new Set(sourceSlugs)
     const disabledSlugs = [...previousSlugs].filter(prevSlug => !newSlugs.has(prevSlug))
+    managed.enabledSourceSlugs = sourceSlugs
+    this.detachUnavailableSources(managed, getSourcesBySlugs(workspaceRootPath, sourceSlugs))
     if (disabledSlugs.length > 0) {
       try {
         await cleanupSourceRuntimeArtifacts(workspaceRootPath, disabledSlugs)
@@ -11683,40 +11705,45 @@ user a clickable link to where the thing now lives.`
       }
     }
 
-    // Store the selection
-    managed.enabledSourceSlugs = sourceSlugs
+    if (!isCurrent()) return
 
     // If agent exists, build and apply servers immediately
-    if (managed.agent) {
+    if (agent) {
       const sources = getSourcesBySlugs(workspaceRootPath, sourceSlugs)
       // Pass session path so large API responses can be saved to session folder
       const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
-      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, managed.agent.getSummarizeCallback())
+      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback(), isCurrent)
+      if (!isCurrent()) return
       if (errors.length > 0) {
         const message = `Failed to build enabled source tools: ${formatSourceBuildErrors(errors)}`
         sessionLog.warn(message, errors)
         managed.enabledSourceSlugs = Array.from(previousSlugs)
+        // Disabled clients were detached immediately. Rebuild the restored selection
+        // so a failed addition does not leave unrelated previous tools unavailable.
+        const recovery = this.reloadSessionSources(managed)
         this.persistSession(managed)
         this.sendEvent({
           type: 'sources_changed',
           sessionId,
           enabledSourceSlugs: managed.enabledSourceSlugs,
         }, managed.workspace.id)
+        await recovery
         throw new Error(message)
       }
 
       // Set all sources for context (agent sees full list with descriptions, including built-ins)
       const allSources = loadAllSources(workspaceRootPath)
-      managed.agent.setAllSources(allSources)
+      agent.setAllSources(allSources)
 
       // Set active source servers (tools are only available from these)
       const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
 
       // Update bridge-mcp-server config/credentials for backends that need it
       const usableSources = sources.filter(isSourceUsable)
-      await applyBridgeUpdates(managed.agent, sessionPath, usableSources, mcpServers, managed.id, workspaceRootPath, 'source config change', managed.poolServer?.url)
-
-      await managed.agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+      await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+      if (!isCurrent()) return
+      await applyBridgeUpdates(agent, sessionPath, usableSources, mcpServers, managed.id, workspaceRootPath, 'source config change', managed.poolServer?.url)
+      if (!isCurrent()) return
 
       sessionLog.info(`Applied ${Object.keys(mcpServers).length} MCP + ${Object.keys(apiServers).length} API sources to active agent (${allSources.length} total)`)
     }
@@ -13459,17 +13486,19 @@ user a clickable link to where the thing now lives.`
       agent.setAllSources(allSources)
       sendSpan.mark('sources.loaded')
 
+      const isSourceUpdateCurrent = this.beginSourceUpdate(managed)
       const turnSourceSlugs = turnContext.launchReceipt?.taskMode
         ? turnContext.enabledSourceSlugs
         : managed.enabledSourceSlugs
-      // Apply source servers if any are enabled
-      if (turnSourceSlugs?.length) {
+      sourcePreparation: {
         // Always build server configs fresh (no caching - single source of truth)
-        const sources = getSourcesBySlugs(workspaceRootPath, turnSourceSlugs)
+        const sources = getSourcesBySlugs(workspaceRootPath, turnSourceSlugs ?? [])
+        this.detachUnavailableSources(managed, sources)
         // Pass session path so large API responses can be saved to session folder
         const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
-        const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback())
+        const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager, agent.getSummarizeCallback(), isSourceUpdateCurrent)
         if (managed.processingGeneration !== myGeneration || managed.stopRequested || !managed.isProcessing) return
+        if (!isSourceUpdateCurrent()) break sourcePreparation
         if (errors.length > 0) {
           const message = `Failed to build enabled source tools: ${formatSourceBuildErrors(errors)}`
           sessionLog.warn(message, errors)
@@ -13483,6 +13512,7 @@ user a clickable link to where the thing now lives.`
             } catch (err) {
               sessionLog.warn(`Failed to clean up failed source runtime artifacts: ${err}`)
             }
+            if (!isSourceUpdateCurrent()) break sourcePreparation
             this.persistSession(managed)
             this.sendEvent({
               type: 'sources_changed',
@@ -13510,7 +13540,7 @@ user a clickable link to where the thing now lives.`
             sources,
             sessionPath,
             managed.tokenRefreshManager,
-            { sessionId, workspaceRootPath, poolServerUrl: managed.poolServer?.url }
+            { sessionId, workspaceRootPath, poolServerUrl: managed.poolServer?.url, isCurrent: isSourceUpdateCurrent }
           )
           if (managed.processingGeneration !== myGeneration || managed.stopRequested || !managed.isProcessing) return
           if (refreshResult.failedSources.length > 0) {
@@ -13526,17 +13556,17 @@ user a clickable link to where the thing now lives.`
         // If tokens were refreshed, refreshOAuthTokensIfNeeded already rebuilt servers and
         // called setSourceServers with fresh credentials — skip the duplicate call to avoid
         // overwriting the post-refresh state with stale build results.
+        if (!isSourceUpdateCurrent()) break sourcePreparation
         if (!tokensRefreshed) {
           const mcpCount = Object.keys(mcpServers).length
           const apiCount = Object.keys(apiServers).length
-          if (mcpCount > 0 || apiCount > 0 || turnSourceSlugs.length > 0) {
-            const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
-            const usableSources = sources.filter(isSourceUsable)
-            await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
-            if (managed.processingGeneration !== myGeneration || managed.stopRequested || !managed.isProcessing) return
-            await applyBridgeUpdates(agent, sessionPath, usableSources, mcpServers, sessionId, workspaceRootPath, 'send message', managed.poolServer?.url)
-            sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
-          }
+          const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
+          const usableSources = sources.filter(isSourceUsable)
+          await agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+          if (managed.processingGeneration !== myGeneration || managed.stopRequested || !managed.isProcessing) return
+          if (!isSourceUpdateCurrent()) break sourcePreparation
+          await applyBridgeUpdates(agent, sessionPath, usableSources, mcpServers, sessionId, workspaceRootPath, 'send message', managed.poolServer?.url)
+          sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
         }
         sendSpan.mark('servers.applied')
       }

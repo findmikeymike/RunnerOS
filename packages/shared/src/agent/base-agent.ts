@@ -241,6 +241,7 @@ export abstract class BaseAgent implements AgentBackend {
   // ============================================================
   protected permissionManager: PermissionManager;
   protected sourceManager: SourceManager;
+  private sourceServersUpdateVersion = 0;
   protected promptBuilder: PromptBuilder;
   protected pathProcessor: PathProcessor;
   protected configWatcherManager: ConfigWatcherManager | null = null;
@@ -666,20 +667,23 @@ export abstract class BaseAgent implements AgentBackend {
     apiServers: Record<string, unknown>,
     intendedSlugs?: string[]
   ): Promise<void> {
-    // Update SourceManager state (common tracking)
+    const version = ++this.sourceServersUpdateVersion;
+    const pool = !this.config.temporaryFallbackAttempt ? this.config.mcpPool : undefined;
+    const intended = intendedSlugs ?? [...Object.keys(mcpServers), ...Object.keys(apiServers)];
+    // Selection is immediate; connected state only includes actual pool clients.
     this.sourceManager.updateActiveState(
-      Object.keys(mcpServers),
-      Object.keys(apiServers),
-      intendedSlugs
+      pool ? pool.getConnectedSlugs().filter(slug => intended.includes(slug)) : Object.keys(mcpServers),
+      pool ? [] : Object.keys(apiServers),
+      intended,
     );
-
-    // Sync the centralized MCP client pool (if available)
-    // Both MCP sources and API sources are routed through the pool.
-    if (this.config.mcpPool && !this.config.temporaryFallbackAttempt) {
+    if (pool) {
       try {
-        await this.config.mcpPool.sync(mcpServers, apiServers as Record<string, ApiServerConfig>);
+        await pool.sync(mcpServers, apiServers as Record<string, ApiServerConfig>);
       } catch (err) {
         this.debug(`Failed to sync MCP pool: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      if (version === this.sourceServersUpdateVersion) {
+        this.sourceManager.updateActiveState(pool.getConnectedSlugs(), [], intended);
       }
     }
   }
@@ -711,14 +715,18 @@ export abstract class BaseAgent implements AgentBackend {
    * Check if a source server is currently active.
    */
   isSourceServerActive(serverName: string): boolean {
-    return this.sourceManager.isSourceActive(serverName);
+    return this.config.mcpPool && !this.config.temporaryFallbackAttempt
+      ? this.config.mcpPool.isConnected(serverName)
+      : this.sourceManager.isSourceActive(serverName);
   }
 
   /**
    * Get the set of active source server names.
    */
   getActiveSourceServerNames(): Set<string> {
-    return new Set(this.sourceManager.getActiveSlugs());
+    return new Set(this.config.mcpPool && !this.config.temporaryFallbackAttempt
+      ? this.config.mcpPool.getConnectedSlugs()
+      : this.sourceManager.getActiveSlugs());
   }
 
   /**

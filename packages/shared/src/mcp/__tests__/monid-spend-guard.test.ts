@@ -8,8 +8,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 class TestMcpClientPool extends McpClientPool {
-  register(slug: string, client: PoolClient): Promise<void> {
-    return this.registerClient(slug, client);
+  async register(slug: string, client: PoolClient): Promise<void> {
+    await this.registerClient(slug, client);
   }
 }
 

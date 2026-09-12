@@ -96,6 +96,37 @@ export class McpClientPool {
   /** API instances capture endpoint configuration and credential resolvers. */
   private activeApiServers = new Map<string, McpServer>();
 
+  private lifecycleGeneration = 0;
+  private sourceGenerations = new Map<string, number>();
+  private inFlight = new Map<PoolClient, number>();
+  private retired = new Set<PoolClient>();
+  private closed = new WeakSet<PoolClient>();
+
+  /** An outer source build has newer intent; it must invalidate earlier registrations now. */
+  invalidatePendingConnections(): void { this.lifecycleGeneration++; }
+
+  private async retire(client: PoolClient): Promise<void> {
+    this.retired.add(client);
+    await this.closeIfIdle(client);
+  }
+
+  private async closeIfIdle(client: PoolClient): Promise<void> {
+    if (!this.retired.has(client) || (this.inFlight.get(client) ?? 0) > 0 || this.closed.has(client)) return;
+    this.retired.delete(client);
+    this.closed.add(client);
+    await client.close().catch(() => {});
+  }
+
+  private acquireClient(client: PoolClient): () => Promise<void> {
+    this.inFlight.set(client, (this.inFlight.get(client) ?? 0) + 1);
+    return async () => {
+      const remaining = (this.inFlight.get(client) ?? 1) - 1;
+      if (remaining) this.inFlight.set(client, remaining);
+      else this.inFlight.delete(client);
+      await this.closeIfIdle(client);
+    };
+  }
+
   /** Cached tool lists keyed by source slug */
   private toolCache = new Map<string, Tool[]>();
 
@@ -146,18 +177,25 @@ export class McpClientPool {
    * Register a client: connect, cache tools, build proxy mappings.
    * Shared logic for both remote MCP and in-process API sources.
    */
-  protected async registerClient(slug: string, client: PoolClient): Promise<void> {
-    // listTools() triggers connect() internally for both CraftMcpClient and ApiSourcePoolClient
-    const tools = await client.listTools();
+  protected async registerClient(slug: string, client: PoolClient): Promise<boolean> {
+    const generation = this.lifecycleGeneration;
+    const sourceGeneration = (this.sourceGenerations.get(slug) ?? 0) + 1;
+    this.sourceGenerations.set(slug, sourceGeneration);
+    let tools: Tool[];
+    try { tools = await client.listTools(); }
+    catch (error) { await this.retire(client); throw error; }
+    if (generation !== this.lifecycleGeneration || sourceGeneration !== this.sourceGenerations.get(slug)) {
+      await this.retire(client);
+      return false;
+    }
+    const previous = this.clients.get(slug);
+    for (const [name, info] of this.proxyTools) if (info.slug === slug) this.proxyTools.delete(name);
     this.clients.set(slug, client);
     this.toolCache.set(slug, tools);
-
-    for (const tool of tools) {
-      const proxyName = `mcp__${slug}__${tool.name}`;
-      this.proxyTools.set(proxyName, { slug, originalName: tool.name });
-    }
-
+    for (const tool of tools) this.proxyTools.set(`mcp__${slug}__${tool.name}`, { slug, originalName: tool.name });
+    if (previous && previous !== client) void this.retire(previous);
     this.debug(`Connected source ${slug}: ${tools.length} tools`);
+    return true;
   }
 
   /**
@@ -172,8 +210,8 @@ export class McpClientPool {
       this.debug(`Unknown MCP server type for ${slug}: ${(config as { type: string }).type}`);
       return;
     }
-    await this.registerClient(slug, new CraftMcpClient(clientConfig));
-    this.activeConfigs.set(slug, snapshot);
+    const client = new CraftMcpClient(clientConfig);
+    if (await this.registerClient(slug, client) && this.clients.get(slug) === client) this.activeConfigs.set(slug, snapshot);
   }
 
   /**
@@ -181,41 +219,35 @@ export class McpClientPool {
    */
   async connectInProcess(slug: string, mcpServer: McpServer): Promise<void> {
     if (this.clients.has(slug)) return;
-    await this.registerClient(slug, new ApiSourcePoolClient(mcpServer));
-    this.activeApiServers.set(slug, mcpServer);
+    const client = new ApiSourcePoolClient(mcpServer);
+    if (await this.registerClient(slug, client) && this.clients.get(slug) === client) this.activeApiServers.set(slug, mcpServer);
   }
 
   /**
    * Disconnect a source and remove its tools from the pool.
    */
   async disconnect(slug: string): Promise<void> {
+    this.sourceGenerations.set(slug, (this.sourceGenerations.get(slug) ?? 0) + 1);
     const client = this.clients.get(slug);
-    if (client) {
-      await client.close().catch(() => {});
-      this.clients.delete(slug);
-    }
-
-    // Remove proxy tool entries for this slug
-    for (const [proxyName, info] of this.proxyTools) {
-      if (info.slug === slug) this.proxyTools.delete(proxyName);
-    }
+    // Detach routing synchronously. An older close must never remove a replacement.
+    this.clients.delete(slug);
+    for (const [name, info] of this.proxyTools) if (info.slug === slug) this.proxyTools.delete(name);
     this.toolCache.delete(slug);
     this.activeConfigs.delete(slug);
     this.activeApiServers.delete(slug);
+    if (client) await this.retire(client);
     this.debug(`Disconnected source: ${slug}`);
   }
 
-  /**
-   * Disconnect all sources and clear all state.
-   */
   async disconnectAll(): Promise<void> {
-    const closePromises = Array.from(this.clients.values()).map(c => c.close().catch(() => {}));
-    await Promise.all(closePromises);
+    this.invalidatePendingConnections();
+    const clients = [...this.clients.values()];
     this.clients.clear();
     this.toolCache.clear();
     this.proxyTools.clear();
     this.activeConfigs.clear();
     this.activeApiServers.clear();
+    await Promise.all(clients.map(client => this.retire(client)));
     this.debug('Disconnected all MCP clients');
   }
 
@@ -235,6 +267,8 @@ export class McpClientPool {
     mcpServers: Record<string, SdkMcpServerConfig>,
     apiServers: Record<string, ApiServerConfig> = {}
   ): Promise<string[]> {
+    const generation = ++this.lifecycleGeneration;
+    const isCurrent = () => generation === this.lifecycleGeneration;
     // Filter out stdio sources when local MCP is disabled for this workspace.
     const localEnabled = !this.workspaceRootPath || isLocalMcpEnabled(this.workspaceRootPath);
     const filteredMcp: Record<string, SdkMcpServerConfig> = {};
@@ -261,6 +295,7 @@ export class McpClientPool {
 
     // Disconnect sources no longer desired
     for (const slug of currentSlugs) {
+      if (!isCurrent()) return [];
       if (!desiredSlugs.has(slug)) {
         await this.disconnect(slug);
       }
@@ -268,6 +303,7 @@ export class McpClientPool {
 
     // Connect new MCP sources + reconnect existing ones whose config changed (e.g. refreshed token)
     for (const [slug, config] of Object.entries(filteredMcp)) {
+      if (!isCurrent()) return [];
       if (!currentSlugs.has(slug)) {
         try {
           await this.connect(slug, config);
@@ -280,6 +316,7 @@ export class McpClientPool {
         if (!oldConfig || mcpConfigChanged(oldConfig, config)) {
           this.debug(`Config changed for ${slug}, reconnecting with fresh credentials`);
           await this.disconnect(slug);
+          if (!isCurrent()) return [];
           try {
             await this.connect(slug, config);
           } catch (err) {
@@ -293,9 +330,11 @@ export class McpClientPool {
     // Rebuilt API instances capture new configuration/credentials; retaining the
     // old instance would silently ignore an endpoint or account change.
     for (const [slug, server] of apiSlugs) {
+      if (!isCurrent()) return [];
       if (slug in filteredMcp) continue; // Preserve MCP precedence for duplicate input slugs.
       if (!this.clients.has(slug) || this.activeApiServers.get(slug) !== server) {
         if (this.clients.has(slug)) await this.disconnect(slug);
+        if (!isCurrent()) return [];
         try {
           await this.connectInProcess(slug, server);
         } catch (err) {
@@ -305,8 +344,8 @@ export class McpClientPool {
       }
     }
 
-    this.onToolsChanged?.();
-    return failures;
+    if (isCurrent()) this.onToolsChanged?.();
+    return isCurrent() ? failures : [];
   }
 
   // ============================================================
@@ -370,7 +409,8 @@ export class McpClientPool {
     if (!info || !info.originalName.toLowerCase().includes('api_gmail') || !(client instanceof ApiSourcePoolClient)) {
       throw new Error('The Gmail source is not connected for draft preparation.');
     }
-    return client.prepareGmailDraftSend(input);
+    const release = this.acquireClient(client);
+    try { return await client.prepareGmailDraftSend(input); } finally { await release(); }
   }
 
   /** Execute a proxy tool, returning the subprocess protocol result. */
@@ -394,6 +434,7 @@ export class McpClientPool {
       };
     }
 
+    const release = this.acquireClient(client);
     let monidReservationId: string | undefined;
     try {
       if (slug === 'monid' && originalName === 'run') {
@@ -491,7 +532,7 @@ export class McpClientPool {
         isError: true,
         sourceSlug: slug,
       };
-    }
+    } finally { await release(); }
   }
 
   /**

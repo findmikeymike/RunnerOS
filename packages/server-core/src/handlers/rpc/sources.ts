@@ -274,6 +274,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     const [source] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
     if (source) await getSourceCredentialManager().beginAuthentication(source)
     deleteSource(workspace.rootPath, sourceSlug)
+    await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'DELETE')
 
     // Clean up stale slug from workspace default sources
     const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
