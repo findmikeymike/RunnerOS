@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
-import { accessSync, constants, existsSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { accessSync, closeSync, constants, existsSync, fstatSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -117,10 +118,72 @@ function isPrivateDraftWrite(args) {
   );
 }
 
+const inputDigestFlag = '--runner-input-sha256';
+
+function importInput(args) {
+  // Native persistent flags may precede the subcommand. Skip their values,
+  // which can themselves be named 'import'. Equals forms are already one arg.
+  const valuedGlobalFlags = new Set([
+    '--config', '--deliver', '--data-source', '--max-age', '--profile',
+    '--select', '--rate-limit', '--timeout',
+  ]);
+  let commandIndex = 0;
+  while (commandIndex < args.length && args[commandIndex].startsWith('-')) {
+    const arg = args[commandIndex++];
+    if (arg === '--') break;
+    if (valuedGlobalFlags.has(arg)) commandIndex++;
+  }
+  if (args[commandIndex] !== 'import') return null;
+  const matches = [];
+  for (let i = commandIndex + 1; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--input' || arg === '-i') {
+      matches.push({ index: i, length: 2, path: args[++i] });
+    } else if (arg.startsWith('--input=') || arg.startsWith('-i=')) {
+      matches.push({ index: i, length: 1, path: arg.slice(arg.indexOf('=') + 1) });
+    } else if (arg.startsWith('-i') && !arg.startsWith('--')) {
+      matches.push({ index: i, length: 1, path: arg.slice(2) });
+    }
+  }
+  if (matches.length > 1) throw new Error('Import approval requires an unambiguous input: specify --input or -i once.');
+  const input = matches.at(-1);
+  if (!input?.path || input.path === '-') return null;
+  return input;
+}
+
+function readImportBytes(path) {
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    if (!fstatSync(fd).isFile()) throw new Error('Import input must be a readable regular file.');
+    return readFileSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function inputDigest(bytes) {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+function extractInputDigest(args) {
+  const clean = [];
+  let expected;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === inputDigestFlag || args[i].startsWith(`${inputDigestFlag}=`)) {
+      if (expected !== undefined) throw new Error('Duplicate import approval digest.');
+      expected = args[i] === inputDigestFlag ? args[++i] : args[i].slice(inputDigestFlag.length + 1);
+      if (!/^[a-f0-9]{64}$/.test(expected ?? '')) throw new Error('Invalid import approval digest.');
+    } else clean.push(args[i]);
+  }
+  return { args: clean, expected };
+}
+
 function approvalPacket(args) {
   const safeArgs = redactSensitiveArgs(args);
   const commandArgv = ['node', 'bin/printify.mjs', ...safeArgs];
-  const approveArgv = [...commandArgv, '--confirm-runner'];
+  const input = importInput(args);
+  const digest = input ? inputDigest(readImportBytes(input.path)) : undefined;
+  const approveArgv = [...commandArgv, '--confirm-runner', ...(digest ? [inputDigestFlag, digest] : [])];
   return {
     ok: true,
     requiresApproval: true,
@@ -201,31 +264,54 @@ function buildEnv() {
   return env;
 }
 
-const args = process.argv.slice(2);
-const binary = resolveBinary();
-const confirmed = hasFlag(args, '--confirm-runner');
-const dryRun = hasFlag(args, '--dry-run');
-const privateDraft = isPrivateDraftWrite(args);
-const passthroughArgs = args.filter((arg) => arg !== '--confirm-runner' && arg !== '--private-draft');
+function main() {
+  const { args, expected } = extractInputDigest(process.argv.slice(2));
+  const binary = resolveBinary();
+  const confirmed = hasFlag(args, '--confirm-runner');
+  const dryRun = hasFlag(args, '--dry-run');
+  const privateDraft = isPrivateDraftWrite(args);
+  const passthroughArgs = args.filter((arg) => arg !== '--confirm-runner' && arg !== '--private-draft');
 
-if (args[0] === 'doctor') {
-  doctor(binary, args.slice(1));
-} else if (!isSafeReadLike(args) && !dryRun && !confirmed && !privateDraft) {
-  jsonOut(approvalPacket(args));
-} else {
-  if (!binary) {
-    installationHelp(127);
+  if (args[0] === 'doctor') {
+    doctor(binary, args.slice(1));
+  } else if (!isSafeReadLike(args) && !dryRun && !confirmed && !privateDraft) {
+    jsonOut(approvalPacket(args));
   } else {
-    const result = spawnSync(binary, passthroughArgs.length ? passthroughArgs : ['--help'], {
-      stdio: 'inherit',
-      env: buildEnv(),
-    });
+    if (!binary) {
+      installationHelp(127);
+    } else {
+      let snapshotDir;
+      try {
+        const input = confirmed && !dryRun ? importInput(passthroughArgs) : null;
+        if (input) {
+          if (!expected) throw new Error('Import approval digest missing. Run without --confirm-runner and use the returned approveCommand.');
+          const bytes = readImportBytes(input.path);
+          if (inputDigest(bytes) !== expected) throw new Error('Import input changed since review. Request approval for the updated file.');
+          snapshotDir = mkdtempSync(join(tmpdir(), 'runneros-printify-import-'));
+          const snapshot = join(snapshotDir, 'input.jsonl');
+          writeFileSync(snapshot, bytes, { mode: 0o400, flag: 'wx' });
+          passthroughArgs.splice(input.index, input.length, '--input', snapshot);
+        }
+        const result = spawnSync(binary, passthroughArgs.length ? passthroughArgs : ['--help'], {
+          stdio: 'inherit',
+          env: buildEnv(),
+        });
 
-    if (result.error) {
-      console.error(result.error.message);
-      process.exit(1);
+        if (result.error) {
+          console.error(result.error.message);
+          process.exitCode = 1;
+          return;
+        }
+
+        process.exitCode = result.status ?? 0;
+      } finally {
+        if (snapshotDir) rmSync(snapshotDir, { recursive: true, force: true });
+      }
     }
-
-    process.exit(result.status ?? 0);
   }
+}
+try {
+  main();
+} catch (error) {
+  jsonOut({ ok: false, error: error.message }, 1);
 }

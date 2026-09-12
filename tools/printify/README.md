@@ -16,6 +16,8 @@ Auth comes from RunnerOS Secrets or environment:
 
 Write-like commands are blocked unless `--dry-run` or `--confirm-runner` is present. `--confirm-runner` is stripped before calling `printify-pp-cli`.
 
+For `import --input file.jsonl` (or `-i`), use the returned `approveCommand` exactly after approval. It includes `--runner-input-sha256`, captured from the reviewed file. Changed bytes are rejected; unchanged bytes run from a private temporary snapshot that is removed afterward. The digest flag is never forwarded to the provider CLI. Stdin imports, dry runs, and private draft permissions retain their existing behavior.
+
 Install the upstream CLI when missing:
 
 ```bash
