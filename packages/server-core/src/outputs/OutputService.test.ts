@@ -1215,3 +1215,16 @@ describe('OutputService visual board concurrent edits', () => {
     expect(second.cards.find((card) => card.title === 'Agent')).toBeDefined();
   });
 })
+
+it('preserves output files when malformed Finals frontmatter prevents checking final protection', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'osvc-finals-frontmatter-delete-'));
+  const service = new OutputService({ getWorkspaceRootPath: () => root });
+  const created = await service.createFromSessionTool({ workspaceId: 'ws', sessionId: 'session', output: { title: 'Keep this', kind: 'document', content: 'Artist-owned original' } });
+  const finalsPath = join(root, 'context', 'finals', 'CONTEXT.md');
+  mkdirSync(join(root, 'context', 'finals'), { recursive: true });
+  const damaged = '---\ndescription: Missing required name\n---\n{"schemaVersion":1,"finals":[]}';
+  writeFileSync(finalsPath, damaged);
+  await expect(service.delete('ws', created.outputId!)).rejects.toThrow('Finals registry is invalid');
+  expect(readFileSync(finalsPath, 'utf8')).toBe(damaged);
+  expect(readFileSync(join(root, 'outputs', created.outputId!, 'content.md'), 'utf8')).toBe('Artist-owned original');
+});
