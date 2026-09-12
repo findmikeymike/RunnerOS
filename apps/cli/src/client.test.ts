@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 import { CliRpcClient } from './client.ts'
 import {
+  WsRpcServer,
   serializeEnvelope,
   deserializeEnvelope,
 } from '@craft-agent/server-core/transport'
@@ -19,7 +20,6 @@ interface MockServer {
 }
 
 function createMockServer(opts?: {
-  rejectAuth?: boolean
   noAck?: boolean
   tls?: { cert: string; key: string }
 }): MockServer {
@@ -40,17 +40,6 @@ function createMockServer(opts?: {
         lastMsg = envelope
 
         if (envelope.type === 'handshake') {
-          if (opts?.rejectAuth) {
-            const error: MessageEnvelope = {
-              id: envelope.id,
-              type: 'error',
-              error: { code: 'AUTH_FAILED', message: 'Invalid token' },
-            }
-            ws.send(serializeEnvelope(error))
-            ws.close()
-            return
-          }
-
           if (opts?.noAck) return // Simulate timeout
 
           const ack: MessageEnvelope = {
@@ -190,10 +179,25 @@ describe('CliRpcClient', () => {
   })
 
   it('rejects on auth failure', async () => {
-    server = createMockServer({ rejectAuth: true })
-    const client = new CliRpcClient(server.url, { token: 'bad-token' })
-    await expect(client.connect()).rejects.toThrow('Invalid token')
-    client.destroy()
+    // Exercise the real ws transport: Bun.serve can discard an error frame when
+    // its fixture immediately closes, intermittently producing a generic socket
+    // error instead. Production sends AUTH_FAILED before its close frame.
+    const authServer = new WsRpcServer({
+      host: '127.0.0.1', port: 0, requireAuth: true,
+      validateToken: async token => token === 'valid-token',
+    })
+    let client: CliRpcClient | undefined
+    try {
+      await authServer.listen()
+      client = new CliRpcClient(`ws://127.0.0.1:${authServer.port}`, { token: 'bad-token' })
+      const connection = client.connect()
+      await expect(connection).rejects.toThrow('Invalid token')
+      await expect(connection).rejects.toMatchObject({ code: 'AUTH_FAILED' })
+      expect(client.isConnected).toBe(false)
+    } finally {
+      client?.destroy()
+      await authServer.close()
+    }
   })
 
   it('rejects on connect timeout', async () => {
