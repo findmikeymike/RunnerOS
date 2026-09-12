@@ -153,7 +153,7 @@ import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
 import { resolveAuthEnvVars } from '@craft-agent/shared/config'
 import { toolMetadataStore, getLastApiError } from '@craft-agent/shared/interceptor'
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
-import { publishImportedSession } from '../../../shared/src/sessions/import-bundle'
+import { publishImportedSession, relocateBundleMessages } from '../../../shared/src/sessions/import-bundle'
 import { getCredentialManager, isValidUserSecretName, normalizeUserSecretName } from '@craft-agent/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, type CreateSessionOptions, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
@@ -16336,7 +16336,8 @@ user a clickable link to where the thing now lives.`
       hidden: header.hidden,
       transferredSessionSummary: header.transferredSessionSummary,
       transferredSessionSummaryApplied: header.transferredSessionSummaryApplied,
-      messages: bundle.session.messages.map(message => ({ ...message, isQueued: false })),
+      messages: relocateBundleMessages(header, bundle.session.messages, getSessionStoragePath(workspaceRootPath, sessionId))
+        .map(message => ({ ...message, isQueued: false })),
       tokenUsage: header.tokenUsage ?? DEFAULT_TOKEN_USAGE,
       ...focusedState,
     }

@@ -1,9 +1,10 @@
 import { mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { restoreFiles, validateBundleFile, MAX_BUNDLE_SIZE_BYTES, type BundleFile } from '../utils/bundle-files.ts'
-import { writeSessionJsonl } from './jsonl.ts'
+import { expandPath } from '../utils/paths.ts'
+import { makeSessionPathPortable, expandSessionPath, writeSessionJsonl } from './jsonl.ts'
 import { validateSessionId } from './validation.ts'
-import type { StoredSession } from './types.ts'
+import type { StoredSession, StoredMessage, SessionHeader } from './types.ts'
 
 /** Validate the entire payload before any destination writes. */
 export function validateSessionBundleFiles(files: BundleFile[]): void {
@@ -53,4 +54,14 @@ export function publishImportedSession(workspaceRoot: string, session: StoredSes
     if (ownsTarget) rmSync(target, { recursive: true, force: true })
     rmSync(staging, { recursive: true, force: true })
   }
+}
+
+/** Relocate historical session-local paths, including attachment derivatives and tool previews. */
+export function relocateBundleMessages(header: SessionHeader, messages: StoredMessage[], targetSessionDirectory: string): StoredMessage[] {
+  let encoded = JSON.stringify(messages)
+  if (typeof header.workspaceRootPath === 'string' && header.workspaceRootPath) {
+    const sourceDirectory = join(expandPath(header.workspaceRootPath), 'sessions', header.id)
+    encoded = makeSessionPathPortable(encoded, sourceDirectory)
+  }
+  return JSON.parse(expandSessionPath(encoded, targetSessionDirectory)) as StoredMessage[]
 }
