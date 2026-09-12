@@ -10,12 +10,13 @@ import {
   readFileSync,
   readdirSync,
   readlinkSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 interface WorkspaceRecord {
   id: string;
@@ -80,6 +81,39 @@ function parseArgs(argv: string[]): Options {
 function isWithin(parent: string, candidate: string): boolean {
   const child = relative(resolve(parent), resolve(candidate));
   return child === '' || (!child.startsWith('..') && !isAbsolute(child));
+}
+
+// Resolve existing ancestors too: a not-yet-created destination can still sit
+// beneath a symlink into the source tree or outside the selected profile.
+function actualPath(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    // A dangling symlink is not a missing directory we may safely create.
+    try { lstatSync(path); } catch (statError) {
+      if ((statError as NodeJS.ErrnoException).code !== 'ENOENT') throw statError;
+      const parent = dirname(path);
+      if (parent === path) throw error;
+      return join(actualPath(parent), relative(parent, path));
+    }
+    throw error;
+  }
+}
+
+function assertSeparatePaths(a: string, b: string): void {
+  if (isWithin(a, b) || isWithin(b, a)) {
+    throw new Error('Source and destination roots must be completely separate.');
+  }
+}
+
+function assertSafeDestination(source: string, destination: string, artistRoot: string): void {
+  const actualArtist = actualPath(artistRoot);
+  const actualDestination = actualPath(destination);
+  assertSeparatePaths(actualPath(source), actualArtist);
+  if (actualDestination === actualArtist || !isWithin(actualArtist, actualDestination)) {
+    throw new Error('Workspace destination must remain inside the Artist OS root.');
+  }
 }
 
 function readConfig(path: string): StoredConfig {
@@ -222,6 +256,8 @@ if (isWithin(options.runnerRoot, options.artistRoot) || isWithin(options.artistR
   throw new Error('Runner and Artist OS roots must be completely separate.');
 }
 
+assertSeparatePaths(actualPath(options.runnerRoot), actualPath(options.artistRoot));
+
 const runnerConfigPath = join(options.runnerRoot, 'config.json');
 if (!existsSync(runnerConfigPath)) throw new Error(`Runner config not found: ${runnerConfigPath}`);
 const runnerConfig = readConfig(runnerConfigPath);
@@ -232,6 +268,9 @@ const selected: Array<{
   sourceHashes: Record<string, string>;
 }> = [];
 for (const id of options.workspaceIds) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(id)) {
+    throw new Error(`Invalid workspace ID: ${id}`);
+  }
   const workspace = runnerConfig.workspaces.find((candidate) => candidate.id === id);
   if (!workspace) throw new Error(`Workspace not found in Runner registry: ${id}`);
   if ((workspace.artistWorkspaceScope ?? 'general') === 'general' && !options.allowGeneral) {
@@ -241,6 +280,7 @@ for (const id of options.workspaceIds) {
   if (!existsSync(source) || !lstatSync(source).isDirectory()) throw new Error(`Workspace folder missing: ${source}`);
   assertWorkspaceContainsNoEmbeddedCredentials(source);
   const destination = join(options.artistRoot, 'workspaces', workspace.id);
+  assertSafeDestination(source, destination, options.artistRoot);
   if (existsSync(destination)) throw new Error(`Destination already exists; refusing to overwrite: ${destination}`);
   selected.push({ workspace, source, destination, sourceHashes: await hashTree(source) });
 }
@@ -265,20 +305,6 @@ const preview = {
 if (!options.apply) {
   console.log(JSON.stringify(preview, null, 2));
   process.exit(0);
-}
-
-const STALE_STAGING_AGE_MS = 24 * 60 * 60 * 1000;
-for (const item of selected) {
-  const parent = dirname(item.destination);
-  if (!existsSync(parent)) continue;
-  const prefix = `${basename(item.destination)}.migration-`;
-  for (const entry of readdirSync(parent, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !entry.name.startsWith(prefix) || !entry.name.endsWith('.tmp')) continue;
-    const path = join(parent, entry.name);
-    if (Date.now() - lstatSync(path).mtimeMs >= STALE_STAGING_AGE_MS) {
-      rmSync(path, { recursive: true, force: true });
-    }
-  }
 }
 
 const artistConfigPath = join(options.artistRoot, 'config.json');
@@ -309,10 +335,30 @@ const staged = selected.map((item) => ({
   item,
   path: `${item.destination}.migration-${process.pid}-${randomUUID()}.tmp`,
 }));
+const owned = new Map<string, { dev: number; ino: number }>();
+function rememberOwned(path: string): void {
+  const { dev, ino } = lstatSync(path);
+  owned.set(path, { dev, ino });
+}
+function removeOwned(path: string): void {
+  const identity = owned.get(path);
+  if (!identity) return;
+  try {
+    const current = lstatSync(path);
+    if (current.dev === identity.dev && current.ino === identity.ino && current.isDirectory()) {
+      rmSync(path, { recursive: true, force: true });
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+}
 const committed: string[] = [];
 try {
   for (const entry of staged) {
+    assertSafeDestination(entry.item.source, entry.path, options.artistRoot);
     mkdirSync(dirname(entry.path), { recursive: true });
+    mkdirSync(entry.path); // Exclusive creation: cleanup never owns a pre-existing folder.
+    rememberOwned(entry.path);
     cpSync(entry.item.source, entry.path, { recursive: true, errorOnExist: true, force: false, dereference: false });
     const destinationHashes = await hashTree(entry.path);
     if (JSON.stringify(destinationHashes) !== JSON.stringify(entry.item.sourceHashes)) {
@@ -320,14 +366,18 @@ try {
     }
   }
   for (const entry of staged) {
+    assertSafeDestination(entry.item.source, entry.item.destination, options.artistRoot);
+    if (existsSync(entry.item.destination)) throw new Error('Destination appeared during migration; refusing to overwrite.');
     renameSync(entry.path, entry.item.destination);
+    owned.set(entry.item.destination, owned.get(entry.path)!);
+    owned.delete(entry.path);
     committed.push(entry.item.destination);
   }
   atomicWriteJson(manifestPath, manifest);
   atomicWriteJson(artistConfigPath, artistConfig);
 } catch (error) {
-  for (const entry of staged) rmSync(entry.path, { recursive: true, force: true });
-  for (const destination of committed) rmSync(destination, { recursive: true, force: true });
+  for (const entry of staged) removeOwned(entry.path);
+  for (const destination of committed) removeOwned(destination);
   rmSync(manifestPath, { force: true });
   throw error;
 }

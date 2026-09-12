@@ -193,7 +193,7 @@ describe('Runner to Artist OS selective migration', () => {
     expect(existsSync(join(paths.artistRoot, 'workspaces', 'campaign-one', 'large-master.wav'))).toBe(true);
   });
 
-  test('removes only stale migration staging directories before apply', async () => {
+  test('preserves unrelated staging-looking directories regardless of age', async () => {
     const paths = fixture('hq');
     const workspacesRoot = join(paths.artistRoot, 'workspaces');
     const stale = join(workspacesRoot, 'campaign-one.migration-abandoned.tmp');
@@ -210,8 +210,78 @@ describe('Runner to Artist OS selective migration', () => {
       '--apply',
     ]);
     expect(result.exitCode).toBe(0);
-    expect(existsSync(stale)).toBe(false);
+    expect(existsSync(stale)).toBe(true);
     expect(existsSync(recent)).toBe(true);
+  });
+
+  test.each(['../../escaped', '../other', 'nested/path', '..', 'bad\\id'])(
+    'rejects unsafe registry ID %s before creating destination state', async (id) => {
+      const paths = fixture();
+      const configPath = join(paths.runnerRoot, 'config.json');
+      const config = JSON.parse(readFileSync(configPath, 'utf8'));
+      config.workspaces[0].id = id;
+      writeFileSync(configPath, JSON.stringify(config));
+      const result = await run(['--runner-root', paths.runnerRoot, '--artist-root', paths.artistRoot, '--workspace', id, '--apply']);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('Invalid workspace ID');
+      expect(existsSync(paths.artistRoot)).toBe(false);
+      expect(readFileSync(join(paths.workspaceRoot, 'asset.txt'), 'utf8')).toBe('preserve-me\n');
+    },
+  );
+
+  test('never sweeps a source workspace that resembles old staging', async () => {
+    const paths = fixture();
+    const source = join(paths.artistRoot, 'workspaces', 'campaign-one.migration-personal.tmp');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(join(source, 'precious.txt'), 'original only');
+    const configPath = join(paths.runnerRoot, 'config.json');
+    const config = JSON.parse(readFileSync(configPath, 'utf8'));
+    config.workspaces[0].rootPath = source;
+    writeFileSync(configPath, JSON.stringify(config));
+    const old = new Date(1);
+    utimesSync(source, old, old);
+    const result = await run(['--runner-root', paths.runnerRoot, '--artist-root', paths.artistRoot, '--workspace', 'campaign-one', '--apply']);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('completely separate');
+    expect(readFileSync(join(source, 'precious.txt'), 'utf8')).toBe('original only');
+  });
+
+  test('rejects an Artist profile inside the actual source via an ancestor symlink', async () => {
+    const paths = fixture();
+    const alias = join(paths.sandbox, 'alias');
+    symlinkSync(paths.workspaceRoot, alias);
+    const result = await run(['--runner-root', paths.runnerRoot, '--artist-root', join(alias, 'new-profile'), '--workspace', 'campaign-one', '--apply']);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('completely separate');
+    expect(existsSync(join(paths.workspaceRoot, 'new-profile'))).toBe(false);
+  });
+
+  test('rejects a workspace destination redirected outside the Artist profile', async () => {
+    const paths = fixture();
+    const outside = join(paths.sandbox, 'unrelated');
+    mkdirSync(outside);
+    mkdirSync(paths.artistRoot);
+    symlinkSync(outside, join(paths.artistRoot, 'workspaces'));
+    const result = await run(['--runner-root', paths.runnerRoot, '--artist-root', paths.artistRoot, '--workspace', 'campaign-one', '--apply']);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('inside the Artist OS root');
+    expect(existsSync(join(outside, 'campaign-one'))).toBe(false);
+    expect(existsSync(join(paths.artistRoot, 'config.json'))).toBe(false);
+  });
+
+  test('failed publication cleans only its own copy and preserves unrelated old staging', async () => {
+    const paths = fixture();
+    const unrelated = join(paths.artistRoot, 'workspaces', 'campaign-one.migration-old.tmp');
+    mkdirSync(unrelated, { recursive: true });
+    writeFileSync(join(unrelated, 'precious.txt'), 'keep');
+    utimesSync(unrelated, new Date(1), new Date(1));
+    // A file prevents creation of the migrations directory after copy publication.
+    writeFileSync(join(paths.artistRoot, 'migrations'), 'block manifest write');
+    const result = await run(['--runner-root', paths.runnerRoot, '--artist-root', paths.artistRoot, '--workspace', 'campaign-one', '--apply']);
+    expect(result.exitCode).not.toBe(0);
+    expect(readFileSync(join(unrelated, 'precious.txt'), 'utf8')).toBe('keep');
+    expect(existsSync(join(paths.artistRoot, 'workspaces', 'campaign-one'))).toBe(false);
+    expect(readFileSync(join(paths.workspaceRoot, 'asset.txt'), 'utf8')).toBe('preserve-me\n');
   });
 
   test('refuses symbolic links that could keep Artist OS attached to Runner data', async () => {
