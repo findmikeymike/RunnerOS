@@ -714,12 +714,12 @@ describe('effective credential refresh and repaired connections', () => {
       });
       const manager = new TokenRefreshManager(credentials), source = globalSource();
       expect((await manager.ensureFreshToken(source)).success).toBe(false);
-      expect(manager.isInCooldown(source.config.slug)).toBe(true);
+      expect(manager.isInCooldown(source)).toBe(true);
       current = { value: 'replacement', expiresAt: fresh ? Date.now() + 3_600_000 : 1 };
       fail = false;
       if (!fresh) expect(await manager.getSourcesNeedingRefresh([source])).toEqual([source]);
       expect(await manager.ensureFreshToken(source)).toMatchObject({ success: true, token: fresh ? 'replacement' : 'newly-refreshed' });
-      expect(manager.isInCooldown(source.config.slug)).toBe(false);
+      expect(manager.isInCooldown(source)).toBe(false);
     });
   }
 });
@@ -743,4 +743,28 @@ test('suppressed effective credential cannot return a plain-load token', async (
     isExpired: mock(() => false), needsRefresh: mock(() => false),
   });
   expect((await new TokenRefreshManager(credentials).ensureFreshToken(source)).success).toBe(false);
+});
+
+test('a failing workspace instance does not lose its cooldown to another workspace sharing the slug', async () => {
+  const sourceA = { ...createMockSource({ slug: 'shared', type: 'api', provider: 'google', api: { baseUrl: 'https://fixture.invalid', authType: 'bearer' } }), workspaceId: 'workspace-a' };
+  const sourceB = { ...sourceA, workspaceId: 'workspace-b' };
+  const credA = { value: 'a-expired', refreshToken: 'a-refresh', expiresAt: 1 };
+  const credB = { value: 'b-expired', refreshToken: 'b-refresh', expiresAt: 1 };
+  const refresh = mock(async () => null);
+  const credentials = createMockCredManager({
+    loadEffective: mock(async (source: LoadedSource) => source.workspaceId === 'workspace-a' ? credA : credB),
+    refresh, isExpired: mock(() => true), needsRefresh: mock(() => true),
+  });
+  const manager = new TokenRefreshManager(credentials);
+  expect((await manager.ensureFreshToken(sourceA)).success).toBe(false);
+  expect(manager.isInCooldown(sourceA)).toBe(true);
+  // Workspace B's differing credential must not clear workspace A's cooldown.
+  expect((await manager.ensureFreshToken(sourceB)).success).toBe(false);
+  expect(manager.isInCooldown(sourceA)).toBe(true);
+  expect(manager.isInCooldown(sourceB)).toBe(true);
+  expect(await manager.getSourcesNeedingRefresh([sourceA])).toEqual([]);
+  // A successful re-auth clears every workspace instance of the slug.
+  manager.clearCooldown('shared');
+  expect(manager.isInCooldown(sourceA)).toBe(false);
+  expect(manager.isInCooldown(sourceB)).toBe(false);
 });

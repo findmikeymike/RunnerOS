@@ -1380,12 +1380,37 @@ export class SourceCredentialManager {
     const pending = this.pendingRefreshes.get(key);
     if (pending) {
       debug(`[SourceCredentialManager] Reusing pending refresh for ${key}`);
-      const token = await pending;
+      // The owning caller's route may change while the shared refresh is in
+      // flight. A superseded rejection from that caller is re-evaluated against
+      // this caller's own route instead of failing this caller outright.
+      let token: string | null = null;
+      let superseded = false;
+      try {
+        token = await pending;
+      } catch (error) {
+        if (!(error instanceof SourceAuthSupersededError)) throw error;
+        superseded = true;
+      }
       // A shared refresh also belongs to this caller's source/override route.
       const effective = await this.resolveEffectiveCredential(source);
       if (sourceAuthIdentity(source) !== ownership.sourceIdentity || !effective
-        || credentialIdToAccount(effective.id) !== credentialIdToAccount(resolved.id)
-        || (token && (isGoogleAdsSource(source) ? parseGoogleAdsCredentialValue(effective.credential.value).accessToken : effective.credential.value) !== token)) throw new SourceAuthSupersededError();
+        || credentialIdToAccount(effective.id) !== credentialIdToAccount(resolved.id)) throw new SourceAuthSupersededError();
+      const storedToken = (isGoogleAdsSource(source)
+        ? parseGoogleAdsCredentialValue(effective.credential.value).accessToken
+        : effective.credential.value) ?? null;
+      if (superseded) {
+        // The superseded owner may still have committed the refreshed token.
+        // Adopt the stored value only when it changed for this caller's route.
+        const before = ownership.snapshot.credential
+          ? (isGoogleAdsSource(source)
+            ? parseGoogleAdsCredentialValue(ownership.snapshot.credential.value).accessToken
+            : ownership.snapshot.credential.value)
+          : null;
+        if (!before || storedToken === before) return null;
+        token = storedToken;
+      } else if (token && storedToken !== token) {
+        throw new SourceAuthSupersededError();
+      }
       if (token) {
         ownership.snapshot = await getCredentialManager().captureSnapshot(effective.id);
         await this.authenticateOwned(ownership);
