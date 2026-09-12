@@ -32,35 +32,14 @@ const ALLOWED_TRANSITIONS: Record<HqRecommendationStatus, ReadonlySet<HqRecommen
 }
 
 export function readHqRecommendationStore(workspaceRootPath: string): HqRecommendationStore {
-  const file = storeFile(workspaceRootPath)
-  if (!existsSync(file)) return emptyStore()
-  const primary = parseStoreFile(file)
-  if (primary) return primary
-  const backupFile = backupStoreFile(workspaceRootPath)
-  const backup = existsSync(backupFile) ? parseStoreFile(backupFile) : null
-  const corruptFile = `${file}.corrupt-${Date.now()}`
-  if (backup) {
-    renameSync(file, corruptFile)
-    copyFileSync(backupFile, file)
-    return backup
-  }
-  copyFileSync(file, corruptFile)
-  throw new Error(`State of Play recommendation store is corrupt and was preserved at ${corruptFile}.`)
+  return recoverSnapshot(storeFile(workspaceRootPath), backupStoreFile(workspaceRootPath), parseStore,
+    'State of Play recommendation store')?.value ?? emptyStore()
 }
 
 export function writeHqRecommendationStore(workspaceRootPath: string, store: HqRecommendationStore): void {
-  const dir = recommendationDir(workspaceRootPath)
-  mkdirSync(dir, { recursive: true })
-  const file = storeFile(workspaceRootPath)
-  const tmp = `${file}.${process.pid}.tmp`
-  try {
-    writeFileSync(tmp, JSON.stringify(store, null, 2), 'utf8')
-    if (existsSync(file) && parseStoreFile(file)) copyFileSync(file, backupStoreFile(workspaceRootPath))
-    renameSync(tmp, file)
-  } catch (error) {
-    try { rmSync(tmp, { force: true }) } catch { /* best effort */ }
-    throw error
-  }
+  mkdirSync(recommendationDir(workspaceRootPath), { recursive: true })
+  writeBackedSnapshot(storeFile(workspaceRootPath), backupStoreFile(workspaceRootPath),
+    JSON.stringify(store, null, 2), parseStore, 'State of Play recommendation store')
 }
 
 export function upsertHqRecommendation(
@@ -187,20 +166,8 @@ export function readHqRecommendationEvents(workspaceRootPath: string, recommenda
 }
 
 export function readHqRecommendationOutcomes(workspaceRootPath: string): HqRecommendationOutcome[] {
-  const file = outcomesFile(workspaceRootPath)
-  if (!existsSync(file)) return []
-  const primary = parseOutcomeFile(file)
-  if (primary) return primary
-  const backupFile = outcomesBackupFile(workspaceRootPath)
-  const backup = existsSync(backupFile) ? parseOutcomeFile(backupFile) : null
-  const corruptFile = `${file}.corrupt-${Date.now()}`
-  if (backup) {
-    renameSync(file, corruptFile)
-    copyFileSync(backupFile, file)
-    return backup
-  }
-  copyFileSync(file, corruptFile)
-  throw new Error(`State of Play outcome store is corrupt and was preserved at ${corruptFile}.`)
+  return recoverSnapshot(outcomesFile(workspaceRootPath), outcomesBackupFile(workspaceRootPath), parseOutcomes,
+    'State of Play outcome store')?.value ?? []
 }
 
 export function upsertHqRecommendationOutcome(workspaceRootPath: string, outcome: HqRecommendationOutcome): HqRecommendationOutcome {
@@ -211,16 +178,8 @@ export function upsertHqRecommendationOutcome(workspaceRootPath: string, outcome
     : outcome
   const outcomes = [...current.filter((item) => item.recommendationId !== outcome.recommendationId), next]
   mkdirSync(recommendationDir(workspaceRootPath), { recursive: true })
-  const file = outcomesFile(workspaceRootPath)
-  const tmp = `${file}.${process.pid}.tmp`
-  try {
-    writeFileSync(tmp, JSON.stringify({ version: 1, outcomes }, null, 2), 'utf8')
-    if (existsSync(file) && parseOutcomeFile(file)) copyFileSync(file, outcomesBackupFile(workspaceRootPath))
-    renameSync(tmp, file)
-  } catch (error) {
-    try { rmSync(tmp, { force: true }) } catch { /* best effort */ }
-    throw error
-  }
+  writeBackedSnapshot(outcomesFile(workspaceRootPath), outcomesBackupFile(workspaceRootPath),
+    JSON.stringify({ version: 1, outcomes }, null, 2), parseOutcomes, 'State of Play outcome store')
   return next
 }
 
@@ -232,9 +191,49 @@ function outcomesFile(root: string): string { return join(recommendationDir(root
 function outcomesBackupFile(root: string): string { return join(recommendationDir(root), HQ_RECOMMENDATION_OUTCOMES_BACKUP_FILE) }
 function emptyStore(): HqRecommendationStore { return { version: 1, candidates: [], updatedAt: '' } }
 
-function parseStoreFile(file: string): HqRecommendationStore | null {
+interface StoreSnapshot<T> { bytes: string; value: T }
+function readSnapshot<T>(file: string, parse: (bytes: string) => T | null): StoreSnapshot<T> | null {
+  if (!existsSync(file)) return null
+  const bytes = readFileSync(file, 'utf8')
+  const value = parse(bytes)
+  return value === null ? null : { bytes, value }
+}
+
+function atomicInstall(file: string, bytes: string): void {
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`
   try {
-    const parsed = JSON.parse(readFileSync(file, 'utf8')) as Partial<HqRecommendationStore>
+    writeFileSync(tmp, bytes, 'utf8')
+    renameSync(tmp, file)
+  } catch (error) {
+    try { rmSync(tmp, { force: true }) } catch { /* Preserve the original error. */ }
+    throw error
+  }
+}
+
+function recoverSnapshot<T>(file: string, backupFile: string, parse: (bytes: string) => T | null, label: string): StoreSnapshot<T> | null {
+  const primaryExists = existsSync(file), backupExists = existsSync(backupFile)
+  if (!primaryExists && !backupExists) return null
+  const primary = readSnapshot(file, parse)
+  if (primary) return primary
+  const backup = readSnapshot(backupFile, parse)
+  const corruptFile = `${file}.corrupt-${Date.now()}-${randomUUID()}`
+  // Never move the damaged primary away before its replacement is ready.
+  if (primaryExists) copyFileSync(file, corruptFile)
+  if (!backup) throw new Error(`${label} is corrupt and was preserved at ${primaryExists ? corruptFile : backupFile}.`)
+  atomicInstall(file, backup.bytes)
+  return backup
+}
+
+function writeBackedSnapshot<T>(file: string, backupFile: string, bytes: string, parse: (bytes: string) => T | null, label: string): void {
+  const previous = recoverSnapshot(file, backupFile, parse, label)
+  // A failed backup write must never truncate the last usable backup.
+  if (previous) atomicInstall(backupFile, previous.bytes)
+  atomicInstall(file, bytes)
+}
+
+function parseStore(bytes: string): HqRecommendationStore | null {
+  try {
+    const parsed = JSON.parse(bytes) as Partial<HqRecommendationStore>
     if (parsed.version !== 1 || !Array.isArray(parsed.candidates)) return null
     if (!parsed.candidates.every((candidate) => candidate && typeof candidate.id === 'string' && typeof candidate.status === 'string')) return null
     return { version: 1, candidates: parsed.candidates as HqRecommendationCandidate[], updatedAt: String(parsed.updatedAt ?? '') }
@@ -243,9 +242,9 @@ function parseStoreFile(file: string): HqRecommendationStore | null {
   }
 }
 
-function parseOutcomeFile(file: string): HqRecommendationOutcome[] | null {
+function parseOutcomes(bytes: string): HqRecommendationOutcome[] | null {
   try {
-    const parsed = JSON.parse(readFileSync(file, 'utf8')) as { version?: number; outcomes?: unknown[] }
+    const parsed = JSON.parse(bytes) as { version?: number; outcomes?: unknown[] }
     if (parsed.version !== 1 || !Array.isArray(parsed.outcomes)) return null
     if (!parsed.outcomes.every(isHqRecommendationOutcome)) return null
     return parsed.outcomes
