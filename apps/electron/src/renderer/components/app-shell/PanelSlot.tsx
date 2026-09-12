@@ -179,6 +179,7 @@ export function PanelSlot({
         <div className="h-full flex flex-col">
           <AppShellProvider value={contextOverride}>
             <MainContentPanel
+              key={contextOverride.activeWorkspaceId ?? 'no-workspace'}
               navStateOverride={navState}
               isSidebarAndNavigatorHidden={isSidebarAndNavigatorHidden}
             />
