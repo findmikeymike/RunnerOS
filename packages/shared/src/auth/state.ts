@@ -105,7 +105,9 @@ export async function performTokenRefresh(
   manager: ReturnType<typeof getCredentialManager>,
   refreshToken: string,
   originalSource: 'native' | 'cli' | undefined,
-  connectionSlug: string
+  connectionSlug: string,
+  expectedGlobal: NonNullable<Awaited<ReturnType<typeof manager.getClaudeOAuthCredentials>>>,
+  expectedConnection: Awaited<ReturnType<typeof manager.getLlmOAuth>>,
 ): Promise<TokenResult> {
   try {
     const refreshed = await refreshClaudeToken(refreshToken);
@@ -114,23 +116,25 @@ export async function performTokenRefresh(
     const expiresAtDate = refreshed.expiresAt ? new Date(refreshed.expiresAt).toISOString() : 'never';
     debug(`[auth] Successfully refreshed Claude OAuth token (expires: ${expiresAtDate})`);
 
-    // Store the new credentials
-    // If refresh succeeded with our native endpoint, mark as 'native'
-    // (successful refresh proves compatibility with our OAuth system)
-    await manager.setClaudeOAuthCredentials({
+    // Rotations must not clobber a newer sign-in or be mistaken for one: each
+    // write lands only while the credentials observed before the refresh still
+    // own the record, and a rotation never bumps the auth revision.
+    const rotatedGlobal = await manager.compareAndSetClaudeOAuthCredentials(expectedGlobal, {
       accessToken: refreshed.accessToken,
       refreshToken: refreshed.refreshToken,
       expiresAt: refreshed.expiresAt,
       source: 'native',
     });
+    if (!rotatedGlobal) debug('[auth] Global Claude credentials changed during refresh; kept the newer credentials');
 
-    // Also save to LLM connection (dual-write for backwards compatibility)
-    // This ensures both legacy and modern auth paths have the refreshed token
-    await manager.setLlmOAuth(connectionSlug, {
-      accessToken: refreshed.accessToken,
-      refreshToken: refreshed.refreshToken,
-      expiresAt: refreshed.expiresAt,
-    });
+    if (expectedConnection) {
+      const rotatedConnection = await manager.compareAndSetLlmOAuth(connectionSlug, expectedConnection, {
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken,
+        expiresAt: refreshed.expiresAt,
+      });
+      if (!rotatedConnection) debug('[auth] Connection credentials changed during refresh; kept the newer sign-in');
+    }
 
     return { accessToken: refreshed.accessToken };
   } catch (error) {
@@ -162,16 +166,18 @@ export async function performTokenRefresh(
         };
       }
 
-      // Clear the incompatible credentials to force fresh authentication
-      // Clear from both legacy and LLM connection locations
-      await manager.setClaudeOAuthCredentials({
+      // Clear the incompatible credentials only while the credentials observed
+      // before the refresh still own the records, so a newer sign-in that
+      // landed during the failed refresh survives.
+      const clearedGlobal = await manager.compareAndSetClaudeOAuthCredentials(expectedGlobal, {
         accessToken: '',
-        refreshToken: undefined,
-        expiresAt: undefined,
       });
+      if (!clearedGlobal) debug('[auth] Global Claude credentials changed during refresh; kept the newer credentials');
 
-      // Also clear from LLM connection (dual-clear for consistency)
-      await manager.deleteLlmCredentials(connectionSlug);
+      if (expectedConnection) {
+        const removedConnection = await manager.compareAndDeleteLlmOAuth(connectionSlug, expectedConnection);
+        if (!removedConnection) debug('[auth] Connection credentials changed during refresh; kept the newer sign-in');
+      }
     }
 
     // Token refresh failed - return null token with optional migration info
@@ -236,9 +242,11 @@ export async function getValidClaudeOAuthToken(connectionSlug: string): Promise<
         return { accessToken: null };
       }
 
-      // Start the refresh and set the mutex
+      // Start the refresh and set the mutex. Both records are captured first so
+      // the rotation writes can verify ownership when the provider responds.
       debug('[auth] Starting token refresh (holding mutex)');
-      refreshInProgress = performTokenRefresh(manager, creds.refreshToken, creds.source, connectionSlug);
+      const expectedConnection = await manager.getLlmOAuth(connectionSlug);
+      refreshInProgress = performTokenRefresh(manager, creds.refreshToken, creds.source, connectionSlug, creds, expectedConnection);
 
       try {
         const result = await refreshInProgress;

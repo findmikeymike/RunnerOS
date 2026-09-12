@@ -493,6 +493,30 @@ export class CredentialManager {
     });
   }
 
+  /** Save a Claude OAuth rotation only while the observed credentials still own the global record. */
+  async compareAndSetClaudeOAuthCredentials(
+    expected: NonNullable<Awaited<ReturnType<CredentialManager['getClaudeOAuthCredentials']>>>,
+    credentials: {
+      accessToken: string;
+      refreshToken?: string;
+      expiresAt?: number;
+      source?: 'native' | 'cli';
+    },
+  ): Promise<boolean> {
+    const id = { type: 'claude_oauth' as const };
+    return this.mutate(id, async () => {
+      const current = await this.getClaudeOAuthCredentials();
+      if (!current || current.accessToken !== expected.accessToken || current.refreshToken !== expected.refreshToken) return false;
+      await this.setUnlocked(id, {
+        value: credentials.accessToken,
+        refreshToken: credentials.refreshToken,
+        expiresAt: credentials.expiresAt,
+        source: credentials.source,
+      });
+      return true;
+    });
+  }
+
   /** Get workspace MCP OAuth credentials */
   async getWorkspaceOAuth(workspaceId: string): Promise<{
     accessToken: string;
@@ -623,6 +647,19 @@ export class CredentialManager {
         expiresAt: replacement.expiresAt, idToken: replacement.idToken,
       });
       return true;
+    });
+  }
+
+  /** Remove a connection's OAuth credential only while the observed credentials still own it. */
+  async compareAndDeleteLlmOAuth(
+    connectionSlug: string,
+    expected: NonNullable<Awaited<ReturnType<CredentialManager['getLlmOAuth']>>>,
+  ): Promise<boolean> {
+    const id = { type: 'llm_oauth' as const, connectionSlug };
+    return this.mutate(id, async () => {
+      const current = await this.getLlmOAuth(connectionSlug);
+      if (!current || current.accessToken !== expected.accessToken || current.refreshToken !== expected.refreshToken) return false;
+      return this.deleteUnlocked(id);
     });
   }
 
