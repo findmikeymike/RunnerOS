@@ -882,7 +882,7 @@ function EmailProposal({
                 disabled={busy !== null}
                 onClick={() => void act(
                   `save-${job.id}`,
-                  () => window.electronAPI.updateCommunityEmailJob(workspaceId, job.id, { subject, bodyMarkdown: body }),
+                  () => window.electronAPI.updateCommunityEmailJob(workspaceId, job.id, { subject, bodyMarkdown: body }, { revision: job.revision, lastWriteSha256: job.lastWriteSha256 }),
                   'Saved.',
                 )}
                 className="h-8 rounded-[8px] border border-white/[0.08] px-3 text-[12px] text-white/70 transition-colors hover:bg-white/[0.04] disabled:opacity-40"
@@ -900,19 +900,27 @@ function EmailProposal({
                   type="button"
                   disabled={busy !== null}
                   onClick={() => void (async () => {
+                    let reviewed = { revision: job.revision, lastWriteSha256: job.lastWriteSha256 }
                     // Save first: sending anything other than what is on screen
                     // would be a lie about what was approved.
                     if (edited) {
                       const saved = await act(
                         `save-${job.id}`,
-                        () => window.electronAPI.updateCommunityEmailJob(workspaceId, job.id, { subject, bodyMarkdown: body }),
+                        async () => {
+                          const result = await window.electronAPI.updateCommunityEmailJob(workspaceId, job.id, { subject, bodyMarkdown: body }, { revision: job.revision, lastWriteSha256: job.lastWriteSha256 })
+                          const savedJob = result.job as typeof job | undefined
+                          if (result.ok === false) return result
+                          if (!savedJob) return { ok: false, error: 'Could not verify the saved email. Refresh before sending.' }
+                          reviewed = { revision: savedJob.revision, lastWriteSha256: savedJob.lastWriteSha256 }
+                          return result
+                        },
                         'Saved.',
                       )
                       if (!saved) return
                     }
                     await act(
                       `send-${job.id}`,
-                      () => window.electronAPI.sendCommunityEmailJob(workspaceId, job.id),
+                      () => window.electronAPI.sendCommunityEmailJob(workspaceId, job.id, reviewed),
                       'Sent.',
                     )
                     setConfirming(false)

@@ -70,6 +70,9 @@ export type EmailJobStatus =
   | 'failed'
   | 'cancelled';
 
+/** The exact persisted email the artist reviewed before pressing Send. */
+export type CommunityEmailReview = Pick<CommunityEmailJobRecord, 'revision' | 'lastWriteSha256'>;
+
 export interface CommunityEmailJobRecord extends SharedEntityMeta {
   title: string;
   purpose: 'announcement' | 'newsletter' | 'personal-outreach' | 'transactional';

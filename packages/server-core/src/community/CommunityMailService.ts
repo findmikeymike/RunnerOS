@@ -1,6 +1,7 @@
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import {
   approveEmailJob,
+  matchesEmailReview,
   cancelEmailJob,
   listDeliveries,
   markJobFailed,
@@ -13,6 +14,7 @@ import {
   suppressCommunityContact,
   communityEmailHash,
   type CommunityEmailJobRecord,
+  type CommunityEmailReview,
 } from '@craft-agent/shared/community'
 import { writeChangeReceipt, type ChangeReceiptOrigin } from '@craft-agent/shared/website'
 import { ResendMailer, type MailRecipient } from './ResendMailer'
@@ -57,9 +59,14 @@ export class CommunityMailService {
     workspaceRootPath: string,
     machineId: string,
     jobId: string,
+    reviewed: CommunityEmailReview,
   ): CommunityMailResult {
     const job = readEmailJob(workspaceRootPath, jobId)
     if (!job) return { ok: false, error: 'That email no longer exists.' }
+
+    if (!matchesEmailReview(job, reviewed)) {
+      return { ok: false, failure: 'review-changed', error: 'This email changed since you reviewed it. Refresh and review it before sending.' }
+    }
 
     const result = approveEmailJob(workspaceRootPath, machineId, job)
     if ('ok' in result && result.ok === false) {

@@ -11,7 +11,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { getRecordCollectionDir, readSharedRecordBaseline, writeSharedRecord } from '../records/index.ts';
 import type { SharedEntityMeta } from '../records/types.ts';
-import type { CommunityEmailJobRecord, EmailJobStatus } from './types.ts';
+import type { CommunityEmailJobRecord, CommunityEmailReview, EmailJobStatus } from './types.ts';
 import { communityEmailHash, listCommunityContacts, listCommunitySuppressions } from './storage.ts';
 
 const EMAIL_JOBS_COLLECTION = 'community/email-jobs';
@@ -35,6 +35,12 @@ const OPEN_STATUSES: ReadonlySet<EmailJobStatus> = new Set([
   'needs-approval',
   'needs-owner-approval',
 ]);
+
+/** Check the record shown to the artist, never a freshly substituted snapshot. */
+export function matchesEmailReview(job: CommunityEmailJobRecord, reviewed: CommunityEmailReview | undefined): boolean {
+  return !!reviewed && Number.isInteger(reviewed.revision)
+    && reviewed.revision === job.revision && reviewed.lastWriteSha256 === job.lastWriteSha256;
+}
 
 export function isOpenJob(job: CommunityEmailJobRecord): boolean {
   return OPEN_STATUSES.has(job.status) && !job.deletedAt;

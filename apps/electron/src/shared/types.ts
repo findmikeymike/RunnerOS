@@ -957,8 +957,8 @@ export interface ElectronAPI {
     subject?: string
     bodyMarkdown?: string
     title?: string
-  }): Promise<Record<string, unknown>>
-  sendCommunityEmailJob(workspaceId: string, jobId: string): Promise<Record<string, unknown>>
+  }, reviewed: Pick<CommunityEmailJobRecord, 'revision' | 'lastWriteSha256'>): Promise<Record<string, unknown>>
+  sendCommunityEmailJob(workspaceId: string, jobId: string, reviewed: Pick<CommunityEmailJobRecord, 'revision' | 'lastWriteSha256'>): Promise<Record<string, unknown>>
   cancelCommunityEmailJob(workspaceId: string, jobId: string): Promise<Record<string, unknown>>
   getCommunityRoutine(workspaceId: string): Promise<Record<string, unknown>>
   setCommunityRoutine(workspaceId: string, config: {

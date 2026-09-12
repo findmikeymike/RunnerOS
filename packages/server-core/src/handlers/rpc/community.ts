@@ -1,10 +1,11 @@
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { loadCommunityState } from '@craft-agent/shared/community'
+import { loadCommunityState, matchesEmailReview } from '@craft-agent/shared/community'
 import { refreshAndBroadcastArtistManagerState } from '../../hq-state/refresh-and-broadcast'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type {
   CreateCommunityEmailJobInput,
+  CommunityEmailReview,
   CommunitySuppressionRecord,
   ImportCommunityCsvInput,
   UpsertCommunityContactInput,
@@ -184,6 +185,7 @@ export function registerCommunityHandlers(server: RpcServer, deps: HandlerDeps):
     workspaceId: string,
     jobId: string,
     patch: { subject?: string; bodyMarkdown?: string; title?: string },
+    reviewed: CommunityEmailReview,
   ) => {
     const workspace = resolveWorkspace(workspaceId)
     const [{ assertTeamPermission, getTeamModeStatus }, { readEmailJob, updateEmailJobDraft }] = await Promise.all([
@@ -196,6 +198,9 @@ export function registerCommunityHandlers(server: RpcServer, deps: HandlerDeps):
     const job = readEmailJob(workspace.rootPath, jobId)
     if (!job) return { ok: false, error: 'That email no longer exists.' }
 
+    if (!matchesEmailReview(job, reviewed)) {
+      return { ok: false, failure: 'review-changed', error: 'This email changed since you reviewed it. Refresh before saving.' }
+    }
     const result = updateEmailJobDraft(workspace.rootPath, machineId, job, patch)
     if ('ok' in result && result.ok === false) {
       return { ok: false, error: result.message, failure: result.failure }
@@ -211,7 +216,7 @@ export function registerCommunityHandlers(server: RpcServer, deps: HandlerDeps):
    * is the only path that reaches real inboxes, and it is only reachable
    * from the UI — no session or agent can call it.
    */
-  server.handle(RPC_CHANNELS.community.SEND_EMAIL_JOB, async (_ctx, workspaceId: string, jobId: string) => {
+  server.handle(RPC_CHANNELS.community.SEND_EMAIL_JOB, async (_ctx, workspaceId: string, jobId: string, reviewed: CommunityEmailReview) => {
     const workspace = resolveWorkspace(workspaceId)
     const [{ assertTeamPermission, getTeamModeStatus }] = await Promise.all([
       import('@craft-agent/shared/workspaces'),
@@ -224,7 +229,7 @@ export function registerCommunityHandlers(server: RpcServer, deps: HandlerDeps):
 
     const mail = new CommunityMailService()
     try {
-      const approved = mail.approve(workspace.rootPath, machineId, jobId)
+      const approved = mail.approve(workspace.rootPath, machineId, jobId, reviewed)
       if (!approved.ok) return approved
 
       const result = await mail.send(workspace.rootPath, machineId, jobId, provider, { kind: 'user' })

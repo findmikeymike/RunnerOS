@@ -105,7 +105,7 @@ describe('approving before sending', () => {
         bodyMarkdown: '',
       }, { status: 'draft' })
 
-      const result = new CommunityMailService().approve(root, MACHINE, job.id)
+      const result = new CommunityMailService().approve(root, MACHINE, job.id, readEmailJob(root, job.id)!)
       expect(result.ok).toBe(false)
       expect(result.failure).toBe('missing-content')
     } finally {
@@ -124,7 +124,7 @@ describe('approving before sending', () => {
         bodyMarkdown: 'Anyone there?',
       }, { status: 'draft' })
 
-      const result = new CommunityMailService().approve(root, MACHINE, job.id)
+      const result = new CommunityMailService().approve(root, MACHINE, job.id, readEmailJob(root, job.id)!)
       expect(result.ok).toBe(false)
       expect(result.failure).toBe('empty-audience')
     } finally {
@@ -136,7 +136,7 @@ describe('approving before sending', () => {
     const { root, jobId } = workspace()
     try {
       const mail = new CommunityMailService()
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
       // Simulate the send having completed.
       const job = readEmailJob(root, jobId)!
       expect(job.status).toBe('approved')
@@ -157,7 +157,7 @@ describe('sending', () => {
         batch: [{ body: { data: [{ id: 'msg-1' }, { id: 'msg-2' }] } }],
       })
       const mail = service(fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
 
       const result = await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)
 
@@ -185,7 +185,7 @@ describe('sending', () => {
     try {
       const { fetchImpl, calls } = fakeFetch({})
       const mail = service(fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
       await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)
 
       const batch = calls.find(call => call.url.includes('/emails/batch'))!
@@ -208,7 +208,7 @@ describe('sending', () => {
     try {
       const { fetchImpl, calls } = fakeFetch({})
       const mail = service(fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
       await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)
 
       const batch = calls.find(call => call.url.includes('/emails/batch'))!
@@ -231,7 +231,7 @@ describe('sending', () => {
     ])
     try {
       const mail = service(fakeFetch({}).fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
       // They left between the draft and the send.
       suppressCommunityContact(root, MACHINE, 'leaves@example.com', 'unsubscribed')
 
@@ -249,7 +249,7 @@ describe('sending', () => {
     const { root, jobId } = workspace([{ email: 'leaves@example.com' }])
     try {
       const mail = service(fakeFetch({}).fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
       suppressCommunityContact(root, MACHINE, 'leaves@example.com', 'unsubscribed')
 
       const result = await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)
@@ -286,7 +286,7 @@ describe('refusing to send when the setup is wrong', () => {
         domains: { body: { data: [{ name: 'lowtide.com', status: 'pending' }] } },
       })
       const mail = service(fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
 
       const result = await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)
       expect(result.ok).toBe(false)
@@ -302,7 +302,7 @@ describe('refusing to send when the setup is wrong', () => {
     try {
       const { fetchImpl } = fakeFetch({ domains: { body: { data: [] } } })
       const mail = service(fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
 
       const result = await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)
       expect(result.error).toContain('not added to Resend')
@@ -318,7 +318,7 @@ describe('refusing to send when the setup is wrong', () => {
         batch: [{ ok: false, status: 422, body: { message: 'Invalid from address' } }],
       })
       const mail = service(fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
 
       const result = await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)
       expect(result.ok).toBe(false)
@@ -337,7 +337,7 @@ describe('batching', () => {
     try {
       const stale = readEmailJob(root, jobId)!
       const mail = service(fakeFetch({}).fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
       expect(() => updateEmailJobDraft(root, MACHINE, stale, { subject: 'Changed after approval' })).toThrow('changed')
       expect(readEmailJob(root, jobId)!.content.subject).toBe(stale.content.subject)
     } finally { rmSync(root, { recursive: true, force: true }) }
@@ -352,10 +352,10 @@ describe('batching', () => {
         { body: { data: [{ id: 'retry' }] } },
       ] })
       const mail = service(fake.fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
       expect((await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(false)
       expect(listDeliveries(root, jobId)).toHaveLength(101)
-      expect(mail.approve(root, MACHINE, jobId).ok).toBe(true)
+      expect(mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!).ok).toBe(true)
       expect((await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(true)
       const batches = fake.calls.filter(call => call.url.includes('/emails/batch'))
       expect(JSON.parse(String(batches[2]!.body))).toHaveLength(1)
@@ -370,7 +370,7 @@ describe('batching', () => {
     try {
       const fake = fakeFetch({})
       const mail = service(fake.fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
       const results = await Promise.all([
         mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN),
         mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN),
@@ -391,7 +391,7 @@ describe('batching', () => {
         if (url.includes('/domains')) { entered(); await barrier }
         return fake.fetchImpl(url, init)
       })
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
       const pending = mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)
       await ready
       expect(mail.cancel(root, MACHINE, jobId).ok).toBe(true)
@@ -406,11 +406,11 @@ describe('batching', () => {
     const { root, jobId } = workspace()
     try {
       const offline = service(async () => { throw new Error('offline') })
-      expect(offline.approve(root, MACHINE, jobId).ok).toBe(true)
+      expect(offline.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!).ok).toBe(true)
       expect((await offline.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(false)
       const fake = fakeFetch({})
       const online = service(fake.fetchImpl)
-      expect(online.approve(root, MACHINE, jobId).ok).toBe(true)
+      expect(online.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!).ok).toBe(true)
       expect((await online.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(true)
       expect(fake.calls.filter(call => call.url.includes('/emails/batch'))).toHaveLength(1)
     } finally { rmSync(root, { recursive: true, force: true }) }
@@ -423,7 +423,7 @@ describe('batching', () => {
       const mail = service(async (url, init) => url.includes('/contacts?')
         ? { ok: true, status: 200, text: async () => '', json: async () => ({ data: [{ id: 'c1', email: 'fan@example.com', unsubscribed: true }] }) }
         : fake.fetchImpl(url, init))
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
       expect((await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(false)
       expect(resolveSendAudience(root, readEmailJob(root, jobId)!).members).toHaveLength(0)
       expect(fake.calls.filter(call => call.url.includes('/emails/batch'))).toHaveLength(0)
@@ -435,11 +435,11 @@ describe('batching', () => {
     try {
       const fake = fakeFetch({ batch: [{ body: {} }] })
       const mail = service(fake.fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
       expect((await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(false)
       expect(listDeliveries(root, jobId)[0]!.error).toContain('uncertain')
       expect(readEmailJob(root, jobId)!.status).toBe('failed')
-      expect(mail.approve(root, MACHINE, jobId).ok).toBe(false)
+      expect(mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!).ok).toBe(false)
     } finally { rmSync(root, { recursive: true, force: true }) }
   })
 
@@ -450,7 +450,7 @@ describe('batching', () => {
       const mail = service(async (url, init) => url.includes('/unsubscribe')
         ? { ok: false, status: 404, text: async () => '', json: async () => ({}) }
         : fake.fetchImpl(url, init))
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
       expect((await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(false)
       expect(fake.calls.filter(call => call.url.includes('/emails/batch'))).toHaveLength(0)
     } finally { rmSync(root, { recursive: true, force: true }) }
@@ -466,7 +466,7 @@ describe('batching', () => {
         ],
       })
       const mail = service(fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
 
       const result = await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)
 
@@ -492,7 +492,7 @@ describe('batching', () => {
         ],
       })
       const mail = service(fetchImpl)
-      mail.approve(root, MACHINE, jobId)
+      mail.approve(root, MACHINE, jobId, readEmailJob(root, jobId)!)
 
       const result = await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)
       expect(result.sent).toBe(100)
@@ -504,4 +504,22 @@ describe('batching', () => {
       rmSync(root, { recursive: true, force: true })
     }
   }, 20_000)
+})
+
+describe('reviewed email identity', () => {
+  test('a stale screen cannot approve a replacement email', () => {
+    const { root, jobId } = workspace()
+    try {
+      const displayed = readEmailJob(root, jobId)!
+      updateEmailJobDraft(root, MACHINE, displayed, { subject: 'Changed in another window', bodyMarkdown: 'Different approved content' })
+      const { fetchImpl, calls } = fakeFetch({})
+      const result = service(fetchImpl).approve(root, MACHINE, jobId, {
+        revision: displayed.revision, lastWriteSha256: displayed.lastWriteSha256,
+      })
+      expect(result.ok).toBe(false)
+      expect(result.failure).toBe('review-changed')
+      expect(readEmailJob(root, jobId)!.status).toBe('draft')
+      expect(calls).toHaveLength(0)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
 })
