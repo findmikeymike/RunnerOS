@@ -15,6 +15,7 @@ import {
   getTeamModeStatus,
   isTeamRunnerHeartbeatStale,
   joinWorkspaceTeam,
+  listTeamMachineHeartbeats,
   markWorkspaceAsSharedFolder,
   readOrCreateMachineIdentity,
   recoverWorkspaceOwner,
@@ -347,7 +348,7 @@ describe('team mode metadata', () => {
     const oldHeartbeat = JSON.parse(readFileSync(original.heartbeatPath, 'utf-8'));
     writeFileSync(original.heartbeatPath, JSON.stringify({ ...oldHeartbeat,
       observedTeamRevision: retargeted.team.revision,
-      observedRunnerEpoch: retargeted.team.runnerEpoch, isRunner: false }));
+      observedRunnerEpoch: retargeted.team.runnerEpoch, observedRunnerMachineId: 'machine_c', isRunner: false }));
     expect(clearReadyRunnerHandover(root, 'machine_c')?.team?.runnerHandover).toBeUndefined();
     expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: true, reason: 'runner' });
   });
@@ -364,6 +365,55 @@ describe('team mode metadata', () => {
     const retargeted = setRunnerMachine(root);
     expect(retargeted.team.runnerHandover).toMatchObject({ from: 'machine_b', to: 'machine_c' });
     expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: false, reason: 'handover-pending' });
+  });
+
+  it('does not reuse an acknowledgement for a conflicting assignment with identical counters', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+    const original = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+    writeSyncedHeartbeat(root, 'machine_b');
+    setRunnerMachine(root, 'machine_b');
+    const fork = loadWorkspaceConfig(root)!;
+    // An offline owner assigned C from the same original config as the B edit.
+    // Its counters collide, but A has only seen and acknowledged the B branch.
+    fork.team!.runnerMachineId = 'machine_c';
+    fork.team!.runnerHandover!.to = 'machine_c';
+    writeFileSync(join(root, 'config.json'), JSON.stringify(fork));
+    writeFileSync(original.privateMachinePath, JSON.stringify({ ...original.machine, machineId: 'machine_c' }));
+    refreshTeamRunnerHeartbeat(root);
+    expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: false, reason: 'handover-pending' });
+    expect(clearReadyRunnerHandover(root, 'machine_c')).toBeNull();
+
+    // Even within the heartbeat throttle interval, observing a different
+    // destination must publish a new acknowledgement despite equal counters.
+    writeFileSync(original.privateMachinePath, JSON.stringify(original.machine));
+    expect(refreshTeamRunnerHeartbeat(root)?.observedRunnerMachineId).toBe('machine_c');
+    writeFileSync(original.privateMachinePath, JSON.stringify({ ...original.machine, machineId: 'machine_c' }));
+    expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: true, reason: 'runner' });
+  });
+
+  it('does not acknowledge an old assignment using a later epoch for the same destination', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+    const original = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+    writeSyncedHeartbeat(root, 'machine_b');
+    const assigned = setRunnerMachine(root, 'machine_b');
+    const oldHeartbeat = JSON.parse(readFileSync(original.heartbeatPath, 'utf-8'));
+    writeFileSync(original.heartbeatPath, JSON.stringify({ ...oldHeartbeat,
+      observedRunnerEpoch: assigned.team.runnerEpoch! + 1 }));
+    writeFileSync(original.privateMachinePath, JSON.stringify({ ...original.machine, machineId: 'machine_b' }));
+    refreshTeamRunnerHeartbeat(root);
+    expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: false, reason: 'handover-pending' });
+  });
+
+  it('does not treat provider copies as authoritative machine heartbeats', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+    const original = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+    for (const suffix of [' (conflicted copy)', '.sync-conflict-20260912-123456-ABCDEFG']) {
+      writeFileSync(original.heartbeatPath.replace(/\.json$/, `${suffix}.json`), readFileSync(original.heartbeatPath));
+    }
+    expect(listTeamMachineHeartbeats(root)).toHaveLength(1);
   });
 
   it('reports stale runner heartbeat in status', () => {

@@ -56,6 +56,8 @@ export interface TeamMachineHeartbeat {
   isRunner: boolean;
   observedTeamRevision: number;
   observedRunnerEpoch?: number;
+  /** Assignment destination observed by this machine, not its own identity. */
+  observedRunnerMachineId?: string;
   lastSeenAt: string;
   lastAutomationHeartbeatAt?: string;
 }
@@ -621,8 +623,12 @@ export function listTeamMachineHeartbeats(workspaceRootPath: string): TeamMachin
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((file) => file.endsWith('.json'))
-    .map((file) => readJson<TeamMachineHeartbeat>(join(dir, file)))
-    .filter((heartbeat): heartbeat is TeamMachineHeartbeat => heartbeat?.version === 1 && Boolean(heartbeat.machineId));
+    .flatMap((file) => {
+      const heartbeat = readJson<TeamMachineHeartbeat>(join(dir, file));
+      // A provider's alternate copy is not a second authoritative heartbeat.
+      return heartbeat?.version === 1 && heartbeat.machineId && file === `${heartbeat.machineId}.json`
+        ? [heartbeat] : [];
+    });
 }
 
 export function getRunnerHeartbeat(workspaceRootPath: string, runnerMachineId?: string): TeamMachineHeartbeat | undefined {
@@ -646,8 +652,11 @@ function isRunnerHandoverReady(workspaceRootPath: string, team: WorkspaceTeamCon
   if (!handover.from) return true;
   const fromHeartbeat = getRunnerHeartbeat(workspaceRootPath, handover.from);
   if (!fromHeartbeat) return false;
-  return fromHeartbeat.observedTeamRevision >= handover.revision
-    && (fromHeartbeat.observedRunnerEpoch ?? 0) >= (handover.runnerEpoch ?? team.runnerEpoch ?? 0);
+  // Offline assignments can share revision/epoch counters. Acknowledgement
+  // must name the destination, otherwise one fork can authorize another.
+  return fromHeartbeat.observedRunnerMachineId === handover.to
+    && fromHeartbeat.observedTeamRevision >= handover.revision
+    && (fromHeartbeat.observedRunnerEpoch ?? 0) === (handover.runnerEpoch ?? team.runnerEpoch ?? 0);
 }
 
 /** Preserve the last unacknowledged runner across retries and retargeting. */
@@ -987,7 +996,9 @@ export function refreshTeamRunnerHeartbeat(workspaceRootPath: string, input: { a
   const machine = readOrCreateMachineIdentity(normalized.id);
   const existing = getRunnerHeartbeat(workspaceRootPath, machine.machineId);
   const lastSeen = existing?.lastSeenAt ? Date.parse(existing.lastSeenAt) : NaN;
-  const revisionChanged = existing?.observedTeamRevision !== normalized.team?.revision;
+  const revisionChanged = existing?.observedTeamRevision !== normalized.team?.revision
+    || existing?.observedRunnerEpoch !== (normalized.team?.runnerEpoch ?? 0)
+    || existing?.observedRunnerMachineId !== normalized.team?.runnerMachineId;
   if (existing && !revisionChanged && Number.isFinite(lastSeen) && Date.now() - lastSeen < TEAM_HEARTBEAT_MIN_WRITE_MS) {
     return existing;
   }
@@ -1106,6 +1117,7 @@ function createReadOnlyHeartbeat(
         isRunner: team.runnerMachineId === machine.machineId,
         observedTeamRevision: team.revision,
         observedRunnerEpoch: team.runnerEpoch ?? 0,
+        observedRunnerMachineId: team.runnerMachineId,
         lastSeenAt: nowIso(),
       };
 }
@@ -1127,6 +1139,7 @@ export function writeMachineHeartbeat(
     isRunner: normalized.team?.runnerMachineId === machine.machineId,
     observedTeamRevision: normalized.team?.revision ?? 0,
     observedRunnerEpoch: normalized.team?.runnerEpoch ?? 0,
+    observedRunnerMachineId: normalized.team?.runnerMachineId,
     lastSeenAt: nowIso(),
     lastAutomationHeartbeatAt:
       normalized.team?.runnerMachineId === machine.machineId && normalized.team.backgroundTriggersEnabled
