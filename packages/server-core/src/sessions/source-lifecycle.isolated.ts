@@ -141,3 +141,22 @@ test('a failed older build cannot roll back a newer selection', async () => {
   expect(f.events).toHaveLength(1)
   expect(f.applied).toEqual([[]])
 })
+
+test('a source update withheld during agent creation is applied once the agent exists', async () => {
+  const f = await fixture()
+  buildSpy = spyOn(builder, 'buildAll').mockImplementation(async sources =>
+    response(sources.map(entry => entry.source.config.slug)) as any)
+  const observed = f.runtime.sourceUpdateVersions.get(f.managed)
+  const agent = f.managed.agent
+  // The bump reload defers to the pending build while the agent is still null.
+  f.managed.agent = null
+  await f.runtime.reloadSessionSources(f.managed)
+  expect(f.applied).toEqual([])
+  // Creation finishes: the withheld update must now be applied to the agent.
+  f.managed.agent = agent
+  await f.runtime.applySourcesIfUpdatedSince(f.managed, observed)
+  expect(f.applied).toEqual([[f.source.slug]])
+  // No further reload happens when no update arrived since the observed version.
+  await f.runtime.applySourcesIfUpdatedSince(f.managed, f.runtime.sourceUpdateVersions.get(f.managed))
+  expect(f.applied).toEqual([[f.source.slug]])
+})
