@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { useTransportConnectionState } from './useTransportConnectionState'
@@ -31,11 +31,15 @@ export function useDirectoryPicker(
     window.electronAPI.isChannelAvailable(RPC_CHANNELS.fs.LIST_DIRECTORY)
 
   const [showServerBrowser, setShowServerBrowser] = useState(false)
+  const pendingSelection = useRef<((path: string) => void) | null>(null)
 
   const serverBrowserMode: ServerBrowserMode = canBrowse ? 'browse' : 'manual'
 
   const pickDirectory = useCallback(async () => {
     if (isRemote) {
+      // Bind the selection to its opener, just like the awaited native dialog.
+      // Navigation can replace onSelect while the remote browser is still open.
+      pendingSelection.current = onSelect
       // Remote mode — open ServerDirectoryBrowser (browse or manual depending on server support)
       setShowServerBrowser(true)
       return
@@ -54,13 +58,16 @@ export function useDirectoryPicker(
   }, [isRemote, onSelect, t])
 
   const cancelServerBrowser = useCallback(() => {
+    pendingSelection.current = null
     setShowServerBrowser(false)
   }, [])
 
   const confirmServerBrowser = useCallback((path: string) => {
+    const onOpenedSelection = pendingSelection.current
+    pendingSelection.current = null
     setShowServerBrowser(false)
-    onSelect(path)
-  }, [onSelect])
+    onOpenedSelection?.(path)
+  }, [])
 
   return {
     pickDirectory,

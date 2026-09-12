@@ -3,22 +3,70 @@ import { chromium } from 'playwright'
 import assert from 'node:assert/strict'
 import { resolve } from 'node:path'
 const base = resolve(import.meta.dir, '..')
-const stubs: Record<string,string> = {
-  context: `import React from 'react'; const C=React.createContext({}); export const AppShellProvider=({value,children})=>React.createElement(C.Provider,{value},children); export const useAppShellContext=()=>React.useContext(C);`,
-  main: `import React from 'react'; import Page from '${base}/apps/electron/src/renderer/pages/WorkspaceContextPage.tsx'; import {useAppShellContext} from '@/context/AppShellContext'; export const MainContentPanel=()=>React.createElement(Page,{workspaceId:useAppShellContext().activeWorkspaceId});`,
-  i18n: `export const useTranslation=()=>({t:x=>x});`,
-  atoms: `import {atom} from 'jotai'; export const closePanelAtom=atom(null,()=>{});export const focusedPanelIdAtom=atom('same-panel');`,
-  route: `export const parseRouteToNavigationState=()=>({navigator:'workspaceContext'});`,
-  utils: `export const cn=(...a)=>a.filter(x=>typeof x==='string').join(' ');`,
-  product: `export const RENDERER_PRODUCT_VARIANT='artist-os';`,
-  blank: `export const PanelHeaderCenterButton=()=>null;export const UserProfileDialog=()=>null;`,
-  header: `import React from 'react'; export const CompactPageHeader=({actions,title})=>React.createElement('header',null,title,actions);`,
-  docs: `export const useWorkspaceContext=workspaceId=>({docs:[],loading:false,error:null,upsert:async input=>{window.saved.push({workspaceId,...input})},remove:async()=>true});`,
-  agents: `export const useAgents=()=>({activeAgents:[]});`,
-  transport: `export const useTransportConnectionState=()=>({mode:'remote'});`,
-  server: `import React from 'react'; export const ServerDirectoryBrowser=({open,onSelect})=>open?React.createElement('button',{onClick:()=>onSelect('/campaign-A/repo')},'Confirm remote directory'):null;`,
-  dialog: `import React from 'react'; export const Dialog=({open,children})=>open?React.createElement('div',{role:'dialog'},children):null; const E=({children})=>React.createElement('div',null,children); export const DialogContent=E,DialogHeader=E,DialogTitle=E,DialogDescription=E,DialogFooter=E;`,
-  button: `import React from 'react';export const Button=({children,variant,size,...props})=>React.createElement('button',props,children);`,
+const stubs: Record<string, string> = {
+  context: `
+    import React from 'react'
+    const Context = React.createContext({})
+    export const AppShellProvider = ({ value, children }) =>
+      React.createElement(Context.Provider, { value }, children)
+    export const useAppShellContext = () => React.useContext(Context)
+  `,
+  main: `
+    import React from 'react'
+    import Page from '${base}/apps/electron/src/renderer/pages/WorkspaceContextPage.tsx'
+    import { useAppShellContext } from '@/context/AppShellContext'
+    export const MainContentPanel = () =>
+      React.createElement(Page, { workspaceId: useAppShellContext().activeWorkspaceId })
+  `,
+  i18n: `export const useTranslation = () => ({ t: key => key })`,
+  atoms: `
+    import { atom } from 'jotai'
+    export const closePanelAtom = atom(null, () => {})
+    export const focusedPanelIdAtom = atom('same-panel')
+  `,
+  route: `export const parseRouteToNavigationState = () => ({ navigator: 'workspaceContext' })`,
+  utils: `export const cn = (...args) => args.filter(value => typeof value === 'string').join(' ')`,
+  product: `export const RENDERER_PRODUCT_VARIANT = 'artist-os'`,
+  blank: `
+    export const PanelHeaderCenterButton = () => null
+    export const UserProfileDialog = () => null
+  `,
+  header: `
+    import React from 'react'
+    export const CompactPageHeader = ({ actions, title }) =>
+      React.createElement('header', null, title, actions)
+  `,
+  docs: `
+    export const useWorkspaceContext = workspaceId => ({
+      docs: [], loading: false, error: null,
+      upsert: async input => { window.saved.push({ workspaceId, ...input }) },
+      remove: async () => true,
+    })
+  `,
+  agents: `export const useAgents = () => ({ activeAgents: [] })`,
+  transport: `export const useTransportConnectionState = () => ({ mode: window.pickerMode || 'remote' })`,
+  server: `
+    import React from 'react'
+    export const ServerDirectoryBrowser = ({ open, onSelect }) => open
+      ? React.createElement('button', {
+          onClick: () => onSelect('/campaign-A/repo'),
+        }, 'Confirm remote directory')
+      : null
+  `,
+  dialog: `
+    import React from 'react'
+    export const Dialog = ({ open, children }) => open
+      ? React.createElement('div', { role: 'dialog' }, children)
+      : null
+    const Element = ({ children }) => React.createElement('div', null, children)
+    export const DialogContent = Element, DialogHeader = Element, DialogTitle = Element,
+      DialogDescription = Element, DialogFooter = Element
+  `,
+  button: `
+    import React from 'react'
+    export const Button = ({ children, variant, size, ...props }) =>
+      React.createElement('button', props, children)
+  `,
 }
 const routeMap: Record<string, string> = {
   '@/context/AppShellContext': 'context',
@@ -139,6 +187,47 @@ try {
     await settle()
     assert.equal(await page.getByRole('dialog').count(), 0)
     assert.equal(await page.evaluate(() => (window as any).saved.length), 0)
+  })
+  await check('remote picker retains opener and consumes each selection once', async () => {
+    await page.evaluate(() => (window as any).renderPicker('A'))
+    await page.getByRole('button', { name: 'Open harness picker' }).click()
+    await page.evaluate(() => (window as any).renderPicker('B'))
+    await page.evaluate(() => {
+      const host = window as any
+      host.picker.confirmServerBrowser('/selected-for-A')
+      host.picker.confirmServerBrowser('/duplicate')
+    })
+    assert.deepEqual(await page.evaluate(() => (window as any).pickerCalls), [
+      { owner: 'A', path: '/selected-for-A' },
+    ])
+    await page.getByRole('button', { name: 'Open harness picker' }).click()
+    await page.evaluate(() => (window as any).picker.confirmServerBrowser('/selected-for-B'))
+    assert.deepEqual(await page.evaluate(() => (window as any).pickerCalls), [
+      { owner: 'A', path: '/selected-for-A' },
+      { owner: 'B', path: '/selected-for-B' },
+    ])
+  })
+  await check('cancelled remote picker cannot deliver a late confirmation', async () => {
+    await page.evaluate(() => (window as any).renderPicker('A'))
+    await page.getByRole('button', { name: 'Open harness picker' }).click()
+    await page.evaluate(() => (window as any).renderPicker('B'))
+    await page.evaluate(() => {
+      const host = window as any
+      host.picker.cancelServerBrowser()
+      host.picker.confirmServerBrowser('/cancelled')
+    })
+    assert.deepEqual(await page.evaluate(() => (window as any).pickerCalls), [])
+  })
+  await check('native picker retains opener through a callback owner change', async () => {
+    await page.evaluate(() => (window as any).renderPicker('A', 'local'))
+    await page.getByRole('button', { name: 'Open harness picker' }).click()
+    await page.waitForFunction(() => typeof (window as any).finishNativePicker === 'function')
+    await page.evaluate(() => (window as any).renderPicker('B', 'local'))
+    await page.evaluate(() => (window as any).finishNativePicker('/native-for-A'))
+    await settle()
+    assert.deepEqual(await page.evaluate(() => (window as any).pickerCalls), [
+      { owner: 'A', path: '/native-for-A' },
+    ])
   })
 } finally {
   await browser.close()
