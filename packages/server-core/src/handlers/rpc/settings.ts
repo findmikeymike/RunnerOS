@@ -61,15 +61,30 @@ async function commandExists(command: string): Promise<string | null> {
   }
 }
 
+async function publishCurrentStoredSecret(name: string, clearMissing = false): Promise<void> {
+  const manager = getCredentialManager()
+  const snapshot = await manager.captureSnapshot({ type: 'user_secret', name })
+  await manager.withCurrentSnapshot(snapshot, () => {
+    if (snapshot.credential?.value) process.env[name] = snapshot.credential.value
+    else if (clearMissing) delete process.env[name]
+    return true
+  })
+}
+
 async function applyStoredSecretsToProcessEnv(): Promise<void> {
   const manager = getCredentialManager()
-  const stored = await manager.exportUserSecretsEnv()
-  const env = { ...stored }
-  const apiKey = await migrateStoredAliasGroupFromValues(INWORLD_API_KEY_NAME, INWORLD_LEGACY_API_KEY_NAMES, manager, stored)
-  const voiceId = await migrateStoredAliasGroupFromValues(INWORLD_VOICE_ID_NAME, INWORLD_LEGACY_VOICE_ID_NAMES, manager, stored)
-  if (apiKey) env[INWORLD_API_KEY_NAME] = apiKey
-  if (voiceId) env[INWORLD_VOICE_ID_NAME] = voiceId
-  for (const [key, value] of Object.entries(env)) process.env[key] = value
+  // Discovery may be slow. Its values are never authority for a later env write.
+  const names = new Set(Object.keys(await manager.exportUserSecretsEnv()))
+  for (const [canonical, aliases] of [
+    [INWORLD_API_KEY_NAME, INWORLD_LEGACY_API_KEY_NAMES],
+    [INWORLD_VOICE_ID_NAME, INWORLD_LEGACY_VOICE_ID_NAMES],
+  ] as const) {
+    if ([canonical, ...aliases].some(name => names.has(name))) {
+      await manager.migrateUserSecretAliases(canonical, aliases)
+      names.add(canonical)
+    }
+  }
+  for (const name of names) await publishCurrentStoredSecret(name, true)
 }
 
 let inworldMigration: Promise<void> | null = null
@@ -94,38 +109,8 @@ async function migrateStoredAliasGroup(
   legacyNames: readonly string[],
   manager: ReturnType<typeof getCredentialManager>,
 ): Promise<void> {
-  const canonical = await manager.getUserSecret(canonicalName)
-  const legacy = await Promise.all(legacyNames.map(async (name) => ({ name, value: await manager.getUserSecret(name) })))
-  await migrateStoredAliasGroupFromValues(
-    canonicalName,
-    legacyNames,
-    manager,
-    Object.fromEntries([
-      [canonicalName, canonical ?? undefined],
-      ...legacy.map((entry) => [entry.name, entry.value ?? undefined]),
-    ]),
-  )
-}
-
-async function migrateStoredAliasGroupFromValues(
-  canonicalName: string,
-  legacyNames: readonly string[],
-  manager: ReturnType<typeof getCredentialManager>,
-  values: Readonly<Record<string, string | undefined>>,
-): Promise<string | undefined> {
-  const canonical = values[canonicalName]?.trim()
-  const migratedValue = canonical || legacyNames.map((name) => values[name]?.trim()).find(Boolean)
-  if (!migratedValue) return undefined
-
-  if (!canonical) await manager.setUserSecret(canonicalName, migratedValue)
-  process.env[canonicalName] = migratedValue
-
-  // Remove only aliases that hold the migrated value. Conflicting legacy values
-  // remain visible in Saved secrets rather than being destroyed silently.
-  for (const name of legacyNames) {
-    if (values[name]?.trim() === migratedValue) await manager.deleteUserSecret(name)
-  }
-  return migratedValue
+  await manager.migrateUserSecretAliases(canonicalName, legacyNames)
+  await publishCurrentStoredSecret(canonicalName)
 }
 
 function broadcastSecretsChanged(deps: HandlerDeps): void {
@@ -305,7 +290,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       return { success: false, error: 'Secret value is required.' }
     }
     await getCredentialManager().setUserSecret(normalized, value)
-    process.env[normalized] = value
+    await publishCurrentStoredSecret(normalized, true)
     if (normalized === INWORLD_API_KEY_NAME || normalized === INWORLD_VOICE_ID_NAME) {
       await migrateStoredInworldAliases()
     }
@@ -323,7 +308,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
         ? [INWORLD_VOICE_ID_NAME, ...INWORLD_LEGACY_VOICE_ID_NAMES]
         : [normalized]
     const deleted = await Promise.all(linkedNames.map((name) => getCredentialManager().deleteUserSecret(name)))
-    for (const name of linkedNames) delete process.env[name]
+    for (const name of linkedNames) await publishCurrentStoredSecret(name, true)
     broadcastSecretsChanged(deps)
     return { success: deleted.some(Boolean) }
   })

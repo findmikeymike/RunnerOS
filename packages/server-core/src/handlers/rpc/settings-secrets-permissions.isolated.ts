@@ -11,8 +11,10 @@ const exportUserSecretsEnv = mock(async () => ({}))
 const getUserSecret = mock<(name: string) => Promise<string | null>>(
   async (name: string) => name === 'GENIUS_ACCESS_TOKEN' ? 'genius-token' : null,
 )
-const setUserSecret = mock(async () => undefined)
-const deleteUserSecret = mock(async () => true)
+const secretValues = new Map<string, string | null>()
+const setUserSecret = mock(async (name: string, value: string) => { secretValues.set(name, value) })
+const deleteUserSecret = mock(async (name: string) => { secretValues.set(name, null); return true })
+const readCurrent = async (name: string) => secretValues.has(name) ? secretValues.get(name)! : getUserSecret(name)
 const assertTeamPermission = mock((_rootPath: string, _action: string) => undefined)
 const getWorkspaceOrThrow = mock((workspaceId: string) => ({ id: workspaceId, rootPath: `/${workspaceId}` }))
 const assertGlobalSecretVaultPermission = mock((workspaceId: string) => {
@@ -55,6 +57,20 @@ mock.module('@craft-agent/shared/credentials', () => ({
     getUserSecret,
     setUserSecret,
     deleteUserSecret,
+    captureSnapshot: async (id: { name: string }) => {
+      const value = await readCurrent(id.name)
+      return { id, credential: value ? { value } : null }
+    },
+    withCurrentSnapshot: async (snapshot: any, action: () => boolean) =>
+      (await readCurrent(snapshot.id.name)) === (snapshot.credential?.value ?? null) && action(),
+    migrateUserSecretAliases: async (canonical: string, aliases: string[]) => {
+      const current = await readCurrent(canonical)
+      const records = await Promise.all(aliases.map(async name => ({ name, value: await readCurrent(name) })))
+      const value = current || records.find(record => record.value)?.value
+      if (!value) return
+      if (!current) await setUserSecret(canonical, value)
+      for (const record of records) if (record.value === value) await deleteUserSecret(record.name)
+    },
   }),
   isValidUserSecretName: () => true,
   normalizeUserSecretName: (value: string) => value,
@@ -87,6 +103,7 @@ function register(): Map<string, Handler> {
 }
 
 beforeEach(() => {
+  secretValues.clear()
   listUserSecrets.mockClear()
   exportUserSecretsEnv.mockClear()
   getUserSecret.mockClear()
@@ -100,6 +117,57 @@ beforeEach(() => {
 })
 
 describe('settings secret permissions', () => {
+  it('does not restore a deleted secret from a delayed startup environment load', async () => {
+    const name = 'ARTIST_OS_TEST_DELETED_SECRET'
+    let release!: (value: Record<string, string>) => void
+    exportUserSecretsEnv.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    const handlers = register()
+    try {
+      await handlers.get(RPC_CHANNELS.secrets.DELETE)!({}, name, 'workspace-owner')
+      release({ [name]: 'obsolete-fixture-value' })
+      await new Promise(resolve => setTimeout(resolve, 0))
+      expect(process.env[name]).toBeUndefined()
+    } finally { delete process.env[name] }
+  })
+
+  it('does not overwrite a newly saved secret with a delayed startup value', async () => {
+    const name = 'ARTIST_OS_TEST_REPLACED_SECRET'
+    let release!: (value: Record<string, string>) => void
+    exportUserSecretsEnv.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    const handlers = register()
+    try {
+      await handlers.get(RPC_CHANNELS.secrets.SAVE)!({}, name, 'new-fixture-value', 'workspace-owner')
+      release({ [name]: 'old-fixture-value' })
+      await new Promise(resolve => setTimeout(resolve, 0))
+      expect(process.env[name]).toBe('new-fixture-value')
+    } finally { delete process.env[name] }
+  })
+
+  it('a delayed alias deletion cannot clear a newer saved canonical environment value', async () => {
+    const name = 'INWORLD_API_KEY'
+    let release!: () => void
+    let entered!: () => void
+    const started = new Promise<void>(resolve => { entered = resolve })
+    deleteUserSecret.mockImplementation(async alias => {
+      secretValues.set(alias, null)
+      if (alias === 'INWORLD_RUNTIME_KEY') { entered(); await new Promise<void>(resolve => { release = resolve }) }
+      return true
+    })
+    const handlers = register()
+    const deleting = handlers.get(RPC_CHANNELS.secrets.DELETE)!({}, name, 'workspace-owner') as Promise<unknown>
+    try {
+      await started
+      await handlers.get(RPC_CHANNELS.secrets.SAVE)!({}, name, 'new-fixture-value', 'workspace-owner')
+      release()
+      await deleting
+      expect(process.env[name]).toBe('new-fixture-value')
+    } finally {
+      release?.(); await deleting
+      deleteUserSecret.mockImplementation(async name => { secretValues.set(name, null); return true })
+      delete process.env[name]
+    }
+  })
+
   it('lists saved secret summaries only after owner permission passes', async () => {
     const handler = register().get(RPC_CHANNELS.secrets.LIST)!
 

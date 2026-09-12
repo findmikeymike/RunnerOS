@@ -335,6 +335,37 @@ export class CredentialManager {
     return this.delete({ type: 'user_secret', name: normalized });
   }
 
+  /** Read and migrate an alias group under the same locks used by secret edits. */
+  async migrateUserSecretAliases(canonicalName: string, legacyNames: readonly string[]): Promise<void> {
+    const names = [...new Set([canonicalName, ...legacyNames].map(normalizeUserSecretName))];
+    if (names.some(name => !isValidUserSecretName(name))) throw new Error('Invalid secret name');
+    const ids = names.map(name => ({ type: 'user_secret' as const, name }))
+      .sort((a, b) => credentialIdToAccount(a).localeCompare(credentialIdToAccount(b)));
+    const migrate = async () => {
+      const records = new Map<string, StoredCredential | null>();
+      for (const id of ids) records.set(id.name, await this.get(id));
+      const canonical = normalizeUserSecretName(canonicalName);
+      const aliases = legacyNames.map(normalizeUserSecretName).filter(name => name !== canonical);
+      const value = records.get(canonical)?.value.trim()
+        || aliases.map(name => records.get(name)?.value.trim()).find(Boolean);
+      if (!value) return;
+      if (!records.get(canonical)?.value.trim()) {
+        const id = { type: 'user_secret' as const, name: canonical };
+        await this.setUnlocked(id, { value, source: 'native', createdAt: Date.now(), updatedAt: Date.now() });
+        this.bumpAuthRevision(id);
+      }
+      for (const name of aliases) {
+        if (records.get(name)?.value.trim() === value) {
+          await this.deleteUnlocked({ type: 'user_secret', name });
+        }
+      }
+    };
+    // All migrations acquire the complete group in deterministic order.
+    const lock = (index: number): Promise<void> => index === ids.length
+      ? migrate() : this.mutate(ids[index]!, () => lock(index + 1));
+    await lock(0);
+  }
+
   async listUserSecrets(): Promise<UserSecretSummary[]> {
     const ids = await this.list({ type: 'user_secret' });
     const summaries = await Promise.all(ids
