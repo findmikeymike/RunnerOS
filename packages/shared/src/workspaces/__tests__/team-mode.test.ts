@@ -18,6 +18,7 @@ import {
   markWorkspaceAsSharedFolder,
   readOrCreateMachineIdentity,
   recoverWorkspaceOwner,
+  refreshTeamRunnerHeartbeat,
   rotateOwnerRecoveryCode,
   setRunnerMachine,
   TEAM_CONFIG_FILE,
@@ -297,6 +298,72 @@ describe('team mode metadata', () => {
 
     expect(runner.team.runnerMachineId).toBe('machine_someone_else');
     expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: false, reason: 'not-runner' });
+  });
+
+  it('keeps an unacknowledged handover when assigning the same runner again', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+    const original = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+    writeSyncedHeartbeat(root, 'machine_b');
+    // Simulate B receiving the workspace while A is offline and has not seen the edit.
+    writeFileSync(original.privateMachinePath, JSON.stringify({ ...original.machine, machineId: 'machine_b' }));
+    const assigned = setRunnerMachine(root);
+    const retried = setRunnerMachine(root);
+
+    expect(retried.team.runnerHandover).toEqual(assigned.team.runnerHandover);
+    expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: false, reason: 'handover-pending' });
+    expect(clearReadyRunnerHandover(root, 'machine_b')).toBeNull();
+  });
+
+  it('uses the same handover when an existing team is enabled with makeRunner', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+    const original = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+    writeFileSync(original.privateMachinePath, JSON.stringify({ ...original.machine, machineId: 'machine_b' }));
+
+    const enabled = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+    expect(enabled.team.runnerHandover).toMatchObject({ from: original.machine.machineId, to: 'machine_b' });
+    expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: false, reason: 'handover-pending' });
+    const retried = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+    expect(retried.team.runnerHandover).toEqual(enabled.team.runnerHandover);
+  });
+
+  it('retargets a pending handover without forgetting the runner that has not acknowledged', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+    const original = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+    writeSyncedHeartbeat(root, 'machine_b');
+    writeSyncedHeartbeat(root, 'machine_c');
+    writeFileSync(original.privateMachinePath, JSON.stringify({ ...original.machine, machineId: 'machine_b' }));
+    setRunnerMachine(root);
+    const retargeted = setRunnerMachine(root, 'machine_c');
+    expect(retargeted.team.runnerHandover).toMatchObject({ from: original.machine.machineId, to: 'machine_c' });
+    // B has already observed the new revision; its acknowledgement must not stand in for A's.
+    writeFileSync(original.privateMachinePath, JSON.stringify({ ...original.machine, machineId: 'machine_c' }));
+    refreshTeamRunnerHeartbeat(root);
+    expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: false, reason: 'handover-pending' });
+    expect(clearReadyRunnerHandover(root, 'machine_c')).toBeNull();
+
+    const oldHeartbeat = JSON.parse(readFileSync(original.heartbeatPath, 'utf-8'));
+    writeFileSync(original.heartbeatPath, JSON.stringify({ ...oldHeartbeat,
+      observedTeamRevision: retargeted.team.revision,
+      observedRunnerEpoch: retargeted.team.runnerEpoch, isRunner: false }));
+    expect(clearReadyRunnerHandover(root, 'machine_c')?.team?.runnerHandover).toBeUndefined();
+    expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: true, reason: 'runner' });
+  });
+
+  it('waits for the intermediate runner once the original handover was acknowledged', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+    const original = markWorkspaceAsSharedFolder(root, { makeRunner: true });
+    writeSyncedHeartbeat(root, 'machine_b');
+    writeSyncedHeartbeat(root, 'machine_c');
+    // A makes this assignment and immediately observes it in its own heartbeat.
+    setRunnerMachine(root, 'machine_b');
+    writeFileSync(original.privateMachinePath, JSON.stringify({ ...original.machine, machineId: 'machine_c' }));
+    const retargeted = setRunnerMachine(root);
+    expect(retargeted.team.runnerHandover).toMatchObject({ from: 'machine_b', to: 'machine_c' });
+    expect(evaluateTeamRunnerGate(root)).toMatchObject({ allowed: false, reason: 'handover-pending' });
   });
 
   it('reports stale runner heartbeat in status', () => {

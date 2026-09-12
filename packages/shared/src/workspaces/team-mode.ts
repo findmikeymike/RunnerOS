@@ -650,6 +650,24 @@ function isRunnerHandoverReady(workspaceRootPath: string, team: WorkspaceTeamCon
     && (fromHeartbeat.observedRunnerEpoch ?? 0) >= (handover.runnerEpoch ?? team.runnerEpoch ?? 0);
 }
 
+/** Preserve the last unacknowledged runner across retries and retargeting. */
+function nextRunnerHandover(
+  workspaceRootPath: string,
+  team: WorkspaceTeamConfig,
+  runnerMachineId: string,
+  revision: number,
+  runnerEpoch: number,
+  timestamp: string,
+): WorkspaceTeamConfig['runnerHandover'] {
+  if (runnerMachineId === team.runnerMachineId) return team.runnerHandover;
+  const previousRunner = team.runnerHandover && !isRunnerHandoverReady(workspaceRootPath, team)
+    ? team.runnerHandover.from
+    : team.runnerMachineId;
+  return previousRunner && previousRunner !== runnerMachineId
+    ? { from: previousRunner, to: runnerMachineId, initiatedAt: timestamp, revision, runnerEpoch }
+    : undefined;
+}
+
 function getRunnerStatusFields(workspaceRootPath: string, team: WorkspaceTeamConfig): Pick<TeamModeStatus, 'runnerHeartbeat' | 'runnerIsStale' | 'runnerStaleAfterMs'> {
   const runnerHeartbeat = getRunnerHeartbeat(workspaceRootPath, team.runnerMachineId);
   return {
@@ -1240,6 +1258,10 @@ export function markWorkspaceAsSharedFolder(
       revision: previousTeam.revision + 1,
       runnerMachineId: input.makeRunner ? machine.machineId : previousTeam.runnerMachineId,
       runnerEpoch: initialRunnerChanged ? (previousTeam.runnerEpoch ?? 0) + 1 : (previousTeam.runnerEpoch ?? 0),
+      runnerHandover: input.makeRunner
+        ? nextRunnerHandover(workspaceRootPath, previousTeam, machine.machineId, previousTeam.revision + 1,
+          initialRunnerChanged ? (previousTeam.runnerEpoch ?? 0) + 1 : (previousTeam.runnerEpoch ?? 0), timestamp)
+        : previousTeam.runnerHandover,
       automationsPolicy,
       backgroundTriggersEnabled,
       updatedAt: timestamp,
@@ -1438,9 +1460,6 @@ export function setRunnerMachine(workspaceRootPath: string, machineId?: string):
     || !targetHeartbeat.canRunAutomations || isTeamRunnerHeartbeatStale(targetHeartbeat)) {
     throw new Error('Runner must be a recently active joined team machine that can run automations.');
   }
-  const handoverFrom = previousTeam.runnerMachineId && previousTeam.runnerMachineId !== runnerMachineId
-    ? previousTeam.runnerMachineId
-    : undefined;
   const nextRevision = previousTeam.revision + 1;
   const nextRunnerEpoch = runnerMachineId === previousTeam.runnerMachineId
     ? (previousTeam.runnerEpoch ?? 0)
@@ -1453,15 +1472,8 @@ export function setRunnerMachine(workspaceRootPath: string, machineId?: string):
       revision: nextRevision,
       runnerMachineId,
       runnerEpoch: nextRunnerEpoch,
-      runnerHandover: handoverFrom
-        ? {
-            from: handoverFrom,
-            to: runnerMachineId,
-            initiatedAt: timestamp,
-            revision: nextRevision,
-            runnerEpoch: nextRunnerEpoch,
-          }
-        : undefined,
+      runnerHandover: nextRunnerHandover(workspaceRootPath, previousTeam, runnerMachineId,
+        nextRevision, nextRunnerEpoch, timestamp),
       automationsPolicy: 'runner-only',
       backgroundTriggersEnabled: true,
       updatedAt: timestamp,
