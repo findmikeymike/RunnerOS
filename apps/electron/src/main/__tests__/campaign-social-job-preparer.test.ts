@@ -6,7 +6,7 @@ import {
 import { executeScheduledSocialWork, prepareCampaignSocialJob, prepareScheduledSocialWork, resolveCampaignSocialMediaPath, resolveScheduledSocialMediaPath } from '../campaign-social-job-preparer'
 import type { ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import { materializeReleaseKitItem, resolveReleaseKitItemPath, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -306,12 +306,20 @@ describe('native scheduled social work', () => {
     const execution = executeScheduledSocialWork({
       workspaceRootPath: '/workspace', order, preview,
       approval: { id: 'approval-1', approvedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString(), actionId: preview.actionId, actionDigest: preview.actionDigest, mediaDigest: preview.mediaDigest, payloadDigest: preview.payloadDigest, platform: preview.platform, profileId: preview.profileId, approvedBy: { type: 'user', clientId: 'test-client' } },
-    }, { runSocialJson: async (args) => { executeArgs = args; return { ok: true, status: 'delegated', code: 'RUNNER_CDP_DELEGATED' } } })
+    }, { runSocialJson: async (args) => {
+      executeArgs = args
+      const saved = JSON.parse(readFileSync(args[args.indexOf('--action-file') + 1]!, 'utf8'))
+      expect(saved.action).toEqual(dryRun.action)
+      expect(saved.approvalDigest).toMatch(/^sha256:[a-f0-9]{64}$/)
+      expect(args[args.indexOf('--expected-action-digest') + 1]).toBe(saved.approvalDigest)
+      return { ok: true, status: 'delegated', code: 'RUNNER_CDP_DELEGATED' }
+    } })
 
     await expect(execution).rejects.toThrow(/visible-account verification/i)
     expect(executeArgs).toContain('--expected-action-id')
     expect(executeArgs).toContain('act_social-native-1')
     expect(executeArgs).toContain('runner-cdp')
+    expect(dryRun).not.toHaveProperty('approvalDigest')
   })
 
   test('rejects a dry-run whose caption differs from the order', async () => {
@@ -320,5 +328,37 @@ describe('native scheduled social work', () => {
       action: { actionId: 'act_social-native-1', platform: 'x', profile: 'artist-main', payload: { text: 'Changed text.' }, options: { dryRun: true, idempotencyKey: 'idem-native-1' } },
       browserPlan: { accountVerification: { verificationTargetKnown: true } },
     }) })).rejects.toThrow(/authoritative work order/i)
+  })
+
+  test('carries previously approved media into the CLI contract without another approval', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'approved-social-media-'))
+    try {
+      const source = join(root, 'clip.mp4')
+      writeFileSync(source, 'approved clip bytes')
+      const { item } = materializeReleaseKitItem(root, {
+        workspaceId: 'campaign-1', campaignId: 'campaign-1',
+        source: { type: 'campaign-asset', assetId: 'clip' }, sourcePath: source,
+        category: 'video', subtype: 'lyric-clip', promotedBy: 'user',
+      })
+      const media = resolveReleaseKitItemPath(root, item.relativePath)
+      const mediaOrder: ScheduledWorkOrder = { ...order, inputRefs: [{ kind: 'release-kit', itemId: item.id, sha256: item.sha256 }] }
+      const preview = await prepareScheduledSocialWork({ workspaceRootPath: root, order: mediaOrder }, {
+        runSocialJson: async () => ({
+          ok: true, status: 'dry_run', actionId: `act_${order.id}`, platform: 'x', profile: 'artist-main',
+          action: { actionId: `act_${order.id}`, platform: 'x', profile: 'artist-main', payload: { text: 'Out Friday.', media: [media] }, options: { dryRun: true, idempotencyKey: 'idem-native-1' } },
+          browserPlan: { accountVerification: { verificationTargetKnown: true } },
+        }),
+      })
+      const result = await executeScheduledSocialWork({
+        workspaceRootPath: root, order: mediaOrder, preview,
+        approval: { id: 'approved-media', approvedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString(), actionId: preview.actionId, actionDigest: preview.actionDigest, mediaDigest: preview.mediaDigest, payloadDigest: preview.payloadDigest, platform: preview.platform, profileId: preview.profileId, approvedBy: { type: 'user', clientId: 'fixture' } },
+      }, { runSocialJson: async args => {
+        const saved = JSON.parse(readFileSync(args[args.indexOf('--action-file') + 1]!, 'utf8'))
+        expect(saved.action.mediaApproval).toEqual([{ path: media, sha256: item.sha256, bytes: Buffer.byteLength('approved clip bytes') }])
+        expect(args[args.indexOf('--expected-action-digest') + 1]).toBe(saved.approvalDigest)
+        return { ok: true, status: 'succeeded', externalUrl: 'https://x.com/artist/status/123' }
+      } })
+      expect(result.externalUrl).toBe('https://x.com/artist/status/123')
+    } finally { rmSync(root, { recursive: true, force: true }) }
   })
 })

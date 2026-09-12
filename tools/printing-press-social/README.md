@@ -41,7 +41,7 @@ Approved Runner handoff workflow:
 
 ```bash
 social post x --profile artist01 --text "post text" --dry-run --json > dry-run-result.json
-social execute --action-file dry-run-result.json --expected-action-id act_... --confirm yes --json
+social execute --action-file dry-run-result.json --expected-action-id act_... --expected-action-digest sha256:... --confirm yes --json
 ```
 
 Spotify playlist actions additionally bind approval to the full immutable action contract:
@@ -77,3 +77,5 @@ Default browser engine:
 - Keep Instagram/TikTok/X/YouTube/Spotify differences as platform playbooks inside this CLI harness, not as separate posting agents by default.
 - `runner-cdp` inside RunnerOS. The CLI emits structured plans; Runner executes with native browser/CDP tools. Direct live CLI execution requires a non-delegated fallback engine.
 - `playwright` is optional fallback for standalone local execution.
+
+Approval-file execution uses the action ID and digest from the approved preview for every platform. Keep that digest separately from the editable JSON file. Preview digests cover the payload, browser account/session plan, and SHA-256 fingerprints of attached media bytes. If any of these change, create and review a fresh dry-run; the existing approval step does not change. Directly authored CLI actions retain their existing authorization behavior.

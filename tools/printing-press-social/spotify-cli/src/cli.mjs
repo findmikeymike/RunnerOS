@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, resolveBrowserEngine } from '../../src/browser-engines.mjs';
 import { createProfile, profileJson, profileListJson, profileLoginJson, profileStatusJson, updateProfile } from '../../src/profile-json.mjs';
 import { readProfileVerificationResult } from '../../src/profile-verification.mjs';
-import { computeApprovalDigest } from '../../src/approval-contract.mjs';
+import { computeApprovalDigest, bindDryRunApproval } from '../../src/approval-contract.mjs';
 import {
   acquireProfileLock,
   assertConfirmPolicy,
@@ -1075,6 +1075,7 @@ function setFlag(out, key, value) {
 }
 
 function writeResult(result, asJson = false) {
+  result = bindDryRunApproval(result);
   if (asJson) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;

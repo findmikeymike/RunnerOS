@@ -743,6 +743,7 @@ test('root execute rejects dry-run results without account verification target',
       'execute',
       '--action-file', actionFile,
       '--expected-action-id', dryRun.actionId,
+      '--expected-action-digest', dryRun.approvalDigest,
       '--confirm', 'yes',
       '--json',
     ], { SOCIAL_HOME: home });
@@ -778,6 +779,7 @@ test('root execute returns delegated runner-cdp result for approved dry-run resu
     'execute',
     '--action-file', actionFile,
     '--expected-action-id', dryRun.actionId,
+      '--expected-action-digest', dryRun.approvalDigest,
     '--confirm', 'yes',
     '--json',
   ], { SOCIAL_HOME: home }));
@@ -872,6 +874,7 @@ test('root execute rejects dry-runs when current profile verification target cha
       'execute',
       '--action-file', actionFile,
       '--expected-action-id', dryRun.actionId,
+      '--expected-action-digest', dryRun.approvalDigest,
       '--confirm', 'yes',
       '--json',
     ], { SOCIAL_HOME: home });
@@ -909,6 +912,7 @@ test('root execute rejects dry-runs with tampered browser session identity', () 
       'execute',
       '--action-file', actionFile,
       '--expected-action-id', dryRun.actionId,
+      '--expected-action-digest', dryRun.approvalDigest,
       '--confirm', 'yes',
       '--json',
     ], { SOCIAL_HOME: home });
@@ -917,7 +921,7 @@ test('root execute rejects dry-runs with tampered browser session identity', () 
   }
 
   assert.equal(result.ok, false);
-  assert.equal(result.code, 'PROFILE_BROWSER_SESSION_MISMATCH');
+  assert.equal(result.code, 'ACTION_DIGEST_MISMATCH');
 });
 
 test('root dispatcher does not allow smoke profile for live actions', () => {

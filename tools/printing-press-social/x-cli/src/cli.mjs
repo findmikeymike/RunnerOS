@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
+import { bindDryRunApproval } from '../../src/approval-contract.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -793,6 +794,7 @@ function setFlag(out, key, value) {
 }
 
 function writeResult(result, asJson = false) {
+  result = bindDryRunApproval(result);
   if (asJson) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;

@@ -21,7 +21,7 @@ Use this skill to run social channel work through RunnerOS with the bundled Prin
    - For inbox work, first load `references/engagement-playbook.md` and inspect the owned profile through `browser_tool`.
 6. Validate the payload against the platform checklist below.
 7. Resolve authorization before any live action. A direct instruction or active scheduled job to handle comments/messages is a bounded engagement mandate and does not require approval for every matching reply. One-off posts, comments, or DMs outside that mandate still require exact approval.
-8. Save the full dry-run result JSON and run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`.
+8. Save the full dry-run result JSON and run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --expected-action-digest <sha256:...> --confirm yes --json`.
 9. Execute through Runner `browser_tool` using the returned `RUNNER_CDP_DELEGATED` handoff and browser plan.
 10. Treat `browserPlan.accountVerification` as mandatory: verify the visible logged-in account/channel matches the expected handle or account URL before submit. If `verificationTargetKnown` is false, stop and add a profile `--handle` or `--account-url`.
    - For profile readiness checks, use `accountVerification.identityProbe`, then pass only non-secret observed identity back with `profile status <platform> --profile <id> --live --verification-result <json-file> --json`.
@@ -98,7 +98,7 @@ CLI safety behavior:
 - Pass `--confirm yes` only for an exact approved action or a reply that fits an active bounded engagement mandate. Do not use `--autorun` for write actions.
 - Reuse a stable `--idempotency-key` for retried live actions so the CLI can dedupe accidental repeats.
 - Use `--asset-root` and `--content-root` so receipts and dry-runs preserve exact source folders and resolved files.
-- When using `runner-cdp`, `social execute` validates the authorized dry-run result and returns a Runner browser handoff. Exact approval or a matching mandate plus the `--expected-action-id` is the authorization basis. The agent should submit without asking again when the visible account and draft match it; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.
+- When using `runner-cdp`, `social execute` validates the authorized dry-run result and returns a Runner browser handoff. Exact approval or a matching mandate plus the captured `--expected-action-id` and `--expected-action-digest` is the authorization basis. The digest binds the exact action and browser plan, and execution also verifies the approved media bytes. The agent should submit without asking again when the visible account and draft match it; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.
 - For delegated engagement, the mandate plus the matching dry-run action id is the approval basis for `--confirm yes`. Record the mandate source in the run summary.
 
 ## Universal Payload Rules

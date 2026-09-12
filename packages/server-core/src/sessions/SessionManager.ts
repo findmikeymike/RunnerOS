@@ -5704,6 +5704,13 @@ Default report shape:`,
           }
           if (replaceBuiltInAgentPromptText(
             SOCIAL_PUBLISHER_SLUG,
+            '10. After exact-action approval or when a reply fits an active bounded engagement mandate, save the dry-run result and run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`.',
+            '10. After exact-action approval or when a reply fits an active bounded engagement mandate, save the dry-run result and run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --expected-action-digest <sha256:...> --confirm yes --json`.',
+          ).updated) {
+            sessionLog.info('[agent-definitions] Bound Social Publisher execution to the approved digest')
+          }
+          if (replaceBuiltInAgentPromptText(
+            SOCIAL_PUBLISHER_SLUG,
             '5. Summarize the exact action, resolved media paths, content source, target account, and ask approval if it is live.\n6. Run `social execute` on the saved dry-run JSON only after that approval.',
             '5. Summarize the exact action, resolved media paths, content source, and target account. Ask only when neither exact approval nor a matching engagement mandate exists.\n6. Run `social execute` on the saved dry-run JSON after resolving that authorization.',
           ).updated) {

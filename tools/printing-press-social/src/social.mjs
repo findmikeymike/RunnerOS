@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, checkBrowserEngine } from './browser-engines.mjs';
 import { listAssets, listContent, normalizeList } from './content-assets.mjs';
 import { buildProfileBrowserSession, duplicateActionResult, findCompletedAction } from './action-safety.mjs';
-import { computeApprovalDigest } from './approval-contract.mjs';
+import { computeApprovalDigest, verifyApprovedMedia } from './approval-contract.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const REGISTRY_PATH = path.join(ROOT, 'registry.json');
@@ -413,20 +413,20 @@ async function runExecute(args) {
     throw new CliError(`Action id mismatch: expected ${expectedActionId}, got ${action.actionId}`, 'ACTION_ID_MISMATCH');
   }
   const approvalDigest = computeApprovalDigest(action, browserPlan);
-  if (approved.approvalDigest) {
-    if (approved.approvalDigest !== approvalDigest) {
-      throw new CliError('Dry-run approval digest does not match its action and browser plan', 'ACTION_DIGEST_MISMATCH');
-    }
-    const expectedDigest = flags['expected-action-digest'];
-    if (!expectedDigest || expectedDigest === true) {
-      throw new CliError('Spotify execute needs --expected-action-digest <sha256:...>', 'EXPECTED_ACTION_DIGEST_REQUIRED');
-    }
-    if (expectedDigest !== approvalDigest) {
-      throw new CliError('Approved action digest does not match the current action contract', 'ACTION_DIGEST_MISMATCH');
-    }
-  } else if (action.platform === 'spotify') {
-    throw new CliError('Spotify dry-run is missing its approval digest', 'ACTION_DIGEST_REQUIRED');
+  if (!approved.approvalDigest) {
+    throw new CliError('Dry-run is missing its approval digest. Generate a fresh preview.', 'ACTION_DIGEST_REQUIRED');
   }
+  if (approved.approvalDigest !== approvalDigest) {
+    throw new CliError('Dry-run approval digest does not match its action and browser plan', 'ACTION_DIGEST_MISMATCH');
+  }
+  const expectedDigest = flags['expected-action-digest'];
+  if (!expectedDigest || expectedDigest === true) {
+    throw new CliError('execute needs --expected-action-digest <sha256:...> from the approved preview', 'EXPECTED_ACTION_DIGEST_REQUIRED');
+  }
+  if (expectedDigest !== approvalDigest) {
+    throw new CliError('Approved action digest does not match the current action contract', 'ACTION_DIGEST_MISMATCH');
+  }
+  verifyApprovedMedia(action);
   if (!action.options?.dryRun) {
     throw new CliError('execute only accepts action files produced by a dry-run result', 'ACTION_NOT_DRY_RUN');
   }
@@ -714,7 +714,7 @@ Commands:
   social repl
   social assets --asset-root ./assets --platform instagram --json
   social content --content-root ./content --json
-  social execute --action-file ./dry-run-result.json --expected-action-id act_... --confirm yes --json
+  social execute --action-file ./dry-run-result.json --expected-action-id act_... --expected-action-digest sha256:... --confirm yes --json
   social profile add instagram --profile artist01 --json
   social profile add tiktok --profile creator01 --json
   social profile add x --profile artist01 --json

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -162,8 +162,15 @@ export async function executeScheduledSocialWork(input: {
   const directory = mkdtempSync(join(tmpdir(), 'runneros-social-action-'))
   const actionFile = join(directory, 'action.json')
   try {
-    writeFileSync(actionFile, JSON.stringify(input.preview.dryRun), { mode: 0o600 })
-    const result = await deps.runSocialJson(['execute', '--action-file', actionFile, '--expected-action-id', input.preview.actionId, '--confirm', 'yes', '--engine', 'runner-cdp', '--json']) as Record<string, unknown>
+    // Older scheduled previews already bind action, browser plan, and media
+    // bytes above. Carry that same authority into the CLI's newer contract.
+    const originalAction = input.preview.dryRun.action as Record<string, unknown>
+    const action = mediaPath && originalAction.mediaApproval === undefined
+      ? { ...originalAction, mediaApproval: [{ path: mediaPath, sha256: mediaDigest!.slice('sha256:'.length), bytes: statSync(mediaPath).size }] }
+      : originalAction
+    const approvalDigest = `sha256:${createHash('sha256').update(stableStringify({ action, browserPlan: input.preview.dryRun.browserPlan })).digest('hex')}`
+    writeFileSync(actionFile, JSON.stringify({ ...input.preview.dryRun, action, approvalDigest }), { mode: 0o600 })
+    const result = await deps.runSocialJson(['execute', '--action-file', actionFile, '--expected-action-id', input.preview.actionId, '--expected-action-digest', approvalDigest, '--confirm', 'yes', '--engine', 'runner-cdp', '--json']) as Record<string, unknown>
     if (result.code === 'RUNNER_CDP_DELEGATED') {
       throw new Error('Approved social action needs visible-account verification and confirmed browser execution before a receipt can be recorded.')
     }
