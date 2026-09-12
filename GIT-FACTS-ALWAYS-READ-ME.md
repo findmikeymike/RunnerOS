@@ -277,8 +277,13 @@ custom CA instead. Do not flip the default back.
 **Tests that mock a Node builtin (`os`, `fs`, `path`) or set env at module
 level must be `*.isolated.ts`.** `mock.module` on a builtin is process-global
 and permanent, and shard order decides who loads first. `bun test` does not
-pick up `.isolated.ts`; the root `test` script and the CI `isolated` job run
-each one in its own process.
+pick up `.isolated.ts`; the shared `scripts/run-tests.ts` runner and CI `isolated` job run
+each one in its own process. `bun run test` now uses the same six discovery
+shards as CI, then the isolated files. Every subprocess receives a disposable
+profile, the Artist OS product variant, bundled assets, and the Pango setting.
+Use `bun scripts/run-tests.ts --suite=regular --shard=N/6` to reproduce CI,
+or `--suite=isolated` for all isolated files. A test checks that regular files
+do not install direct Node filesystem/path/OS mocks.
 
 **CI needs `CRAFT_BUNDLED_ASSETS_ROOT`** (set in the workflow and the root
 `test` script). Tests that load config defaults sync them from
