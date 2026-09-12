@@ -60,11 +60,16 @@ export class CredentialManager {
   private mutations = new Map<string, Promise<unknown>>();
   private revisions = new Map<string, number>();
   private authRevisions = new Map<string, number>();
+  private authMutationSequence = 0;
+  private authMutationVersions = new Map<string, number>();
+
+  getAuthMutationVersion(): number { return this.authMutationSequence; }
 
   private bumpAuthRevision(id: CredentialId): number {
     const key = credentialIdToAccount(id);
     const revision = (this.authRevisions.get(key) ?? 0) + 1;
     this.authRevisions.set(key, revision);
+    this.authMutationVersions.set(key, ++this.authMutationSequence);
     return revision;
   }
 
@@ -124,6 +129,35 @@ export class CredentialManager {
         credential: structuredClone(replacement),
       };
     });
+  }
+
+  /** Remove only the admitted sign-ins. Token refreshes do not replace user intent. */
+  async compareAndDeleteAuthSnapshots(
+    snapshots: CredentialSnapshot[], admissionVersion: number,
+    stillOwned: () => boolean | Promise<boolean> = () => true,
+  ): Promise<{ deleted: boolean; credentials: StoredCredential[] } | null> {
+    const ordered = [...new Map(snapshots.map(snapshot => [credentialIdToAccount(snapshot.id), snapshot])).values()]
+      .sort((a, b) => credentialIdToAccount(a.id).localeCompare(credentialIdToAccount(b.id)));
+    const remove = async () => {
+      for (const snapshot of ordered) {
+        const key = credentialIdToAccount(snapshot.id);
+        if ((this.authRevisions.get(key) ?? 0) !== snapshot.authRevision
+          || (this.authMutationVersions.get(key) ?? 0) > admissionVersion) return null;
+      }
+      if (!(await stillOwned())) return null;
+      const credentials: StoredCredential[] = [];
+      let deleted = false;
+      for (const snapshot of ordered) {
+        const current = await this.get(snapshot.id);
+        const removed = await this.deleteUnlocked(snapshot.id);
+        deleted = removed || deleted;
+        if (removed && current) credentials.push(current);
+      }
+      return { deleted, credentials };
+    };
+    const lock = (index: number): Promise<{ deleted: boolean; credentials: StoredCredential[] } | null> =>
+      index === ordered.length ? remove() : this.mutate(ordered[index]!.id, () => lock(index + 1));
+    return lock(0);
   }
 
   private async mutate<T>(id: CredentialId, operation: () => Promise<T>): Promise<T> {

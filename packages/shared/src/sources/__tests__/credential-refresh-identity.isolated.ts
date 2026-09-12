@@ -297,3 +297,75 @@ test('stale LoadedSource cannot refresh the old route after disk configuration c
   expect(deferred.calls).toHaveLength(0);
   expect((await manager.load(a))?.value).toBe('existing');
 });
+
+test('a slow revoke lookup cannot delete a newer sign-in', async () => {
+  const manager = new SourceCredentialManager(), a = source('slow-revoke');
+  await manager.save(a, { value: 'old-account' });
+  const originalGet = backend.get;
+  let entered!: () => void, release!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve });
+  const gate = new Promise<void>(resolve => { release = resolve });
+  let held = false;
+  backend.get = async id => {
+    const captured = await originalGet(id);
+    if (!held && id.workspaceId === a.workspaceId) { held = true; entered(); await gate; }
+    return captured;
+  };
+  const revoking = manager.revoke(a);
+  try {
+    await started;
+    const saving = manager.save(a, { value: 'new-account' });
+    await new Promise<void>(resolve => setImmediate(resolve));
+    release();
+    await Promise.all([revoking, saving]);
+    expect((await manager.load(a))?.value).toBe('new-account');
+  } finally { release(); backend.get = originalGet; }
+});
+
+
+test('ordinary token rotation does not defeat explicit disconnect and returns the removed token', async () => {
+  const credentials = getCredentialManager(), manager = new SourceCredentialManager(), a = source('rotated-revoke');
+  await manager.save(a, { value: 'old-token', refreshToken: 'old-refresh' });
+  const admission = credentials.getAuthMutationVersion();
+  const captured = await credentials.captureSnapshot(manager.getCredentialId(a));
+  await credentials.compareAndSetSnapshot(captured, { value: 'rotated-token', refreshToken: 'rotated-refresh' });
+  const removed = await credentials.compareAndDeleteAuthSnapshots([captured], admission);
+  expect(removed).toMatchObject({ deleted: true, credentials: [{ value: 'rotated-token', refreshToken: 'rotated-refresh' }] });
+  expect(await manager.load(a)).toBeNull();
+});
+
+test('shared Google revoke cannot delete a replacement admitted during slow record discovery', async () => {
+  const manager = new SourceCredentialManager();
+  const google = (workspaceId: string) => { const a = source(workspaceId); a.config = { ...a.config, slug: 'gmail', provider: 'google' }; return a; };
+  const a = google('shared-a'), b = google('shared-b');
+  await manager.save(a, { value: 'old-A' }); await manager.save(b, { value: 'old-B' });
+  const list = backend.list;
+  let entered!: () => void, release!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve });
+  const gate = new Promise<void>(resolve => { release = resolve });
+  let held = false;
+  backend.list = async filter => {
+    const captured = await list(filter);
+    if (!held) { held = true; entered(); await gate; }
+    return captured;
+  };
+  const removing = manager.disconnectForRevoke(a);
+  try {
+    await started;
+    await manager.save(b, { value: 'new-account-B' });
+    release();
+    expect(await removing).toMatchObject({ superseded: true, deleted: false, credentials: [] });
+    expect((await manager.load(a))?.value).toBe('old-A');
+    expect((await manager.load(b))?.value).toBe('new-account-B');
+  } finally { release(); backend.list = list; }
+});
+
+test('uncontested shared Google disconnect removes all matching records only', async () => {
+  const manager = new SourceCredentialManager();
+  const a = source('shared-a'), b = source('shared-b'), unrelated = source('unrelated');
+  a.config = { ...a.config, slug: 'gmail', provider: 'google' }; b.config = { ...b.config, slug: 'gmail', provider: 'google' };
+  await manager.save(a, { value: 'A' }); await manager.save(b, { value: 'B' }); await manager.save(unrelated, { value: 'unrelated' });
+  expect(await manager.disconnectForRevoke(a)).toMatchObject({ superseded: false, deleted: true, credentials: [{ value: 'A' }, { value: 'B' }] });
+  expect(await manager.load(a)).toBeNull(); expect(await manager.load(b)).toBeNull();
+  expect((await manager.load(unrelated))?.value).toBe('unrelated');
+});

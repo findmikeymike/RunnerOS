@@ -287,17 +287,11 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       throw new Error(`Source not found: ${sourceSlug}`)
     }
 
-    const credential = source.config.provider === 'google'
-      ? await credManager.loadEffective(source)
-      : await credManager.load(source)
-
-    // Detach locally before remote revocation can wait on a provider. A newer
-    // sign-in must never be deleted or marked signed-out by this completion.
-    if (source.config.provider === 'google') {
-      await credManager.deleteEffective(source)
-    } else {
-      await credManager.delete(source)
+    const removal = await credManager.disconnectForRevoke(source)
+    if (removal.superseded) {
+      return { success: false, error: 'Connection changed while disconnecting. The newer sign-in was kept.' }
     }
+
     await syncGoogleAdsCredentialCache(source)
     // Shared Google credentials can serve the same source in other workspaces.
     const affectedWorkspaces = source.config.provider === 'google'
@@ -314,15 +308,21 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
 
     let revokedRemotely = true
     let warning: string | undefined
-    if (source.config.provider === 'google' && credential) {
-      try {
-        await revokeGoogleToken(credential.refreshToken || credential.value)
-      } catch {
-        revokedRemotely = false
-        warning = 'Local Google credentials were removed, but Google could not confirm remote revocation. Retry revoke from your Google Account if needed.'
+    const remotelyRevoked = new Set<string>()
+    for (const credential of removal.credentials) {
+      if (source.config.provider === 'google') {
+        const token = credential.refreshToken || credential.value
+        if (remotelyRevoked.has(token)) continue
+        remotelyRevoked.add(token)
+        try {
+          await revokeGoogleToken(token)
+        } catch {
+          revokedRemotely = false
+          warning = 'Local Google credentials were removed, but Google could not confirm remote revocation. Retry revoke from your Google Account if needed.'
+        }
+      } else {
+        await credManager.revokeRemote(source, credential)
       }
-    } else {
-      await credManager.revokeRemote(source, credential)
     }
 
     log.info(`[OAuth] Revoked credentials for ${sourceSlug}`)

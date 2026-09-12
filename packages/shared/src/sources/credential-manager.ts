@@ -564,12 +564,38 @@ export class SourceCredentialManager {
     return deleted;
   }
 
-  /** Revoke remote MCP OAuth tokens when supported, then delete the local credential. */
+  /** Detach the sign-ins captured by this request, preserving newer replacements. */
+  async disconnectForRevoke(source: LoadedSource): Promise<{
+    superseded: boolean; deleted: boolean; credentials: StoredCredential[];
+  }> {
+    const identity = captureSourceAuthIdentity(source);
+    const manager = getCredentialManager();
+    const admission = manager.getAuthMutationVersion();
+    const shared = isSharedGoogleSource(source);
+    const ids = shared
+      ? (await manager.list({ type: 'source_oauth' })).filter(id => id.sourceId === source.config.slug)
+      : [this.getCredentialId(source)];
+    // Also invalidate an in-progress sign-in when no credential exists yet.
+    const primary = this.getCredentialId(source);
+    if (!ids.some(id => credentialIdToAccount(id) === credentialIdToAccount(primary))) ids.push(primary);
+    const snapshots = await Promise.all(ids.map(id => manager.captureSnapshot(id)));
+    const admittedIds = new Set(ids.map(credentialIdToAccount));
+    const result = await manager.compareAndDeleteAuthSnapshots(snapshots, admission, async () => {
+      if (sourceAuthIdentity(source) !== identity) return false;
+      if (shared) {
+        const currentIds = await manager.list({ type: 'source_oauth' });
+        if (currentIds.some(id => id.sourceId === source.config.slug && !admittedIds.has(credentialIdToAccount(id)))) return false;
+      }
+      return true;
+    });
+    return result ? { superseded: false, ...result } : { superseded: true, deleted: false, credentials: [] };
+  }
+
   async revoke(source: LoadedSource): Promise<boolean> {
-    const credential = await this.load(source);
-    const deleted = await this.delete(source);
-    await this.revokeRemote(source, credential);
-    return deleted;
+    const result = await this.disconnectForRevoke(source);
+    if (result.superseded) return false;
+    for (const credential of result.credentials) await this.revokeRemote(source, credential);
+    return result.deleted;
   }
 
   /** Remote revocation never mutates local credentials or source status. */

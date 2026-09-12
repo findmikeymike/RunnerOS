@@ -16,6 +16,7 @@ const manager = {
   cancelAuthentication,
   load: async () => ({ value: 'old-token' }),
   delete: async () => { order.push('delete'); return true },
+  disconnectForRevoke: async () => { order.push('delete'); return { superseded: false, deleted: true, credentials: [{ value: 'old-token' }] } },
   markSourceNeedsReauthIfDisconnected: async () => { order.push('status'); return true },
   revokeRemote: async (..._args: any[]) => { order.push('remote') },
 }
@@ -89,4 +90,17 @@ test('revoke detaches runtime before waiting for remote revocation', async () =>
     await revoking
     expect(order.at(-1)).toBe('new-sign-in')
   } finally { release?.(); await revoking; manager.revokeRemote = original }
+})
+
+
+test('superseded revoke preserves the newer sign-in without claiming disconnect', async () => {
+  const { handlers } = setup()
+  const original = manager.disconnectForRevoke
+  manager.disconnectForRevoke = async () => ({ superseded: true, deleted: false, credentials: [] })
+  try {
+    const result = await handlers.get(RPC_CHANNELS.oauth.REVOKE)({ workspaceId: 'fixture' }, 'fixture')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('newer sign-in was kept')
+    expect(order).toEqual([])
+  } finally { manager.disconnectForRevoke = original }
 })
