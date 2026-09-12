@@ -126,3 +126,5 @@ export {
   withOutputBundleLockAsync,
   writeOutputManifest,
 } from './storage.ts';
+
+export { assertUsableOutputAsset } from './asset-usability.ts';

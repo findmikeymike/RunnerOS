@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'bun:test';
+import * as fs from 'node:fs';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -511,6 +512,8 @@ describe('OutputService visual boards', () => {
         links: [{ label: 'Preview', url: 'http://localhost:4187/report.html', role: 'primary' }],
       },
     });
+    const generatedPath = join(root, 'index.html');
+    writeFileSync(generatedPath, '<html><body>Generated preview</body></html>');
     const generated = await service.createFromSessionTool({
       workspaceId: 'ws',
       sessionId: 'session-1',
@@ -518,7 +521,7 @@ describe('OutputService visual boards', () => {
         title: 'Generated HTML',
         kind: 'code',
         summary: 'Generated web artifact',
-        files: [{ label: 'index.html', path: 'index.html', role: 'primary' }],
+        files: [{ label: 'index.html', path: generatedPath, role: 'primary' }],
       },
     });
     const remote = await service.createFromSessionTool({
@@ -567,7 +570,7 @@ describe('OutputService visual boards', () => {
       canInspectInBrowserPane: true,
       previewSurface: 'browser-pane',
       webPreview: {
-        url: buildRunnerOutputAssetUrl('ws', generated.outputId!, 'index.html'),
+        url: buildRunnerOutputAssetUrl('ws', generated.outputId!, generatedPath),
         displayHost: 'generated output',
         kind: 'generated-html',
       },
@@ -1219,7 +1222,7 @@ describe('OutputService visual board concurrent edits', () => {
 it('preserves output files when malformed Finals frontmatter prevents checking final protection', async () => {
   const root = mkdtempSync(join(tmpdir(), 'osvc-finals-frontmatter-delete-'));
   const service = new OutputService({ getWorkspaceRootPath: () => root });
-  const created = await service.createFromSessionTool({ workspaceId: 'ws', sessionId: 'session', output: { title: 'Keep this', kind: 'document', content: 'Artist-owned original' } });
+  const created = await service.createFromSessionTool({ workspaceId: 'ws', sessionId: 'session', output: { title: 'Keep this', kind: 'document', summary: 'Keep original files', content: 'Artist-owned original' } });
   const finalsPath = join(root, 'context', 'finals', 'CONTEXT.md');
   mkdirSync(join(root, 'context', 'finals'), { recursive: true });
   const damaged = '---\ndescription: Missing required name\n---\n{"schemaVersion":1,"finals":[]}';
@@ -1227,4 +1230,44 @@ it('preserves output files when malformed Finals frontmatter prevents checking f
   await expect(service.delete('ws', created.outputId!)).rejects.toThrow('Finals registry is invalid');
   expect(readFileSync(finalsPath, 'utf8')).toBe(damaged);
   expect(readFileSync(join(root, 'outputs', created.outputId!, 'content.md'), 'utf8')).toBe('Artist-owned original');
+});
+
+
+describe('file-backed output creation validates before publication', () => {
+  for (const kind of ['missing', 'directory', 'relative', 'outside', 'escaping-link', 'supporting-missing'] as const) {
+    it(`rejects ${kind} files without publishing an output`, async () => {
+      const root = mkdtempSync(join(tmpdir(), 'osvc-file-validation-'));
+      const workspace = join(root, 'workspace'); mkdirSync(workspace);
+      const service = new OutputService({ getWorkspaceRootPath: () => workspace });
+      const healthy = join(workspace, 'healthy.txt'); writeFileSync(healthy, 'real content');
+      const outside = join(root, 'outside.txt'); writeFileSync(outside, 'outside content');
+      const escaping = join(workspace, 'escape.txt'); fs.symlinkSync(outside, escaping);
+      const path = kind === 'directory' ? workspace : kind === 'relative' ? 'relative.txt'
+        : kind === 'outside' ? outside : kind === 'escaping-link' ? escaping : join(workspace, 'missing.txt');
+      try {
+        await expect(service.createFromSessionTool({ workspaceId: 'ws', sessionId: 'session', output: {
+          title: 'Invalid file', kind: 'document', summary: 'Invalid attachment',
+          files: kind === 'supporting-missing' ? [{ path: healthy, role: 'primary' }, { path, role: 'attachment' }] : [{ path }],
+        } })).rejects.toThrow();
+        expect(service.list('ws')).toEqual([]);
+        expect(existsSync(join(workspace, 'outputs'))).toBe(false);
+        expect(readFileSync(healthy, 'utf8')).toBe('real content');
+      } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    });
+  }
+
+  it('rejects unreadable files before publishing any record', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-unreadable-'));
+    const path = join(root, 'unreadable.txt'); writeFileSync(path, 'retained bytes');
+    const service = new OutputService({ getWorkspaceRootPath: () => root });
+    const realOpen = fs.openSync;
+    const open = spyOn(fs, 'openSync').mockImplementation((file, flags, mode) => {
+      if (fs.realpathSync(String(file)) === fs.realpathSync(path)) throw Object.assign(new Error('injected unreadable'), { code: 'EACCES' });
+      return realOpen(file, flags, mode);
+    });
+    try {
+      await expect(service.createFromSessionTool({ workspaceId: 'ws', sessionId: 's', output: { title: 'Unreadable', kind: 'document', summary: 'Unreadable attachment', files: [{ path }] } })).rejects.toThrow('unavailable');
+      expect(service.list('ws')).toEqual([]);
+    } finally { open.mockRestore(); fs.rmSync(root, { recursive: true, force: true }); }
+  });
 });

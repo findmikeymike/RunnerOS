@@ -1,3 +1,4 @@
+import { assertUsableOutputAsset } from './asset-usability.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstatSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -242,6 +243,9 @@ export function promoteOutputToFinalInsideLock(
   if (assetId && !output.assets.some((asset) => asset.id === assetId)) {
     throw new Error(`Output "${output.id}" has no asset "${assetId}".`);
   }
+
+  const selectedAsset = assetId ? output.assets.find(asset => asset.id === assetId) : undefined;
+  if (selectedAsset) assertUsableOutputAsset(workspaceRootPath, output.id, selectedAsset.path);
 
   const registry = readOutputFinalsRegistry(workspaceRootPath, { strict: true });
   const now = new Date().toISOString();

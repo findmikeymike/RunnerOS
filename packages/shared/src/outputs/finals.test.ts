@@ -72,3 +72,27 @@ test('read errors preserve a present registry instead of replacing it with empty
   } finally { read.mockRestore(); }
   expect(fs.readFileSync(path, 'utf8')).toBe(bytes);
 });
+
+test('missing selected asset cannot replace healthy Finals registry', () => {
+  const { root, output, path } = fixture();
+  promoteOutputToFinal(root, output, { outputId: output.id, scope: 'hq', slot: 'cover' });
+  const bytes = fs.readFileSync(path, 'utf8');
+  fs.unlinkSync(join(root, 'outputs', output.id, output.primary!.path));
+  expect(() => promoteOutputToFinal(root, output, { outputId: output.id, scope: 'hq', slot: 'press' })).toThrow('unavailable');
+  expect(fs.readFileSync(path, 'utf8')).toBe(bytes);
+});
+
+test('fileless link Finals remain supported', () => {
+  const { root } = fixture();
+  const output = createOutputBundle(root, { workspaceId: 'ws', title: 'Published page', kind: 'code', origin: { source: 'manual' }, links: [{ id: 'web', label: 'Page', url: 'https://example.com', role: 'primary' }] });
+  expect(promoteOutputToFinal(root, output, { outputId: output.id, scope: 'hq', slot: 'website' }).outputId).toBe(output.id);
+});
+
+test('Final promotion validates the selected declared asset without imposing a file on receipts', () => {
+  const { root, output } = fixture();
+  output.assets.push({ id: 'missing-support', label: 'Support', role: 'attachment', path: 'missing.txt' });
+  expect(promoteOutputToFinal(root, output, { outputId: output.id, scope: 'hq', slot: 'document' }).assetId).toBe(output.primary!.id);
+  expect(() => promoteOutputToFinal(root, output, { outputId: output.id, scope: 'hq', slot: 'support', assetId: 'missing-support' })).toThrow('unavailable');
+  const receipt = createOutputBundle(root, { workspaceId: 'ws', title: 'Sent receipt', kind: 'other', origin: { source: 'manual' }, receipts: [{ id: 'sent', provider: 'test', action: 'send', status: 'succeeded', occurredAt: '2026-09-12T00:00:00Z' }] });
+  expect(promoteOutputToFinal(root, receipt, { outputId: receipt.id, scope: 'hq', slot: 'receipt' }).outputId).toBe(receipt.id);
+});

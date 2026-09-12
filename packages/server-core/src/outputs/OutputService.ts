@@ -8,6 +8,7 @@ import {
   deleteOutput,
   attachFinalsToOutputs,
   assertOutputAssetPath,
+  assertUsableOutputAsset,
   getOutputDir,
   listOutputManifests,
   listOutputs,
@@ -831,7 +832,15 @@ export class OutputService {
       ? [...new Set([...(input.output.tags ?? []), OUTPUT_SHOW_IN_CANVAS_TAG])]
       : input.output.tags;
 
-    const manifest = createOutputBundle(this.deps.getWorkspaceRootPath(input.workspaceId), {
+    const root = this.deps.getWorkspaceRootPath(input.workspaceId);
+    const outputId = randomUUID();
+    // Validate every declared file before creating any published output record.
+    const files = (input.output.files ?? []).map(file => {
+      if (!isAbsolute(file.path)) throw new Error('Output files must use absolute paths inside the active workspace.');
+      return { file, readablePath: assertUsableOutputAsset(root, outputId, file.path) };
+    });
+    const manifest = createOutputBundle(root, {
+      id: outputId,
       workspaceId: input.workspaceId,
       title: input.output.title,
       kind: input.output.kind,
@@ -839,12 +848,12 @@ export class OutputService {
       origin,
       content: input.output.content,
       contentMimeType: input.output.contentMimeType,
-      assets: (input.output.files ?? []).map((file, index) => ({
+      assets: files.map(({ file, readablePath }, index) => ({
         id: `file-${index + 1}`,
         label: file.label?.trim() || file.path.split(/[\\/]/).pop() || `File ${index + 1}`,
         role: file.role ?? (index === 0 && !input.output.content ? 'primary' : 'attachment'),
         path: file.path,
-        ...fileAssetMetadata(file.path),
+        ...fileAssetMetadata(readablePath),
       })),
       links: (input.output.links ?? []).map((link, index) => ({
         id: `link-${index + 1}`,
@@ -1096,9 +1105,8 @@ function latestVisualCapture(output: OutputManifest): VisualSurfaceStateCapture 
 }
 
 function fileAssetMetadata(path: string): Pick<OutputAsset, 'mimeType' | 'sizeBytes' | 'sha256'> {
-  if (!isAbsolute(path) || !existsSync(path)) return {};
   const stat = statSync(path);
-  if (!stat.isFile()) return {};
+  if (!stat.isFile()) throw new Error(`Output asset is unavailable: ${path}. Expected a regular file.`);
   const data = readFileSync(path);
   return {
     mimeType: mimeTypeForAssetPath(path),
