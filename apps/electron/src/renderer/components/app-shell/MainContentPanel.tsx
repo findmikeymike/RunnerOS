@@ -744,7 +744,8 @@ export function MainContentPanel({
     if (navState.details?.type === 'session') {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
-          <ChatPage sessionId={navState.details.sessionId} />
+          {/* Keep drafts and pending local updates owned by their original session. */}
+          <ChatPage key={navState.details.sessionId} sessionId={navState.details.sessionId} />
         </Panel>
       )
     }
