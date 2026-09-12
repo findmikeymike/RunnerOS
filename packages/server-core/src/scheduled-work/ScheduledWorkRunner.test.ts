@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { OutputManifest } from '@craft-agent/shared/outputs'
+import { createOutputBundle, listOutputManifests, type OutputManifest } from '@craft-agent/shared/outputs'
 import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
   campaignCalendarMetadata,
@@ -164,6 +164,7 @@ function buildManifest(id: string, sessionId: string, kind: OutputManifest['kind
     kind,
     status: 'published',
     summary: 'Scheduled output.',
+    preview: { mode: 'text', inlineText: 'Completed scheduled report content.' },
     createdAt: '2026-07-10T14:00:00.000Z',
     updatedAt: '2026-07-10T14:00:00.000Z',
     origin: { source: 'session', sessionId },
@@ -2495,4 +2496,59 @@ describe('ScheduledWorkRunner', () => {
     expect(parsedCalendar.calendar.items[0]?.job).toBeUndefined()
     expect(parsedCalendar.calendar.items[0]?.scheduledWorkId).toBe(readWork(root).items[0]?.id)
   })
+})
+
+
+describe('scheduled completion requires usable saved outputs', () => {
+  for (const restart of [false, true]) {
+    for (const scenario of ['missing-primary', 'failed', 'cancelled', 'healthy', 'optional', 'none', 'minimum-count'] as const) {
+      test(`${restart ? 'recovered' : 'normal'} completion: ${scenario}`, async () => {
+        const root = makeRoot()
+        const sessionId = 'session-saved-output'
+        const report = createOutputBundle(root, {
+          workspaceId, title: 'Saved launch report', kind: 'report',
+          status: scenario === 'failed' || scenario === 'cancelled' ? scenario : 'published',
+          origin: { source: 'session', sessionId },
+          content: '# Full report\nThis saved document must remain readable.',
+        })
+        const missing = ['missing-primary', 'optional', 'none', 'minimum-count'].includes(scenario)
+        if (missing) unlinkSync(join(root, 'outputs', report.id, report.primary!.path))
+        const healthy = scenario === 'minimum-count' ? createOutputBundle(root, {
+          workspaceId, title: 'One healthy report', kind: 'report',
+          origin: { source: 'session', sessionId }, content: 'Actual saved answer',
+        }) : undefined
+        const listed = listOutputManifests(root)
+        expect(listed).toHaveLength(healthy ? 2 : 1)
+        expect(listed.find(output => output.id === report.id)?.preview?.inlineText).toContain('This saved document must remain readable.')
+        const requirement = scenario === 'optional' || scenario === 'none' ? scenario : 'required'
+        writeWork(root, [buildOrder({
+          status: restart ? 'running' : 'scheduled',
+          execution: { type: 'agent-task', agentSlug: 'content-genius', brief: 'Save a report.', permissionMode: 'safe',
+            expectedOutput: { requirement, kind: 'report', minimumCount: scenario === 'minimum-count' ? 2 : 1 } },
+          runs: restart ? [{ id: 'recovered-attempt', jobId: 'order-1', status: 'running', sessionId, startedAt: '2026-07-10T14:00:00.000Z' }] : [],
+        })])
+        let starts = 0
+        const runner = new ScheduledWorkRunner({
+          canRunBackgroundWork: () => true, withLock: createLock(),
+          executeAgentTask: async ({ onStarted }) => { starts += 1; await onStarted(sessionId); return { sessionId } },
+          startWorkflow: async () => ({ runId: 'unused' }), readWorkflowRun: () => null,
+          readAgentSession: async () => 'completed',
+          listOutputManifests,
+        })
+        await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:10:00.000Z'))
+        const shouldFinish = ['healthy', 'optional', 'none'].includes(scenario)
+        await waitFor(() => readWork(root).items[0]?.status === (shouldFinish ? 'done' : 'needs-attention'))
+        const saved = readWork(root).items[0]!
+        expect(starts).toBe(restart ? 0 : 1)
+        if (shouldFinish) {
+          expect(saved.result).toEqual({ type: 'agent-task', sessionId, outputIds: scenario === 'healthy' ? [report.id] : [] })
+          expect(saved.runs.at(-1)?.status).toBe('done')
+        } else {
+          expect(saved.attention?.reason).toBe('required-output-missing')
+          expect(saved.runs.at(-1)?.status).toBe('failed')
+          if (healthy) expect(saved.attention?.message).toContain('Expected at least 2 outputs')
+        }
+      })
+    }
+  }
 })

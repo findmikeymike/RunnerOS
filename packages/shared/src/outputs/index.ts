@@ -128,3 +128,5 @@ export {
 } from './storage.ts';
 
 export { assertUsableOutputAsset } from './asset-usability.ts';
+
+export { isOutputUsable } from './usability.ts';

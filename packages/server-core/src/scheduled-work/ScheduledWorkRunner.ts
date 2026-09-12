@@ -8,7 +8,7 @@ import {
   type CampaignJobRun,
 } from '@craft-agent/shared/campaign-calendar'
 import { createHash, randomUUID } from 'node:crypto'
-import type { OutputManifest } from '@craft-agent/shared/outputs'
+import { isOutputUsable, type OutputManifest } from '@craft-agent/shared/outputs'
 import { assertReleaseKitSocialUseAllowed, loadReleaseKitManifest } from '@craft-agent/shared/release-kit'
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
@@ -661,6 +661,7 @@ export class ScheduledWorkRunner {
         return 'failed'
       }
       const outputs = this.matchExpectedOutputs(
+        workspaceRootPath,
         execution.expectedOutput,
         sessionId,
         this.deps.listOutputManifests(workspaceRootPath),
@@ -745,6 +746,7 @@ export class ScheduledWorkRunner {
       return persisted.updated ? 'failed' : 'running'
     }
     const outputs = this.matchExpectedOutputs(
+      workspaceRootPath,
       order.execution.expectedOutput,
       sessionId,
       this.deps.listOutputManifests(workspaceRootPath),
@@ -957,11 +959,12 @@ export class ScheduledWorkRunner {
   }
 
   private matchExpectedOutputs(
+    workspaceRootPath: string,
     expectedOutput: ExpectedOutputContract,
     sessionId: string,
     manifests: OutputManifest[],
   ): OutputMatchResult {
-    const fromSession = manifests.filter((manifest) => manifest.origin.sessionId === sessionId)
+    const fromSession = manifests.filter((manifest) => manifest.origin.sessionId === sessionId && isOutputUsable(workspaceRootPath, manifest))
     const matching = fromSession.filter((manifest) => matchesExpectedOutput(manifest, expectedOutput))
     if (expectedOutput.requirement === 'none') {
       return { matched: matching.length > 0 ? matching : fromSession, satisfied: true }
