@@ -1,3 +1,4 @@
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { describe, expect, it } from 'bun:test'
 import { handleDeepLink, parseDeepLink } from '../deep-link'
 import { RPC_CHANNELS } from '../../shared/types'
@@ -48,7 +49,7 @@ describe('handleDeepLink routing', () => {
     }
 
     await handleDeepLink(
-      'craftagents://workspace/ws-target/allSessions',
+      `${RUNTIME_IDENTITY.deeplinkScheme}://workspace/ws-target/allSessions`,
       windowManager,
       sink,
       (wcId) => wcId === 22 ? 'client-target' : undefined,
@@ -76,7 +77,7 @@ describe('handleDeepLink routing', () => {
     }
 
     await handleDeepLink(
-      'craftagents://workspace/ws-target/allSessions',
+      `${RUNTIME_IDENTITY.deeplinkScheme}://workspace/ws-target/allSessions`,
       windowManager,
       sink,
       undefined,
@@ -103,7 +104,7 @@ describe('handleDeepLink routing', () => {
     }
 
     await handleDeepLink(
-      'craftagents://workspace/ws-target/allSessions',
+      `${RUNTIME_IDENTITY.deeplinkScheme}://workspace/ws-target/allSessions`,
       windowManager,
       sink,
       () => undefined,
@@ -130,7 +131,7 @@ describe('handleDeepLink routing', () => {
     }
 
     await handleDeepLink(
-      'craftagents://workspace/ws-target/video-studio/287e951c-09aa-4c42-b3e7-30ad0c7bc77f',
+      `${RUNTIME_IDENTITY.deeplinkScheme}://workspace/ws-target/video-studio/287e951c-09aa-4c42-b3e7-30ad0c7bc77f`,
       windowManager,
       sink,
       () => 'client-target',

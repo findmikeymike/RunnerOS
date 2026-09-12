@@ -18,6 +18,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'signal-send-'));
   saveWorkspaceConfig(root, { id: 'campaign', name: 'Campaign', slug: 'campaign', createdAt: 1, updatedAt: 1 });
   manager = new SessionManager();
+  manager.setPaidExecutionAuthorizer(() => true);
   resolveReference = mock(async () => resolved);
   // Reader scope/provenance/activation have their own integration tests. Here
   // a controllable reader exercises the real send admission and disk receipt.

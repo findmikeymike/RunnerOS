@@ -13,6 +13,7 @@ describe('SessionManager chat Goal management', () => {
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'chat-goal-management-'));
     manager = new SessionManager();
+    manager.setPaidExecutionAuthorizer(() => true);
     (manager as unknown as { dispatchChatGoalContinuation(): void }).dispatchChatGoalContinuation = () => {};
   });
 

@@ -1,3 +1,4 @@
+import { RUNTIME_IDENTITY } from '../../config/runtime-identity'
 import { describe, it, expect, mock, beforeEach } from 'bun:test'
 
 // Stub the preferences module so we can toggle `getCoAuthorPreference` per test
@@ -13,7 +14,7 @@ import { getSystemPrompt } from '../system'
 import { getDocPath } from '../../docs/index'
 
 const GIT_CONVENTIONS_HEADING = '## Git Conventions'
-const CO_AUTHOR_TRAILER = 'Co-Authored-By: Runner <agents-noreply@runneros.local>'
+const CO_AUTHOR_TRAILER = `Co-Authored-By: ${RUNTIME_IDENTITY.productName} <agents-noreply@${RUNTIME_IDENTITY.variant === 'artist-os' ? 'artistos.local' : 'runneros.local'}>`
 
 describe('system prompt guidance', () => {
   it('uses backend-neutral debug log querying guidance (rg/grep via Bash)', () => {
@@ -64,7 +65,7 @@ describe('system prompt guidance', () => {
     expect(prompt).toContain('The parent owns integration and the final user answer')
     expect(prompt).toContain('Delegation neither creates nor erases authority')
     expect(prompt).toContain('do not ask again merely because work was delegated')
-    expect(prompt).toContain('`message_agent` = saved RunnerOS agent in a hidden child session')
+    expect(prompt).toContain('`message_agent` = saved ' + (RUNTIME_IDENTITY.variant === 'artist-os' ? 'Artist OS' : 'RunnerOS') + ' agent in a hidden child session')
   })
 
   it('teaches agents the shared Canvas and Outputs workflow', () => {

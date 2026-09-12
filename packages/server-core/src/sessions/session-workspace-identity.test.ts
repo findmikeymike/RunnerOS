@@ -17,6 +17,7 @@ function deferred() {
 
 test('an async send and its queued replay stay in campaign A while the artist views campaign B', async () => {
   const manager = new SessionManager()
+  manager.setPaidExecutionAuthorizer(() => true)
   const host = manager as unknown as {
     sessions: Map<string, ReturnType<typeof createManagedSession>>
     getOrCreateAgent: () => Promise<never>

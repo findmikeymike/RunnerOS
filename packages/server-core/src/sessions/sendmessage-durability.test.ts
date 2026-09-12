@@ -23,6 +23,7 @@ describe('sendMessage durability', () => {
   beforeEach(() => {
     tmpRoot = mkdtempSync(join(tmpdir(), 'sm-durability-'))
     sm = new SessionManager()
+    sm.setPaidExecutionAuthorizer(() => true)
   })
 
   afterEach(() => {
