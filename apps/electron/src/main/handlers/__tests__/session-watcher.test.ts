@@ -8,7 +8,7 @@
  * (which breaks transitive imports that need real fs exports).
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
+import { describe, it, expect, afterEach, mock } from 'bun:test'
 import { mkdtempSync, writeFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -47,6 +47,7 @@ interface PushCall {
 }
 
 let tempDirs: string[] = []
+const watchClients = new Set<string>()
 
 function makeTempSessionDir(): string {
   const dir = mkdtempSync(join(tmpdir(), 'watcher-test-'))
@@ -57,6 +58,7 @@ function makeTempSessionDir(): string {
 function createTestHarness(sessionPaths: Map<string, string>) {
   const handlers = new Map<string, Function>()
   const pushCalls: PushCall[] = []
+  const watchErrors: unknown[][] = []
 
   const server: RpcServer = {
     handle(channel: string, handler: Function) {
@@ -80,7 +82,7 @@ function createTestHarness(sessionPaths: Map<string, string>) {
       isPackaged: false,
       appVersion: '0.0.0-test',
       isDebugMode: true,
-      logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      logger: { info: () => {}, warn: () => {}, error: (...args: unknown[]) => { watchErrors.push(args) }, debug: () => {} },
       imageProcessor: { getMetadata: async () => null, process: async () => Buffer.from('') },
     } as unknown as HandlerDeps['platform'],
     oauthFlowStore: {
@@ -88,10 +90,11 @@ function createTestHarness(sessionPaths: Map<string, string>) {
     } as unknown as HandlerDeps['oauthFlowStore'],
   }
 
-  return { server, deps, handlers, pushCalls }
+  return { server, deps, handlers, pushCalls, watchErrors }
 }
 
 function makeCtx(clientId: string, workspaceId = 'ws-1'): RequestContext {
+  watchClients.add(clientId)
   return { clientId, workspaceId, webContentsId: null }
 }
 
@@ -105,12 +108,53 @@ async function waitForPush(pushCalls: PushCall[], clientId: string, sessionId: s
   }
 }
 
+/**
+ * Bun's macOS recursive watcher may return before the native subscription is
+ * observing writes. A direct fs.watch probe reproduces a lost first write even
+ * without app imports. Observe readiness instead of sleeping before assertions.
+ *
+ * Repeating this disposable probe handles that startup loss; the assertion writes
+ * below still happen exactly once. Keep the normal two-second failure deadline.
+ */
+async function watchReady(
+  handler: Function,
+  ctx: RequestContext,
+  sessionId: string,
+  directory: string,
+  pushCalls: PushCall[],
+  watchErrors: unknown[][],
+) {
+  await handler(ctx, sessionId)
+  expect(watchErrors).toEqual([])
+  const observed = () => pushCalls.some(call => call.target?.clientId === ctx.clientId && call.args[0] === sessionId)
+  const deadline = Date.now() + 2000
+  let nextProbeAt = 0
+  let sequence = 0
+  while (!observed() && Date.now() < deadline) {
+    if (Date.now() >= nextProbeAt) {
+      writeFileSync(join(directory, 'watcher-readiness.txt'), String(++sequence))
+      // Leave room for the production 100ms debounce to publish each probe.
+      nextProbeAt = Date.now() + 250
+    }
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  if (!observed()) {
+    throw new Error('Native recursive file watcher did not become ready; verify filesystem event access for this test process.')
+  }
+  pushCalls.length = 0
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 describe('session file watcher isolation', () => {
-  afterEach(() => {
+  afterEach(async () => {
+    // Assertions can fail before explicit disconnect calls. Always close native
+    // watchers before removing their directories or starting the next test.
+    const { cleanupSessionFileWatchForClient } = await import('@craft-agent/server-core/handlers/rpc')
+    for (const clientId of watchClients) cleanupSessionFileWatchForClient(clientId)
+    watchClients.clear()
     for (const dir of tempDirs) {
       try { rmSync(dir, { recursive: true, force: true }) } catch {}
     }
@@ -121,7 +165,7 @@ describe('session file watcher isolation', () => {
     const dir1 = makeTempSessionDir()
     const dir2 = makeTempSessionDir()
     const sessionPaths = new Map([['s1', dir1], ['s2', dir2]])
-    const { server, deps, handlers, pushCalls } = createTestHarness(sessionPaths)
+    const { server, deps, handlers, pushCalls, watchErrors } = createTestHarness(sessionPaths)
 
     const { registerSessionsHandlers, cleanupSessionFileWatchForClient } = await import('@craft-agent/server-core/handlers/rpc')
     registerSessionsHandlers(server, deps)
@@ -130,8 +174,8 @@ describe('session file watcher isolation', () => {
     const unwatchHandler = handlers.get(RPC_CHANNELS.sessions.UNWATCH_FILES)!
 
     // Client A watches session s1, Client B watches session s2
-    await watchHandler(makeCtx('client-a'), 's1')
-    await watchHandler(makeCtx('client-b'), 's2')
+    await watchReady(watchHandler, makeCtx('client-a'), 's1', dir1, pushCalls, watchErrors)
+    await watchReady(watchHandler, makeCtx('client-b'), 's2', dir2, pushCalls, watchErrors)
 
     // Trigger a change in s1
     writeFileSync(join(dir1, 'output.txt'), 'hello')
@@ -173,7 +217,7 @@ describe('session file watcher isolation', () => {
     const dir1 = makeTempSessionDir()
     const dir2 = makeTempSessionDir()
     const sessionPaths = new Map([['s1', dir1], ['s2', dir2]])
-    const { server, deps, handlers, pushCalls } = createTestHarness(sessionPaths)
+    const { server, deps, handlers, pushCalls, watchErrors } = createTestHarness(sessionPaths)
 
     const { registerSessionsHandlers, cleanupSessionFileWatchForClient } = await import('@craft-agent/server-core/handlers/rpc')
     registerSessionsHandlers(server, deps)
@@ -181,10 +225,10 @@ describe('session file watcher isolation', () => {
     const watchHandler = handlers.get(RPC_CHANNELS.sessions.WATCH_FILES)!
 
     // Client A watches s1
-    await watchHandler(makeCtx('client-a'), 's1')
+    await watchReady(watchHandler, makeCtx('client-a'), 's1', dir1, pushCalls, watchErrors)
 
     // Client A switches to s2 — old watcher should be cleaned up
-    await watchHandler(makeCtx('client-a'), 's2')
+    await watchReady(watchHandler, makeCtx('client-a'), 's2', dir2, pushCalls, watchErrors)
 
     // Write to s1 — should NOT trigger notification (old watcher closed)
     writeFileSync(join(dir1, 'old.txt'), 'stale')
@@ -210,13 +254,13 @@ describe('session file watcher isolation', () => {
   it('ignores internal session.jsonl and hidden files', async () => {
     const dir = makeTempSessionDir()
     const sessionPaths = new Map([['s1', dir]])
-    const { server, deps, handlers, pushCalls } = createTestHarness(sessionPaths)
+    const { server, deps, handlers, pushCalls, watchErrors } = createTestHarness(sessionPaths)
 
     const { registerSessionsHandlers, cleanupSessionFileWatchForClient } = await import('@craft-agent/server-core/handlers/rpc')
     registerSessionsHandlers(server, deps)
 
     const watchHandler = handlers.get(RPC_CHANNELS.sessions.WATCH_FILES)!
-    await watchHandler(makeCtx('client-a'), 's1')
+    await watchReady(watchHandler, makeCtx('client-a'), 's1', dir, pushCalls, watchErrors)
 
     // Write internal files — should be ignored
     writeFileSync(join(dir, 'session.jsonl'), 'log entry')
