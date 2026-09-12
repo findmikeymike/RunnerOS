@@ -118,27 +118,43 @@ export function registerOnboardingHandlers(server: RpcServer, deps: HandlerDeps)
         return { success: false, error: 'OAuth session expired. Please start again.' }
       }
 
+      // Mark this exchange's sign-in intent before the network call so a newer
+      // sign-in or sign-out that lands during the exchange supersedes it.
+      const manager = getCredentialManager()
+      const connectionId = { type: 'llm_oauth' as const, connectionSlug }
+      const connectionIntent = await manager.beginAuthIntent(connectionId)
+      const before = await manager.captureSnapshot(connectionId)
+      before.authRevision = connectionIntent
+      const globalId = { type: 'claude_oauth' as const }
+      const globalIntent = await manager.beginAuthIntent(globalId)
+      const globalBefore = await manager.captureSnapshot(globalId)
+      globalBefore.authRevision = globalIntent
+
       const tokens = await exchangeClaudeCode(authorizationCode, (status) => {
         log.info('[Onboarding] Claude code exchange status:', status)
       })
 
-      // Save credentials with refresh token support
-      const manager = getCredentialManager()
-
-      // Save to new LLM connection system
-      await manager.setLlmOAuth(connectionSlug, {
-        accessToken: tokens.accessToken,
+      // The exchange commits only while it still owns the connection.
+      const committed = await manager.compareAndSetSnapshot(before, {
+        value: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
-      })
+      }, () => true, true)
+      if (!committed) {
+        log.warn('[Onboarding] A newer sign-in superseded this Claude exchange; kept the newer credentials')
+        return { success: false, error: 'A newer sign-in superseded this authentication. Please start again.' }
+      }
 
-      // Also save to legacy key for validation compatibility
-      await manager.setClaudeOAuthCredentials({
-        accessToken: tokens.accessToken,
+      // Legacy global record for validation compatibility, fenced the same way.
+      const globalCommitted = await manager.compareAndSetSnapshot(globalBefore, {
+        value: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
         source: 'native',
-      })
+      }, () => true, true)
+      if (!globalCommitted) {
+        log.warn('[Onboarding] Legacy Claude credentials superseded during exchange; kept the newer credentials')
+      }
 
       const expiresAtDate = tokens.expiresAt ? new Date(tokens.expiresAt).toISOString() : 'never'
       log.info(`[Onboarding] Claude OAuth saved to LLM connection (expires: ${expiresAtDate})`)
