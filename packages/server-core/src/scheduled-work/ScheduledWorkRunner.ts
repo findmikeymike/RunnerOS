@@ -60,6 +60,7 @@ export interface ScheduledWorkRunnerDeps {
   withLock<T>(workspaceRootPath: string, fn: () => Promise<T> | T): Promise<T>
   resolveWorkspace?(workspaceId: string): { id: string; name?: string; rootPath: string; artistWorkspaceScope?: string } | null | undefined
   executeAgentTask(input: {
+    backgroundFence?: string
     workOrderId: string
     workspace: { id: string; rootPath: string }
     agentSlug: string
@@ -72,6 +73,7 @@ export interface ScheduledWorkRunnerDeps {
     continuation?: ScheduledWorkContinuation
   }): Promise<{ sessionId?: string } | void>
   startWorkflow(input: {
+    backgroundFence?: string
     attemptId: string
     workOrderId: string
     workspace: { id: string; rootPath: string }
@@ -405,7 +407,7 @@ export class ScheduledWorkRunner {
             this.activeSocialProfiles.delete(profileKey)
             throw error
           }
-          if (!claimed.order || claimed.order.execution.type !== 'social-publish' || !claimed.order.socialAction || !claimed.order.socialApproval) {
+          if (!claimed.updated || !claimed.order || claimed.order.execution.type !== 'social-publish' || !claimed.order.socialAction || !claimed.order.socialApproval) {
             this.activeSocialProfiles.delete(profileKey)
             continue
           }
@@ -486,7 +488,7 @@ export class ScheduledWorkRunner {
           } finally {
             if (backgroundAdmissionKey) this.releaseBackgroundAdmission(backgroundAdmissionKey)
           }
-          if (!claimed.order) continue
+          if (!claimed.updated || !claimed.order) continue
           if (claimed.order.execution.type === 'workflow-run') {
             const started = await this.startWorkflow(workspaceId, workspaceRootPath, claimed.order, capturedFence)
             if (started === 'started') result.started += 1
@@ -581,6 +583,7 @@ export class ScheduledWorkRunner {
         return 'failed'
       }
       const executePromise = this.deps.executeAgentTask({
+        backgroundFence: capturedFence ?? undefined,
         workOrderId: order.id,
         workspace: { id: workspaceId, rootPath: workspaceRootPath },
         agentSlug: execution.agentSlug,
@@ -838,6 +841,7 @@ export class ScheduledWorkRunner {
       if (!attemptId) throw new Error('Scheduled workflow is missing its persisted attempt identity.')
       if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before workflow execution.')
       const { runId } = await this.deps.startWorkflow({
+        backgroundFence: capturedFence ?? undefined,
         attemptId,
         workOrderId: order.id,
         workspace: { id: workspaceId, rootPath: workspaceRootPath },

@@ -1621,7 +1621,7 @@ interface ManagedSession {
     message: string
     attachments?: FileAttachment[]
     storedAttachments?: StoredAttachment[]
-    options?: SendMessageOptions
+    options?: SendMessageOptions & { backgroundFence?: string }
     messageId?: string  // Pre-generated ID for matching with UI
     optimisticMessageId?: string  // Frontend's ID for reliable event matching
   }>
@@ -1649,7 +1649,7 @@ interface ManagedSession {
     sourceSlug: string
     message: string
     turnContext: NonNullable<ManagedSession['lastSentTurnContext']>
-    options?: SendMessageOptions
+    options?: SendMessageOptions & { backgroundFence?: string }
     attachments?: FileAttachment[]
     storedAttachments?: StoredAttachment[]
   }
@@ -2910,6 +2910,8 @@ export class SessionManager implements ISessionManager {
     automationSystem.eventBus.onAny(async (event, payload) => {
       if (event !== 'SchedulerTick') return
       if (!this.isPaidExecutionAuthorized()) return
+      const backgroundFence = getWorkspaceBackgroundFenceToken(workspaceRootPath)
+      if (!backgroundFence) return
       const matchers = automationSystem.getMatchersForEvent('SchedulerTick')
       for (const matcher of matchers) {
         const pulseAction = matcher.actions.find((a) => (a as { type?: string }).type === 'pulse') as PulseAction | undefined
@@ -2939,6 +2941,7 @@ export class SessionManager implements ISessionManager {
             const composedPrompt = baseOpts.customSystemPrompt
               ? `${baseOpts.customSystemPrompt}\n\n---\n\n${params.systemPromptAddendum}`
               : params.systemPromptAddendum
+            this.assertBackgroundExecutionFence(workspaceRootPath, backgroundFence)
             const session = await this.createSession(workspaceId, {
               ...baseOpts,
               customSystemPrompt: composedPrompt,
@@ -2962,7 +2965,8 @@ export class SessionManager implements ISessionManager {
               }
               this.persistSession(managed)
             }
-            await this.sendMessage(session.id, params.userMessage)
+            this.assertBackgroundExecutionFence(workspaceRootPath, backgroundFence)
+            await this.sendMessage(session.id, params.userMessage, undefined, undefined, { backgroundFence })
             return {
               sessionId: session.id,
               rawAssistantText: this.getLastAssistantTextForSession(session.id),
@@ -2976,8 +2980,10 @@ export class SessionManager implements ISessionManager {
               }
               const wf = loadGlobalWorkflow(workflowSlug)
               if (!wf) return { error: `Workflow not found: ${workflowSlug}` }
+              this.assertBackgroundExecutionFence(workspaceRootPath, backgroundFence)
               const result = await this.workflowRunner.start({
                 workflow: wf,
+                backgroundFence,
                 workspaceId,
                 triggerInputs: normalizeWorkflowTriggerInputs(wf, triggerInputs),
               })
@@ -3576,6 +3582,12 @@ export class SessionManager implements ISessionManager {
     return this.getScheduledWorkRunner().manageGoalRun(workspaceId, workspaceRootPath, input)
   }
 
+  private assertBackgroundExecutionFence(workspaceRootPath: string, fence?: string): void {
+    if (fence !== undefined && getWorkspaceBackgroundFenceToken(workspaceRootPath) !== fence) {
+      throw new Error('Team runner ownership changed before background execution.')
+    }
+  }
+
   private getScheduledWorkRunner(): ScheduledWorkRunner {
     if (!this.scheduledWorkRunner) {
       this.scheduledWorkRunner = new ScheduledWorkRunner({
@@ -3597,13 +3609,14 @@ export class SessionManager implements ISessionManager {
             taskModeId: input.taskModeId,
             automationName: `Scheduled work: ${input.workOrderId}`,
             workOrderId: input.workOrderId,
+            backgroundFence: input.backgroundFence,
             onSessionCreated: input.onStarted,
           })
         },
-        startWorkflow: async ({ workOrderId, attemptId, workspace, workflowSlug, workflowDigest, triggerInputs, untrustedTriggerInputs }) => {
+        startWorkflow: async ({ workOrderId, attemptId, workspace, workflowSlug, workflowDigest, triggerInputs, untrustedTriggerInputs, backgroundFence }) => {
           if (triggerInputs.signalContract === 'signals-v1') {
             return this.getSignalService().startAdmitted(workspace.id, workOrderId, workflowSlug, workflowDigest, triggerInputs,
-              (workflow, request) => this.workflowRunner.start({ workflow, workspaceId: workspace.id, runId: request.identity.workflowRunId,
+              (workflow, request) => this.workflowRunner.start({ workflow, workspaceId: workspace.id, backgroundFence, runId: request.identity.workflowRunId,
                 triggerInputs: normalizeWorkflowTriggerInputs(workflow, { ...triggerInputs, signalPacket: this.getSignalService().packetInput(request) }), untrustedTriggerInputs }));
           }
           if (!readActivatedWorkflows(workspace.rootPath).active.includes(workflowSlug)) {
@@ -3618,8 +3631,10 @@ export class SessionManager implements ISessionManager {
             const existing = await this.durableWorkflowHost.getScheduledRun(workspace.id, occurrence)
             if (existing) return { runId: existing.id }
           }
+          this.assertBackgroundExecutionFence(workspace.rootPath, backgroundFence)
           const run = await this.workflowRunner.start({
             workflow,
+            backgroundFence,
             workspaceId: workspace.id,
             triggerInputs: workflow.metadata.execution === 'durable-local-read' ? triggerInputs : normalizeWorkflowTriggerInputs(workflow, triggerInputs),
             untrustedTriggerInputs,
@@ -3732,6 +3747,8 @@ export class SessionManager implements ISessionManager {
   private async executeAutomaticPromptInBackgroundLane(
     input: ExecutePromptAutomationInput,
   ): Promise<{ sessionId: string }> {
+    const backgroundFence = input.backgroundFence ?? getWorkspaceBackgroundFenceToken(input.workspaceRootPath)
+    if (!backgroundFence) throw new Error('Team runner ownership could not be verified before background admission.')
     const releaseLane = await this.acquireAutomaticPromptLane(input.workspaceId, input.workspaceRootPath)
     let sessionId: string | undefined
     let settled = false
@@ -3749,6 +3766,7 @@ export class SessionManager implements ISessionManager {
     const originalOnSessionCreated = input.onSessionCreated
     const rawExecution = this.executePromptAutomation({
       ...input,
+      backgroundFence,
       onSessionCreated: async (createdSessionId) => {
         sessionId = createdSessionId
         if (timedOut) {
@@ -6504,6 +6522,11 @@ user a clickable link to where the thing now lives.`
       await this.loadSessionsFromDisk()
 
       this.workflowRunner = new WorkflowRunner({
+        assertBackgroundFence: (workspaceId, fence) => {
+          const workspace = getWorkspaceByNameOrId(workspaceId)
+          if (!workspace) throw new Error('Workflow workspace is no longer available.')
+          this.assertBackgroundExecutionFence(workspace.rootPath, fence)
+        },
         durableStart: input => this.durableWorkflowStart?.(input) ?? null,
         assertWorkflowAdmissionAvailable: (workspaceId, workflowSlug) => {
           this.scheduledWorkflowStartup.assertAdmissionAvailable()
@@ -7474,6 +7497,7 @@ user a clickable link to where the thing now lives.`
             storedAttachments: msg.attachments,
             options: {
               inputOrigin: msg.inputOrigin ?? 'system',
+              backgroundFence: msg.backgroundFence,
               badges: msg.badges,
               displayIntent: msg.displayIntent,
               hidden: msg.hidden,
@@ -12931,7 +12955,7 @@ user a clickable link to where the thing now lives.`
     message: string,
     attachments?: FileAttachment[],
     storedAttachments?: StoredAttachment[],
-    options?: SendMessageOptions,
+    options?: SendMessageOptions & { backgroundFence?: string },
     existingMessageId?: string,
     _isAuthRetry?: boolean,
     /**
@@ -13149,7 +13173,9 @@ user a clickable link to where the thing now lives.`
         }
       }
 
+      this.assertBackgroundExecutionFence(managed.workspace.rootPath, options?.backgroundFence)
       pendingSignalReference = await this.validateSignalHandoffBeforeSend(managed, options)
+      this.assertBackgroundExecutionFence(managed.workspace.rootPath, options?.backgroundFence)
 
       // If currently processing, redirect mid-stream. Each backend decides its strategy:
       // - Pi: steers (injects message, events continue through existing stream)
@@ -13174,6 +13200,7 @@ user a clickable link to where the thing now lives.`
           content: message,
           timestamp: this.monotonic(),
           inputOrigin: options?.inputOrigin ?? 'system',
+          backgroundFence: options?.backgroundFence,
           attachments: storedAttachments,
           badges: options?.badges,
           displayIntent: options?.displayIntent,
@@ -13242,6 +13269,7 @@ user a clickable link to where the thing now lives.`
           content: message,
           timestamp: this.monotonic(),
           inputOrigin: options?.inputOrigin ?? 'system',
+          backgroundFence: options?.backgroundFence,
           attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
           badges: options?.badges,  // Include content badges (sources, skills with embedded icons)
           displayIntent: options?.displayIntent,
@@ -13623,6 +13651,8 @@ user a clickable link to where the thing now lives.`
       sessionLog.info('Message:', options?.hidden ? '[hidden internal message]' : message)
       sessionLog.info('Agent model:', agent.getModel())
       sessionLog.info('process.cwd():', process.cwd())
+
+      this.assertBackgroundExecutionFence(managed.workspace.rootPath, options?.backgroundFence)
 
       // Process the message through the agent
       sessionLog.info('Calling agent.chat()...')
@@ -15824,6 +15854,7 @@ user a clickable link to where the thing now lives.`
   async executePromptAutomation(
     input: ExecutePromptAutomationInput,
   ): Promise<{ sessionId: string }> {
+    this.assertBackgroundExecutionFence(input.workspaceRootPath, input.backgroundFence)
     const automationStartedAt = Date.now()
     const {
       workspaceId,
@@ -15858,6 +15889,8 @@ user a clickable link to where the thing now lives.`
     const agentOptions = agentSlug
       ? await this.resolveAgentSessionOptions(workspaceId, agentSlug, { taskModeId, taskModeSelectionSource: 'automation' })
       : undefined
+
+    this.assertBackgroundExecutionFence(workspaceRootPath, input.backgroundFence)
 
     // Ensure labels exist in workspace config before assigning to session
     const resolvedLabels = labels?.length
@@ -15914,7 +15947,9 @@ user a clickable link to where the thing now lives.`
       this.persistSession(managed)
     }
 
+    this.assertBackgroundExecutionFence(workspaceRootPath, input.backgroundFence)
     await onSessionCreated?.(session.id)
+    this.assertBackgroundExecutionFence(workspaceRootPath, input.backgroundFence)
 
     // Notify renderer to hydrate full session metadata (including title)
     // before streaming events arrive. Without this, the renderer may create
@@ -15945,6 +15980,7 @@ user a clickable link to where the thing now lives.`
 
     // Send the prompt
     await this.sendMessage(session.id, teamModePrompt, undefined, undefined, {
+      backgroundFence: input.backgroundFence,
       skillSlugs: resolved?.skillSlugs,
       legacySkillReferences: input.legacySkillReferences,
     })

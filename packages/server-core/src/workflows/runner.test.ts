@@ -65,6 +65,46 @@ test('workflow dispatch forwards unchanged authored legacy selections after temp
   expect(received).toEqual([{ legacySkillReferences: ['monid'] }, undefined]);
 });
 
+describe('background runner ownership', () => {
+  test('handoff during workflow preflight prevents creating any step session', async () => {
+    const h = makeHarness()
+    let fence = 'old'
+    h.deps.assertBackgroundFence = (_workspaceId, captured) => { if (fence !== captured) throw new Error('Runner ownership changed') }
+    h.deps.preflightStepAgent = async () => { fence = 'new' }
+    await expect(new WorkflowRunner(h.deps).start({ workflow: makeWorkflow(), workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'test' }, backgroundFence: 'old' })).rejects.toThrow('Runner ownership changed')
+    expect(h.sessions.size).toBe(0)
+  })
+
+  test('handoff while one step is running prevents the next step and preserves the captured fence', async () => {
+    const h = makeHarness()
+    let fence = 'old'
+    const forwarded: Array<string | undefined> = []
+    h.deps.assertBackgroundFence = (_workspaceId, captured) => { if (fence !== captured) throw new Error('Runner ownership changed') }
+    const send = h.deps.sendMessage
+    h.deps.sendMessage = async (sessionId, prompt, options) => {
+      forwarded.push(options?.backgroundFence)
+      await send(sessionId, prompt, options)
+      fence = 'new'
+    }
+    await new WorkflowRunner(h.deps).start({ workflow: makeWorkflow(), workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'test' }, backgroundFence: 'old' })
+    await waitFor(() => lastCompleted(h.events) !== undefined)
+    expect(h.promptsSent).toHaveLength(1)
+    expect(forwarded).toEqual(['old'])
+    expect(h.sessions.size).toBe(1)
+  })
+
+  test('handoff during session creation prevents sending the prepared step', async () => {
+    const h = makeHarness()
+    let fence = 'old'
+    h.deps.assertBackgroundFence = (_workspaceId, captured) => { if (fence !== captured) throw new Error('Runner ownership changed') }
+    const create = h.deps.createSession
+    h.deps.createSession = async (workspaceId, options) => { const result = await create(workspaceId, options); fence = 'new'; return result }
+    await new WorkflowRunner(h.deps).start({ workflow: makeWorkflow(), workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'test' }, backgroundFence: 'old' })
+    await waitFor(() => lastCompleted(h.events) !== undefined)
+    expect(h.promptsSent).toHaveLength(0)
+  })
+})
+
 describe('explicit workflow task modes', () => {
   test('preflights agent plus mode once and executes every step with the same selection', async () => {
     const h = makeHarness();

@@ -302,6 +302,8 @@ export interface ISessionManager {
  * overrides) can be added without churn at every call site.
  */
 export interface ExecutePromptAutomationInput {
+  /** Host-captured ownership at background admission; never refreshed mid-run. */
+  backgroundFence?: string
   legacySkillReferences?: string[]
   workspaceId: string
   workspaceRootPath: string

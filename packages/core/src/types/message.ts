@@ -288,6 +288,8 @@ export interface Message {
   timestamp: number;
   /** Host-stamped origin for user-shaped messages. Never trust renderer input for this field. */
   inputOrigin?: 'human' | 'agent' | 'system';
+  /** Original background ownership; retained when queued work is recovered. */
+  backgroundFence?: string;
   // Tool-specific fields
   toolName?: string;
   toolUseId?: string;
@@ -397,6 +399,8 @@ export interface StoredMessage {
   timestamp?: number;
   /** Persisted host-stamped origin for user-shaped messages. */
   inputOrigin?: 'human' | 'agent' | 'system';
+  /** Original background ownership; retained when queued work is recovered. */
+  backgroundFence?: string;
   // Tool-specific fields
   toolName?: string;
   toolUseId?: string;

@@ -98,6 +98,8 @@ export type WorkflowRunEventDetail =
  * wiring (added in the RPC step).
  */
 export interface WorkflowStartInput {
+  /** Ownership captured by a background caller. Manual runs omit this. */
+  backgroundFence?: string;
   workflow: LoadedWorkflow;
   workspaceId: string;
   triggerInputs: Record<string, unknown>;
@@ -119,6 +121,7 @@ function freezeStartInput<T>(value: T): T {
 }
 
 export interface WorkflowRunnerDeps {
+  assertBackgroundFence?: (workspaceId: string, fence: string) => void;
   /** Check saved durable concurrency for both fresh and legacy rerun admission. */
   assertWorkflowAdmissionAvailable?: (workspaceId: string, workflowSlug: string) => Promise<void> | void;
   /** Null means unselected. Selected admission errors must never fall back to legacy execution. */
@@ -146,7 +149,7 @@ export interface WorkflowRunnerDeps {
    * `SessionManager.sendMessage` — that method already returns when the
    * turn ends.
    */
-  sendMessage: (sessionId: string, prompt: string, options?: { legacySkillReferences?: string[] }) => Promise<void>;
+  sendMessage: (sessionId: string, prompt: string, options?: { legacySkillReferences?: string[]; backgroundFence?: string }) => Promise<void>;
   /**
    * Read the last assistant message text from a session. Used as the
    * naive Phase 1 step output. Returns '' when there are no assistant
@@ -194,6 +197,7 @@ export interface WorkflowRunnerDeps {
 
 /** Internal bookkeeping for an in-flight run. */
 interface ActiveRun {
+  backgroundFence?: string;
   snapshot: WorkflowRunSnapshot;
   abort: AbortController;
   startIndex: number;
@@ -392,8 +396,10 @@ export class WorkflowRunner {
   }
 
   private async startPinned(input: WorkflowStartInput): Promise<WorkflowRunSnapshot> {
+    if (input.backgroundFence !== undefined) this.deps.assertBackgroundFence?.(input.workspaceId, input.backgroundFence);
     if (this.activeByKey.has(concurrencyKey(input.workspaceId, input.workflow.slug))) throw new Error('Workflow already has an active run; previous execution is still draining.');
     if (this.deps.assertWorkflowAdmissionAvailable) await this.deps.assertWorkflowAdmissionAvailable(input.workspaceId, input.workflow.slug);
+    if (input.backgroundFence !== undefined) this.deps.assertBackgroundFence?.(input.workspaceId, input.backgroundFence);
     if (this.deps.durableStart) {
       const durable = await this.deps.durableStart(freezeStartInput(input.workflow.metadata.execution === 'durable-local-read' ? structuredClone(input) : this.cloneJson(input)));
       if (durable !== null) return this.cloneSnapshot(durable);
@@ -411,6 +417,7 @@ export class WorkflowRunner {
 
     try {
       await this.preflightStepAgents(workspaceId, workflow.metadata.steps);
+      if (input.backgroundFence !== undefined) this.deps.assertBackgroundFence?.(workspaceId, input.backgroundFence);
 
       const now = new Date().toISOString();
 
@@ -439,7 +446,7 @@ export class WorkflowRunner {
         updatedAt: now,
       };
 
-      const active: ActiveRun = { snapshot, abort: new AbortController(), startIndex: 0 };
+      const active: ActiveRun = { snapshot, abort: new AbortController(), startIndex: 0, backgroundFence: input.backgroundFence };
       this.active.set(runId, active);
 
       try {
@@ -930,11 +937,13 @@ export class WorkflowRunner {
     const stepRecord = active.snapshot.steps.find((s) => s.id === stepDef.id);
     if (!stepRecord) throw new StepAttemptError('step-record-missing', `Missing run step record for "${stepDef.id}".`);
 
+    this.assertBackgroundOwnership(active);
     const resolvedAgentOptions = await this.deps.resolveAgentSessionOptions?.(
       active.snapshot.workspaceId,
       stepDef.agent,
       stepDef.taskModeId ? { taskModeId: stepDef.taskModeId } : undefined,
     ) ?? {};
+    this.assertBackgroundOwnership(active);
     const agentOptionsWithMode = normalizeWorkflowPermissionMode({ ...resolvedAgentOptions,
       ...(stepDef.modelRole ? { modelFallbackRole: stepDef.modelRole } : {}) });
     // R5: Per-run toolset override (Hermes MIT — cron/scheduler.py:60-88,
@@ -1190,6 +1199,10 @@ export class WorkflowRunner {
     }
   }
 
+  private assertBackgroundOwnership(active: ActiveRun): void {
+    if (active.backgroundFence !== undefined) this.deps.assertBackgroundFence?.(active.snapshot.workspaceId, active.backgroundFence);
+  }
+
   private async sendMessageWithOptionalTimeout(
     active: ActiveRun,
     sessionId: string,
@@ -1199,8 +1212,12 @@ export class WorkflowRunner {
   ): Promise<void> {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
+      this.assertBackgroundOwnership(active);
+      const options = legacySkillReferences?.length || active.backgroundFence !== undefined
+        ? { ...(legacySkillReferences?.length ? { legacySkillReferences } : {}), ...(active.backgroundFence !== undefined ? { backgroundFence: active.backgroundFence } : {}) }
+        : undefined;
       await Promise.race([
-        this.deps.sendMessage(sessionId, prompt, legacySkillReferences?.length ? { legacySkillReferences } : undefined),
+        this.deps.sendMessage(sessionId, prompt, options),
         new Promise<never>((_, reject) => {
           timeoutId = setTimeout(() => {
             reject(new StepAttemptError('timeout', `Step timed out after ${timeoutSeconds} seconds.`));

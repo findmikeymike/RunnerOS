@@ -212,6 +212,25 @@ async function waitFor(predicate: () => boolean, attempts = 100): Promise<void> 
 }
 
 describe('ScheduledWorkRunner', () => {
+  test('only the successful claimant launches when two runners share a serialized lock', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder()])
+    const lock = createLock()
+    const completion = deferred<void>()
+    const calls: Array<{ backgroundFence?: string }> = []
+    const makeRunner = () => new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, getBackgroundFenceToken: () => 'runner-epoch-1', withLock: lock,
+      executeAgentTask: async input => { calls.push(input); await completion.promise; return { sessionId: 'winner' } },
+      startWorkflow: async () => ({ runId: 'unused' }), readWorkflowRun: () => null, listOutputManifests: () => [],
+    })
+    await Promise.all([makeRunner(), makeRunner()].map(runner => runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))))
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.backgroundFence).toBe('runner-epoch-1')
+    expect(readWork(root).items[0]?.runs).toHaveLength(1)
+    completion.resolve()
+    await waitFor(() => readWork(root).items[0]?.status === 'done')
+  })
+
   test('preserves focus through persisted scheduled work and agent dispatch', async () => {
     const root = makeRoot()
     writeWork(root, [buildOrder({ execution: {
