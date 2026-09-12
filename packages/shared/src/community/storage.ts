@@ -118,7 +118,8 @@ function readJsonRecords<T extends { id: string }>(workspaceRootPath: string, co
     .flatMap((name) => {
       try {
         const parsed = JSON.parse(readFileSync(join(dir, name), 'utf-8')) as T;
-        return parsed?.id ? [parsed] : [];
+        // Conflict copies are evidence, never active contacts, jobs, or consent.
+        return parsed?.id && name === `${parsed.id}.json` ? [parsed] : [];
       } catch {
         return [];
       }

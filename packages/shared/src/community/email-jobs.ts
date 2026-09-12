@@ -349,7 +349,7 @@ export function listDeliveries(
     .flatMap(name => {
       try {
         const parsed = JSON.parse(readFileSync(join(dir, name), 'utf-8')) as CommunityDeliveryRecord;
-        if (!parsed?.id || parsed.deletedAt) return [];
+        if (!parsed?.id || name !== `${parsed.id}.json` || parsed.deletedAt) return [];
         return !jobId || parsed.jobId === jobId ? [parsed] : [];
       } catch {
         return [];

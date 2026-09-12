@@ -33,6 +33,18 @@ afterEach(() => {
 });
 
 describe('conflict-safe shared records', () => {
+  test.each(['{"name":"truncated"', '{"name":"missing identity"}'])('preserves unreadable existing records rather than treating them as new: %s', (raw) => {
+    const workspace = tempRoot();
+    const first = writeSharedRecord(workspace, 'community/contacts', 'fan_corrupt', { name: 'Original' }, { machineId: 'machine_a' });
+    expect(first.status).toBe('written');
+    const file = getRecordFile(workspace, 'community/contacts', 'fan_corrupt');
+    writeFileSync(file, raw);
+    const attempted = writeSharedRecord(workspace, 'community/contacts', 'fan_corrupt', { name: 'Replacement' }, { machineId: 'machine_b' });
+    expect(attempted.status).toBe('conflict');
+    expect(readFileSync(file, 'utf-8')).toBe(raw);
+    expect(listConflictRecords(workspace)[0]?.incoming).toEqual({ name: 'Replacement' });
+  });
+
   test('same-machine stale baseline creates a conflict instead of overwriting', () => {
     const workspace = tempRoot();
     const first = writeSharedRecord(workspace, 'community/contacts', 'fan_01', {
@@ -329,14 +341,14 @@ describe('conflict-safe shared records', () => {
     expect(remaining).not.toContain('conflict-purge@example.com');
   });
 
-  test('PII purge removes provider-copy conflict payloads for the record', () => {
+  test.each([' (conflicted copy)', '.sync-conflict-20260912-123456-ABCDEFG'])('PII purge removes provider-copy conflict payloads: %s', (suffix) => {
     const workspace = tempRoot();
     const created = writeSharedRecord(workspace, 'community/contacts', 'fan_provider_purge', {
       email: 'provider-purge@example.com', name: 'Provider Purge', emailHash: 'hash_provider_purge',
     }, { machineId: 'machine_a', now: '2026-07-02T12:00:00.000Z' });
     if (created.status !== 'written') throw new Error('expected write');
     const entityPath = 'records/community/contacts/fan_provider_purge.json';
-    const providerConflictPath = 'records/community/contacts/fan_provider_purge (conflicted copy).json';
+    const providerConflictPath = `records/community/contacts/fan_provider_purge${suffix}.json`;
     const providerConflictFile = join(workspace, providerConflictPath);
     writeFileSync(providerConflictFile, JSON.stringify({
       id: 'fan_provider_purge', email: 'provider-purge@example.com', name: 'Provider Copy',
@@ -418,7 +430,7 @@ describe('conflict-safe shared records', () => {
     expect(conflictText).not.toContain('Stale resurrection');
   });
 
-  test('provider conflicted-copy files create conflict inbox items', () => {
+  test.each([" (Michael's conflicted copy)", '.sync-conflict-20260912-123456-ABCDEFG'])('provider conflicted-copy files create conflict inbox items: %s', (suffix) => {
     const workspace = tempRoot();
     const created = writeSharedRecord(workspace, 'community/contacts', 'fan_04', {
       email: 'copy@example.com',
@@ -426,7 +438,7 @@ describe('conflict-safe shared records', () => {
     }, { machineId: 'machine_a', now: '2026-07-02T12:00:00.000Z' });
     expect(created.status).toBe('written');
 
-    const conflictPath = getRecordFile(workspace, 'community/contacts', 'fan_04').replace(/\.json$/, " (Michael's conflicted copy).json");
+    const conflictPath = getRecordFile(workspace, 'community/contacts', 'fan_04').replace(/\.json$/, `${suffix}.json`);
     rmSync(conflictPath, { force: true });
     writeFileSync(conflictPath, JSON.stringify({ id: 'fan_04', name: 'Copy' }, null, 2), 'utf-8');
 
@@ -442,7 +454,7 @@ describe('conflict-safe shared records', () => {
     expect(repeated).toHaveLength(0);
     expect(conflicts[0]?.reason).toBe('provider-conflicted-copy');
     expect(conflicts[0]?.entityPath).toBe('records/community/contacts/fan_04.json');
-    expect(conflicts[0]?.providerConflictPath).toContain("Michael's conflicted copy");
+    expect(conflicts[0]?.providerConflictPath).toContain(suffix);
     expect(listConflictRecords(workspace)).toHaveLength(1);
   });
 });

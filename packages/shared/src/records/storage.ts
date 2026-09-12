@@ -473,14 +473,15 @@ export function writeSharedRecord<T extends Record<string, unknown>>(
       }),
     };
   }
-  if (!current && baseline) {
+  // An unreadable existing file is not an empty slot: preserve its bytes.
+  if (!current && (baseline || currentSha !== null)) {
     return {
       status: 'conflict',
       conflict: createConflictRecord(workspaceRootPath, {
         entityPath: recordEntityPath(collection, entityId),
         detectedByMachineId: options.machineId,
-        baseRevision: baseline.revision,
-        base: baseline.entity,
+        baseRevision: baseline?.revision,
+        base: baseline?.entity,
         incoming: data,
         reason: 'stale-baseline',
       }),
@@ -793,14 +794,16 @@ function canonicalEntityPathForProviderConflict(workspaceRootPath: string, file:
   const name = basename(rel);
   const canonicalName = name
     .replace(/\s+\([^)]+(?:conflicted copy|case conflict)[^)]*\)(?=\.json$)/i, '')
-    .replace(/\s+(?:conflicted copy|case conflict)(?=\.json$)/i, '');
+    .replace(/\s+(?:conflicted copy|case conflict)(?=\.json$)/i, '')
+    .replace(/\.sync-conflict-\d{8}-\d{6}-[a-z0-9]+(?=\.json$)/i, '');
   return dir === '.' ? canonicalName : `${dir}/${canonicalName}`;
 }
 
 export function isProviderConflictFilename(name: string): boolean {
   if (RECORD_CONFLICT_SCAN_IGNORE_PATTERNS.some((pattern) => pattern.test(name))) return false;
   return /\.json$/i.test(name) && (
-    /\bconflicted copy\b/i.test(name)
+    /\.sync-conflict-\d{8}-\d{6}-[a-z0-9]+\.json$/i.test(name)
+    || /\bconflicted copy\b/i.test(name)
     || /\bcase conflict\b/i.test(name)
     || /\([^)]+conflicted copy[^)]*\)/i.test(name)
     || /\([^)]+case conflict[^)]*\)/i.test(name)

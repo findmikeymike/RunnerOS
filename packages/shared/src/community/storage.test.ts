@@ -11,6 +11,8 @@ import {
   suppressCommunityContact,
   upsertCommunityContact,
 } from './storage.ts';
+import { listDeliveries } from './email-jobs.ts';
+import { writeSharedRecord } from '../records/index.ts';
 import { ARTIST_COMMUNITY_CONTEXT_SLUG } from './types.ts';
 import { joinWorkspaceTeam, markWorkspaceAsSharedFolder } from '../workspaces/team-mode.ts';
 
@@ -47,6 +49,28 @@ afterEach(() => {
 });
 
 describe('community record storage', () => {
+  test.each([' (conflicted copy)', '.sync-conflict-20260912-123456-ABCDEFG', ' (other laptop)'])('excludes alternate contact and delivery copies from active state: %s', (suffix) => {
+    const root = tempRoot();
+    upsertCommunityContact(root, 'machine_a', {
+      name: 'Current', email: 'current@example.com', consentStatus: 'unsubscribed',
+    });
+    const contactName = jsonFiles(root, 'records/community/contacts')[0]!;
+    const contactPath = join(root, 'records/community/contacts', contactName);
+    const original = JSON.parse(readFileSync(contactPath, 'utf-8'));
+    writeFileSync(contactPath.replace(/\.json$/, `${suffix}.json`), JSON.stringify({ ...original, name: 'Stale', consentStatus: 'opted-in' }));
+    const state = readCommunityState(root);
+    expect(state.contacts).toHaveLength(1);
+    expect(state.contacts[0]?.name).toBe('Current');
+    expect(state.contacts[0]?.consentStatus).toBe('unsubscribed');
+
+    writeSharedRecord(root, 'community/deliveries', 'delivery_1', { jobId: 'job_1', lastEvent: 'sent' }, { machineId: 'machine_a' });
+    const deliveryPath = join(root, 'records/community/deliveries/delivery_1.json');
+    const delivery = JSON.parse(readFileSync(deliveryPath, 'utf-8'));
+    writeFileSync(deliveryPath.replace(/\.json$/, `${suffix}.json`), JSON.stringify({ ...delivery, lastEvent: 'failed' }));
+    expect(listDeliveries(root, 'job_1')).toHaveLength(1);
+    expect(listDeliveries(root, 'job_1')[0]?.lastEvent).toBe('sent');
+  });
+
   test('migrates legacy artist-community context into records and generated summary', () => {
     const root = tempRoot();
     upsertContextDoc(root, {
