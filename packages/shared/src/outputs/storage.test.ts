@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import * as fs from 'node:fs';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -438,5 +439,90 @@ describe('output storage', () => {
     expect(output.preview?.mode).toBe('markdown');
     expect(existsSync(join(getOutputDir(workspace, OUTPUT_OLD_ID), 'content.md'))).toBe(true);
     expect(readOutputManifest(workspace, OUTPUT_OLD_ID)).toEqual(output);
+  });
+});
+
+describe('ordinary output publication commit boundary', () => {
+  const input = (content: string) => ({ id: OUTPUT_OLD_ID, workspaceId: 'workspace-1', title: 'Published text', kind: 'document' as const, origin: { source: 'manual' as const }, content });
+
+  test('partial staging writes are cleaned up without publishing a manifest', () => {
+    const realWrite = fs.writeFileSync;
+    const write = spyOn(fs, 'writeFileSync').mockImplementation((file, data, options) => {
+      if (String(file).endsWith('.staging')) {
+        realWrite(file, 'partial bytes');
+        throw new Error('injected staging write failure');
+      }
+      realWrite(file, data, options);
+    });
+    try { expect(() => createOutputBundle(workspace, input('new answer'))).toThrow('injected staging write failure'); }
+    finally { write.mockRestore(); }
+    expect(listOutputManifests(workspace)).toEqual([]);
+    expect(fs.readdirSync(getOutputDir(workspace, OUTPUT_OLD_ID))).toEqual([]);
+  });
+
+  test('failed content rename leaves no published manifest', () => {
+    const realRename = fs.renameSync;
+    const rename = spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      if (String(to).endsWith('/content.md')) throw new Error('injected content rename failure');
+      realRename(from, to);
+    });
+    try { expect(() => createOutputBundle(workspace, input('new answer'))).toThrow('injected content rename failure'); }
+    finally { rename.mockRestore(); }
+    expect(listOutputManifests(workspace)).toEqual([]);
+    expect(existsSync(getOutputManifestFile(workspace, OUTPUT_OLD_ID))).toBe(false);
+    expect(fs.readdirSync(getOutputDir(workspace, OUTPUT_OLD_ID))).toEqual([]);
+  });
+
+  test('failed manifest commit removes only new content and preserves caller-created assets', () => {
+    const dir = getOutputDir(workspace, OUTPUT_OLD_ID);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'cover.png'), Buffer.from([0, 255, 42]));
+    const realRename = fs.renameSync;
+    const rename = spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      if (String(to) === getOutputManifestFile(workspace, OUTPUT_OLD_ID)) {
+        expect(readFileSync(join(dir, 'content.md'), 'utf8')).toBe('new answer');
+        throw new Error('injected manifest commit failure');
+      }
+      realRename(from, to);
+    });
+    try { expect(() => createOutputBundle(workspace, input('new answer'))).toThrow('injected manifest commit failure'); }
+    finally { rename.mockRestore(); }
+    expect(listOutputManifests(workspace)).toEqual([]);
+    expect(fs.readdirSync(dir)).toEqual(['cover.png']);
+    expect(readFileSync(join(dir, 'cover.png'))).toEqual(Buffer.from([0, 255, 42]));
+  });
+
+  test('replacement failure keeps the old manifest and bytes; success changes both at the commit point', () => {
+    const original = createOutputBundle(workspace, input('original answer'));
+    const dir = getOutputDir(workspace, OUTPUT_OLD_ID);
+    const oldManifestBytes = readFileSync(getOutputManifestFile(workspace, OUTPUT_OLD_ID), 'utf8');
+    const realRename = fs.renameSync;
+    const rename = spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      if (String(to) === getOutputManifestFile(workspace, OUTPUT_OLD_ID)) {
+        expect(readOutputManifest(workspace, OUTPUT_OLD_ID)).toEqual(original);
+        expect(readFileSync(join(dir, original.primary!.path), 'utf8')).toBe('original answer');
+        throw new Error('injected replacement commit failure');
+      }
+      realRename(from, to);
+    });
+    try { expect(() => createOutputBundle(workspace, input('replacement answer'))).toThrow('injected replacement commit failure'); }
+    finally { rename.mockRestore(); }
+    expect(readFileSync(getOutputManifestFile(workspace, OUTPUT_OLD_ID), 'utf8')).toBe(oldManifestBytes);
+    expect(fs.readdirSync(dir).sort()).toEqual(['content.md', 'output.json']);
+    const replaced = createOutputBundle(workspace, input('replacement answer'));
+    expect(replaced.primary!.path).not.toBe(original.primary!.path);
+    expect(readFileSync(join(dir, replaced.primary!.path), 'utf8')).toBe('replacement answer');
+    expect(readFileSync(join(dir, original.primary!.path), 'utf8')).toBe('original answer');
+    expect(readOutputManifest(workspace, OUTPUT_OLD_ID)).toEqual(replaced);
+    expect(listOutputManifests(workspace)).toHaveLength(1);
+  });
+
+  test('precreated canonical content is never overwritten by a new output', () => {
+    const dir = getOutputDir(workspace, OUTPUT_OLD_ID);
+    mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, 'content.md'), 'caller attachment');
+    const output = createOutputBundle(workspace, input('new primary'));
+    expect(output.primary!.path).not.toBe('content.md');
+    expect(readFileSync(join(dir, 'content.md'), 'utf8')).toBe('caller attachment');
+    expect(readFileSync(join(dir, output.primary!.path), 'utf8')).toBe('new primary');
   });
 });

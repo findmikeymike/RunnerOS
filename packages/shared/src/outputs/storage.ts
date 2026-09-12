@@ -257,22 +257,31 @@ function createOutputBundleUnlocked(workspaceRootPath: string, input: CreateOutp
   let preview = undefined as OutputManifest['preview'];
   let summary = input.summary?.trim() ?? '';
 
-  // Stage content under a tmp name in the same dir; only rename to the
-  // canonical filename after the manifest write succeeds. This avoids
-  // orphaning `content.md` in the output dir if validation throws.
+  // The manifest is the publication commit marker. Content must exist first.
+  // Existing bundles use a fresh content path so readers of the prior manifest
+  // keep their original bytes until the manifest replacement commits.
   let contentTmpPath: string | null = null;
   let contentFinalPath: string | null = null;
 
   if (input.content !== undefined) {
     const mimeType = input.contentMimeType ?? 'text/markdown';
-    const filename = contentFilename(mimeType);
+    const canonicalFilename = contentFilename(mimeType);
+    const filename = existsSync(join(outputDir, OUTPUT_MANIFEST_FILE)) || existsSync(join(outputDir, canonicalFilename))
+      ? `${basename(canonicalFilename, extname(canonicalFilename))}-${randomUUID()}${extname(canonicalFilename)}`
+      : canonicalFilename;
     contentFinalPath = join(outputDir, filename);
     contentTmpPath = `${contentFinalPath}.${process.pid}.${randomUUID()}.staging`;
-    writeFileSync(contentTmpPath, input.content, 'utf-8');
-    const meta = sizeAndHash(contentTmpPath);
+    let meta: { sizeBytes: number; sha256: string };
+    try {
+      writeFileSync(contentTmpPath, input.content, 'utf-8');
+      meta = sizeAndHash(contentTmpPath);
+    } catch (error) {
+      try { rmSync(contentTmpPath, { force: true }); } catch { /* Preserve the staging error. */ }
+      throw error;
+    }
     primary = {
       id: 'primary',
-      label: basename(filename, extname(filename)) || 'Content',
+      label: basename(canonicalFilename, extname(canonicalFilename)) || 'Content',
       role: 'primary',
       path: filename,
       mimeType,
@@ -312,22 +321,25 @@ function createOutputBundleUnlocked(workspaceRootPath: string, input: CreateOutp
     socialVariantSet: input.socialVariantSet,
   };
 
+  let contentPublished = false;
   try {
+    // Validate before either file becomes visible. The final manifest write
+    // repeats validation under the same reentrant bundle lock.
+    assertOutputManifest(manifest, id);
+    assertSafeManifestAssetPaths(workspaceRootPath, manifest);
+    if (contentTmpPath && contentFinalPath) {
+      renameSync(contentTmpPath, contentFinalPath);
+      contentPublished = true;
+    }
     writeOutputManifest(workspaceRootPath, manifest);
   } catch (err) {
     if (contentTmpPath) {
       try { rmSync(contentTmpPath, { force: true }); } catch { /* ignore */ }
     }
-    throw err;
-  }
-
-  if (contentTmpPath && contentFinalPath) {
-    try {
-      renameSync(contentTmpPath, contentFinalPath);
-    } catch (err) {
-      try { unlinkSync(contentTmpPath); } catch { /* ignore */ }
-      throw err;
+    if (contentPublished && contentFinalPath) {
+      try { unlinkSync(contentFinalPath); } catch { /* Keep the original publication error. */ }
     }
+    throw err;
   }
 
   return manifest;
