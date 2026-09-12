@@ -19,6 +19,7 @@ import {
   getTeamConfigFile,
   createDisabledTeamConfig,
   ensureMachineTeamMember,
+  nextRunnerHandover,
   readOrCreateMachineIdentity,
   writeMachineHeartbeat,
   writeTeamConfigMirror,
@@ -559,6 +560,9 @@ function writeMigratedWorkspaceConfig(
   const timestamp = nowIso();
   const previousTeam = sourceConfig.team ?? createDisabledTeamConfig();
   const machine = readOrCreateMachineIdentity(sourceConfig.id);
+  const runnerMachineId = input.makeRunner ? machine.machineId : previousTeam.runnerMachineId;
+  const runnerEpoch = (previousTeam.runnerEpoch ?? 0)
+    + (runnerMachineId !== previousTeam.runnerMachineId ? 1 : 0);
   const automationsPolicy = input.makeRunner
     ? 'runner-only'
     : previousTeam.enabled
@@ -591,7 +595,12 @@ function writeMigratedWorkspaceConfig(
       ...previousTeam,
       enabled: true,
       revision: previousTeam.revision + 1,
-      runnerMachineId: input.makeRunner ? machine.machineId : previousTeam.runnerMachineId,
+      runnerMachineId,
+      runnerEpoch,
+      runnerHandover: input.makeRunner
+        ? nextRunnerHandover(sourceRootPath, previousTeam, machine.machineId,
+          previousTeam.revision + 1, runnerEpoch, timestamp)
+        : previousTeam.runnerHandover,
       automationsPolicy,
       backgroundTriggersEnabled,
       updatedAt: timestamp,

@@ -17,6 +17,7 @@ import {
   writeMovedToTombstone,
 } from '../team-migration.ts';
 import type { WorkspaceConfig } from '../types.ts';
+import { markWorkspaceAsSharedFolder, evaluateTeamRunnerGate } from '../team-mode.ts';
 
 const tempDirs: string[] = [];
 
@@ -419,3 +420,20 @@ for (const cleanup of ['rollback', 'promotion', 'prepare-failure'] as const) {
     expect(readFileSync(join(privateRoot, 'team', config.id, 'private-sessions', 'private.jsonl'), 'utf8')).toBe('private transcript');
   });
 }
+
+
+it('migrating an existing team preserves the offline runner handover and advances its epoch', () => {
+  const root = makeDir('team-migrate-runner-handover-');
+  const source = join(root, 'campaign');
+  const destination = join(root, 'shared');
+  mkdirSync(source); mkdirSync(destination);
+  process.env.CRAFT_CONFIG_DIR = join(root, 'private');
+  writeWorkspace(source);
+  const original = markWorkspaceAsSharedFolder(source, { makeRunner: true });
+  writeFileSync(original.privateMachinePath, JSON.stringify({ ...original.machine, machineId: 'machine_b' }));
+  const result = moveWorkspaceToSharedFolder(source, destination, { makeRunner: true });
+  const migrated = loadWorkspaceConfig(result.finalRootPath)!;
+  expect(migrated.team?.runnerEpoch).toBe((original.team.runnerEpoch ?? 0) + 1);
+  expect(migrated.team?.runnerHandover).toMatchObject({ from: original.machine.machineId, to: 'machine_b' });
+  expect(evaluateTeamRunnerGate(result.finalRootPath)).toMatchObject({ allowed: false, reason: 'handover-pending' });
+});

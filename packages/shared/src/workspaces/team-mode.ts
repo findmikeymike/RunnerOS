@@ -651,7 +651,7 @@ function isRunnerHandoverReady(workspaceRootPath: string, team: WorkspaceTeamCon
 }
 
 /** Preserve the last unacknowledged runner across retries and retargeting. */
-function nextRunnerHandover(
+export function nextRunnerHandover(
   workspaceRootPath: string,
   team: WorkspaceTeamConfig,
   runnerMachineId: string,
