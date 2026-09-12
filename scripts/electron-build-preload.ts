@@ -7,6 +7,7 @@
  */
 
 import { spawn } from "bun";
+import { createBuildProvenance } from "./build-provenance";
 import { existsSync, statSync, mkdirSync } from "fs";
 import { join } from "path";
 
@@ -82,6 +83,8 @@ async function verifyJsFile(filePath: string): Promise<{ valid: boolean; error?:
   return { valid: true };
 }
 
+const buildInfo = createBuildProvenance({ rootDir: ROOT_DIR, component: 'preload' });
+
 async function buildEntry(entry: string, outfile: string): Promise<number> {
   const proc = spawn({
     cmd: [
@@ -92,6 +95,7 @@ async function buildEntry(entry: string, outfile: string): Promise<number> {
       "--format=cjs",
       `--outfile=${outfile}`,
       "--external:electron",
+      `--define:__ARTIST_OS_BUILD_INFO__=${JSON.stringify(buildInfo)}`,
     ],
     cwd: ROOT_DIR,
     stdout: "inherit",

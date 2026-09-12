@@ -297,6 +297,69 @@ describe('ReleaseKitService source trust', () => {
     expect(() => service().migrateLegacy('campaign-1')).toThrow(/Finals registry is invalid/i)
   })
 
+  for (const existingSubtype of ['cover-art', 'press-art', undefined]) {
+    test(`migration preserves primary choices with existing ${existingSubtype ?? 'no artwork'}`, async () => {
+      const campaignRoot = mkdtempSync(join(tmpdir(), 'release-kit-primary-migration-'))
+      try {
+        workspaces.set('campaign-1', {
+          id: 'campaign-1', name: 'Campaign', rootPath: campaignRoot, artistWorkspaceScope: 'campaign',
+        })
+        const releaseKit = service()
+        let existingId: string | undefined
+        if (existingSubtype) {
+          const uploadPath = join(campaignRoot, 'current-art.png')
+          writeFileSync(uploadPath, 'current user artwork')
+          existingId = releaseKit.promote('campaign-1', {
+            source: { type: 'upload', originalFileName: 'current-art.png' }, uploadPath,
+            category: 'artwork', subtype: existingSubtype, makePrimary: true,
+          }, 'user').item.id
+        }
+        const outputs = new OutputService({ getWorkspaceRootPath: () => campaignRoot })
+        const finals = []
+        // Different legacy slots collapse into the same Release Kit placement.
+        for (const [index, slot] of ['Cover Art', 'Single Artwork'].entries()) {
+          const path = join(campaignRoot, `legacy-${index}.png`)
+          writeFileSync(path, `legacy artwork ${index}`)
+          const created = await outputs.createFromSessionTool({
+            workspaceId: 'campaign-1', sessionId: 'session-1',
+            output: { title: `Legacy ${index}`, kind: 'image', summary: 'Legacy artwork', files: [{ path, role: 'primary' }] },
+          })
+          expect(created.ok).toBe(true)
+          const output = outputs.get('campaign-1', created.outputId!)!
+          const asset = output.primary ?? output.assets[0]!
+          finals.push({
+            id: `legacy-${index}`, scope: 'campaign' as const, campaignId: 'campaign-1', slot,
+            outputId: output.id, assetId: asset.id, isPrimary: true,
+            promotedAt: '2025-01-01T00:00:00.000Z', promotedBy: 'user' as const,
+          })
+        }
+        writeOutputFinalsRegistry(campaignRoot, { schemaVersion: 1, updatedAt: new Date().toISOString(), finals })
+        const first = releaseKit.migrateLegacy('campaign-1')
+        expect(first.migrated).toBe(2)
+        expect(first.skipped).toEqual([])
+        const imported = first.manifest.items.filter((item) => item.source.type === 'legacy-final')
+        expect(imported.map((item) => item.isPrimary)).toEqual([existingSubtype !== 'cover-art', false])
+        if (existingId) {
+          const existing = first.manifest.items.find((item) => item.id === existingId)!
+          expect(existing.isPrimary).toBe(true)
+          expect(readFileSync(resolveReleaseKitItemPath(campaignRoot, existing.relativePath), 'utf8')).toBe('current user artwork')
+        }
+        expect(releaseKit.migrateLegacy('campaign-1').migrated).toBe(0)
+        // A later explicit selection also survives recovery when the ledger write was lost.
+        const chosen = imported[1]!
+        releaseKit.setPrimary('campaign-1', chosen.id)
+        rmSync(join(campaignRoot, 'release-kit', '.legacy-migration.json'), { force: true })
+        const recovered = releaseKit.migrateLegacy('campaign-1')
+        expect(recovered.migrated).toBe(0)
+        expect(recovered.manifest.items).toHaveLength(existingId ? 3 : 2)
+        expect(recovered.manifest.items.filter((item) => item.subtype === 'cover-art' && item.isPrimary).map((item) => item.id)).toEqual([chosen.id])
+        expect(releaseKit.migrateLegacy('campaign-1').migrated).toBe(0)
+      } finally {
+        rmSync(campaignRoot, { recursive: true, force: true })
+      }
+    })
+  }
+
   test('does not resurrect a removed legacy Final on later migration', async () => {
     const campaignRoot = mkdtempSync(join(tmpdir(), 'release-kit-service-campaign-'))
     workspaces.set('campaign-1', {

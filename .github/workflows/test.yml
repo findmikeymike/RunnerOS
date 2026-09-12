@@ -106,7 +106,7 @@ jobs:
       - name: Run isolated tests, one process each
         run: |
           set -e
-          for f in $(find ./packages ./apps ./tools -name '*.isolated.ts' -not -path '*/node_modules/*' -not -path '*/release-artist-os/*'); do
+          for f in $(find ./packages ./apps ./tools ./scripts -name '*.isolated.ts' -not -path '*/node_modules/*' -not -path '*/release-artist-os/*'); do
             echo "== $f"; bun test "$f"
           done
 

@@ -5,7 +5,8 @@
  * These are necessary for reliable CI builds on Windows.
  */
 
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
+import { createBuildProvenance } from '../build-provenance';
 import { existsSync, mkdirSync, rmSync, readdirSync, statSync, cpSync } from 'fs';
 import { join } from 'path';
 import { claudeNativeBinaryPath, type BuildConfig } from './common';
@@ -142,12 +143,12 @@ function buildMainProcess(config: BuildConfig): void {
 
   for (const [key, value] of oauthDefines) {
     if (value) {
-      mainArgs.push(`--define:process.env.${key}="'${value}'"`);
+      mainArgs.push(`--define:process.env.${key}=${JSON.stringify(value)}`);
     }
   }
 
-  // Use node to run esbuild directly
-  run(`node ./node_modules/esbuild/bin/esbuild ${mainArgs.join(' ')}`, rootDir);
+  mainArgs.push(`--define:__ARTIST_OS_BUILD_INFO__=${JSON.stringify(createBuildProvenance({ rootDir, component: 'main' }))}`);
+  execFileSync(process.execPath, ['./node_modules/esbuild/bin/esbuild', ...mainArgs], { cwd: rootDir, stdio: 'inherit' });
 }
 
 /**
@@ -170,17 +171,11 @@ export async function buildElectronAppWindows(config: BuildConfig): Promise<void
 
   // Build preload - invoke esbuild directly via node
   console.log('  Building preload...');
-  run(
-    'node ./node_modules/esbuild/bin/esbuild apps/electron/src/preload/bootstrap.ts --bundle --platform=node --format=cjs --outfile=apps/electron/dist/bootstrap-preload.cjs --external:electron',
-    rootDir
-  );
+  execFileSync(process.execPath, ['./node_modules/esbuild/bin/esbuild', 'apps/electron/src/preload/bootstrap.ts', '--bundle', '--platform=node', '--format=cjs', '--outfile=apps/electron/dist/bootstrap-preload.cjs', '--external:electron', `--define:__ARTIST_OS_BUILD_INFO__=${JSON.stringify(createBuildProvenance({ rootDir, component: 'preload' }))}`], { cwd: rootDir, stdio: 'inherit' });
 
   // Build renderer - invoke vite directly via node
   console.log('  Building renderer...');
   const rendererDir = join(electronDir, 'dist', 'renderer');
-  if (existsSync(rendererDir)) {
-    rmSync(rendererDir, { recursive: true, force: true });
-  }
   run('node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build --config apps/electron/vite.config.ts', rootDir);
 
   // Verify renderer was built

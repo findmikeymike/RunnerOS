@@ -1222,7 +1222,7 @@ describe('OutputService visual board concurrent edits', () => {
 it('preserves output files when malformed Finals frontmatter prevents checking final protection', async () => {
   const root = mkdtempSync(join(tmpdir(), 'osvc-finals-frontmatter-delete-'));
   const service = new OutputService({ getWorkspaceRootPath: () => root });
-  const created = await service.createFromSessionTool({ workspaceId: 'ws', sessionId: 'session', output: { title: 'Keep this', kind: 'document', summary: 'Keep original files', content: 'Artist-owned original' } });
+  const created = await service.createFromSessionTool({ workspaceId: 'ws', sessionId: 'session', output: { title: 'Keep this', summary: 'Protected output', kind: 'document', content: 'Artist-owned original' } });
   const finalsPath = join(root, 'context', 'finals', 'CONTEXT.md');
   mkdirSync(join(root, 'context', 'finals'), { recursive: true });
   const damaged = '---\ndescription: Missing required name\n---\n{"schemaVersion":1,"finals":[]}';

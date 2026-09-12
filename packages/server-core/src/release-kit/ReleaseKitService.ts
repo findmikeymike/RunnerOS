@@ -241,7 +241,10 @@ export class ReleaseKitService {
           subtype: mapped.subtype,
           title: output.title,
           mimeType: asset.mimeType,
-          makePrimary: final.isPrimary,
+          // Legacy defaults must not replace a primary already chosen in the Release Kit.
+          makePrimary: final.isPrimary && !manifest.items.some((item) => (
+            item.isPrimary && item.category === mapped.category && item.subtype === mapped.subtype
+          )),
           promotedBy: 'migration',
           note: final.note ?? `Migrated from legacy Finals slot: ${final.slot}`,
         })

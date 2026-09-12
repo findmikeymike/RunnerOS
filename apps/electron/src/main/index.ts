@@ -1,4 +1,5 @@
 import { recoverCampaignCleanupTransactions } from './campaign-cleanup-recovery'
+import { getEmbeddedBuildInfo } from '@craft-agent/shared/build-info'
 import { createSafeRelaunch } from './safe-relaunch'
 import { waitForSafeShutdown } from './shutdown-wait'
 import { startElectronDurableWorkflowHost } from './durable-workflow-startup'
@@ -638,6 +639,7 @@ app.whenReady().then(async () => {
     })
 
     // Bootstrap IPC handlers — preload uses sendSync for window-local details
+    ipcMain.handle('__get-build-info', () => ({ main: getEmbeddedBuildInfo(), isPackaged: app.isPackaged }))
     ipcMain.on('__get-web-contents-id', (e) => {
       e.returnValue = e.sender.id
     })
