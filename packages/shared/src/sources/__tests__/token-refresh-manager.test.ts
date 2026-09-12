@@ -309,7 +309,7 @@ describe('OAuth source filtering', () => {
 // --- TokenRefreshManager tests ---
 
 function createMockCredManager(overrides: Partial<SourceCredentialManager> = {}): SourceCredentialManager {
-  return {
+  const manager = {
     load: mock(() => Promise.resolve(null)),
     refresh: mock(() => Promise.resolve(null)),
     isExpired: mock(() => true),
@@ -317,6 +317,8 @@ function createMockCredManager(overrides: Partial<SourceCredentialManager> = {})
     markSourceNeedsReauth: mock(() => {}),
     ...overrides,
   } as unknown as SourceCredentialManager;
+  manager.loadEffective = overrides.loadEffective ?? manager.load;
+  return manager;
 }
 
 describe('TokenRefreshManager', () => {
@@ -672,4 +674,73 @@ describe('isRefreshableSource', () => {
     });
     expect(isRefreshableSource(source)).toBe(false);
   });
+});
+
+describe('effective credential refresh and repaired connections', () => {
+  const globalSource = () => ({ ...createMockSource({
+    slug: 'shared-api', type: 'api', provider: 'custom',
+    api: { baseUrl: 'https://fixture.invalid', authType: 'bearer', renewEndpoint: { path: '/renew' } },
+  }), tier: 'global' as const });
+
+  test('startup refresh detects an inherited expired global credential', async () => {
+    const credentials = createMockCredManager({
+      load: mock(async () => null),
+      loadEffective: mock(async () => ({ value: 'inherited', expiresAt: 1 })),
+    });
+    const manager = new TokenRefreshManager(credentials);
+    expect(await manager.needsRefresh(globalSource())).toBe(true);
+  });
+
+  test('valid inherited global token is used without another refresh', async () => {
+    const refresh = mock(async () => null);
+    const credentials = createMockCredManager({
+      load: mock(async () => null),
+      loadEffective: mock(async () => ({ value: 'inherited', expiresAt: Date.now() + 3_600_000 })),
+      isExpired: mock(() => false), needsRefresh: mock(() => false), refresh,
+    });
+    expect(await new TokenRefreshManager(credentials).ensureFreshToken(globalSource())).toMatchObject({ success: true, token: 'inherited' });
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  for (const fresh of [true, false]) {
+    test(`a repaired effective credential bypasses the old failure cooldown (fresh=${fresh})`, async () => {
+      let current = { value: 'old', expiresAt: 1 };
+      let fail = true;
+      const refresh = mock(async () => fail ? null : 'newly-refreshed');
+      const credentials = createMockCredManager({
+        load: mock(async () => current), loadEffective: mock(async () => current), refresh,
+        isExpired: mock(() => current.expiresAt < Date.now()),
+        needsRefresh: mock(() => current.expiresAt < Date.now() + 300_000),
+      });
+      const manager = new TokenRefreshManager(credentials), source = globalSource();
+      expect((await manager.ensureFreshToken(source)).success).toBe(false);
+      expect(manager.isInCooldown(source.config.slug)).toBe(true);
+      current = { value: 'replacement', expiresAt: fresh ? Date.now() + 3_600_000 : 1 };
+      fail = false;
+      if (!fresh) expect(await manager.getSourcesNeedingRefresh([source])).toEqual([source]);
+      expect(await manager.ensureFreshToken(source)).toMatchObject({ success: true, token: fresh ? 'replacement' : 'newly-refreshed' });
+      expect(manager.isInCooldown(source.config.slug)).toBe(false);
+    });
+  }
+});
+
+test('unchanged failing credential retains cooldown without another refresh', async () => {
+  const source = createMockSource({ slug: 'unchanged', type: 'api', provider: 'google', api: { baseUrl: 'https://fixture.invalid', authType: 'bearer' } });
+  const refresh = mock(async () => null);
+  const credentials = createMockCredManager({ loadEffective: mock(async () => ({ value: 'expired', refreshToken: 'refresh', expiresAt: 1 })), refresh });
+  const manager = new TokenRefreshManager(credentials);
+  expect((await manager.ensureFreshToken(source)).success).toBe(false);
+  expect(await manager.ensureFreshToken(source)).toMatchObject({ success: false, rateLimited: true });
+  expect(await manager.getSourcesNeedingRefresh([source])).toEqual([]);
+  expect(refresh).toHaveBeenCalledTimes(1);
+});
+
+test('suppressed effective credential cannot return a plain-load token', async () => {
+  const source = { ...createMockSource({ slug: 'suppressed', type: 'api', provider: 'google', api: { baseUrl: 'https://fixture.invalid', authType: 'bearer' } }), tier: 'global' as const };
+  const credentials = createMockCredManager({
+    load: mock(async () => ({ value: 'not-effective', expiresAt: Date.now() + 3_600_000 })),
+    loadEffective: mock(async () => null), refresh: mock(async () => null),
+    isExpired: mock(() => false), needsRefresh: mock(() => false),
+  });
+  expect((await new TokenRefreshManager(credentials).ensureFreshToken(source)).success).toBe(false);
 });

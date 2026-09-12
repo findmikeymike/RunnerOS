@@ -13,6 +13,8 @@
 
 import { isRefreshableSource, hasRenewEndpoint, type LoadedSource } from './types.ts';
 import type { SourceCredentialManager } from './credential-manager.ts';
+import { createHash } from 'node:crypto';
+import type { StoredCredential } from '../credentials/types.ts';
 import { SourceAuthSupersededError } from './credential-manager.ts';
 
 /** Default cooldown after failed refresh (5 minutes) */
@@ -38,6 +40,7 @@ export interface RefreshManagerOptions {
 
 export class TokenRefreshManager {
   private failedAttempts = new Map<string, number>();
+  private failedCredentials = new Map<string, string>();
   private cooldownMs: number;
   private log: (message: string) => void;
   private credManager: SourceCredentialManager;
@@ -63,8 +66,9 @@ export class TokenRefreshManager {
   /**
    * Record a failed refresh attempt for rate limiting.
    */
-  private recordFailure(sourceSlug: string): void {
+  private recordFailure(sourceSlug: string, identity: string): void {
     this.failedAttempts.set(sourceSlug, Date.now());
+    this.failedCredentials.set(sourceSlug, identity);
   }
 
   /**
@@ -72,6 +76,7 @@ export class TokenRefreshManager {
    */
   private clearFailure(sourceSlug: string): void {
     this.failedAttempts.delete(sourceSlug);
+    this.failedCredentials.delete(sourceSlug);
   }
 
   /**
@@ -79,6 +84,7 @@ export class TokenRefreshManager {
    */
   clearCooldown(sourceSlug: string): void {
     this.failedAttempts.delete(sourceSlug);
+    this.failedCredentials.delete(sourceSlug);
   }
 
   /**
@@ -86,6 +92,23 @@ export class TokenRefreshManager {
    */
   reset(): void {
     this.failedAttempts.clear();
+    this.failedCredentials.clear();
+  }
+
+  private credentialIdentity(source: LoadedSource, credential: StoredCredential | null): string {
+    return createHash('sha256').update(JSON.stringify({
+      workspaceId: source.workspaceId, tier: source.tier, provider: source.config.provider,
+      api: source.config.api, mcp: source.config.mcp, credential,
+    })).digest('hex');
+  }
+
+  private async loadCurrentCredential(source: LoadedSource): Promise<StoredCredential | null> {
+    const credential = await this.credManager.loadEffective(source);
+    const failedIdentity = this.failedCredentials.get(source.config.slug);
+    if (failedIdentity && failedIdentity !== this.credentialIdentity(source, credential)) {
+      this.clearFailure(source.config.slug);
+    }
+    return credential;
   }
 
   /**
@@ -93,7 +116,7 @@ export class TokenRefreshManager {
    * Returns true if the token is expired or expiring soon (within 5 min).
    */
   async needsRefresh(source: LoadedSource): Promise<boolean> {
-    const cred = await this.credManager.load(source);
+    const cred = await this.loadCurrentCredential(source);
     if (!cred) return false;
     // Renew-endpoint sources don't need a separate refreshToken —
     // they use the current access token for renewal.
@@ -115,6 +138,27 @@ export class TokenRefreshManager {
   async ensureFreshToken(source: LoadedSource): Promise<TokenRefreshResult> {
     const slug = source.config.slug;
 
+    // Load credential and check if refresh needed
+    const cred = await this.loadCurrentCredential(source);
+
+    // Non-refreshable tokens (e.g. Slack) — return as-is.
+    // Renew-endpoint sources are refreshable even without a separate refreshToken.
+    if (cred?.value && !cred.refreshToken && !hasRenewEndpoint(source)) {
+      this.clearFailure(slug);
+      return { success: true, token: cred.value };
+    }
+
+    // If credential exists, has a known expiry, and isn't near expiry, return it as-is.
+    // Missing expiresAt means we can't determine lifetime — fall through to refresh
+    // so the new credential gets a proper expiresAt (matching needsRefresh() logic).
+    if (cred?.value && cred.expiresAt && !this.credManager.isExpired(cred) && !this.credManager.needsRefresh(cred)) {
+      this.clearFailure(slug);
+      return {
+        success: true,
+        token: cred.value,
+      };
+    }
+
     // Check rate limiting
     if (this.isInCooldown(slug)) {
       this.log(`[TokenRefresh] Skipping ${slug} - in cooldown after recent failure`);
@@ -122,25 +166,6 @@ export class TokenRefreshManager {
         success: false,
         rateLimited: true,
         reason: 'Rate limited after recent failure',
-      };
-    }
-
-    // Load credential and check if refresh needed
-    const cred = await this.credManager.load(source);
-
-    // Non-refreshable tokens (e.g. Slack) — return as-is.
-    // Renew-endpoint sources are refreshable even without a separate refreshToken.
-    if (cred && !cred.refreshToken && !hasRenewEndpoint(source)) {
-      return { success: true, token: cred.value };
-    }
-
-    // If credential exists, has a known expiry, and isn't near expiry, return it as-is.
-    // Missing expiresAt means we can't determine lifetime — fall through to refresh
-    // so the new credential gets a proper expiresAt (matching needsRefresh() logic).
-    if (cred && cred.expiresAt && !this.credManager.isExpired(cred) && !this.credManager.needsRefresh(cred)) {
-      return {
-        success: true,
-        token: cred.value,
       };
     }
 
@@ -160,14 +185,14 @@ export class TokenRefreshManager {
       } else {
         const reason = 'Refresh returned null';
         this.log(`[TokenRefresh] ${reason} for ${slug}`);
-        this.recordFailure(slug);
+        this.recordFailure(slug, this.credentialIdentity(source, cred));
         return { success: false, reason };
       }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       this.log(`[TokenRefresh] Failed for ${slug}: ${reason}`);
       if (err instanceof SourceAuthSupersededError) return { success: false, reason };
-      this.recordFailure(slug);
+      this.recordFailure(slug, this.credentialIdentity(source, cred));
       return { success: false, reason };
     }
   }
@@ -188,13 +213,12 @@ export class TokenRefreshManager {
     // Check each source in parallel
     const results = await Promise.all(
       refreshableSources.map(async (source) => {
-        // Skip if in cooldown
+        const needsRefresh = await this.needsRefresh(source);
         if (this.isInCooldown(source.config.slug)) {
           this.log(`[TokenRefresh] Skipping ${source.config.slug} - in cooldown`);
           return { source, needsRefresh: false };
         }
 
-        const needsRefresh = await this.needsRefresh(source);
         return { source, needsRefresh };
       })
     );
