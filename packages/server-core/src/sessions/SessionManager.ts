@@ -4293,6 +4293,22 @@ export class SessionManager implements ISessionManager {
       && managed.workspace.rootPath === root
   }
 
+  /**
+   * A pending agent build observes source updates by withholding stale initial
+   * sources, but reloadSessionSources skips sessions whose agent is still null.
+   * Once that build completes, catch up to any update that arrived during
+   * creation so the new agent is never left running without its sources.
+   */
+  private async applySourcesIfUpdatedSince(managed: ManagedSession, observedVersion: number | undefined): Promise<void> {
+    if (this.sourceUpdateVersions.get(managed) === observedVersion) return
+    sessionLog.info(`Applying source updates withheld during agent creation for session ${managed.id}`)
+    try {
+      await this.reloadSessionSources(managed)
+    } catch (error) {
+      sessionLog.error(`Failed to apply withheld source updates after agent creation for session ${managed.id}:`, error)
+    }
+  }
+
   private detachUnavailableSources(managed: ManagedSession, sources: LoadedSource[]): void {
     const usable = new Set(sources.filter(isSourceUsable).map(source => source.config.slug))
     for (const slug of managed.mcpPool?.getConnectedSlugs() ?? []) {
@@ -8996,6 +9012,11 @@ user a clickable link to where the thing now lives.`
 
       // Signal that the agent instance is ready (unblocks title generation)
       managed.agentReadyResolve?.()
+
+      // A source update that arrived after the source build loop but before this
+      // agent existed withheld the build's initial sources. Apply the withheld
+      // update now that reloadSessionSources can see the agent.
+      void this.applySourcesIfUpdatedSince(managed, sourceVersion)
 
       // Set up permission handler to forward requests to renderer
       managed.agent.onPermissionRequest = (request: {
