@@ -425,7 +425,7 @@ describe('TokenRefreshManager', () => {
           expiresAt: Date.now() - 60_000,
         })),
         isExpired: mock(() => true),
-        refresh: mock(() => Promise.resolve('new-fresh-token')),
+        refresh: mock(async (source: LoadedSource) => { mockMarkLoadedSourceAuthenticated(source); return 'new-fresh-token'; }),
       });
 
       const manager = new TokenRefreshManager(credManager);
@@ -488,7 +488,7 @@ describe('TokenRefreshManager', () => {
         })),
         isExpired: mock(() => true),
         needsRefresh: mock(() => true),
-        refresh: mock(() => Promise.resolve('fresh-token')),
+        refresh: mock(async (source: LoadedSource) => { mockMarkLoadedSourceAuthenticated(source); return 'fresh-token'; }),
       });
 
       const manager = new TokenRefreshManager(credManager);
@@ -554,7 +554,7 @@ describe('TokenRefreshManager', () => {
         })),
         isExpired: mock(() => true),
         needsRefresh: mock(() => true),
-        refresh: mock(() => Promise.resolve('new-fresh-token')),
+        refresh: mock(async (source: LoadedSource) => { mockMarkLoadedSourceAuthenticated(source); return 'new-fresh-token'; }),
       });
 
       const manager = new TokenRefreshManager(credManager);

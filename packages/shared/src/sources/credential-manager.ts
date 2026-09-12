@@ -23,11 +23,12 @@ import {
   type SlackService,
   type MicrosoftService,
 } from './types.ts';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildAuthorizationHeader } from './api-tools.ts';
 import { credentialIdToAccount, type CredentialId, type StoredCredential } from '../credentials/types.ts';
 import { getCredentialManager } from '../credentials/index.ts';
+import type { CredentialSnapshot } from '../credentials/manager.ts';
 import { CONFIG_DIR } from '../config/paths.ts';
 import { CraftOAuth, getMcpBaseUrl, prepareMcpOAuth, exchangeMcpOAuth, revokeMcpOAuthTokens, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
 import { type OAuthSessionContext } from '../auth/types.ts';
@@ -64,7 +65,7 @@ import {
   refreshGenericOAuthToken,
 } from '../auth/generic-oauth.ts';
 import { debug } from '../utils/debug.ts';
-import { markLoadedSourceAuthenticated, markLoadedSourceNeedsReauth, GLOBAL_WORKSPACE_ID } from './storage.ts';
+import { markLoadedSourceAuthenticated, markLoadedSourceNeedsReauth, loadSourceConfig, loadGlobalSource, GLOBAL_WORKSPACE_ID } from './storage.ts';
 
 /**
  * True when a credential ID points at the global tier (workspaceId === '__global__').
@@ -258,10 +259,101 @@ export function isMultiHeaderCredential(cred: ApiCredential): cred is MultiHeade
  * });
  * ```
  */
+export class SourceAuthSupersededError extends Error {
+  constructor() { super('Connection changed while authentication was in progress.'); this.name = 'SourceAuthSupersededError'; }
+}
+
+interface SourceAuthOwnership {
+  source: LoadedSource;
+  sourceIdentity: string;
+  snapshot: CredentialSnapshot;
+  effective: boolean;
+  authentication?: boolean;
+}
+
+function sourceAuthFields(config: LoadedSource['config']): string {
+  return JSON.stringify({ id: config.id, provider: config.provider, type: config.type,
+    enabled: config.enabled, api: config.api, mcp: config.mcp });
+}
+
+function sourceAuthIdentity(source: LoadedSource): string {
+  const path = join(source.folderPath, 'config.json');
+  try {
+    const stat = statSync(path);
+    // Use the same normalization as LoadedSource construction (not raw JSON).
+    const config = (source.tier === 'global' || source.tier === 'global-dormant'
+      ? loadGlobalSource(source.config.slug, source.workspaceRootPath)?.config
+      : loadSourceConfig(source.workspaceRootPath, source.config.slug))
+      ?? JSON.parse(readFileSync(path, 'utf8'));
+    const fields = sourceAuthFields(config);
+    if (fields !== sourceAuthFields(source.config)) return 'stale';
+    return JSON.stringify({ inode: stat.ino, birthtime: stat.birthtimeMs, fields });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'virtual';
+    return 'unreadable';
+  }
+}
+
+function captureSourceAuthIdentity(source: LoadedSource): string {
+  const identity = sourceAuthIdentity(source);
+  if (identity === 'stale' || identity === 'unreadable') throw new SourceAuthSupersededError();
+  return identity;
+}
+
 export class SourceCredentialManager {
   // Track in-flight refresh promises to prevent concurrent refreshes for the same source
   // This prevents race conditions (especially important for Microsoft which rotates refresh tokens)
   private pendingRefreshes = new Map<string, Promise<string | null>>();
+
+  async beginAuthentication(source: LoadedSource): Promise<number> {
+    return getCredentialManager().beginAuthIntent(this.getCredentialId(source));
+  }
+
+  async cancelAuthentication(source: LoadedSource, expectedRevision: number): Promise<boolean> {
+    return getCredentialManager().cancelAuthIntent(this.getCredentialId(source), expectedRevision);
+  }
+
+  private async ownershipCurrent(ownership: SourceAuthOwnership): Promise<boolean> {
+    if (sourceAuthIdentity(ownership.source) !== ownership.sourceIdentity) return false;
+    if (ownership.effective) {
+      const current = await this.resolveEffectiveCredential(ownership.source);
+      if (!current || credentialIdToAccount(current.id) !== credentialIdToAccount(ownership.snapshot.id)) return false;
+    }
+    return ownership.authentication
+      ? getCredentialManager().withCurrentAuthIntent(ownership.snapshot, () => sourceAuthIdentity(ownership.source) === ownership.sourceIdentity)
+      : getCredentialManager().withCurrentSnapshot(ownership.snapshot,
+      () => sourceAuthIdentity(ownership.source) === ownership.sourceIdentity);
+  }
+
+  private async saveOwned(ownership: SourceAuthOwnership, credential: StoredCredential): Promise<void> {
+    if (!(await this.ownershipCurrent(ownership))) throw new SourceAuthSupersededError();
+    const committed = await getCredentialManager().compareAndSetSnapshot(ownership.snapshot, credential,
+      () => sourceAuthIdentity(ownership.source) === ownership.sourceIdentity, ownership.authentication);
+    if (!committed) throw new SourceAuthSupersededError();
+    ownership.snapshot = committed;
+  }
+
+  private async failOwned(ownership: SourceAuthOwnership, message: string): Promise<void> {
+    if (!(await this.ownershipCurrent(ownership))) throw new SourceAuthSupersededError();
+    const marked = await getCredentialManager().withCurrentSnapshot(ownership.snapshot, () => {
+      if (sourceAuthIdentity(ownership.source) !== ownership.sourceIdentity) return false;
+      this.markSourceNeedsReauth(ownership.source, message);
+      return true;
+    });
+    if (!marked) throw new SourceAuthSupersededError();
+  }
+
+  private async authenticateOwned(ownership: SourceAuthOwnership): Promise<void> {
+    if (!(await this.ownershipCurrent(ownership))) throw new SourceAuthSupersededError();
+    const manager = getCredentialManager();
+    const check = ownership.authentication ? manager.withCurrentAuthIntent.bind(manager) : manager.withCurrentSnapshot.bind(manager);
+    const marked = await check(ownership.snapshot, () => {
+      if (sourceAuthIdentity(ownership.source) !== ownership.sourceIdentity) return false;
+      markLoadedSourceAuthenticated(ownership.source);
+      return true;
+    });
+    if (!marked) throw new SourceAuthSupersededError();
+  }
 
   // ============================================================
   // Core CRUD Operations
@@ -475,21 +567,20 @@ export class SourceCredentialManager {
   /** Revoke remote MCP OAuth tokens when supported, then delete the local credential. */
   async revoke(source: LoadedSource): Promise<boolean> {
     const credential = await this.load(source);
-    const mcpUrl = source.config.mcp?.url;
-    const isMcpOAuth = source.config.type === 'mcp'
-      && source.config.mcp?.authType === 'oauth'
-      && Boolean(mcpUrl);
+    const deleted = await this.delete(source);
+    await this.revokeRemote(source, credential);
+    return deleted;
+  }
 
-    if (credential && isMcpOAuth && mcpUrl) {
+  /** Remote revocation never mutates local credentials or source status. */
+  async revokeRemote(source: LoadedSource, credential: StoredCredential | null): Promise<void> {
+    const mcpUrl = source.config.mcp?.url;
+    if (credential && source.config.type === 'mcp' && source.config.mcp?.authType === 'oauth' && mcpUrl) {
       await revokeMcpOAuthTokens(mcpUrl, {
-        accessToken: credential.value,
-        refreshToken: credential.refreshToken,
-        clientId: credential.clientId,
-        clientSecret: credential.clientSecret,
+        accessToken: credential.value, refreshToken: credential.refreshToken,
+        clientId: credential.clientId, clientSecret: credential.clientSecret,
       });
     }
-
-    return this.delete(source);
   }
 
   /**
@@ -670,6 +761,18 @@ export class SourceCredentialManager {
     }
   }
 
+  async markSourceNeedsReauthIfDisconnected(source: LoadedSource, message: string): Promise<boolean> {
+    const identity = sourceAuthIdentity(source);
+    const manager = getCredentialManager();
+    const snapshot = await manager.captureSnapshot(this.getCredentialId(source));
+    return manager.withCurrentSnapshot(snapshot, async () => {
+      if (await this.loadEffective(source)) return false;
+      if (sourceAuthIdentity(source) !== identity) return false;
+      this.markSourceNeedsReauth(source, message);
+      return true;
+    });
+  }
+
   /**
    * Check if source has valid (non-expired) credentials
    */
@@ -839,8 +942,13 @@ export class SourceCredentialManager {
     source: LoadedSource,
     provider: OAuthProvider,
     params: OAuthExchangeParams,
-    opts?: { override?: boolean }
+    opts?: { override?: boolean; authIntentRevision?: number }
   ): Promise<AuthResult> {
+    const ownership: SourceAuthOwnership = {
+      source, sourceIdentity: captureSourceAuthIdentity(source), effective: false, authentication: true,
+      snapshot: await getCredentialManager().captureSnapshot(this.getCredentialId(source)),
+    };
+    if (opts?.authIntentRevision !== undefined) ownership.snapshot.authRevision = opts.authIntentRevision;
     let result: OAuthExchangeResult;
 
     switch (provider) {
@@ -865,7 +973,9 @@ export class SourceCredentialManager {
       return { success: false, error: result.error };
     }
 
-    const existing = await this.load(source);
+    const existing = ownership.snapshot.credential;
+    const sameAccount = Boolean(result.email?.trim() && existing?.accountEmail?.trim()
+      && result.email.trim().toLowerCase() === existing.accountEmail.trim().toLowerCase());
     const value = isGoogleAdsSource(source)
       ? stringifyGoogleAdsCredentialValue({
         ...parseGoogleAdsCredentialValue(existing?.value),
@@ -873,18 +983,23 @@ export class SourceCredentialManager {
       })
       : result.accessToken!;
 
-    await this.save(source, {
-      value,
-      refreshToken: result.refreshToken ?? existing?.refreshToken,
-      expiresAt: result.expiresAt,
-      clientId: result.oauthClientId,
-      clientSecret: result.oauthClientSecret,
-      accountEmail: result.email,
-      oauthScopes: result.grantedScopes,
-      ...(opts?.override === true || existing?.override === true ? { override: true } : {}),
-    });
+    try {
+      await this.saveOwned(ownership, {
+        value,
+        refreshToken: result.refreshToken ?? (sameAccount ? existing?.refreshToken : undefined),
+        expiresAt: result.expiresAt,
+        clientId: result.oauthClientId,
+        clientSecret: result.oauthClientSecret,
+        accountEmail: result.email,
+        oauthScopes: result.grantedScopes,
+        ...(opts?.override === true || existing?.override === true ? { override: true } : {}),
+      });
 
-    markLoadedSourceAuthenticated(source);
+      await this.authenticateOwned(ownership);
+    } catch (error) {
+      if (error instanceof SourceAuthSupersededError) return { success: false, error: error.message };
+      throw error;
+    }
 
     debug(`[SourceCredentialManager] OAuth exchange+store complete for ${source.config.slug}`);
     return { success: true, email: result.email };
@@ -905,6 +1020,11 @@ export class SourceCredentialManager {
     callbacks?: OAuthCallbacks,
     sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
+    const identity = captureSourceAuthIdentity(source);
+    const authRevision = await this.beginAuthentication(source);
+    const snapshot = await getCredentialManager().captureSnapshot(this.getCredentialId(source));
+    snapshot.authRevision = authRevision;
+    const ownership: SourceAuthOwnership = { source, sourceIdentity: identity, snapshot, effective: false, authentication: true };
     const defaultCallbacks: OAuthCallbacks = {
       onStatus: (msg) => debug(`[SourceCredentialManager] ${msg}`),
       onError: (err) => debug(`[SourceCredentialManager] Error: ${err}`),
@@ -913,17 +1033,17 @@ export class SourceCredentialManager {
 
     // Google APIs use Google OAuth
     if (source.config.provider === 'google') {
-      return this.authenticateGoogle(source, cb, sessionContext);
+      return this.authenticateGoogle(source, cb, ownership, sessionContext);
     }
 
     // Slack APIs use Slack OAuth
     if (source.config.provider === 'slack') {
-      return this.authenticateSlack(source, cb, sessionContext);
+      return this.authenticateSlack(source, cb, ownership, sessionContext);
     }
 
     // Microsoft APIs use Microsoft OAuth
     if (source.config.provider === 'microsoft') {
-      return this.authenticateMicrosoft(source, cb, sessionContext);
+      return this.authenticateMicrosoft(source, cb, ownership, sessionContext);
     }
 
     // Generic OAuth (explicit config or auto-discovery from baseUrl)
@@ -933,7 +1053,7 @@ export class SourceCredentialManager {
 
     // MCP OAuth flow
     if (source.config.type === 'mcp' && source.config.mcp?.authType === 'oauth') {
-      return this.authenticateMcp(source, cb, sessionContext);
+      return this.authenticateMcp(source, cb, ownership, sessionContext);
     }
 
     return {
@@ -948,6 +1068,7 @@ export class SourceCredentialManager {
   private async authenticateMcp(
     source: LoadedSource,
     callbacks: OAuthCallbacks,
+    ownership: SourceAuthOwnership,
     sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     if (!source.config.mcp?.url) {
@@ -964,7 +1085,7 @@ export class SourceCredentialManager {
       const { tokens, clientId } = await oauth.authenticate();
 
       // Save the credentials
-      await this.save(source, {
+      await this.saveOwned(ownership, {
         value: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
@@ -973,7 +1094,7 @@ export class SourceCredentialManager {
       });
 
       // Mark source as authenticated in config.json
-      markLoadedSourceAuthenticated(source);
+      await this.authenticateOwned(ownership);
 
       return { success: true };
     } catch (error) {
@@ -994,6 +1115,7 @@ export class SourceCredentialManager {
   private async authenticateGoogle(
     source: LoadedSource,
     callbacks: OAuthCallbacks,
+    ownership: SourceAuthOwnership,
     sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     try {
@@ -1038,7 +1160,7 @@ export class SourceCredentialManager {
       }
 
       // Save the credentials (including clientId/clientSecret for token refresh)
-      await this.save(source, {
+      await this.saveOwned(ownership, {
         value: result.accessToken!,
         refreshToken: result.refreshToken,
         expiresAt: result.expiresAt,
@@ -1049,7 +1171,7 @@ export class SourceCredentialManager {
       });
 
       // Mark source as authenticated in config.json
-      markLoadedSourceAuthenticated(source);
+      await this.authenticateOwned(ownership);
 
       callbacks.onStatus(`${serviceName} authentication successful`);
       return { success: true, email: result.email };
@@ -1071,6 +1193,7 @@ export class SourceCredentialManager {
   private async authenticateSlack(
     source: LoadedSource,
     callbacks: OAuthCallbacks,
+    ownership: SourceAuthOwnership,
     sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     try {
@@ -1107,14 +1230,14 @@ export class SourceCredentialManager {
       }
 
       // Save the credentials
-      await this.save(source, {
+      await this.saveOwned(ownership, {
         value: result.accessToken!,
         refreshToken: result.refreshToken,
         expiresAt: result.expiresAt,
       });
 
       // Mark source as authenticated in config.json
-      markLoadedSourceAuthenticated(source);
+      await this.authenticateOwned(ownership);
 
       callbacks.onStatus(`${serviceName} authentication successful`);
       // Use teamName as the identifier (similar to email for Google)
@@ -1137,6 +1260,7 @@ export class SourceCredentialManager {
   private async authenticateMicrosoft(
     source: LoadedSource,
     callbacks: OAuthCallbacks,
+    ownership: SourceAuthOwnership,
     sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     try {
@@ -1179,14 +1303,14 @@ export class SourceCredentialManager {
       }
 
       // Save the credentials
-      await this.save(source, {
+      await this.saveOwned(ownership, {
         value: result.accessToken!,
         refreshToken: result.refreshToken,
         expiresAt: result.expiresAt,
       });
 
       // Mark source as authenticated in config.json
-      markLoadedSourceAuthenticated(source);
+      await this.authenticateOwned(ownership);
 
       callbacks.onStatus(`${serviceName} authentication successful`);
       return { success: true, email: result.email };
@@ -1209,15 +1333,29 @@ export class SourceCredentialManager {
    * - Microsoft rotates refresh tokens, so concurrent refreshes could cause token invalidation
    */
   async refresh(source: LoadedSource): Promise<string | null> {
+    const sourceIdentity = captureSourceAuthIdentity(source);
     const resolved = await this.resolveEffectiveCredential(source);
     if (!resolved) return null;
-    const key = credentialIdToAccount(resolved.id);
+    const snapshot = await getCredentialManager().captureSnapshot(resolved.id);
+    if (!snapshot.credential) return null;
+    const ownership: SourceAuthOwnership = { source, sourceIdentity, snapshot, effective: true };
+    const key = `${credentialIdToAccount(resolved.id)}:${snapshot.revision}`;
 
     // Return existing refresh promise if one is in progress
     const pending = this.pendingRefreshes.get(key);
     if (pending) {
       debug(`[SourceCredentialManager] Reusing pending refresh for ${key}`);
-      return pending;
+      const token = await pending;
+      // A shared refresh also belongs to this caller's source/override route.
+      const effective = await this.resolveEffectiveCredential(source);
+      if (sourceAuthIdentity(source) !== ownership.sourceIdentity || !effective
+        || credentialIdToAccount(effective.id) !== credentialIdToAccount(resolved.id)
+        || (token && (isGoogleAdsSource(source) ? parseGoogleAdsCredentialValue(effective.credential.value).accessToken : effective.credential.value) !== token)) throw new SourceAuthSupersededError();
+      if (token) {
+        ownership.snapshot = await getCredentialManager().captureSnapshot(effective.id);
+        await this.authenticateOwned(ownership);
+      }
+      return token;
     }
 
     // Create and track new refresh promise
@@ -1233,7 +1371,11 @@ export class SourceCredentialManager {
         },
       } : {}),
     };
-    const refreshPromise = this.doRefresh(ownerSource, resolved.credential).finally(() => {
+    const refreshPromise = this.doRefresh(ownerSource, snapshot.credential, ownership).then(async token => {
+      if (!(await this.ownershipCurrent(ownership))) throw new SourceAuthSupersededError();
+      if (token) await this.authenticateOwned(ownership);
+      return token;
+    }).finally(() => {
       this.pendingRefreshes.delete(key);
     });
 
@@ -1244,12 +1386,12 @@ export class SourceCredentialManager {
   /**
    * Internal refresh implementation
    */
-  private async doRefresh(source: LoadedSource, cred: StoredCredential): Promise<string | null> {
+  private async doRefresh(source: LoadedSource, cred: StoredCredential, ownership: SourceAuthOwnership): Promise<string | null> {
     // API renew endpoint (non-OAuth token refresh) — check before provider routing.
     // These sources may not have a separate refreshToken; they use the current
     // access token for renewal.
     if (hasRenewEndpoint(source)) {
-      return this.refreshApiRenew(source, cred);
+      return this.refreshApiRenew(source, cred, ownership);
     }
 
     // For all other refresh strategies, a refreshToken is required.
@@ -1260,30 +1402,30 @@ export class SourceCredentialManager {
 
     // Google API refresh
     if (source.config.provider === 'google') {
-      return this.refreshGoogle(source, cred);
+      return this.refreshGoogle(source, cred, ownership);
     }
 
     // Slack API refresh
     if (source.config.provider === 'slack') {
-      return this.refreshSlack(source, cred);
+      return this.refreshSlack(source, cred, ownership);
     }
 
     // Microsoft API refresh
     if (source.config.provider === 'microsoft') {
-      return this.refreshMicrosoft(source, cred);
+      return this.refreshMicrosoft(source, cred, ownership);
     }
 
     // Generic OAuth refresh
     if (source.config.api?.authType === 'oauth') {
       if (source.config.api?.oauth?.tokenUrl) {
         // Static config: tokenUrl from config.json
-        return this.refreshGeneric(source, cred);
+        return this.refreshGeneric(source, cred, ownership);
       }
       // Auto-discovered: re-discover token endpoint from baseUrl via MCP OAuth refresh
       if (source.config.api?.baseUrl && cred.clientId) {
         return this.refreshMcp(
           { ...source, config: { ...source.config, type: 'mcp', mcp: { url: source.config.api.baseUrl, authType: 'oauth' } } },
-          cred,
+          cred, ownership,
         );
       }
       return null;
@@ -1291,7 +1433,7 @@ export class SourceCredentialManager {
 
     // MCP refresh
     if (source.config.type === 'mcp' && source.config.mcp?.url) {
-      return this.refreshMcp(source, cred);
+      return this.refreshMcp(source, cred, ownership);
     }
 
     return null;
@@ -1304,6 +1446,7 @@ export class SourceCredentialManager {
   private async refreshApiRenew(
     source: LoadedSource,
     cred: StoredCredential,
+    ownership: SourceAuthOwnership,
   ): Promise<string | null> {
     const renewConfig = source.config.api?.renewEndpoint;
     if (!renewConfig?.path) return null;
@@ -1365,7 +1508,7 @@ export class SourceCredentialManager {
       // trigger refresh on next session start (safe but noisy).
 
       // 7. Save updated credential
-      await this.save(source, {
+      await this.saveOwned(ownership, {
         ...cred,
         value: newToken,
         ...(expiresAt !== undefined ? { expiresAt } : {}),
@@ -1376,7 +1519,7 @@ export class SourceCredentialManager {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       debug(`[SourceCredentialManager] Renew endpoint refresh failed for ${source.config.slug}: ${errorMsg}`);
-      this.markSourceNeedsReauth(source, `Token refresh failed: ${errorMsg}`);
+      await this.failOwned(ownership, `Token refresh failed: ${errorMsg}`);
       return null;
     }
   }
@@ -1386,7 +1529,8 @@ export class SourceCredentialManager {
    */
   private async refreshGoogle(
     source: LoadedSource,
-    cred: StoredCredential
+    cred: StoredCredential,
+    ownership: SourceAuthOwnership,
   ): Promise<string | null> {
     try {
       // Pass stored credentials (or fall back to env vars via undefined)
@@ -1404,7 +1548,7 @@ export class SourceCredentialManager {
         })
         : result.accessToken;
 
-      await this.save(source, {
+      await this.saveOwned(ownership, {
         ...cred,
         value,
         expiresAt: result.expiresAt,
@@ -1415,7 +1559,7 @@ export class SourceCredentialManager {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       debug(`[SourceCredentialManager] Google token refresh failed:`, error);
-      this.markSourceNeedsReauth(source, `Token refresh failed: ${errorMsg}`);
+      await this.failOwned(ownership, `Token refresh failed: ${errorMsg}`);
       return null;
     }
   }
@@ -1425,13 +1569,14 @@ export class SourceCredentialManager {
    */
   private async refreshSlack(
     source: LoadedSource,
-    cred: StoredCredential
+    cred: StoredCredential,
+    ownership: SourceAuthOwnership,
   ): Promise<string | null> {
     try {
       const result = await refreshSlackToken(cred.refreshToken!, cred.clientId);
 
       // Update stored credentials
-      await this.save(source, {
+      await this.saveOwned(ownership, {
         ...cred,
         value: result.accessToken,
         expiresAt: result.expiresAt,
@@ -1442,7 +1587,7 @@ export class SourceCredentialManager {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       debug(`[SourceCredentialManager] Slack token refresh failed:`, error);
-      this.markSourceNeedsReauth(source, `Token refresh failed: ${errorMsg}`);
+      await this.failOwned(ownership, `Token refresh failed: ${errorMsg}`);
       return null;
     }
   }
@@ -1452,13 +1597,14 @@ export class SourceCredentialManager {
    */
   private async refreshMicrosoft(
     source: LoadedSource,
-    cred: StoredCredential
+    cred: StoredCredential,
+    ownership: SourceAuthOwnership,
   ): Promise<string | null> {
     try {
       const result = await refreshMicrosoftToken(cred.refreshToken!);
 
       // Update stored credentials (Microsoft may rotate refresh tokens)
-      await this.save(source, {
+      await this.saveOwned(ownership, {
         ...cred,
         value: result.accessToken,
         refreshToken: result.refreshToken || cred.refreshToken,
@@ -1470,7 +1616,7 @@ export class SourceCredentialManager {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       debug(`[SourceCredentialManager] Microsoft token refresh failed:`, error);
-      this.markSourceNeedsReauth(source, `Token refresh failed: ${errorMsg}`);
+      await this.failOwned(ownership, `Token refresh failed: ${errorMsg}`);
       return null;
     }
   }
@@ -1501,11 +1647,12 @@ export class SourceCredentialManager {
   private async refreshGeneric(
     source: LoadedSource,
     cred: StoredCredential,
+    ownership: SourceAuthOwnership,
   ): Promise<string | null> {
     const oauthConfig = source.config.api?.oauth;
     if (!oauthConfig?.tokenUrl) {
       debug(`[SourceCredentialManager] No tokenUrl in config for generic OAuth refresh`);
-      this.markSourceNeedsReauth(source, 'Missing tokenUrl in api.oauth config');
+      await this.failOwned(ownership, 'Missing tokenUrl in api.oauth config');
       return null;
     }
 
@@ -1517,7 +1664,7 @@ export class SourceCredentialManager {
         cred.clientSecret || oauthConfig.clientSecret,
       );
 
-      await this.save(source, {
+      await this.saveOwned(ownership, {
         ...cred,
         value: result.accessToken,
         refreshToken: result.refreshToken || cred.refreshToken,
@@ -1529,7 +1676,7 @@ export class SourceCredentialManager {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       debug(`[SourceCredentialManager] Generic OAuth token refresh failed:`, error);
-      this.markSourceNeedsReauth(source, `Token refresh failed: ${errorMsg}`);
+      await this.failOwned(ownership, `Token refresh failed: ${errorMsg}`);
       return null;
     }
   }
@@ -1539,11 +1686,12 @@ export class SourceCredentialManager {
    */
   private async refreshMcp(
     source: LoadedSource,
-    cred: StoredCredential
+    cred: StoredCredential,
+    ownership: SourceAuthOwnership,
   ): Promise<string | null> {
     if (!cred.clientId) {
       debug(`[SourceCredentialManager] No clientId for MCP token refresh`);
-      this.markSourceNeedsReauth(source, 'Missing clientId for token refresh');
+      await this.failOwned(ownership, 'Missing clientId for token refresh');
       return null;
     }
 
@@ -1566,7 +1714,7 @@ export class SourceCredentialManager {
       const tokens = await oauth.refreshAccessToken(cred.refreshToken!, cred.clientId);
 
       // Update stored credentials
-      await this.save(source, {
+      await this.saveOwned(ownership, {
         ...cred,
         value: tokens.accessToken,
         refreshToken: tokens.refreshToken || cred.refreshToken,
@@ -1578,7 +1726,7 @@ export class SourceCredentialManager {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       debug(`[SourceCredentialManager] MCP token refresh failed:`, error);
-      this.markSourceNeedsReauth(source, `Token refresh failed: ${errorMsg}`);
+      await this.failOwned(ownership, `Token refresh failed: ${errorMsg}`);
       return null;
     }
   }

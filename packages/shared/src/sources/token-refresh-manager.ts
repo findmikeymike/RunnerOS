@@ -13,7 +13,7 @@
 
 import { isRefreshableSource, hasRenewEndpoint, type LoadedSource } from './types.ts';
 import type { SourceCredentialManager } from './credential-manager.ts';
-import { markLoadedSourceAuthenticated } from './storage.ts';
+import { SourceAuthSupersededError } from './credential-manager.ts';
 
 /** Default cooldown after failed refresh (5 minutes) */
 const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000;
@@ -154,21 +154,19 @@ export class TokenRefreshManager {
         this.log(`[TokenRefresh] Successfully refreshed token for ${slug}`);
         this.clearFailure(slug);
 
-        // Restore auth state — undoes markSourceNeedsReauth() from startup
-        markLoadedSourceAuthenticated(source);
+        // Credential manager commits authentication status under the same ownership fence.
 
         return { success: true, token };
       } else {
         const reason = 'Refresh returned null';
         this.log(`[TokenRefresh] ${reason} for ${slug}`);
-        this.credManager.markSourceNeedsReauth(source, 'Token refresh failed');
         this.recordFailure(slug);
         return { success: false, reason };
       }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       this.log(`[TokenRefresh] Failed for ${slug}: ${reason}`);
-      this.credManager.markSourceNeedsReauth(source, `Refresh error: ${reason}`);
+      if (err instanceof SourceAuthSupersededError) return { success: false, reason };
       this.recordFailure(slug);
       return { success: false, reason };
     }

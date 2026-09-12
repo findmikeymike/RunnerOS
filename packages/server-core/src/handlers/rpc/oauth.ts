@@ -40,7 +40,7 @@ export const HANDLED_CHANNELS = [
 export async function completeOAuthFlow(opts: {
   code: string
   state: string
-  flowStore: { getByState(state: string): any; remove(state: string): void }
+  flowStore: { getByState(state: string): any; claim?(state: string): any; remove(state: string): void }
   credManager: { exchangeAndStore(...args: any[]): Promise<any> }
   sessionManager: { completeAuthRequest(...args: any[]): Promise<void> }
   pushSourcesChanged: (workspaceId: string) => void
@@ -63,56 +63,64 @@ export async function completeOAuthFlow(opts: {
   }
   // Consume the one-time state nonce before network I/O so concurrent/replayed
   // callbacks cannot exchange a second code against the same authorization.
-  flowStore.remove(state)
-  const workspace = getWorkspaceByNameOrId(flow.workspaceId)
-  if (!workspace) throw new Error(`Workspace not found: ${flow.workspaceId}`)
-  const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
-  if (flow.credentialScope === 'global') {
-    assertGlobalSourceCredentialPermission(flow.workspaceId, flow.sourceSlug)
+  if (flowStore.claim) {
+    if (!flowStore.claim(state)) throw new Error('Unknown or expired OAuth flow')
   } else {
-    assertTeamPermission(workspace.rootPath, 'secrets.update')
+    flowStore.remove(state)
   }
+  try {
+    const workspace = getWorkspaceByNameOrId(flow.workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${flow.workspaceId}`)
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    if (flow.credentialScope === 'global') {
+      assertGlobalSourceCredentialPermission(flow.workspaceId, flow.sourceSlug)
+    } else {
+      assertTeamPermission(workspace.rootPath, 'secrets.update')
+    }
 
-  const result = await credManager.exchangeAndStore(
-    flow.source,
-    flow.provider,
-    {
-      code,
-      codeVerifier: flow.codeVerifier,
-      tokenEndpoint: flow.tokenEndpoint,
-      resource: flow.resource,
-      clientId: flow.clientId,
-      clientSecret: flow.clientSecret,
-      redirectUri: flow.redirectUri,
-      expectedScopes: flow.requestedScopes,
-      googleService: flow.googleService,
-    },
-    { override: flow.credentialScope === 'workspace-override' },
-  )
+    const result = await credManager.exchangeAndStore(
+      flow.source,
+      flow.provider,
+      {
+        code,
+        codeVerifier: flow.codeVerifier,
+        tokenEndpoint: flow.tokenEndpoint,
+        resource: flow.resource,
+        clientId: flow.clientId,
+        clientSecret: flow.clientSecret,
+        redirectUri: flow.redirectUri,
+        expectedScopes: flow.requestedScopes,
+        googleService: flow.googleService,
+      },
+      { override: flow.credentialScope === 'workspace-override', authIntentRevision: flow.authIntentRevision },
+    )
 
-  // If this was triggered from a session auth card, complete it
-  if (flow.sessionId && flow.authRequestId) {
-    await sessionManager.completeAuthRequest(flow.sessionId, {
-      requestId: flow.authRequestId,
-      sourceSlug: flow.sourceSlug,
-      success: result.success,
-      email: result.email,
-      error: result.error,
-    })
+    // If this was triggered from a session auth card, complete it
+    if (flow.sessionId && flow.authRequestId) {
+      await sessionManager.completeAuthRequest(flow.sessionId, {
+        requestId: flow.authRequestId,
+        sourceSlug: flow.sourceSlug,
+        success: result.success,
+        email: result.email,
+        error: result.error,
+      })
+    }
+
+    // Push source status update to all clients in this workspace
+    pushSourcesChanged(flow.workspaceId)
+    if (result.success) {
+      await opts.onSourceCredentialsChanged?.({
+        workspaceId: flow.workspaceId,
+        sourceSlug: flow.sourceSlug,
+        credentialScope: flow.credentialScope,
+      })
+    }
+
+    logger.info(`[OAuth] Flow complete for ${flow.sourceSlug} (success=${result.success})`)
+    return result
+  } finally {
+    flowStore.remove(state)
   }
-
-  // Push source status update to all clients in this workspace
-  pushSourcesChanged(flow.workspaceId)
-  if (result.success) {
-    await opts.onSourceCredentialsChanged?.({
-      workspaceId: flow.workspaceId,
-      sourceSlug: flow.sourceSlug,
-      credentialScope: flow.credentialScope,
-    })
-  }
-
-  logger.info(`[OAuth] Flow complete for ${flow.sourceSlug} (success=${result.success})`)
-  return result
 }
 
 export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -160,11 +168,13 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       source = materializeBuiltinSource(source)
     }
 
+    const authIntentRevision = await credManager.beginAuthentication(source)
     const prepared = await credManager.prepareOAuth(source, { callbackPort, callbackUrl })
 
     const flowId = randomUUID()
     flowStore.store(createPendingFlow({
       flowId,
+      authIntentRevision,
       state: prepared.state,
       codeVerifier: prepared.codeVerifier,
       redirectUri: prepared.redirectUri,
@@ -245,9 +255,12 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     state: string
   }) => {
     const { flowId, state } = args
-    const flow = flowStore.getByState(state)
+    const flow = flowStore.getForCancellation?.(state) ?? flowStore.getByState(state)
     if (flow && flow.flowId === flowId && flow.ownerClientId === ctx.clientId) {
       flowStore.remove(state)
+      if (flow.authIntentRevision !== undefined) {
+        await credManager.cancelAuthentication(flow.source, flow.authIntentRevision)
+      }
       log.info(`[OAuth] Flow cancelled for ${flow.sourceSlug}`)
     }
   })
@@ -274,7 +287,31 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       throw new Error(`Source not found: ${sourceSlug}`)
     }
 
-    const credential = await credManager.loadEffective(source)
+    const credential = source.config.provider === 'google'
+      ? await credManager.loadEffective(source)
+      : await credManager.load(source)
+
+    // Detach locally before remote revocation can wait on a provider. A newer
+    // sign-in must never be deleted or marked signed-out by this completion.
+    if (source.config.provider === 'google') {
+      await credManager.deleteEffective(source)
+    } else {
+      await credManager.delete(source)
+    }
+    await syncGoogleAdsCredentialCache(source)
+    // Shared Google credentials can serve the same source in other workspaces.
+    const affectedWorkspaces = source.config.provider === 'google'
+      ? [...new Map([workspace, ...getWorkspaces()].map(ws => [ws.id, ws])).values()]
+      : [workspace]
+    for (const affected of affectedWorkspaces) {
+      const [currentSource] = getSourcesBySlugs(affected.rootPath, [sourceSlug])
+      if (!currentSource || currentSource.config.provider !== source.config.provider) continue
+      await credManager.markSourceNeedsReauthIfDisconnected(currentSource, 'Signed out by user')
+      await reloadSourcesForWorkspace(deps, affected.rootPath, log, 'OAUTH_REVOKED')
+      pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: affected.id },
+        affected.id, loadAllSources(affected.rootPath))
+    }
+
     let revokedRemotely = true
     let warning: string | undefined
     if (source.config.provider === 'google' && credential) {
@@ -284,19 +321,9 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
         revokedRemotely = false
         warning = 'Local Google credentials were removed, but Google could not confirm remote revocation. Retry revoke from your Google Account if needed.'
       }
-    }
-
-    if (source.config.provider === 'google') {
-      await credManager.deleteEffective(source)
     } else {
-      await credManager.revoke(source)
+      await credManager.revokeRemote(source, credential)
     }
-    await syncGoogleAdsCredentialCache(source)
-    credManager.markSourceNeedsReauth(source, 'Signed out by user')
-
-    // Push source status update
-    const revokeSources = loadAllSources(workspace.rootPath)
-    pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: ctx.workspaceId }, ctx.workspaceId, revokeSources)
 
     log.info(`[OAuth] Revoked credentials for ${sourceSlug}`)
     return { success: true, revokedRemotely, warning }

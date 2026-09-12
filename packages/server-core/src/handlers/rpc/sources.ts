@@ -268,9 +268,11 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
   server.handle(RPC_CHANNELS.sources.DELETE, async (_ctx, workspaceId: string, sourceSlug: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { deleteSource } = await import('@craft-agent/shared/sources')
+    const { deleteSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
     const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
     assertTeamPermission(workspace.rootPath, 'files.write')
+    const [source] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
+    if (source) await getSourceCredentialManager().beginAuthentication(source)
     deleteSource(workspace.rootPath, sourceSlug)
 
     // Clean up stale slug from workspace default sources

@@ -19,11 +19,19 @@ mock.module('../storage.ts', () => ({
 // Mock credentials module — track set() calls to verify saves
 let setCalls: unknown[][] = [];
 const mockGet = mock(() => Promise.resolve(null as unknown));
+let currentCredential: any = null;
 mock.module('../../credentials/index.ts', () => ({
   getCredentialManager: () => ({
     getUserSecret: async (_name: string): Promise<string | null> => null,
     set: (...args: unknown[]) => { setCalls.push(args); return Promise.resolve(); },
-    get: mockGet,
+    get: async () => { const value = await mockGet(); if (value) currentCredential = value; return currentCredential; },
+    captureSnapshot: async (id: unknown) => ({ id, revision: 0, authRevision: 0, credential: currentCredential }),
+    withCurrentSnapshot: async (_snapshot: unknown, action: () => boolean) => action(),
+    compareAndSetSnapshot: async (snapshot: any, replacement: unknown, guard: () => boolean) => {
+      if (!guard()) return null;
+      setCalls.push([snapshot.id, replacement]); currentCredential = replacement;
+      return { ...snapshot, credential: replacement, revision: snapshot.revision + 1 };
+    },
     delete: mock(() => Promise.resolve()),
   }),
 }));
@@ -85,6 +93,7 @@ describe('refreshApiRenew via refresh()', () => {
     credManager = new SourceCredentialManager();
     originalFetch = globalThis.fetch;
     setCalls = [];
+    currentCredential = null;
     fetchCalls = [];
   });
 

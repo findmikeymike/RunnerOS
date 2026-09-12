@@ -48,8 +48,83 @@ function clearRepairedCredentialCooldown(id: CredentialId): void {
   }
 }
 
+/** Internal ownership receipt; never expose credentials through RPC or logs. */
+export interface CredentialSnapshot {
+  id: CredentialId;
+  revision: number;
+  authRevision: number;
+  credential: StoredCredential | null;
+}
+
 export class CredentialManager {
   private mutations = new Map<string, Promise<unknown>>();
+  private revisions = new Map<string, number>();
+  private authRevisions = new Map<string, number>();
+
+  private bumpAuthRevision(id: CredentialId): number {
+    const key = credentialIdToAccount(id);
+    const revision = (this.authRevisions.get(key) ?? 0) + 1;
+    this.authRevisions.set(key, revision);
+    return revision;
+  }
+
+  async beginAuthIntent(id: CredentialId): Promise<number> {
+    return this.mutate(id, () => Promise.resolve(this.bumpAuthRevision(id)));
+  }
+
+  async cancelAuthIntent(id: CredentialId, expectedRevision: number): Promise<boolean> {
+    return this.mutate(id, async () => {
+      if ((this.authRevisions.get(credentialIdToAccount(id)) ?? 0) !== expectedRevision) return false;
+      this.bumpAuthRevision(id);
+      return true;
+    });
+  }
+
+  async withCurrentAuthIntent(snapshot: CredentialSnapshot, action: () => boolean): Promise<boolean> {
+    return this.mutate(snapshot.id, async () =>
+      (this.authRevisions.get(credentialIdToAccount(snapshot.id)) ?? 0) === snapshot.authRevision && action());
+  }
+
+  private bumpRevision(id: CredentialId): void {
+    const key = credentialIdToAccount(id);
+    this.revisions.set(key, (this.revisions.get(key) ?? 0) + 1);
+  }
+
+  async captureSnapshot(id: CredentialId): Promise<CredentialSnapshot> {
+    return this.mutate(id, async () => ({
+      id: { ...id }, revision: this.revisions.get(credentialIdToAccount(id)) ?? 0,
+      authRevision: this.authRevisions.get(credentialIdToAccount(id)) ?? 0,
+      credential: structuredClone(await this.get(id)),
+    }));
+  }
+
+  private async matchesSnapshot(snapshot: CredentialSnapshot): Promise<boolean> {
+    return (this.revisions.get(credentialIdToAccount(snapshot.id)) ?? 0) === snapshot.revision
+      && JSON.stringify(await this.get(snapshot.id)) === JSON.stringify(snapshot.credential);
+  }
+
+  async withCurrentSnapshot(snapshot: CredentialSnapshot, action: () => boolean | Promise<boolean>): Promise<boolean> {
+    return this.mutate(snapshot.id, async () => (await this.matchesSnapshot(snapshot)) && action());
+  }
+
+  async compareAndSetSnapshot(
+    snapshot: CredentialSnapshot, replacement: StoredCredential, stillOwned: () => boolean = () => true,
+    authentication = false,
+  ): Promise<CredentialSnapshot | null> {
+    return this.mutate(snapshot.id, async () => {
+      const matches = authentication
+        ? (this.authRevisions.get(credentialIdToAccount(snapshot.id)) ?? 0) === snapshot.authRevision
+        : await this.matchesSnapshot(snapshot);
+      if (!matches || !stillOwned()) return null;
+      await this.setUnlocked(snapshot.id, replacement);
+      if (authentication) this.bumpAuthRevision(snapshot.id);
+      return {
+        id: snapshot.id, revision: this.revisions.get(credentialIdToAccount(snapshot.id)) ?? 0,
+        authRevision: this.authRevisions.get(credentialIdToAccount(snapshot.id)) ?? 0,
+        credential: structuredClone(replacement),
+      };
+    });
+  }
 
   private async mutate<T>(id: CredentialId, operation: () => Promise<T>): Promise<T> {
     const key = credentialIdToAccount(id);
@@ -159,7 +234,7 @@ export class CredentialManager {
    * Automatically initializes if needed.
    */
   async set(id: CredentialId, credential: StoredCredential): Promise<void> {
-    return this.mutate(id, () => this.setUnlocked(id, credential));
+    return this.mutate(id, async () => { await this.setUnlocked(id, credential); this.bumpAuthRevision(id); });
   }
 
   private async setUnlocked(id: CredentialId, credential: StoredCredential): Promise<void> {
@@ -170,6 +245,7 @@ export class CredentialManager {
     }
 
     await this.writeBackend.set(id, credential);
+    this.bumpRevision(id);
     clearRepairedCredentialCooldown(id);
     debug(`[CredentialManager] Saved ${id.type} to ${this.writeBackend.name}`);
   }
@@ -197,6 +273,8 @@ export class CredentialManager {
       }
     }
 
+    this.bumpRevision(id);
+    this.bumpAuthRevision(id);
     if (deleted) clearRepairedCredentialCooldown(id);
     return deleted;
   }

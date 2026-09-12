@@ -42,12 +42,16 @@ export interface PendingOAuthFlow {
    */
   credentialScope?: 'global' | 'workspace-override';
 
+  /** Server-owned sign-in intent; never accepted from a callback payload. */
+  authIntentRevision?: number;
+
   createdAt: number;
   expiresAt: number;
 }
 
 export class OAuthFlowStore {
   private flows = new Map<string, PendingOAuthFlow>();
+  private completing = new Map<string, PendingOAuthFlow>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
@@ -71,8 +75,22 @@ export class OAuthFlowStore {
     return flow;
   }
 
+  /** Consume the callback nonce while retaining cancellation ownership. */
+  claim(state: string): PendingOAuthFlow | null {
+    const flow = this.getByState(state);
+    if (!flow) return null;
+    this.flows.delete(state);
+    this.completing.set(state, flow);
+    return flow;
+  }
+
+  getForCancellation(state: string): PendingOAuthFlow | null {
+    return this.getByState(state) ?? this.completing.get(state) ?? null;
+  }
+
   remove(state: string): void {
     this.flows.delete(state);
+    this.completing.delete(state);
   }
 
   /** Prune expired entries. Called on interval + lazily on access. */
@@ -92,6 +110,7 @@ export class OAuthFlowStore {
       this.cleanupTimer = null;
     }
     this.flows.clear();
+    this.completing.clear();
   }
 
   /** Number of pending flows (for diagnostics). */
