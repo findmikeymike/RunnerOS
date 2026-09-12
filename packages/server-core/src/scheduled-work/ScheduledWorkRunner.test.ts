@@ -212,6 +212,39 @@ async function waitFor(predicate: () => boolean, attempts = 100): Promise<void> 
 }
 
 describe('ScheduledWorkRunner', () => {
+  for (const outcome of ['success', 'failure', 'late-start'] as const) {
+    test(`an old agent ${outcome} cannot overwrite a newer attempt`, async () => {
+      const root = makeRoot()
+      const original = buildOrder({ status: 'running', runs: [{ id: 'old-attempt', jobId: 'order-1', status: 'running', startedAt: '2026-07-10T14:00:00.000Z' }] })
+      writeWork(root, [original])
+      const gate = deferred<void>()
+      const started = deferred<void>()
+      const runner = new ScheduledWorkRunner({
+        canRunBackgroundWork: () => true, withLock: createLock(),
+        executeAgentTask: async ({ onStarted }) => {
+          if (outcome !== 'late-start') await onStarted('old-session')
+          started.resolve()
+          await gate.promise
+          if (outcome === 'failure') throw new Error('Old provider failed')
+          if (outcome === 'late-start') await onStarted('old-session')
+          return { sessionId: 'old-session' }
+        },
+        startWorkflow: async () => ({ runId: 'unused' }), readWorkflowRun: () => null, listOutputManifests: () => [],
+      })
+      const execution = (runner as any).runAgentTask(workspaceId, root, original, null)
+      await started.promise
+      const replacement = { ...original, runs: [...original.runs, { id: 'new-attempt', jobId: 'order-1', status: 'running' as const, sessionId: 'new-session', startedAt: '2026-07-10T14:01:00.000Z' }] }
+      writeWork(root, [replacement])
+      gate.resolve()
+      await execution
+      const saved = readWork(root).items[0]!
+      expect(saved.status).toBe('running')
+      expect(saved.runs.at(-1)).toEqual(replacement.runs.at(-1))
+      expect(saved.result).toBeUndefined()
+      expect(saved.attention).toBeUndefined()
+    })
+  }
+
   test('only the successful claimant launches when two runners share a serialized lock', async () => {
     const root = makeRoot()
     writeWork(root, [buildOrder()])

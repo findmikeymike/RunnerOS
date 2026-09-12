@@ -570,6 +570,7 @@ export class ScheduledWorkRunner {
     order: ScheduledWorkOrder,
     capturedFence: string | null,
   ): Promise<'done' | 'failed'> {
+    const attemptId = currentWorkflowAttemptId(order) ?? null
     let sessionId = currentSessionId(order)
     let timedOut = false
     let abortedSessionId: string | undefined
@@ -579,7 +580,7 @@ export class ScheduledWorkRunner {
       if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before scheduled agent execution.')
       const continuationIssue = this.continuationFenceIssue(workspaceRootPath, order)
       if (continuationIssue) {
-        await this.stopContinuation(workspaceId, workspaceRootPath, order.id, continuationIssue)
+        await this.stopContinuation(workspaceId, workspaceRootPath, order.id, continuationIssue, attemptId)
         return 'failed'
       }
       const executePromise = this.deps.executeAgentTask({
@@ -608,7 +609,8 @@ export class ScheduledWorkRunner {
             }
             throw new Error(`Scheduled agent task ${order.id} started after its execution deadline.`)
           }
-          await this.persistRunningSessionId(workspaceId, workspaceRootPath, order.id, cleaned)
+          const persisted = await this.persistRunningSessionId(workspaceId, workspaceRootPath, order.id, cleaned, attemptId)
+          if (!persisted.updated) throw new Error('Scheduled agent attempt was replaced before session dispatch.')
         },
       })
       const timeoutMs = this.deps.agentTaskTimeoutMs && this.deps.agentTaskTimeoutMs > 0
@@ -637,7 +639,7 @@ export class ScheduledWorkRunner {
         const returnedSessionId = clean(started && typeof started === 'object' && 'sessionId' in started ? started.sessionId : undefined)
         if (returnedSessionId) {
           sessionId = returnedSessionId
-          await this.persistRunningSessionId(workspaceId, workspaceRootPath, order.id, returnedSessionId)
+          await this.persistRunningSessionId(workspaceId, workspaceRootPath, order.id, returnedSessionId, attemptId)
         }
       }
       if (!sessionId) {
@@ -649,6 +651,7 @@ export class ScheduledWorkRunner {
           workspaceRootPath,
           order.id,
           this.buildAttention('continuation-disarmed', 'Continuation stopped because session persistence could not be proven. Review the completed session before resuming.'),
+          attemptId,
         )
         return 'failed'
       }
@@ -660,6 +663,7 @@ export class ScheduledWorkRunner {
           order.id,
           this.buildAttention('provider-unavailable', formatModelExhaustion(exhaustedAttempts)),
           exhaustedAttempts,
+          attemptId,
         )
         return 'failed'
       }
@@ -671,7 +675,7 @@ export class ScheduledWorkRunner {
       )
       if (!outputs.satisfied) {
         if (order.continuation?.role === 'round') {
-          await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, [], undefined)
+          await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, [], undefined, attemptId)
           return 'done'
         }
         await this.finishWithAttention(
@@ -679,22 +683,23 @@ export class ScheduledWorkRunner {
           workspaceRootPath,
           order.id,
           this.buildAttention('required-output-missing', outputs.message ?? 'Required output was not produced.'),
+          undefined, attemptId,
         )
         return 'failed'
       }
       const processed = await this.postProcessAgentTask(workspaceId, workspaceRootPath, order, sessionId, outputs.matched)
       if (order.continuation?.role === 'round') {
-        await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
+        await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs, attemptId)
       } else {
-        await this.finishAgentDone(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
+        await this.finishAgentDone(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs, attemptId)
       }
       return 'done'
     } catch (error) {
       const attention = this.buildAttention('execution-failed', errorMessage(error))
       if (order.continuation?.role === 'round') {
-        await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention)
+        await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention, attemptId)
       } else {
-        await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention)
+        await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention, undefined, attemptId)
       }
       return 'failed'
     }
@@ -705,12 +710,13 @@ export class ScheduledWorkRunner {
     workspaceRootPath: string,
     order: ScheduledWorkOrder,
   ): Promise<'running' | 'done' | 'failed'> {
+    const attemptId = currentWorkflowAttemptId(order) ?? null
     const sessionId = currentSessionId(order)
     if (!sessionId || !this.deps.readAgentSession) {
       const attention = this.buildAttention('execution-failed', runningAgentMessage(order))
       const persisted = order.continuation?.role === 'round'
-        ? await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention)
-        : await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention)
+        ? await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention, attemptId)
+        : await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention, undefined, attemptId)
       return persisted.updated ? 'failed' : 'running'
     }
     const state = await this.deps.readAgentSession(sessionId)
@@ -723,8 +729,8 @@ export class ScheduledWorkRunner {
             : `Scheduled agent session ${sessionId} stopped before producing a final response.`,
         )
       const persisted = order.continuation?.role === 'round'
-        ? await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention)
-        : await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention)
+        ? await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention, attemptId)
+        : await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention, undefined, attemptId)
       return persisted.updated ? 'failed' : 'running'
     }
     if (order.continuation && !(await this.deps.awaitAgentCompletionBarrier?.(sessionId))) {
@@ -733,6 +739,7 @@ export class ScheduledWorkRunner {
         workspaceRootPath,
         order.id,
         this.buildAttention('continuation-disarmed', 'Continuation stopped because session persistence could not be proven after restart. Review the session before resuming.'),
+          attemptId,
       )
       return persisted.updated ? 'failed' : 'running'
     }
@@ -745,6 +752,7 @@ export class ScheduledWorkRunner {
         order.id,
         this.buildAttention('provider-unavailable', formatModelExhaustion(exhaustedAttempts)),
         exhaustedAttempts,
+        attemptId,
       )
       return persisted.updated ? 'failed' : 'running'
     }
@@ -756,7 +764,7 @@ export class ScheduledWorkRunner {
     )
     if (!outputs.satisfied) {
       if (order.continuation?.role === 'round') {
-        const persisted = await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, [], undefined)
+        const persisted = await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, [], undefined, attemptId)
         return persisted.updated ? 'done' : 'running'
       }
       const persisted = await this.finishWithAttention(
@@ -764,6 +772,7 @@ export class ScheduledWorkRunner {
         workspaceRootPath,
         order.id,
         this.buildAttention('required-output-missing', outputs.message ?? 'Required output was not produced.'),
+          undefined, attemptId,
       )
       return persisted.updated ? 'failed' : 'running'
     }
@@ -773,12 +782,12 @@ export class ScheduledWorkRunner {
     } catch (error) {
       const attention = this.buildAttention('execution-failed', errorMessage(error))
       const persisted = order.continuation?.role === 'round'
-        ? await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention)
-        : await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention)
+        ? await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention, attemptId)
+        : await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention, undefined, attemptId)
       return persisted.updated ? 'failed' : 'running'
     }
     const persisted = order.continuation?.role === 'round'
-      ? await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
+      ? await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs, attemptId)
       : await this.finishAgentDone(
           workspaceId,
           workspaceRootPath,
@@ -786,6 +795,7 @@ export class ScheduledWorkRunner {
           sessionId,
           outputs.matched.map((output) => output.id),
           processed.sharedIntelContextSlugs,
+          attemptId,
         )
     return persisted.updated ? 'done' : 'running'
   }
@@ -1014,9 +1024,10 @@ export class ScheduledWorkRunner {
     workspaceRootPath: string,
     orderId: string,
     sessionId: string,
+    expectedAttemptId?: string | null,
   ): Promise<PersistResult> {
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
-      if (order.status !== 'running') return null
+      if ((expectedAttemptId !== undefined && (currentWorkflowAttemptId(order) ?? null) !== expectedAttemptId) || order.status !== 'running') return null
       return {
         ...order,
         updatedAt: nowIso,
@@ -1056,10 +1067,11 @@ export class ScheduledWorkRunner {
     sessionId: string,
     outputIds: string[],
     sharedIntelContextSlugs?: string[],
+    expectedAttemptId?: string | null,
   ): Promise<PersistResult> {
     const modelAttempts = this.deps.getSessionModelAttempts?.(sessionId) ?? []
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
-      if (order.status !== 'running' || order.execution.type !== 'agent-task') return null
+      if ((expectedAttemptId !== undefined && (currentWorkflowAttemptId(order) ?? null) !== expectedAttemptId) || order.status !== 'running' || order.execution.type !== 'agent-task') return null
       return {
         ...order,
         status: order.execution.expectedOutput.reviewRequired ? 'awaiting-review' : 'done',
@@ -1182,11 +1194,13 @@ export class ScheduledWorkRunner {
     workspaceRootPath: string,
     orderId: string,
     attention: ScheduledWorkAttention,
+    expectedAttemptId?: string | null,
   ): Promise<PersistResult> {
     return this.deps.withLock(workspaceRootPath, async () => {
       const parsed = this.readWork(workspaceRootPath, workspaceId)
       if (!parsed.ok) throw new Error(parsed.error)
       const child = parsed.work.items.find((candidate) => candidate.id === orderId && !candidate.deletedAt)
+      if (expectedAttemptId !== undefined && (child ? currentWorkflowAttemptId(child) ?? null : null) !== expectedAttemptId) return { updated: false, work: parsed.work, order: child }
       const continuation = child?.continuation
       if (!child || child.status === 'canceled' || continuation?.role !== 'round') return { updated: false, work: parsed.work, order: child }
       const coordinator = parsed.work.items.find((candidate) => candidate.id === continuation.coordinatorOrderId && !candidate.deletedAt)
@@ -1223,11 +1237,13 @@ export class ScheduledWorkRunner {
     sessionId: string,
     outputIds: string[],
     sharedIntelContextSlugs?: string[],
+    expectedAttemptId?: string | null,
   ): Promise<PersistResult> {
     return this.deps.withLock(workspaceRootPath, async () => {
       const parsed = this.readWork(workspaceRootPath, workspaceId)
       if (!parsed.ok) throw new Error(parsed.error)
       const child = parsed.work.items.find((candidate) => candidate.id === orderId && !candidate.deletedAt)
+      if (expectedAttemptId !== undefined && (child ? currentWorkflowAttemptId(child) ?? null : null) !== expectedAttemptId) return { updated: false, work: parsed.work, order: child }
       const continuation = child?.continuation
       if (!child || child.status !== 'running' || child.execution.type !== 'agent-task' || continuation?.role !== 'round') {
         return { updated: false, work: parsed.work, order: child }
