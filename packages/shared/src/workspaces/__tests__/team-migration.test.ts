@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { getWorkspaceSessionsPath, loadWorkspaceConfig, saveWorkspaceConfig } from '../storage.ts';
@@ -9,6 +9,9 @@ import {
   listLocalTeamMigrationJournals,
   moveWorkspaceToSharedFolder,
   prepareWorkspaceMoveToSharedFolder,
+  promotePreparedPrivateSessions,
+  readTeamMigrationJournal,
+  rollbackPreparedWorkspaceMigration,
   preflightSharedFolderMigration,
   TEAM_MIGRATIONS_DIR,
   writeMovedToTombstone,
@@ -302,5 +305,87 @@ describe('team shared-folder migration', () => {
     writeMovedToTombstone(moved, join(parent, 'new-workspace'), 'mig_done');
     expect(() => assertWorkspaceOpenable(moved)).toThrow('Workspace moved to');
     expect(() => saveWorkspaceConfig(moved, { ...movedConfig, name: 'Old Workspace Write' })).toThrow('Workspace moved to');
+  });
+});
+
+
+describe('migration publication and replay ownership', () => {
+  function fixture() {
+    const root = makeDir('team-migration-races-');
+    const source = join(root, 'campaign');
+    const destination = join(root, 'shared');
+    const privateRoot = join(root, 'private');
+    mkdirSync(source); mkdirSync(destination);
+    process.env.CRAFT_CONFIG_DIR = privateRoot;
+    const config = writeWorkspace(source);
+    return { source, destination, privateRoot, config, final: join(destination, 'campaign') };
+  }
+
+  it('preserves another folder created after preflight when publication collides', () => {
+    const f = fixture();
+    expect(() => prepareWorkspaceMoveToSharedFolder(f.source, f.destination, {
+      onPhase(phase) {
+        if (phase !== 'prepared') return;
+        mkdirSync(f.final);
+        writeFileSync(join(f.final, 'other-user.txt'), 'keep my work');
+      },
+    })).toThrow();
+    expect(readFileSync(join(f.final, 'other-user.txt'), 'utf8')).toBe('keep my work');
+    expect(readFileSync(join(f.source, 'config.json'), 'utf8')).toContain(f.config.id);
+  });
+
+  it('startup rollback does not delete a destination replaced by another workspace', () => {
+    const f = fixture();
+    const result = prepareWorkspaceMoveToSharedFolder(f.source, f.destination, { deferCompletion: true });
+    const journal = readTeamMigrationJournal(result.journalPath!)!;
+    rmSync(f.final, { recursive: true });
+    mkdirSync(f.final);
+    writeFileSync(join(f.final, 'other-user.txt'), 'replacement');
+    rollbackPreparedWorkspaceMigration(journal);
+    expect(readFileSync(join(f.final, 'other-user.txt'), 'utf8')).toBe('replacement');
+  });
+
+  for (const [file, content] of [
+    ['settings.json', JSON.stringify({ nested: { apiKey: 'fake-private-key' } })],
+    ['.ENV.staging', 'API_TOKEN=fake-private-key'],
+    ['deploy-key.pem', 'fake-private-key'],
+  ]) {
+    it(`does not publish ${file} introduced after preflight`, () => {
+      const f = fixture();
+      expect(() => prepareWorkspaceMoveToSharedFolder(f.source, f.destination, {
+        onPhase(phase) { if (phase === 'prepared') writeFileSync(join(f.source, file!), content!); },
+      })).toThrow('should not be synced');
+      expect(readdirSync(f.destination)).toEqual([]);
+      expect(readFileSync(join(f.source, file!), 'utf8')).toBe(content!);
+    });
+  }
+
+  it('resumes private session promotion after one identical file was already copied', () => {
+    const f = fixture();
+    mkdirSync(join(f.source, 'sessions'));
+    writeFileSync(join(f.source, 'sessions', 'one.jsonl'), 'private one');
+    writeFileSync(join(f.source, 'sessions', 'two.jsonl'), 'private two');
+    const result = prepareWorkspaceMoveToSharedFolder(f.source, f.destination, { deferCompletion: true });
+    const privateDestination = join(f.privateRoot, 'team', f.config.id, 'private-sessions');
+    mkdirSync(privateDestination, { recursive: true });
+    writeFileSync(join(privateDestination, 'one.jsonl'), 'private one');
+    promotePreparedPrivateSessions(result);
+    completePreparedWorkspaceMigration(result);
+    expect(readFileSync(join(privateDestination, 'one.jsonl'), 'utf8')).toBe('private one');
+    expect(readFileSync(join(privateDestination, 'two.jsonl'), 'utf8')).toBe('private two');
+    expect(existsSync(join(f.final, 'sessions'))).toBe(false);
+  });
+
+  it('preserves conflicting private session bytes and the retry stage', () => {
+    const f = fixture();
+    mkdirSync(join(f.source, 'sessions'));
+    writeFileSync(join(f.source, 'sessions', 'one.jsonl'), 'original private');
+    const result = prepareWorkspaceMoveToSharedFolder(f.source, f.destination, { deferCompletion: true });
+    const privateDestination = join(f.privateRoot, 'team', f.config.id, 'private-sessions');
+    mkdirSync(privateDestination, { recursive: true });
+    writeFileSync(join(privateDestination, 'one.jsonl'), 'newer private edit');
+    expect(() => promotePreparedPrivateSessions(result)).toThrow('conflicting content');
+    expect(readFileSync(join(privateDestination, 'one.jsonl'), 'utf8')).toBe('newer private edit');
+    expect(readFileSync(join(f.privateRoot, 'team', f.config.id, '.migration', result.migrationId, 'private-sessions', 'one.jsonl'), 'utf8')).toBe('original private');
   });
 });

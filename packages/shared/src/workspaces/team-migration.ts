@@ -28,7 +28,7 @@ import {
   saveWorkspaceConfig,
 } from './storage.ts';
 import { WORKSPACE_FORMAT_VERSION, type SharedFolderProvider, type WorkspaceConfig } from './types.ts';
-import { verifiedCopyFileSync } from './verified-copy.ts';
+import { assertPathWithinRealRoot, verifiedCopyFileSync } from './verified-copy.ts';
 
 export const TEAM_MIGRATIONS_DIR = 'team/migrations';
 export const LOCAL_TEAM_MIGRATIONS_DIR = 'team-migrations';
@@ -490,7 +490,7 @@ function copyWorkspaceFilesConfigLast(sourceRootPath: string, tempRootPath: stri
   }
 }
 
-function copyDirectoryContents(sourceDir: string, destinationDir: string): void {
+function copyDirectoryContents(sourceDir: string, destinationDir: string, allowIdentical = false): void {
   if (!existsSync(sourceDir)) return;
   const copyDir = (currentSourceDir: string, currentDestinationDir: string): void => {
     mkdirSync(currentDestinationDir, { recursive: true });
@@ -504,6 +504,15 @@ function copyDirectoryContents(sourceDir: string, destinationDir: string): void 
       if (stat.isDirectory()) {
         copyDir(sourcePath, destinationPath);
       } else if (stat.isFile()) {
+        if (allowIdentical && existsSync(destinationPath)) {
+          assertPathWithinRealRoot(sourceDir, sourcePath);
+          assertPathWithinRealRoot(destinationDir, destinationPath);
+          if (!lstatSync(destinationPath).isFile()
+            || !readFileSync(sourcePath).equals(readFileSync(destinationPath))) {
+            throw new Error(`Private session recovery found conflicting content: ${destinationPath}`);
+          }
+          continue;
+        }
         verifiedCopyFileSync(sourcePath, destinationPath, {
           sourceRootPath: sourceDir,
           destinationRootPath: destinationDir,
@@ -541,8 +550,8 @@ function writeMigratedWorkspaceConfig(
     makeRunner?: boolean;
   },
 ): void {
-  const sourceConfig = loadWorkspaceConfig(sourceRootPath);
-  if (!sourceConfig) throw new Error(`Failed to load workspace config: ${sourceRootPath}`);
+  const sourceConfig = loadWorkspaceConfig(tempRootPath);
+  if (!sourceConfig) throw new Error(`Failed to load staged workspace config: ${tempRootPath}`);
   const timestamp = nowIso();
   const previousTeam = sourceConfig.team ?? createDisabledTeamConfig();
   const machine = readOrCreateMachineIdentity(sourceConfig.id);
@@ -648,12 +657,19 @@ export function prepareWorkspaceMoveToSharedFolder(
   input.onPhase?.(journal.phase);
 
   try {
-    mkdirSync(tempRootPath, { recursive: true });
     stagePrivateWorkspaceDirs(sourceRootPath, journal);
-    writeJson(receiptPath, receipt);
-    copyWorkspaceFilesConfigLast(sourceRootPath, tempRootPath);
+    // Synced folders can upload hidden staging files too. Freeze and inspect
+    // the shared payload in the machine-private stage before publishing bytes.
+    const sharedStage = join(dirname(getPrivateSessionStageDir(journal)), 'shared-payload');
+    mkdirSync(sharedStage, { recursive: true, mode: 0o700 });
+    copyWorkspaceFilesConfigLast(sourceRootPath, sharedStage);
+    verifiedCopyFileSync(join(sourceRootPath, 'config.json'), join(sharedStage, 'config.json'), {
+      sourceRootPath, destinationRootPath: sharedStage,
+    });
+    const blockedFiles = findBlockedSecretFiles(sharedStage);
+    if (blockedFiles.length) throw new Error(`Workspace changed during migration; files should not be synced: ${blockedFiles.join(', ')}`);
 
-    writeMigratedWorkspaceConfig(sourceRootPath, tempRootPath, {
+    writeMigratedWorkspaceConfig(sourceRootPath, sharedStage, {
       provider,
       providerLabel: input.providerLabel,
       makeRunner: input.makeRunner,
@@ -664,6 +680,16 @@ export function prepareWorkspaceMoveToSharedFolder(
       status: input.deferCompletion ? 'ready' : 'complete',
       completedAt: input.deferCompletion ? undefined : nowIso(),
     };
+    writeJson(getMigrationReceiptPath(sharedStage, migrationId), readyReceipt);
+    mkdirSync(tempRootPath);
+    // Ownership proof precedes the payload and is required by cleanup/recovery.
+    writeJson(receiptPath, receipt);
+    for (const relativePath of collectWorkspaceFiles(sharedStage)) {
+      if (relativePath === join(TEAM_MIGRATIONS_DIR, `${migrationId}.json`)) continue;
+      verifiedCopyFileSync(join(sharedStage, relativePath), join(tempRootPath, relativePath), {
+        sourceRootPath: sharedStage, destinationRootPath: tempRootPath,
+      });
+    }
     writeJson(receiptPath, readyReceipt);
     renameSync(tempRootPath, preflight.finalRootPath);
     fsyncPath(destinationParentPath);
@@ -680,18 +706,8 @@ export function prepareWorkspaceMoveToSharedFolder(
     };
   } catch (error) {
     try {
-      if (existsSync(tempRootPath)) {
-        writeJson(receiptPath, {
-          ...receipt,
-          status: 'failed',
-          failedAt: nowIso(),
-          error: error instanceof Error ? error.message : String(error),
-        } satisfies TeamMigrationReceipt);
-        rmSync(tempRootPath, { recursive: true, force: true });
-      }
-      if (existsSync(preflight.finalRootPath)) {
-        rmSync(preflight.finalRootPath, { recursive: true, force: true });
-      }
+      removeOwnedMigrationDirectory(tempRootPath, journal);
+      removeOwnedMigrationDirectory(preflight.finalRootPath, journal);
       rmSync(getPrivateMigrationStageRoot(journal.workspaceId), { recursive: true, force: true });
     } catch {
       // Original workspace remains authoritative when rollback cleanup fails.
@@ -723,16 +739,26 @@ export function promotePreparedPrivateSessions(result: TeamSharedFolderMigration
   const stage = getPrivateSessionStageDir(journal);
   if (!existsSync(stage)) return;
   const destination = getPrivateSessionsDir(journal.workspaceId);
-  copyDirectoryContents(stage, destination);
+  copyDirectoryContents(stage, destination, true);
   rmSync(getPrivateMigrationStageRoot(journal.workspaceId), { recursive: true, force: true });
 }
 
+function removeOwnedMigrationDirectory(rootPath: string, journal: TeamMigrationJournal): void {
+  if (!existsSync(rootPath) || lstatSync(rootPath).isSymbolicLink()) return;
+  const receiptPath = getMigrationReceiptPath(rootPath, journal.migrationId);
+  try { assertPathWithinRealRoot(rootPath, receiptPath); } catch { return; }
+  const receipt = readJson<TeamMigrationReceipt>(receiptPath);
+  if (!receipt || receipt.version !== 1 || receipt.migrationId !== journal.migrationId
+    || receipt.sourceRootPath !== journal.sourceRootPath
+    || receipt.destinationParentPath !== journal.destinationParentPath
+    || receipt.finalRootPath !== journal.finalRootPath) return;
+  rmSync(rootPath, { recursive: true, force: true });
+}
+
 export function rollbackPreparedWorkspaceMigration(journal: TeamMigrationJournal): TeamMigrationJournal {
-  if (existsSync(journal.finalRootPath)) {
-    rmSync(journal.finalRootPath, { recursive: true, force: true });
-  }
+  removeOwnedMigrationDirectory(journal.finalRootPath, journal);
   const tempRootPath = join(journal.destinationParentPath, `.craft-migrating-${journal.migrationId}`);
-  if (existsSync(tempRootPath)) rmSync(tempRootPath, { recursive: true, force: true });
+  removeOwnedMigrationDirectory(tempRootPath, journal);
   rmSync(getPrivateMigrationStageRoot(journal.workspaceId), { recursive: true, force: true });
   return updateTeamMigrationJournal(journal, 'rolled-back');
 }
