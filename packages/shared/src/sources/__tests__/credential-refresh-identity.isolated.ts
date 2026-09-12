@@ -240,7 +240,7 @@ test('obsolete failure cannot mark reconnected source needs_auth or start cooldo
   await manager.save(a, { value: 'new-account' });
   release();
   expect((await pending).success).toBe(false);
-  expect(refreshes.isInCooldown(a.config.slug)).toBe(false);
+  expect(refreshes.isInCooldown(a)).toBe(false);
   expect(JSON.parse(readFileSync(configPath, 'utf8')).connectionStatus).toBe('connected');
   expect((await manager.load(a))?.value).toBe('new-account');
 });
@@ -368,4 +368,37 @@ test('uncontested shared Google disconnect removes all matching records only', a
   expect(await manager.disconnectForRevoke(a)).toMatchObject({ superseded: false, deleted: true, credentials: [{ value: 'A' }, { value: 'B' }] });
   expect(await manager.load(a)).toBeNull(); expect(await manager.load(b)).toBeNull();
   expect((await manager.load(unrelated))?.value).toBe('unrelated');
+});
+
+test('a joiner adopts the committed token when the owning refresh was superseded after saving', async () => {
+  const manager = new SourceCredentialManager(), a = source('a'), b = { ...a };
+  const { SourceAuthSupersededError } = await import('../credential-manager.ts');
+  set(manager, a, 'shared');
+  const resolved = await (manager as any).resolveEffectiveCredential(a);
+  const revision = (await getCredentialManager().captureSnapshot(resolved.id)).revision;
+  const key = `${credentialIdToAccount(resolved.id)}:${revision}`;
+  let rejectPending!: (error: Error) => void;
+  (manager as any).pendingRefreshes.set(key, new Promise((_resolve, reject) => { rejectPending = reject }));
+  const joined = manager.refresh(b);
+  // The owner committed the refreshed token, then its own route changed.
+  await new Promise(resolve => setImmediate(resolve));
+  set(manager, a, 'fresh:Bearer shared');
+  rejectPending(new SourceAuthSupersededError());
+  expect(await joined).toBe('fresh:Bearer shared');
+  expect((await manager.load(b))?.value).toBe('fresh:Bearer shared');
+});
+
+test('a joiner returns null when a superseded owner never committed a new token', async () => {
+  const manager = new SourceCredentialManager(), a = source('a'), b = { ...a };
+  const { SourceAuthSupersededError } = await import('../credential-manager.ts');
+  set(manager, a, 'shared');
+  const resolved = await (manager as any).resolveEffectiveCredential(a);
+  const revision = (await getCredentialManager().captureSnapshot(resolved.id)).revision;
+  const key = `${credentialIdToAccount(resolved.id)}:${revision}`;
+  let rejectPending!: (error: Error) => void;
+  (manager as any).pendingRefreshes.set(key, new Promise((_resolve, reject) => { rejectPending = reject }));
+  const joined = manager.refresh(b);
+  await new Promise(resolve => setImmediate(resolve));
+  rejectPending(new SourceAuthSupersededError());
+  expect(await joined).toBe(null);
 });
