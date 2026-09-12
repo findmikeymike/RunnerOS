@@ -34,3 +34,12 @@ Scope: account switching, refresh, sign-in/sign-out, source activation, and cred
 - After merging canonical main's concurrent artist-mission commit, affected prompt tests and the connection barrier tests passed: 49 tests, 370 assertions.
 - The regular suite was run as six shards. Repaired test doubles were rerun in their shards: 9,921 passed, 10 skipped, 1 failed, 39,098 assertions. The remaining failure is described below.
 - One unresolved full-shard failure remains in the unchanged native session watcher test: its first immediate file write produces no notification. That file passes standalone (3 tests, 9 assertions). This is not a fully green full-suite claim; watcher readiness/test isolation remains for Phase 5.
+
+## Post-landing review fixes (2026-09-12)
+
+A critical review of this lane found and fixed four gaps the audit above did not cover:
+
+- A source update arriving after the source build loop but before agent assignment created the agent with empty sources: `reloadSessionSources` defers to the pending build while the agent is null, and nothing re-applied the withheld update. Agent creation now catches up to any source update observed during the build.
+- Legacy Claude credential writes bypassed the revision fencing this audit claims: routine token refresh dual-wrote through unfenced setters (bumping the auth revision for rotation, which could make a racing disconnect look superseded, and clobbering newer sign-ins), and the onboarding Claude exchange committed unfenced after the network call. Rotations now use ownership-checked compare-and-set writes that never bump the auth revision, and the exchange marks its sign-in intent before the network call and commits conditionally.
+- Refresh cooldowns were keyed by slug alone, so the same slug enabled in two workspaces with different credentials cleared each other's failure records through identity mismatches. Cooldowns are now scoped per workspace instance; successful re-authentication still clears every instance of the slug.
+- A joiner of a shared refresh promise inherited the owning caller's superseded rejection even when its own route was still valid. Joiners now re-evaluate the superseded result against their own route and adopt the committed token when one exists. Expired never-completed OAuth exchanges are also pruned from the completing map so code verifiers and client secrets do not outlive the flow TTL.
