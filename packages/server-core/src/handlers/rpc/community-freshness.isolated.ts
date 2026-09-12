@@ -56,7 +56,7 @@ for (const channel of [RPC_CHANNELS.community.ADD_CONTACT, RPC_CHANNELS.communit
 }
 
 test('failed sends still refresh because approval or partial delivery may have changed', async () => {
-  const result = await handlers.get(RPC_CHANNELS.community.SEND_EMAIL_JOB)!({}, 'hq', 'job')
+  const result = await handlers.get(RPC_CHANNELS.community.SEND_EMAIL_JOB)!({}, 'hq', 'job', { revision: 1, sender: { from: 'configured', unsubscribeUrl: 'configured', postalAddress: 'configured' } })
   expect(result).toEqual({ ok: false, error: 'partial delivery' })
   expect(approve).toHaveBeenCalled()
   expect(send).toHaveBeenCalled()
@@ -66,13 +66,13 @@ test('failed sends still refresh because approval or partial delivery may have c
 
 test('summary repair failure cannot replace the actual send outcome', async () => {
   loadState.mockImplementation(() => { throw new Error('summary disk failure') })
-  const result = await handlers.get(RPC_CHANNELS.community.SEND_EMAIL_JOB)!({}, 'hq', 'job')
+  const result = await handlers.get(RPC_CHANNELS.community.SEND_EMAIL_JOB)!({}, 'hq', 'job', { revision: 1, sender: { from: 'configured', unsubscribeUrl: 'configured', postalAddress: 'configured' } })
   expect(result).toEqual({ ok: false, error: 'partial delivery' })
 })
 
 test('summary repair failure cannot turn successful delivery into failure', async () => {
   send.mockResolvedValue({ ok: true })
   loadState.mockImplementation(() => { throw new Error('summary disk failure') })
-  const result = await handlers.get(RPC_CHANNELS.community.SEND_EMAIL_JOB)!({}, 'hq', 'job')
+  const result = await handlers.get(RPC_CHANNELS.community.SEND_EMAIL_JOB)!({}, 'hq', 'job', { revision: 1, sender: { from: 'configured', unsubscribeUrl: 'configured', postalAddress: 'configured' } })
   expect(result).toEqual({ ok: true })
 })

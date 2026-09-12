@@ -1,4 +1,5 @@
 import * as React from 'react'
+import type { CommunityEmailSenderReview } from '@craft-agent/shared/community/types'
 import {
   ArrowRight,
   ChevronDown,
@@ -96,7 +97,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
   const [addFanOpen, setAddFanOpen] = React.useState(false)
   const [emailQueueOpen, setEmailQueueOpen] = React.useState(true)
   const [mailBusy, setMailBusy] = React.useState<string | null>(null)
-  const [emailReady, setEmailReady] = React.useState(true)
+  const [emailSetup, setEmailSetup] = React.useState<{ ready: boolean; sender: CommunityEmailSenderReview } | null>(null)
 
   const refreshCommunity = React.useCallback(async (foreground = true) => {
     if (foreground) setLoading(true)
@@ -405,7 +406,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
             )}
           </div>
 
-          <CommunityEmailSetup workspaceId={workspaceId} onReadyChange={setEmailReady} />
+          <CommunityEmailSetup workspaceId={workspaceId} onSetupChange={setEmailSetup} />
 
           <CommunityRoutineRow
             workspaceId={workspaceId}
@@ -439,7 +440,8 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
                     workspaceId={workspaceId}
                     busy={mailBusy}
                     onBusy={setMailBusy}
-                    emailReady={emailReady}
+                    emailReady={emailSetup?.ready ?? false}
+                    emailSender={emailSetup?.sender}
                     onChanged={() => void refreshCommunity(false)}
                   />
                 )) : (
@@ -780,6 +782,7 @@ function EmailProposal({
   busy,
   onBusy,
   emailReady,
+  emailSender,
   onChanged,
 }: {
   job: CommunityEmailJobRecord
@@ -788,6 +791,7 @@ function EmailProposal({
   onBusy: (key: string | null) => void
   /** False until a verified sender and an unsubscribe link exist. */
   emailReady: boolean
+  emailSender?: CommunityEmailSenderReview
   onChanged: () => void
 }) {
   const [open, setOpen] = React.useState(false)
@@ -900,6 +904,8 @@ function EmailProposal({
                   type="button"
                   disabled={busy !== null}
                   onClick={() => void (async () => {
+                    if (!emailSender) return
+                    const sender = emailSender
                     let reviewed = { revision: job.revision, lastWriteSha256: job.lastWriteSha256 }
                     // Save first: sending anything other than what is on screen
                     // would be a lie about what was approved.
@@ -920,7 +926,7 @@ function EmailProposal({
                     }
                     await act(
                       `send-${job.id}`,
-                      () => window.electronAPI.sendCommunityEmailJob(workspaceId, job.id, reviewed),
+                      () => window.electronAPI.sendCommunityEmailJob(workspaceId, job.id, { ...reviewed, sender }),
                       'Sent.',
                     )
                     setConfirming(false)
@@ -1029,10 +1035,10 @@ const STEP_HELP: Record<string, { hint: string; placeholder: string; link?: { la
  */
 function CommunityEmailSetup({
   workspaceId,
-  onReadyChange,
+  onSetupChange,
 }: {
   workspaceId: string
-  onReadyChange?: (ready: boolean) => void
+  onSetupChange?: (setup: { ready: boolean; sender: CommunityEmailSenderReview }) => void
 }) {
   const [setup, setSetup] = React.useState<CommunitySetup | null>(null)
   const [drafts, setDrafts] = React.useState<Record<string, string>>({})
@@ -1044,11 +1050,18 @@ function CommunityEmailSetup({
     try {
       const result = await window.electronAPI.getCommunitySetup(workspaceId) as unknown as CommunitySetup
       setSetup(result)
-      onReadyChange?.(Boolean(result?.ready))
+      onSetupChange?.({
+        ready: Boolean(result?.ready),
+        sender: {
+          from: result.steps.find(step => step.id === 'COMMUNITY_FROM_EMAIL')?.value ?? '',
+          unsubscribeUrl: result.steps.find(step => step.id === 'COMMUNITY_UNSUBSCRIBE_URL')?.value ?? '',
+          postalAddress: result.steps.find(step => step.id === 'COMMUNITY_POSTAL_ADDRESS')?.value ?? '',
+        },
+      })
     } catch {
       // Setup state is advisory; a failure here must not break the page.
     }
-  }, [onReadyChange, workspaceId])
+  }, [onSetupChange, workspaceId])
 
   React.useEffect(() => { void load() }, [load])
 
@@ -1084,7 +1097,7 @@ function CommunityEmailSetup({
         </p>
         <button
           type="button"
-          onClick={() => setExpanded(true)}
+          onClick={() => { setExpanded(true); void load() }}
           className="text-[11px] text-white/30 underline-offset-2 hover:text-white/60 hover:underline"
         >
           Change

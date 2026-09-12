@@ -958,7 +958,7 @@ export interface ElectronAPI {
     bodyMarkdown?: string
     title?: string
   }, reviewed: Pick<CommunityEmailJobRecord, 'revision' | 'lastWriteSha256'>): Promise<Record<string, unknown>>
-  sendCommunityEmailJob(workspaceId: string, jobId: string, reviewed: Pick<CommunityEmailJobRecord, 'revision' | 'lastWriteSha256'>): Promise<Record<string, unknown>>
+  sendCommunityEmailJob(workspaceId: string, jobId: string, reviewed: import('@craft-agent/shared/community/types').CommunityEmailSendReview): Promise<Record<string, unknown>>
   cancelCommunityEmailJob(workspaceId: string, jobId: string): Promise<Record<string, unknown>>
   getCommunityRoutine(workspaceId: string): Promise<Record<string, unknown>>
   setCommunityRoutine(workspaceId: string, config: {

@@ -73,6 +73,17 @@ export type EmailJobStatus =
 /** The exact persisted email the artist reviewed before pressing Send. */
 export type CommunityEmailReview = Pick<CommunityEmailJobRecord, 'revision' | 'lastWriteSha256'>;
 
+/** Public sending identity shown in Community email setup; never credentials. */
+export interface CommunityEmailSenderReview {
+  from: string;
+  unsubscribeUrl: string;
+  postalAddress?: string;
+}
+
+export interface CommunityEmailSendReview extends CommunityEmailReview {
+  sender: CommunityEmailSenderReview;
+}
+
 export interface CommunityEmailJobRecord extends SharedEntityMeta {
   title: string;
   purpose: 'announcement' | 'newsletter' | 'personal-outreach' | 'transactional';

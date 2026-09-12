@@ -6,6 +6,7 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type {
   CreateCommunityEmailJobInput,
   CommunityEmailReview,
+  CommunityEmailSendReview,
   CommunitySuppressionRecord,
   ImportCommunityCsvInput,
   UpsertCommunityContactInput,
@@ -216,7 +217,7 @@ export function registerCommunityHandlers(server: RpcServer, deps: HandlerDeps):
    * is the only path that reaches real inboxes, and it is only reachable
    * from the UI — no session or agent can call it.
    */
-  server.handle(RPC_CHANNELS.community.SEND_EMAIL_JOB, async (_ctx, workspaceId: string, jobId: string, reviewed: CommunityEmailReview) => {
+  server.handle(RPC_CHANNELS.community.SEND_EMAIL_JOB, async (_ctx, workspaceId: string, jobId: string, reviewed: CommunityEmailSendReview) => {
     const workspace = resolveWorkspace(workspaceId)
     const [{ assertTeamPermission, getTeamModeStatus }] = await Promise.all([
       import('@craft-agent/shared/workspaces'),
@@ -226,6 +227,12 @@ export function registerCommunityHandlers(server: RpcServer, deps: HandlerDeps):
 
     const provider = await resolveMailProvider(workspace.rootPath)
     if ('error' in provider) return { ok: false, error: provider.error, failure: 'no-provider' }
+
+    if (!reviewed) return { ok: false, failure: 'review-changed', error: 'Refresh and review this email before sending.' }
+    if (!reviewed.sender || reviewed.sender.from !== provider.from || reviewed.sender.unsubscribeUrl !== provider.unsubscribeUrl
+      || (reviewed.sender.postalAddress ?? '') !== (provider.postalAddress ?? '')) {
+      return { ok: false, failure: 'sender-changed', error: 'Your email sender or footer changed. Open Change in email setup to review the current details before sending.' }
+    }
 
     const mail = new CommunityMailService()
     try {
