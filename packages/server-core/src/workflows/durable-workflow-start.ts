@@ -37,6 +37,7 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
   const pending = new Set<string>();
   return async (input: WorkflowStartInput) => {
     input = structuredClone(input);
+    options.host.assertBackgroundFence(input.workspaceId, input.backgroundFence);
     // All callers share this guard, even when they will use the legacy engine.
     if (await options.host.hasUnfinishedWorkflow(input.workspaceId, input.workflow.slug)) {
       throw new Error('This workflow has unfinished work. Open its saved run to continue or stop it.');
@@ -85,7 +86,9 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
           ] } } : {}),
         };
       }));
+      options.host.assertBackgroundFence(workspaceId, pinned.backgroundFence);
       const admission = {
+        ...(pinned.backgroundFence !== undefined ? { backgroundFence: pinned.backgroundFence } : {}),
         ...bundle, triggerInputs: pinned.triggerInputs, ...(pinned.untrustedTriggerInputs ? { untrustedTriggerInputs: pinned.untrustedTriggerInputs } : {}), workspaceId, runId, commandId: scheduled ? durableWorkflowOccurrenceIdentity(workspaceId, pinned.occurrence!).commandId : `manual-start:${runId}`,
         localSources: [...new Map([...bundles.values()].flatMap(candidate => candidate.localSources ?? []).map(source => [canonical(source), source])).values()],
         resolvedAgentSlug: workflow.metadata.steps[0]!.agent,

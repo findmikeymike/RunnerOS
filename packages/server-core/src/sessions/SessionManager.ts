@@ -3489,6 +3489,11 @@ export class SessionManager implements ISessionManager {
 
   setDurableWorkflowHost(host: DurableWorkflowHost): void {
     this.durableWorkflowHost = host
+    host.setBackgroundFenceAuthorizer((workspaceId, fence) => {
+      const workspace = getWorkspaceByNameOrId(workspaceId)
+      if (!workspace) throw new Error('Workflow workspace is no longer available.')
+      this.assertBackgroundExecutionFence(workspace.rootPath, fence)
+    })
     this.durableWorkflowAdmissionGuard = async (workspaceId, workflowSlug) => {
       if (await host.hasUnfinishedWorkflow(workspaceId, workflowSlug)) {
         throw new Error('This workflow has unfinished work. Open its saved run to continue or stop it.')

@@ -53,6 +53,14 @@ export class DurableWorkflowHost {
     });
   }
 
+  setBackgroundFenceAuthorizer(authorize: NonNullable<DurableReadRunnerOptions['assertBackgroundFence']>): void {
+    this.runner.setBackgroundFenceAuthorizer(authorize);
+  }
+
+  assertBackgroundFence(workspaceId: string, fence?: string): void {
+    this.runner.assertBackgroundFence(workspaceId, fence);
+  }
+
   /** Trusted host admission only; the public workflow START handler remains unchanged. */
   start(input: DurableReadInput): Promise<DurableRunSnapshot> { return this.track(() => this.runner.start(input)); }
 

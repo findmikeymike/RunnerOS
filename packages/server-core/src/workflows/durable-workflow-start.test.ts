@@ -20,7 +20,7 @@ import { DurableWorkflowStartupGate } from './durable-workflow-startup-gate';
 const cleanup: Array<() => unknown | Promise<unknown>> = [];
 afterEach(async () => { for (const fn of cleanup.splice(0).reverse()) await fn(); });
 const protection: DurableSafeStorage = { isEncryptionAvailable: () => true, encryptString: value => Buffer.from(value), decryptString: value => value.toString() }; // Isolated test protection only.
-function fixture() {
+function fixture(hooks: { beforeBinding?: () => Promise<void>; beforeBackend?: () => Promise<void> } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'durable-normal-start-')); cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const workspace = { id: 'w', slug: 'w', name: 'w', rootPath: root, createdAt: 1 };
   // Use real solo authorization: restoring a spy on an upstream mocked barrel
@@ -38,6 +38,10 @@ function fixture() {
       await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'done' }] } }); }
     await bridge.checkpoint({ kind: 'complete' });
   }, async abort() {}, destroy() { finished(); } }) };
+  const resolveBinding = runnerOptions.resolveBinding;
+  runnerOptions.resolveBinding = async (...args) => { await hooks.beforeBinding?.(); return resolveBinding(...args); };
+  const createBackend = runnerOptions.createBackend!;
+  runnerOptions.createBackend = async args => { await hooks.beforeBackend?.(); return createBackend(args); };
   let scheduledPrincipal = 'alice';
   const open = () => DurableWorkflowHost.open({ configRoot: root, protection, runnerOptions, resolvePrincipal: () => 'alice', resolveScheduledPrincipal: () => scheduledPrincipal });
   const host = open(); cleanup.push(async () => { release(); await host.close(); });
@@ -371,4 +375,96 @@ for (const redirects of [false, true]) test(`normal Start pins explicit redirect
   const journal = new DurableJournal({ configRoot: f.root, key: loadDurableKey(f.root, protection) });
   try { expect(journal.get(run.id, 'w').spec.webReadRedirects).toBe(redirects); } finally { journal.close(); f.release(); }
   await f.done;
+});
+
+
+function fenceGate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+}
+function scheduledFenceInput(f: ReturnType<typeof fixture>): WorkflowStartInput {
+  return { ...f.input, actor: undefined, invocation: 'scheduled-work', backgroundFence: 'runner-a-epoch-1',
+    occurrence: { workOrderId: 'fenced-order', attemptId: 'fenced-attempt', workflowSlug: 'read', workflowDigest: 'definition' } };
+}
+function fenceAuthorizer(f: ReturnType<typeof fixture>) {
+  let current = 'runner-a-epoch-1';
+  f.host.setBackgroundFenceAuthorizer((_workspace, expected) => { if (expected !== current) throw new Error('fixture runner ownership changed'); });
+  return () => { current = 'runner-b-epoch-2'; };
+}
+
+test('scheduled durable start rejects ownership lost while preparing its agent bundle', async () => {
+  const f = fixture(), changeOwner = fenceAuthorizer(f), entered = fenceGate(), release = fenceGate();
+  const start = f.createStart(async () => { entered.resolve(); await release.promise; return f.bundle; });
+  const pending = start(scheduledFenceInput(f));
+  await entered.promise; changeOwner(); release.resolve();
+  await expect(pending).rejects.toThrow('ownership changed');
+  expect(await f.host.runs.list('w', f.input.actor!)).toEqual([]);
+  expect(f.modelCalls()).toBe(0);
+});
+
+test('scheduled durable admission rechecks ownership after resolving its connection binding', async () => {
+  const entered = fenceGate(), release = fenceGate();
+  const f = fixture({ beforeBinding: async () => { entered.resolve(); await release.promise; } });
+  const changeOwner = fenceAuthorizer(f);
+  const pending = f.createStart()(scheduledFenceInput(f));
+  await entered.promise; changeOwner(); release.resolve();
+  await expect(pending).rejects.toThrow('ownership changed');
+  expect(await f.host.runs.list('w', f.input.actor!)).toEqual([]);
+  expect(f.modelCalls()).toBe(0);
+});
+
+test('saved durable background execution cannot dispatch after backend initialization loses ownership', async () => {
+  const entered = fenceGate(), release = fenceGate();
+  const f = fixture({ beforeBackend: async () => { entered.resolve(); await release.promise; } });
+  const changeOwner = fenceAuthorizer(f);
+  const saved = await f.createStart()(scheduledFenceInput(f));
+  await entered.promise; changeOwner(); release.resolve();
+  await f.done;
+  expect(f.modelCalls()).toBe(0);
+  expect(f.prompts).toEqual([]);
+  expect((await f.host.runs.get('w', saved!.id, f.input.actor!))?.state).not.toBe('succeeded');
+});
+
+test('durable workflow retains its original runner fence before a subsequent step', async () => {
+  const f = fixture(), changeOwner = fenceAuthorizer(f);
+  const input = scheduledFenceInput(f);
+  input.workflow = { ...f.workflow, metadata: { ...f.workflow.metadata, steps: [
+    f.workflow.metadata.steps[0]!, { id: 'second', agent: 'reader', input: 'Summarize {{steps.read.output}}' },
+  ] } };
+  const saved = await f.createStart()(input);
+  await f.ready; changeOwner(); f.release(); await f.done;
+  expect(f.modelCalls()).toBe(1);
+  expect(f.prompts).toHaveLength(1);
+  expect((await f.host.runs.get('w', saved!.id, f.input.actor!))?.state).not.toBe('succeeded');
+});
+
+test('unchanged scheduled ownership completes normally with its persisted fence', async () => {
+  const f = fixture(); fenceAuthorizer(f);
+  const saved = await f.createStart()(scheduledFenceInput(f));
+  await f.ready; f.release(); await f.done;
+  expect((await f.host.runs.get('w', saved!.id, f.input.actor!))?.state).toBe('succeeded');
+  const key = loadDurableKey(f.root, protection), observer = new DurableJournal({ configRoot: f.root, key }); key.fill(0);
+  try { expect((observer.get(saved!.id, 'w').spec.context as { backgroundFence?: string }).backgroundFence).toBe('runner-a-epoch-1'); }
+  finally { observer.close(); }
+});
+
+test('reopened durable run retains the original fence instead of adopting the new runner', async () => {
+  const f = fixture(); fenceAuthorizer(f);
+  const saved = await f.createStart()(scheduledFenceInput(f));
+  await f.ready;
+  const running = await f.host.runs.get('w', saved!.id, f.input.actor!);
+  await f.host.controls.control('w', saved!.id, { action: 'pause', commandId: 'pause-fenced', expectedVersion: running!.durable!.version }, f.input.actor!);
+  f.release(); await f.done; await f.host.close();
+  const reopened = f.open(); cleanup.push(() => reopened.close());
+  const observed: string[] = [];
+  reopened.setBackgroundFenceAuthorizer((_workspace, fence) => { observed.push(fence); throw new Error('fixture runner ownership changed'); });
+  const paused = await reopened.runs.get('w', saved!.id, f.input.actor!);
+  await reopened.controls.control('w', saved!.id, { action: 'resume', commandId: 'resume-fenced', expectedVersion: paused!.durable!.version }, f.input.actor!);
+  for (let turn = 0; turn < 100 && await reopened.isRunActive('w', saved!.id); turn++) await new Promise<void>(resolve => setImmediate(resolve));
+  expect(await reopened.isRunActive('w', saved!.id)).toBe(false);
+  expect((await reopened.runs.get('w', saved!.id, f.input.actor!))?.state).not.toBe('succeeded');
+  await reopened.close();
+  expect(observed).toContain('runner-a-epoch-1');
+  expect(f.modelCalls()).toBe(1);
 });

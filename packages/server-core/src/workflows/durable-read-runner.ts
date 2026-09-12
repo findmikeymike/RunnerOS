@@ -23,6 +23,7 @@ export interface DurableReadBinding {
 }
 /** Trusted host inputs only: no renderer/legacy runner registration exists in P-02. */
 export interface DurableReadInput {
+  backgroundFence?: string;
   runId: string; commandId: string; workspaceId: string; connectionSlug: string; model: string;
   prompt: string; systemPrompt: string; allowedTools: DurableRunSpec['allowedTools'];
   webReadUrls?: string[];
@@ -49,6 +50,7 @@ export interface DurableReadBackendArgs {
 }
 type ReadBackend = Pick<AgentBackend, 'chat' | 'abort' | 'destroy'>;
 export interface DurableReadRunnerOptions {
+  assertBackgroundFence?: (workspaceId: string, fence: string) => void;
   journal: DurableJournal;
   hostRuntime: BackendHostRuntimeContext;
   /** Resolve current host-owned workspace and connection configuration. */
@@ -78,6 +80,7 @@ export interface DurableReadDecisionResult {
 export interface DurableReadSteeringResult { receipt: DurableSteeringReceipt; execution?: Promise<DurableRunSnapshot> }
 interface ActiveReadExecution { claim?: DurableClaim; backend?: ReadBackend; promise: Promise<DurableRunSnapshot>; replayForSteering?: boolean }
 interface FrozenReadContext {
+  backgroundFence?: string;
   prompt: string; systemPrompt: string; connectionSlug: string; workspaceRoot: string; bindingDigest: string;
   requireNonEmptyOutput: boolean;
   workflow: DurableJson;
@@ -177,6 +180,16 @@ export class DurableReadRunner {
   private readonly background = new Set<Promise<DurableRunSnapshot>>();
   constructor(private readonly options: DurableReadRunnerOptions) {}
 
+  setBackgroundFenceAuthorizer(authorize: NonNullable<DurableReadRunnerOptions['assertBackgroundFence']>): void {
+    this.options.assertBackgroundFence = authorize;
+  }
+
+  assertBackgroundFence(workspaceId: string, fence?: string): void {
+    if (fence === undefined) return;
+    if (!this.options.assertBackgroundFence) throw new Error('durable-background-authority-unavailable');
+    this.options.assertBackgroundFence(workspaceId, fence);
+  }
+
   /** Fence admission immediately, persist cooperative pauses, then drain before the host closes storage. */
   quiesce(): Promise<void> {
     if (this.quiescing) return this.quiescing;
@@ -243,6 +256,7 @@ export class DurableReadRunner {
     this.assertOpen();
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.runId) || !input.prompt.trim() || !input.systemPrompt.trim()) throw new Error('invalid-durable-read-input');
     const requested = JSON.parse(canonical(input)) as DurableReadInput;
+    this.assertBackgroundFence(requested.workspaceId, requested.backgroundFence);
     const binding = JSON.parse(JSON.stringify(await this.options.resolveBinding(requested.workspaceId, requested.connectionSlug, requested.model))) as DurableReadBinding;
     this.assertOpen();
     this.checkBinding(binding, requested.workspaceId, requested.connectionSlug, requested.model);
@@ -262,6 +276,7 @@ export class DurableReadRunner {
       modelPlans.push({ ...(step.modelPlan.role ? { role: step.modelPlan.role } : {}), candidates });
     }
     const context: FrozenReadContext = { prompt: requested.prompt, systemPrompt: requested.systemPrompt,
+      ...(requested.backgroundFence !== undefined ? { backgroundFence: requested.backgroundFence } : {}),
       connectionSlug: requested.connectionSlug, workspaceRoot: realpathSync(binding.workspace.rootPath), bindingDigest: bindingDigest(binding),
       requireNonEmptyOutput: workflow?.metadata.steps[0]?.completion?.requireNonEmptyOutput !== false,
       workflow: workflow ? JSON.parse(JSON.stringify(workflow)) as DurableJson : null,
@@ -292,6 +307,7 @@ export class DurableReadRunner {
       ...(requested.approvalPrincipalId !== undefined ? { approvalPrincipalId: requested.approvalPrincipalId } : {}),
       authority: { adapter: context.steps ? 'pi-local-read-multi-1' : 'pi-local-read-1', stepCount: context.steps?.length ?? 1, completion: 'journal-only' },
       ...(context.steps ? { workflowSteps: context.steps.map(step => ({ id: step.id })) } : {}) };
+    this.assertBackgroundFence(requested.workspaceId, requested.backgroundFence);
     const snapshot = this.options.journal.admit(spec);
     const execution = this.resume(spec.runId, spec.workspaceId);
     void execution.catch(() => {});
@@ -306,6 +322,7 @@ export class DurableReadRunner {
     const parent = this.options.journal.get(parentRunId, workspaceId);
     if (!parent.spec.approvalPrincipalId) return Promise.reject(new Error('durable-child-principal-required'));
     this.options.authorizeRun?.({ runId: parentRunId, workspaceId, approvalPrincipalId: parent.spec.approvalPrincipalId });
+    this.assertBackgroundFence(workspaceId, frozenContext(parent.spec).backgroundFence);
     return new DurableChildRunner({ journal: this.options.journal, runner: this }).start(claim, request);
   }
 
@@ -425,6 +442,7 @@ export class DurableReadRunner {
       state = journal.get(runId, workspaceId);
       if (state.status !== 'running' || state.controlRevision !== claim.controlRevision) return state;
       const workflow = frozen.workflow as unknown as LoadedWorkflow;
+      this.assertBackgroundFence(workspaceId, frozen.backgroundFence);
       category = 'storage';
       const result = (this.options.publishOutput ?? ensureDurableTextOutput)(frozen.workspaceRoot, {
         id: publication.outputId, workspaceId, workflowRunId: runId, workflowSlug: workflow.slug, stepId: publication.stepId,
@@ -459,8 +477,10 @@ export class DurableReadRunner {
       authorizeTool: async request => {
         const frozen = frozenContext(initial.spec);
         const checkCurrent = async () => {
+          this.assertBackgroundFence(workspaceId, frozen.backgroundFence);
           this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId! });
           const current = await this.options.resolveBinding(workspaceId, candidate.connectionSlug, candidate.model);
+          this.assertBackgroundFence(workspaceId, frozen.backgroundFence);
           this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId! });
           this.checkBinding(current, workspaceId, candidate.connectionSlug, candidate.model);
           if (bindingDigest(current) !== candidate.bindingDigest) throw new Error('durable-authorization-blocked');
@@ -482,6 +502,7 @@ export class DurableReadRunner {
       },
     } : undefined);
     const assertDispatch = () => {
+      this.assertBackgroundFence(workspaceId, initialFrozen.backgroundFence);
       const state = journal.get(runId, workspaceId);
       if (state.controlRevision !== claim.controlRevision) throw new Error('durable-control-changed');
       if (state.status === 'paused') throw new Error('durable-run-paused');
@@ -496,7 +517,7 @@ export class DurableReadRunner {
     };
     const bridge: typeof journalBridge = { ...journalBridge, checkpoint: async request => {
       if (request.kind === 'output-published') throw new Error('durable-workflow-host-checkpoint-required');
-      if (request.kind === 'tool-start' && frozenContext(initial.spec).localSources?.length) assertDispatch();
+      if (request.kind === 'tool-start') assertDispatch();
       if (request.kind === 'model-start') {
         assertDispatch();
         try {
