@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import {
   checkApprovalBinding,
   deriveChangeClass,
@@ -100,6 +101,7 @@ async function publishSiteUnlocked(workspaceRootPath: string, input: PublishInpu
   }
 
   let tier: 'free' | 'one-click' | 'trusted' = 'free'
+  let requiredApproval: ApprovalBinding | undefined
 
   // The caller's change class is a claim, not evidence. Derive it from the
   // build's design inputs so a mislabelled template edit cannot ride trusted
@@ -127,6 +129,10 @@ async function publishSiteUnlocked(workspaceRootPath: string, input: PublishInpu
       if (!binding.ok) {
         return { ok: false, error: binding.message, needsApproval: true, failure: binding.failure }
       }
+      if (!sameApproval(manifest.pendingApproval, input.approval)) {
+        return { ok: false, error: 'That approval was cleared, replaced, or already used. Review the preview before publishing.', needsApproval: true, failure: 'no-approval' }
+      }
+      requiredApproval = manifest.pendingApproval
     }
   }
 
@@ -135,8 +141,17 @@ async function publishSiteUnlocked(workspaceRootPath: string, input: PublishInpu
   try {
   const adapter = await deps.resolveAdapter(manifest)
   const distDir = snapshot.path
-  // Nothing is written before this returns, so a failed deploy leaves the
-  // manifest exactly as it was.
+  if (requiredApproval) {
+    // Adapter resolution can await credentials. Recheck cancellation/replacement
+    // after that wait, then spend this approval before any external publish.
+    const current = loadWebsiteManifest(workspaceRootPath)
+    const binding = checkApprovalBinding(requiredApproval, input.buildHash, { now: nowIso(deps) })
+    if (!binding.ok) return { ok: false, error: binding.message, needsApproval: true, failure: binding.failure }
+    if (!sameApproval(current?.pendingApproval, requiredApproval)) {
+      return { ok: false, error: 'That approval was cleared, replaced, or already used. Review the preview before publishing.', needsApproval: true, failure: 'no-approval' }
+    }
+    clearWebsiteApproval(workspaceRootPath, requiredApproval)
+  }
   const deployed = await adapter.deploy({ distDir, target: input.target, buildHash: input.buildHash })
   const at = nowIso(deps)
 
@@ -157,9 +172,6 @@ async function publishSiteUnlocked(workspaceRootPath: string, input: PublishInpu
     ...latest,
     history: [record, ...supersede(latest.history, input.target)],
     urls: { ...latest.urls, [input.target]: deployed.url },
-    // One approval covers one publish. Spend it so the same click cannot
-    // ship a second, different build later.
-    ...(input.target === 'production' && latest.pendingApproval?.boundTo === input.buildHash ? { pendingApproval: undefined } : {}),
   }
 
   let trustedModeOffered = false
@@ -375,6 +387,7 @@ export function approveWebsiteBuild(
   return saveWebsiteManifest(workspaceRootPath, {
     ...manifest,
     pendingApproval: {
+      nonce: randomUUID(),
       boundTo: buildHash,
       approvedAt: at,
       expiresAt: new Date(Date.parse(at) + ttl).toISOString(),
@@ -382,9 +395,15 @@ export function approveWebsiteBuild(
   })
 }
 
-export function clearWebsiteApproval(workspaceRootPath: string): void {
+function sameApproval(left: ApprovalBinding | undefined, right: ApprovalBinding | undefined): boolean {
+  return !!left && !!right && left.boundTo === right.boundTo
+    && left.approvedAt === right.approvedAt && left.expiresAt === right.expiresAt
+    && left.nonce === right.nonce
+}
+
+export function clearWebsiteApproval(workspaceRootPath: string, expected?: ApprovalBinding): void {
   const manifest = loadWebsiteManifest(workspaceRootPath)
-  if (!manifest?.pendingApproval) return
+  if (!manifest?.pendingApproval || (expected && !sameApproval(manifest.pendingApproval, expected))) return
   saveWebsiteManifest(workspaceRootPath, { ...manifest, pendingApproval: undefined })
 }
 

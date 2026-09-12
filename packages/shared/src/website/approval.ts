@@ -141,6 +141,8 @@ export function disableTrustedMode(manifest: WebsiteManifest): WebsiteManifest {
 export type ApprovalBindingFailure = 'no-approval' | 'hash-changed' | 'expired';
 
 export interface ApprovalBinding {
+  /** Distinguishes newly issued approvals even within one millisecond. */
+  nonce?: string;
   boundTo: string;
   approvedAt: string;
   expiresAt?: string;

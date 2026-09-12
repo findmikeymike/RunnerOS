@@ -147,7 +147,7 @@ export interface WebsiteManifest {
    * Agents cannot write this. It is what keeps "one click" a human decision
    * rather than something a session can grant itself.
    */
-  pendingApproval?: { boundTo: string; approvedAt: string; expiresAt?: string };
+  pendingApproval?: { boundTo: string; approvedAt: string; expiresAt?: string; nonce?: string };
   history: DeployRecord[];
   lastBuild?: WebsiteBuildSummary;
   /** Routine content is saved, but its build/preview has not finished yet. */

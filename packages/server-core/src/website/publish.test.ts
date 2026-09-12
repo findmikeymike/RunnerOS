@@ -34,6 +34,7 @@ function workspace(manifest?: Partial<WebsiteManifest>): string {
     ...defaultWebsiteManifest(),
     lastBuild: { at: '2026-09-01T00:00:00.000Z', hash: 'hash-a', artifactHash: hashBuildDirectory(dist), designHash: 'design-1', auditScore: 92, warnings: 1, fileCount: 1, bytes: 13 },
     targetApproval: { approvedAt: '2026-09-01T00:00:00.000Z', approvedBy: 'user', target: 'lowtide.workers.dev' },
+    pendingApproval: { boundTo: 'hash-a', approvedAt: '2026-09-05T00:00:00.000Z' },
     ...manifest,
   })
   return root
@@ -421,7 +422,7 @@ describe('trusted mode', () => {
       const { adapter } = fakeAdapter()
       const offers: boolean[] = []
       for (let i = 0; i < 6; i += 1) {
-        const result = await publishSite(root, publishInput(), deps(adapter))
+        const result = await publishSite(root, publishInput({ approval: approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })!.pendingApproval }), deps(adapter))
         if (result.ok) offers.push(Boolean(result.trustedModeOffered))
       }
       expect(offers).toEqual([false, false, false, false, true, false])
@@ -488,8 +489,8 @@ describe('rollback', () => {
     const root = workspace()
     try {
       const { adapter } = fakeAdapter()
-      await publishSite(root, publishInput(), deps(adapter))
-      await publishSite(root, publishInput(), deps(adapter))
+      await publishSite(root, publishInput({ approval: approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })!.pendingApproval }), deps(adapter))
+      await publishSite(root, publishInput({ approval: approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })!.pendingApproval }), deps(adapter))
       // Retention dropped the older build.
       pruneDeploySnapshots(root, 1)
 
@@ -505,8 +506,8 @@ describe('rollback', () => {
     const root = workspace()
     try {
       const { adapter } = fakeAdapter()
-      await publishSite(root, publishInput(), deps(adapter))
-      await publishSite(root, publishInput(), deps(adapter))
+      await publishSite(root, publishInput({ approval: approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })!.pendingApproval }), deps(adapter))
+      await publishSite(root, publishInput({ approval: approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })!.pendingApproval }), deps(adapter))
 
       // The weekly routine previews on every run; a shared cap would bury
       // the production records that rollback resolves against.
@@ -529,8 +530,8 @@ describe('rollback', () => {
     const root = workspace()
     try {
       const { adapter } = fakeAdapter()
-      await publishSite(root, publishInput(), deps(adapter))
-      await publishSite(root, publishInput(), deps(adapter))
+      await publishSite(root, publishInput({ approval: approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })!.pendingApproval }), deps(adapter))
+      await publishSite(root, publishInput({ approval: approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })!.pendingApproval }), deps(adapter))
 
       const history = siteHistory(root)
       expect(history[0]!.status).toBe('live')
@@ -540,4 +541,95 @@ describe('rollback', () => {
       rmSync(root, { recursive: true, force: true })
     }
   })
+})
+
+describe('pending website approval ownership', () => {
+  test('two queued publishes cannot reuse the same captured approval', async () => {
+    const root = workspace()
+    try {
+      const approval = approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })!.pendingApproval!
+      const { adapter, deploys } = fakeAdapter()
+      const results = await Promise.all([
+        publishSite(root, publishInput({ approval }), deps(adapter)),
+        publishSite(root, publishInput({ approval }), deps(adapter)),
+      ])
+      expect(results.filter(result => result.ok)).toHaveLength(1)
+      expect(deploys).toHaveLength(1)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('a captured approval is unusable after the artist clears it', async () => {
+    const root = workspace()
+    try {
+      const approval = approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })!.pendingApproval!
+      clearWebsiteApproval(root)
+      const { adapter, deploys } = fakeAdapter()
+      expect((await publishSite(root, publishInput({ approval }), deps(adapter))).ok).toBe(false)
+      expect(deploys).toHaveLength(0)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('settling an older publish preserves a newer approval for the same build', async () => {
+    const root = workspace()
+    try {
+      const approval = approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })!.pendingApproval!
+      const { adapter } = fakeAdapter()
+      const originalDeploy = adapter.deploy
+      let newer: typeof approval | undefined
+      adapter.deploy = async input => {
+        newer = approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:01:00.000Z' })!.pendingApproval!
+        return originalDeploy(input)
+      }
+      expect((await publishSite(root, publishInput({ approval }), deps(adapter))).ok).toBe(true)
+      expect(loadWebsiteManifest(root)!.pendingApproval).toEqual(newer)
+      clearWebsiteApproval(root, approval)
+      expect(loadWebsiteManifest(root)!.pendingApproval).toEqual(newer)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+test('clearing approval while adapter resolution waits prevents deployment', async () => {
+  const root = workspace()
+  try {
+    const approval = approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })!.pendingApproval!
+    const { adapter, deploys } = fakeAdapter()
+    const result = await publishSite(root, publishInput({ approval }), {
+      ...deps(adapter), resolveAdapter: async () => { clearWebsiteApproval(root); return adapter },
+    })
+    expect(result.ok).toBe(false)
+    expect(deploys).toHaveLength(0)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test('a failed external publish cannot reuse its spent approval', async () => {
+  const root = workspace()
+  try {
+    const approval = approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })!.pendingApproval!
+    const { adapter } = fakeAdapter()
+    let attempts = 0
+    adapter.deploy = async () => { attempts++; throw new Error('Transport ended after submission') }
+    await expect(publishSite(root, publishInput({ approval }), deps(adapter))).rejects.toThrow('Transport ended')
+    expect(loadWebsiteManifest(root)!.pendingApproval).toBeUndefined()
+    expect((await publishSite(root, publishInput({ approval }), deps(adapter))).ok).toBe(false)
+    expect(attempts).toBe(1)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+
+test('same-millisecond approval replacement has distinct identity', async () => {
+  const root = workspace()
+  try {
+    const options = { now: '2026-09-05T00:00:00.000Z' }
+    const older = approveWebsiteBuild(root, 'hash-a', options)!.pendingApproval!
+    const newer = approveWebsiteBuild(root, 'hash-a', options)!.pendingApproval!
+    expect(older.approvedAt).toBe(newer.approvedAt)
+    expect(older.nonce).toBeDefined()
+    expect(older.nonce).not.toBe(newer.nonce)
+    clearWebsiteApproval(root, older)
+    expect(loadWebsiteManifest(root)!.pendingApproval).toEqual(newer)
+    const { adapter, deploys } = fakeAdapter()
+    expect((await publishSite(root, publishInput({ approval: older }), deps(adapter))).ok).toBe(false)
+    expect((await publishSite(root, publishInput({ approval: newer }), deps(adapter))).ok).toBe(true)
+    expect(deploys).toHaveLength(1)
+  } finally { rmSync(root, { recursive: true, force: true }) }
 })

@@ -107,7 +107,8 @@ export function registerWebsiteHandlers(server: RpcServer, _deps: HandlerDeps): 
   }) => {
     const workspace = resolveWorkspace(workspaceId)
     const approvedAt = new Date().toISOString()
-    approveWebsiteBuild(workspace.rootPath, input.buildHash, { now: approvedAt })
+    const approval = approveWebsiteBuild(workspace.rootPath, input.buildHash, { now: approvedAt })?.pendingApproval
+    if (!approval) return { ok: false, error: 'No website yet.' }
 
     const result = await service.deploy(workspace.rootPath, {
       target: 'production',
@@ -119,11 +120,11 @@ export function registerWebsiteHandlers(server: RpcServer, _deps: HandlerDeps): 
     }, {
       machineId: await machineIdFor(workspace.rootPath),
       origin: { kind: 'user' },
-      approval: { boundTo: input.buildHash, approvedAt },
+      approval,
     })
 
     // A refused publish must not leave a live approval sitting behind it.
-    if (!result.ok) clearWebsiteApproval(workspace.rootPath)
+    if (!result.ok) clearWebsiteApproval(workspace.rootPath, approval)
     else {
       // The brief's preview stops asking once the change is live.
       const { loadWebsiteManifest } = await import('@craft-agent/shared/website')
