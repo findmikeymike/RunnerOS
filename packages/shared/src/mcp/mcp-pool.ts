@@ -15,6 +15,7 @@
 
 import { CraftMcpClient, type McpClientConfig, type PoolClient } from './client.ts';
 import { ApiSourcePoolClient } from './api-source-pool-client.ts';
+import { isDeepStrictEqual } from 'node:util';
 import type { PreparedGmailSend } from '../sources/gmail-send-snapshot.ts';
 import type { SdkMcpServerConfig } from '../agent/backend/types.ts';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
@@ -80,25 +81,9 @@ function sdkConfigToClientConfig(config: SdkMcpServerConfig): McpClientConfig | 
   return null;
 }
 
-/**
- * Check if an MCP source's config has changed in a way that requires reconnection.
- * Compares auth headers (token refresh) and URL changes.
- * Ignores stdio sources since they don't use OAuth tokens.
- */
+/** Every transport input can affect identity or behavior, including custom auth headers. */
 function mcpConfigChanged(oldConfig: SdkMcpServerConfig, newConfig: SdkMcpServerConfig): boolean {
-  if (oldConfig.type !== newConfig.type) return true;
-
-  if (
-    (oldConfig.type === 'http' || oldConfig.type === 'sse') &&
-    (newConfig.type === 'http' || newConfig.type === 'sse')
-  ) {
-    if (oldConfig.url !== newConfig.url) return true;
-    const oldAuth = oldConfig.headers?.['Authorization'];
-    const newAuth = newConfig.headers?.['Authorization'];
-    if (oldAuth !== newAuth) return true;
-  }
-
-  return false;
+  return !isDeepStrictEqual(oldConfig, newConfig);
 }
 
 export class McpClientPool {
@@ -107,6 +92,9 @@ export class McpClientPool {
 
   /** Configs used for active MCP connections (for change detection during sync) */
   protected activeConfigs = new Map<string, SdkMcpServerConfig>();
+
+  /** API instances capture endpoint configuration and credential resolvers. */
+  private activeApiServers = new Map<string, McpServer>();
 
   /** Cached tool lists keyed by source slug */
   private toolCache = new Map<string, Tool[]>();
@@ -178,13 +166,14 @@ export class McpClientPool {
    */
   async connect(slug: string, config: SdkMcpServerConfig): Promise<void> {
     if (this.clients.has(slug)) return;
-    const clientConfig = sdkConfigToClientConfig(config);
+    const snapshot = structuredClone(config);
+    const clientConfig = sdkConfigToClientConfig(snapshot);
     if (!clientConfig) {
       this.debug(`Unknown MCP server type for ${slug}: ${(config as { type: string }).type}`);
       return;
     }
     await this.registerClient(slug, new CraftMcpClient(clientConfig));
-    this.activeConfigs.set(slug, config);
+    this.activeConfigs.set(slug, snapshot);
   }
 
   /**
@@ -193,6 +182,7 @@ export class McpClientPool {
   async connectInProcess(slug: string, mcpServer: McpServer): Promise<void> {
     if (this.clients.has(slug)) return;
     await this.registerClient(slug, new ApiSourcePoolClient(mcpServer));
+    this.activeApiServers.set(slug, mcpServer);
   }
 
   /**
@@ -211,6 +201,7 @@ export class McpClientPool {
     }
     this.toolCache.delete(slug);
     this.activeConfigs.delete(slug);
+    this.activeApiServers.delete(slug);
     this.debug(`Disconnected source: ${slug}`);
   }
 
@@ -224,6 +215,7 @@ export class McpClientPool {
     this.toolCache.clear();
     this.proxyTools.clear();
     this.activeConfigs.clear();
+    this.activeApiServers.clear();
     this.debug('Disconnected all MCP clients');
   }
 
@@ -251,7 +243,8 @@ export class McpClientPool {
         this.debug(`Filtering out stdio source "${slug}" (local MCP disabled)`);
         continue;
       }
-      filteredMcp[slug] = config;
+      // Snapshot before any asynchronous disconnect/connect can yield to callers.
+      filteredMcp[slug] = structuredClone(config);
     }
 
     // Extract McpServer instances from API configs
@@ -284,7 +277,7 @@ export class McpClientPool {
         }
       } else {
         const oldConfig = this.activeConfigs.get(slug);
-        if (oldConfig && mcpConfigChanged(oldConfig, config)) {
+        if (!oldConfig || mcpConfigChanged(oldConfig, config)) {
           this.debug(`Config changed for ${slug}, reconnecting with fresh credentials`);
           await this.disconnect(slug);
           try {
@@ -297,9 +290,12 @@ export class McpClientPool {
       }
     }
 
-    // Connect new API sources
+    // Rebuilt API instances capture new configuration/credentials; retaining the
+    // old instance would silently ignore an endpoint or account change.
     for (const [slug, server] of apiSlugs) {
-      if (!currentSlugs.has(slug)) {
+      if (slug in filteredMcp) continue; // Preserve MCP precedence for duplicate input slugs.
+      if (!this.clients.has(slug) || this.activeApiServers.get(slug) !== server) {
+        if (this.clients.has(slug)) await this.disconnect(slug);
         try {
           await this.connectInProcess(slug, server);
         } catch (err) {

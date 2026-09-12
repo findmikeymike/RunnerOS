@@ -107,9 +107,8 @@ describe('McpClientPool.sync — config change detection', () => {
     expect(pool.connectCalls).toHaveLength(1);
   });
 
-  it('does not reconnect when only non-auth headers change', async () => {
-    // Only Authorization and URL should trigger reconnect — other header
-    // changes (tracing, versioning) should not cause connection churn.
+  it('reconnects when any configured header changes', async () => {
+    // Custom headers can carry account/API-key identity, so all are applied.
     const config1: SdkMcpServerConfig = {
       type: 'http',
       url: 'https://mcp.example.com',
@@ -126,8 +125,40 @@ describe('McpClientPool.sync — config change detection', () => {
 
     await pool.sync({ craft: config2 });
 
+    expect(pool.connectCalls).toHaveLength(1);
+    expect(pool.disconnectCalls).toHaveLength(1);
+  });
+
+  it('compares against an immutable snapshot when the caller edits the same config object', async () => {
+    const config = httpConfig('old-token');
+    await pool.sync({ craft: config });
+    pool.resetTracking();
+    config.headers!.Authorization = 'Bearer changed-token';
+    await pool.sync({ craft: config });
+    expect(pool.connectCalls).toHaveLength(1);
+    expect(pool.disconnectCalls).toEqual(['craft']);
+  });
+
+  it('does not reconnect semantically identical headers with a different key order', async () => {
+    await pool.sync({ craft: { type: 'http', url: 'https://example.com', headers: { A: '1', B: '2' } } });
+    pool.resetTracking();
+    await pool.sync({ craft: { type: 'http', url: 'https://example.com', headers: { B: '2', A: '1' } } });
     expect(pool.connectCalls).toHaveLength(0);
-    expect(pool.disconnectCalls).toHaveLength(0);
+  });
+
+  it('applies changed stdio commands, arguments and environment', async () => {
+    const config: SdkMcpServerConfig = { type: 'stdio', command: 'first', args: ['one'], env: { ACCOUNT: 'a' } };
+    await pool.sync({ craft: config });
+    for (const next of [
+      { ...config, command: 'second' },
+      { ...config, args: ['two'] },
+      { ...config, env: { ACCOUNT: 'b' } },
+    ]) {
+      pool.resetTracking();
+      await pool.sync({ craft: next });
+      expect(pool.connectCalls).toHaveLength(1);
+      expect(pool.disconnectCalls).toEqual(['craft']);
+    }
   });
 
   it('disconnects sources removed from config', async () => {
