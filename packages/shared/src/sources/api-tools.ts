@@ -7,6 +7,7 @@
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
+import { prepareGmailDraftSend, registerGmailDraftPreparer } from './gmail-send-snapshot.ts';
 import type { ApiConfig } from './types.ts';
 import { debug } from '../utils/debug.ts';
 import { guardLargeResult } from '../utils/large-response.ts';
@@ -397,9 +398,52 @@ export function createApiServer(
 
   const apiTool = createApiTool(config, credential, sessionPath, summarize);
 
-  return createSdkMcpServer({
+  const server = createSdkMcpServer({
     name: `api_${config.name}`,
     version: '1.0.0',
     tools: [apiTool],
   });
+  if (`api_${config.name}`.toLowerCase().includes('api_gmail')) {
+    registerGmailDraftPreparer(server.instance, async original => {
+      const input = structuredClone(original);
+      // One credential covers the profile and both representations of the draft.
+      const resolvedCredential = isTokenGetter(credential) ? await credential() : credential;
+      return prepareGmailDraftSend(input, async (path, params) => {
+        const url = buildUrl(config.baseUrl, path, 'GET', params, config.auth, resolvedCredential);
+        const response = await fetch(url, {
+          method: 'GET', headers: buildHeaders(config.auth, resolvedCredential, config.defaultHeaders),
+          signal: AbortSignal.timeout(API_FETCH_TIMEOUT_MS),
+        });
+        if (!response.ok) throw new Error(`Could not prepare the Gmail draft (${response.status}).`);
+        return readGmailSnapshotJson(response);
+      });
+    });
+  }
+  return server;
+}
+
+/** Gmail messages fit within this bound including their base64 JSON envelope. */
+async function readGmailSnapshotJson(response: Response): Promise<unknown> {
+  const limit = 64 * 1024 * 1024;
+  if (Number(response.headers.get('content-length')) > limit) {
+    await response.body?.cancel();
+    throw new Error('The Gmail draft is too large to prepare its approval preview.');
+  }
+  if (!response.body) throw new Error('Gmail returned an empty draft response.');
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) {
+        await reader.cancel();
+        throw new Error('The Gmail draft is too large to prepare its approval preview.');
+      }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }

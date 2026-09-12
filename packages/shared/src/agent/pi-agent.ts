@@ -94,6 +94,8 @@ import { getSessionDataPath, getSessionPath, getSessionPlansPath } from '../sess
 import { parseError, type AgentError } from './errors.ts';
 
 // Centralized PreToolUse pipeline
+import { classifyGmailMutation } from './core/pre-tool-use.ts';
+import { prepareGmailApprovalPrompt } from './core/prepare-gmail-prompt.ts';
 import { runPreToolUseChecks, type PreToolUseCheckResult } from './core/pre-tool-use.ts';
 
 // Workspace slug extraction for skill qualification
@@ -212,6 +214,8 @@ export class PiAgent extends BaseAgent {
   }
 
   // Pending permission requests (used by handlePreToolUseRequest for ask-mode prompting)
+  private gmailPreparationGeneration = 0;
+
   private pendingPermissions: Map<string, {
     resolve: (allowed: boolean) => void;
     toolName: string;
@@ -1329,10 +1333,28 @@ export class PiAgent extends BaseAgent {
         return;
 
       case 'prompt': {
+        const preparationGeneration = this.gmailPreparationGeneration;
+        let approvalPrompt;
+        try {
+          approvalPrompt = await prepareGmailApprovalPrompt(checkResult, toolName, input, this.mcpPool);
+        } catch (error) {
+          this.send({ type: 'pre_tool_use_response', requestId, action: 'block',
+            reason: error instanceof Error ? error.message : 'Could not prepare the Gmail draft.' });
+          return;
+        }
+
+        if (preparationGeneration !== this.gmailPreparationGeneration) {
+          this.send({ type: 'pre_tool_use_response', requestId, action: 'block', reason: 'The original turn was stopped.' });
+          return;
+        }
         if (!this.onPermissionRequest) {
+          if (classifyGmailMutation(toolName, input) === 'send') {
+            this.send({ type: 'pre_tool_use_response', requestId, action: 'block', reason: 'No permission handler available for Gmail send.' });
+            return;
+          }
           // No permission handler — allow
-          if (checkResult.modifiedInput) {
-            this.send({ type: 'pre_tool_use_response', requestId, action: 'modify', input: checkResult.modifiedInput });
+          if (approvalPrompt.modifiedInput) {
+            this.send({ type: 'pre_tool_use_response', requestId, action: 'modify', input: approvalPrompt.modifiedInput });
           } else {
             this.send({ type: 'pre_tool_use_response', requestId, action: 'allow' });
           }
@@ -1340,7 +1362,7 @@ export class PiAgent extends BaseAgent {
         }
 
         const permRequestId = `pi-perm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        this.debug(`PreToolUse(sessionId=${sessionId}): Prompting user for ${toolName} - ${checkResult.description}`);
+        this.debug(`PreToolUse(sessionId=${sessionId}): Prompting user for ${toolName} - ${approvalPrompt.description}`);
 
         // Wait for user response via pendingPermissions
         const permissionPromise = new Promise<boolean>((resolve) => {
@@ -1353,16 +1375,16 @@ export class PiAgent extends BaseAgent {
         this.onPermissionRequest({
           requestId: permRequestId,
           toolName,
-          command: checkResult.command,
-          description: checkResult.description,
-          type: checkResult.promptType,
-          appName: checkResult.appName,
-          reason: checkResult.reason,
-          impact: checkResult.impact,
-          requiresSystemPrompt: checkResult.requiresSystemPrompt,
-          rememberForMinutes: checkResult.rememberForMinutes,
-          commandHash: checkResult.commandHash,
-          approvalTtlSeconds: checkResult.approvalTtlSeconds,
+          command: approvalPrompt.command,
+          description: approvalPrompt.description,
+          type: approvalPrompt.promptType,
+          appName: approvalPrompt.appName,
+          reason: approvalPrompt.reason,
+          impact: approvalPrompt.impact,
+          requiresSystemPrompt: approvalPrompt.requiresSystemPrompt,
+          rememberForMinutes: approvalPrompt.rememberForMinutes,
+          commandHash: approvalPrompt.commandHash,
+          approvalTtlSeconds: approvalPrompt.approvalTtlSeconds,
         });
 
         const allowed = await permissionPromise;
@@ -1373,8 +1395,8 @@ export class PiAgent extends BaseAgent {
           return;
         }
 
-        if (checkResult.modifiedInput) {
-          this.send({ type: 'pre_tool_use_response', requestId, action: 'modify', input: checkResult.modifiedInput });
+        if (approvalPrompt.modifiedInput) {
+          this.send({ type: 'pre_tool_use_response', requestId, action: 'modify', input: approvalPrompt.modifiedInput });
         } else {
           this.send({ type: 'pre_tool_use_response', requestId, action: 'allow' });
         }
@@ -1911,6 +1933,7 @@ export class PiAgent extends BaseAgent {
     attachments?: FileAttachment[],
     options?: ChatOptions
   ): AsyncGenerator<AgentEvent> {
+    this.gmailPreparationGeneration++;
     let message = messageParam;
     // Reset state for new turn
     this._isProcessing = true;
@@ -2180,6 +2203,7 @@ export class PiAgent extends BaseAgent {
   }
 
   async abort(reason?: string): Promise<void> {
+    this.gmailPreparationGeneration++;
     if (this.config.durableExecution) await this.config.durableExecution.cancel();
     // Fire Stop hook event (fire-and-forget)
     if (!this.config.durableExecution) this.emitAutomationEvent('Stop', { hook_event_name: 'Stop' });
@@ -2200,6 +2224,7 @@ export class PiAgent extends BaseAgent {
   }
 
   forceAbort(reason: AbortReason): void {
+    this.gmailPreparationGeneration++;
     if (this.config.durableExecution) {
       void this.abort(String(reason)).catch(error => {
         this.killSubprocess(error instanceof Error ? error : new Error(String(error)));
@@ -2285,6 +2310,7 @@ export class PiAgent extends BaseAgent {
   }
 
   destroy(): void {
+    this.gmailPreparationGeneration++;
     this.stopConfigWatcher();
 
     // Unregister session-scoped tool callbacks

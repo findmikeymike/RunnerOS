@@ -726,8 +726,7 @@ export function classifyGmailMutation(
 
   const path = normalizeGmailPath(input.path);
   if (method === 'POST' && (
-    path.endsWith('/users/me/drafts/send')
-    || path.endsWith('/users/me/messages/send')
+    /\/users\/[^/]+\/(drafts|messages)\/send$/.test(path)
   )) return 'send';
 
   // gmail.compose permits local draft work. Keep the draft workflow quick,

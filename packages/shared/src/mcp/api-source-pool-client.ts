@@ -11,6 +11,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { PoolClient } from './client.ts';
+import { getGmailDraftPreparer, type PreparedGmailSend } from '../sources/gmail-send-snapshot.ts';
 
 export class ApiSourcePoolClient implements PoolClient {
   private client: Client;
@@ -41,6 +42,12 @@ export class ApiSourcePoolClient implements PoolClient {
   async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     if (!this.connected) await this.connect();
     return this.client.callTool({ name, arguments: args });
+  }
+
+  async prepareGmailDraftSend(input: Record<string, unknown>): Promise<PreparedGmailSend> {
+    const prepare = getGmailDraftPreparer(this.mcpServer);
+    if (!prepare) throw new Error('This Gmail source cannot prepare an exact draft preview. Reconnect the source and try again.');
+    return prepare(input);
   }
 
   async close(): Promise<void> {

@@ -15,6 +15,7 @@
 
 import { CraftMcpClient, type McpClientConfig, type PoolClient } from './client.ts';
 import { ApiSourcePoolClient } from './api-source-pool-client.ts';
+import type { PreparedGmailSend } from '../sources/gmail-send-snapshot.ts';
 import type { SdkMcpServerConfig } from '../agent/backend/types.ts';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -366,10 +367,17 @@ export class McpClientPool {
   // Tool Execution
   // ============================================================
 
-  /**
-   * Execute an MCP tool by its proxy name (mcp__{slug}__{toolName}).
-   * Returns a result matching the subprocess protocol format.
-   */
+  /** Prepare the existing Gmail approval through the source that will send it. */
+  async prepareGmailDraftSend(proxyName: string, input: Record<string, unknown>): Promise<PreparedGmailSend> {
+    const info = this.proxyTools.get(proxyName);
+    const client = info && this.clients.get(info.slug);
+    if (!info || !info.originalName.toLowerCase().includes('api_gmail') || !(client instanceof ApiSourcePoolClient)) {
+      throw new Error('The Gmail source is not connected for draft preparation.');
+    }
+    return client.prepareGmailDraftSend(input);
+  }
+
+  /** Execute a proxy tool, returning the subprocess protocol result. */
   async callTool(proxyName: string, args: Record<string, unknown>): Promise<McpToolResult> {
     const info = this.proxyTools.get(proxyName);
     if (!info) {

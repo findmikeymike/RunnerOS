@@ -14,6 +14,8 @@ describe('Gmail exact-send approval classification', () => {
   it('requires approval for draft and raw-message send endpoints', () => {
     const paths = [
       '/users/me/drafts/send',
+      '/users/artist%40example.com/drafts/send',
+      '/users/artist@example.com/messages/send',
       '/users/me/messages/send',
       '/users/me/messages/send?alt=json',
       '/users/me/messages/send?uploadType=multipart',

@@ -65,6 +65,7 @@ import {
   type ConfigWatcherCallbacks,
 } from '../config/watcher.ts';
 // Centralized PreToolUse pipeline
+import { prepareGmailApprovalPrompt } from './core/prepare-gmail-prompt.ts';
 import {
   runPreToolUseChecks,
   type PreToolUseCheckResult,
@@ -471,6 +472,8 @@ export class ClaudeAgent extends BaseAgent {
   private branchFromSdkCwd: string | null = null;
   private branchFromSdkTurnId: string | null = null;
   private isHeadless: boolean = false;
+  private gmailPreparationGeneration = 0;
+
   private pendingPermissions: Map<string, PendingPermission> = new Map();
   // Permission whitelists are now managed by this.permissionManager (inherited from BaseAgent)
   // Source state tracking is now managed by this.sourceManager (inherited from BaseAgent)
@@ -912,6 +915,7 @@ export class ClaudeAgent extends BaseAgent {
     attachments?: FileAttachment[],
     options?: ChatOptions
   ): AsyncGenerator<AgentEvent> {
+    this.gmailPreparationGeneration++;
     // Extract options (ChatOptions interface from AgentBackend)
     const _isRetry = options?.isRetry ?? false;
 
@@ -1371,8 +1375,23 @@ export class ClaudeAgent extends BaseAgent {
                   return { continue: true };
 
                 case 'prompt': {
+                  const preparationGeneration = this.gmailPreparationGeneration;
+                  const preparationController = this.currentQueryAbortController;
+                  let approvalPrompt;
+                  try {
+                    approvalPrompt = await prepareGmailApprovalPrompt(checkResult, input.tool_name, toolInput, this.config.mcpPool);
+                  } catch (error) {
+                    return { continue: false, decision: 'block' as const,
+                      reason: error instanceof Error ? error.message : 'Could not prepare the Gmail draft.' };
+                  }
+
+                  if (preparationGeneration !== this.gmailPreparationGeneration
+                    || preparationController?.signal.aborted
+                    || preparationController !== this.currentQueryAbortController) {
+                    return { continue: false, decision: 'block' as const, reason: 'The original turn was stopped.' };
+                  }
                   const requestId = `perm-${input.tool_use_id}`;
-                  const command = checkResult.command || '';
+                  const command = approvalPrompt.command || '';
                   const baseCommand = this.permissionManager.getBaseCommand(command);
 
                   debug(`[PreToolUse] Requesting permission for ${input.tool_name}: ${command}`);
@@ -1391,15 +1410,15 @@ export class ClaudeAgent extends BaseAgent {
                       requestId,
                       toolName: input.tool_name,
                       command,
-                      description: checkResult.description,
-                      type: checkResult.promptType,
-                      appName: checkResult.appName,
-                      reason: checkResult.reason,
-                      impact: checkResult.impact,
-                      requiresSystemPrompt: checkResult.requiresSystemPrompt,
-                      rememberForMinutes: checkResult.rememberForMinutes,
-                      commandHash: checkResult.commandHash,
-                      approvalTtlSeconds: checkResult.approvalTtlSeconds,
+                      description: approvalPrompt.description,
+                      type: approvalPrompt.promptType,
+                      appName: approvalPrompt.appName,
+                      reason: approvalPrompt.reason,
+                      impact: approvalPrompt.impact,
+                      requiresSystemPrompt: approvalPrompt.requiresSystemPrompt,
+                      rememberForMinutes: approvalPrompt.rememberForMinutes,
+                      commandHash: approvalPrompt.commandHash,
+                      approvalTtlSeconds: approvalPrompt.approvalTtlSeconds,
                     });
                   } else {
                     this.pendingPermissions.delete(requestId);
@@ -1420,12 +1439,12 @@ export class ClaudeAgent extends BaseAgent {
                   }
 
                   // User approved — return with modified input if transforms were applied
-                  if (checkResult.modifiedInput) {
+                  if (approvalPrompt.modifiedInput) {
                     return {
                       continue: true,
                       hookSpecificOutput: {
                         hookEventName: 'PreToolUse' as const,
-                        updatedInput: checkResult.modifiedInput,
+                        updatedInput: approvalPrompt.modifiedInput,
                       },
                     };
                   }
@@ -2603,6 +2622,7 @@ This is a branched conversation. All prior messages in this conversation are par
    * AbortController mid-control-write.
    */
   override interruptForHandoff(reason: AbortReason): void {
+    this.gmailPreparationGeneration++;
     this.lastAbortReason = reason;
     this.pendingSteerMessage = null; // Clear any undelivered steer
 
@@ -2623,6 +2643,7 @@ This is a branched conversation. All prior messages in this conversation are par
    * @param reason - Why the abort is happening (affects UI feedback)
    */
   forceAbort(reason: AbortReason = AbortReason.UserStop): void {
+    this.gmailPreparationGeneration++;
     this.lastAbortReason = reason;
     this.pendingSteerMessage = null; // Clear any undelivered steer
     if (this.currentQueryAbortController) {
@@ -2740,6 +2761,7 @@ This is a branched conversation. All prior messages in this conversation are par
    * Calls super.destroy() for base cleanup, then Claude-specific cleanup.
    */
   destroy(): void {
+    this.gmailPreparationGeneration++;
     // Claude-specific cleanup first
     this.currentQueryAbortController?.abort();
     this.teardownPersistentQuery('destroy');
