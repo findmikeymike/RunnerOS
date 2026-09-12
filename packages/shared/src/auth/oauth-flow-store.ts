@@ -101,6 +101,14 @@ export class OAuthFlowStore {
         this.flows.delete(state);
       }
     }
+    // A claimed flow whose exchange never completed is dead once expired: the
+    // nonce is already consumed and callbacks no longer accept it. Prune it so
+    // secrets (codeVerifier, clientSecret) do not outlive the flow TTL.
+    for (const [state, flow] of this.completing) {
+      if (now > flow.expiresAt) {
+        this.completing.delete(state);
+      }
+    }
   }
 
   /** Stop the periodic cleanup timer (for graceful shutdown). */
