@@ -70,10 +70,9 @@ function makeCtx(overrides: Partial<SessionToolContext> = {}): SessionToolContex
   } as SessionToolContext;
 }
 
-function hasFfmpeg(): boolean {
-  return spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' }).status === 0
-    && spawnSync('ffprobe', ['-version'], { encoding: 'utf-8' }).status === 0;
-}
+// Missing optional native tools are skips, never successful render checks.
+const ffmpegAvailable = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' }).status === 0;
+const ffprobeAvailable = spawnSync('ffprobe', ['-version'], { encoding: 'utf-8' }).status === 0;
 
 describe('video studio session tools', () => {
   test('create -> import -> add clip -> export placeholder', async () => {
@@ -197,8 +196,7 @@ describe('video studio session tools', () => {
     expect(project.settings).toMatchObject({ aspectRatio: 'custom', width: 1000, height: 1000 });
   });
 
-  test('video_export preserves audio from video clips', async () => {
-    if (!hasFfmpeg()) return;
+  test.skipIf(!ffmpegAvailable || !ffprobeAvailable)('video_export preserves audio from video clips', async () => {
     const ctx = makeCtx();
     const projectPath = join(root, 'project', 'video.runner-video.json');
     await handleVideoProjectCreate(ctx, { projectPath, title: 'Audio Export' });
@@ -553,9 +551,7 @@ describe('video studio session tools', () => {
     expect(project.agentEvents.filter((event) => event.toolName === 'video_clip_edit')).toHaveLength(4);
   });
 
-  test('renders a playable mp4 when output path uses a video extension', async () => {
-    const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
-    if (ffmpeg.status !== 0) return;
+  test.skipIf(!ffmpegAvailable)('renders a playable mp4 when output path uses a video extension', async () => {
     const ctx = makeCtx();
     const projectPath = join(root, 'project', 'video.runner-video.json');
     await handleVideoProjectCreate(ctx, { projectPath, title: 'Real MP4' });
@@ -581,9 +577,7 @@ describe('video studio session tools', () => {
     expect(readFileSync(outputPath).subarray(4, 8).toString()).toBe('ftyp');
   });
 
-  test('renders imported video media into a playable mp4', async () => {
-    const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
-    if (ffmpeg.status !== 0) return;
+  test.skipIf(!ffmpegAvailable)('renders imported video media into a playable mp4', async () => {
     const ctx = makeCtx();
     const projectPath = join(root, 'project', 'video.runner-video.json');
     await handleVideoProjectCreate(ctx, { projectPath, title: 'Media Backed' });
@@ -617,9 +611,7 @@ describe('video studio session tools', () => {
     expect(readFileSync(outputPath).subarray(4, 8).toString()).toBe('ftyp');
   });
 
-  test('renders adjusted video media into a playable mp4', async () => {
-    const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
-    if (ffmpeg.status !== 0) return;
+  test.skipIf(!ffmpegAvailable)('renders adjusted video media into a playable mp4', async () => {
     const ctx = makeCtx();
     const projectPath = join(root, 'project', 'video.runner-video.json');
     await handleVideoProjectCreate(ctx, { projectPath, title: 'Adjusted Media' });
