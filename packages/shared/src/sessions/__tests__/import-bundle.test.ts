@@ -12,7 +12,7 @@ for (const files of [[file('session.jsonl')], [file('SESSION.JSONL')], [file('..
 }
 test('publication preserves an existing destination and never exposes partial invalid imports', () => {
  const root=mkdtempSync('/tmp/session-publish-')
- const session={id:'original',createdAt:1,lastUsedAt:1,workspaceRootPath:root,messages:[],tokenUsage:{}} as StoredSession
+ const session={id:'original',createdAt:1,lastUsedAt:1,workspaceRootPath:root,messages:[],tokenUsage:{inputTokens:0,outputTokens:0,totalTokens:0,contextTokens:0,costUsd:0}} as StoredSession
  try {
   publishImportedSession(root,session,[file('attachments/a.txt')])
   const before=readFileSync(join(root,'sessions/original/session.jsonl'),'utf8')
