@@ -26,7 +26,7 @@ import {
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildAuthorizationHeader } from './api-tools.ts';
-import type { CredentialId, StoredCredential } from '../credentials/types.ts';
+import { credentialIdToAccount, type CredentialId, type StoredCredential } from '../credentials/types.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { CONFIG_DIR } from '../config/paths.ts';
 import { CraftOAuth, getMcpBaseUrl, prepareMcpOAuth, exchangeMcpOAuth, revokeMcpOAuthTokens, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
@@ -372,47 +372,41 @@ export class SourceCredentialManager {
    * the workspace record alone.
    */
   async loadEffective(source: LoadedSource): Promise<StoredCredential | null> {
-    if (source.tier !== 'global') {
-      const direct = await this.load(source);
-      if (direct) return direct;
-      if (isSharedGoogleSource(source)) return this.loadSharedGoogleCredential(source);
-      return null;
-    }
-
-    const manager = getCredentialManager();
-    const ids = this.getCredentialIdsForLoad(source);
-
-    for (const wsId of ids) {
-      const ws = await manager.get(wsId);
-
-      if (ws?.override === true) {
-        // Explicit suppression: return the workspace record only when it has a real value.
-        return ws.value ? ws : null;
-      }
-
-      if (ws) return ws;
-    }
-
-    if (source.tier === 'global') {
-      for (const wsId of ids) {
-        const globalId: CredentialId = { ...wsId, workspaceId: GLOBAL_WORKSPACE_ID };
-        const g = await manager.get(globalId);
-        if (g) return g;
-      }
-    }
-
-    return null;
+    return (await this.resolveEffectiveCredential(source))?.credential ?? null;
   }
 
-  private async loadSharedGoogleCredential(source: LoadedSource): Promise<StoredCredential | null> {
+  /** Resolve the actual storage owner together with its credential. */
+  private async resolveEffectiveCredential(source: LoadedSource): Promise<{
+    id: CredentialId;
+    credential: StoredCredential;
+  } | null> {
     const manager = getCredentialManager();
-    const ids = await manager.list({ type: 'source_oauth' });
+    const ids = this.getCredentialIdsForLoad(source);
+    if (source.tier !== 'global' && source.config.type === 'mcp'
+      && source.config.mcp?.transport !== 'stdio' && source.config.mcp?.authType !== 'none') {
+      // Plain load historically prefers OAuth even when bearer is configured.
+      ids.sort((a, b) => Number(b.type === 'source_oauth') - Number(a.type === 'source_oauth'));
+    }
     for (const id of ids) {
-      if (id.sourceId !== source.config.slug || id.workspaceId === source.workspaceId) continue;
-      const cred = await manager.get(id);
-      if (cred?.value || cred?.refreshToken) {
-        debug(`[SourceCredentialManager] Reusing Google credential for ${source.config.slug} from workspace ${id.workspaceId}`);
-        return cred;
+      const credential = await manager.get(id);
+      if (source.tier === 'global' && credential?.override === true) {
+        return credential.value ? { id, credential } : null;
+      }
+      if (credential && (source.tier === 'global' || source.config.type !== 'mcp'
+        || source.config.mcp?.transport === 'stdio' || source.config.mcp?.authType === 'none'
+        || credential.value)) return { id, credential };
+    }
+    if (source.tier === 'global') {
+      for (const id of ids) {
+        const globalId = { ...id, workspaceId: GLOBAL_WORKSPACE_ID };
+        const credential = await manager.get(globalId);
+        if (credential) return { id: globalId, credential };
+      }
+    } else if (isSharedGoogleSource(source)) {
+      for (const id of await manager.list({ type: 'source_oauth' })) {
+        if (id.sourceId !== source.config.slug || id.workspaceId === source.workspaceId) continue;
+        const credential = await manager.get(id);
+        if (credential?.value || credential?.refreshToken) return { id, credential };
       }
     }
     return null;
@@ -1215,7 +1209,9 @@ export class SourceCredentialManager {
    * - Microsoft rotates refresh tokens, so concurrent refreshes could cause token invalidation
    */
   async refresh(source: LoadedSource): Promise<string | null> {
-    const key = source.config.slug;
+    const resolved = await this.resolveEffectiveCredential(source);
+    if (!resolved) return null;
+    const key = credentialIdToAccount(resolved.id);
 
     // Return existing refresh promise if one is in progress
     const pending = this.pendingRefreshes.get(key);
@@ -1225,7 +1221,19 @@ export class SourceCredentialManager {
     }
 
     // Create and track new refresh promise
-    const refreshPromise = this.doRefresh(source).finally(() => {
+    // Inherited credentials must refresh their owner record, not create a copy
+    // under whichever workspace happened to request the refresh first.
+    const ownerSource: LoadedSource = {
+      ...source,
+      workspaceId: resolved.id.workspaceId ?? source.workspaceId,
+      ...(source.config.type === 'mcp' && source.config.mcp ? {
+        config: {
+          ...source.config,
+          mcp: { ...source.config.mcp, authType: resolved.id.type === 'source_bearer' ? 'bearer' : 'oauth' },
+        },
+      } : {}),
+    };
+    const refreshPromise = this.doRefresh(ownerSource, resolved.credential).finally(() => {
       this.pendingRefreshes.delete(key);
     });
 
@@ -1236,15 +1244,7 @@ export class SourceCredentialManager {
   /**
    * Internal refresh implementation
    */
-  private async doRefresh(source: LoadedSource): Promise<string | null> {
-    const cred = isSharedGoogleSource(source)
-      ? await this.loadEffective(source)
-      : await this.load(source);
-    if (!cred) {
-      debug(`[SourceCredentialManager] No credential for ${source.config.slug}`);
-      return null;
-    }
-
+  private async doRefresh(source: LoadedSource, cred: StoredCredential): Promise<string | null> {
     // API renew endpoint (non-OAuth token refresh) — check before provider routing.
     // These sources may not have a separate refreshToken; they use the current
     // access token for renewal.
