@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { ARTIST_OS_TEAM_MISSION, ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE } from './artist-team-guidance.ts';
 import {
   AGENT_CATALOG_HEADER,
   ARTIST_ASSET_CONTRACT_HEADER,
@@ -38,6 +39,34 @@ const skill = (slug: string, name: string, description?: string) => ({
 
 const source = (slug: string, name: string, tagline?: string) => ({
   config: { slug, name, ...(tagline ? { tagline } : {}) },
+});
+
+describe('Artist OS team mission routing', () => {
+  test('shares the mission across artist workers without replacing their role or adding skills', () => {
+    for (const artistWorkspaceScope of ['hq', 'campaign', 'lab'] as const) {
+      for (const slug of ['ads-agent', 'content-genius', 'scriptwriter', 'custom-worker']) {
+        const worker = { ...agent({}, 'Keep my custom role and artist instructions.'), slug };
+        const result = composeAgentSystemPrompt(worker, [], [], [], [], { artistWorkspaceScope });
+        expect(result.startsWith(worker.systemPrompt!)).toBe(true);
+        expect(result.split(ARTIST_OS_TEAM_MISSION)).toHaveLength(2);
+        expect(result).not.toContain(ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE);
+        expect(result).not.toContain(SKILLS_HEADER);
+      }
+    }
+  });
+
+  test('adds Manager judgment only for the Manager in an artist workspace', () => {
+    const manager = { ...agent(), slug: 'concierge' };
+    for (const artistWorkspaceScope of ['hq', 'campaign', 'lab'] as const) {
+      const result = composeAgentSystemPrompt(manager, [], [], [], [], { artistWorkspaceScope });
+      expect(result.split(ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE)).toHaveLength(2);
+    }
+    for (const artistWorkspaceScope of [undefined, 'general'] as const) {
+      const result = composeAgentSystemPrompt(manager, [], [], [], [], { artistWorkspaceScope });
+      expect(result).not.toContain(ARTIST_OS_TEAM_MISSION);
+      expect(result).not.toContain(ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE);
+    }
+  });
 });
 
 describe('Signals worker guidance', () => {
