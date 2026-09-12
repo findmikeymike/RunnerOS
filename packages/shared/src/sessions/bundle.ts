@@ -12,6 +12,8 @@ import type { SessionHeader, StoredMessage, SessionConfig } from './types.ts'
 import type { StoredSession } from './types.ts'
 import { readSessionJsonl } from './jsonl.ts'
 import { getSessionPath, getSessionFilePath } from './storage.ts'
+import { isValidSessionId } from './validation.ts'
+import { validateSessionBundleFiles } from './import-bundle.ts'
 import { debug } from '../utils/debug.ts'
 import {
   type BundleFile,
@@ -153,10 +155,12 @@ export function validateBundle(bundle: unknown): bundle is SessionBundle {
   if (!Array.isArray(session.messages)) return false
 
   const header = session.header as Record<string, unknown>
-  if (typeof header.id !== 'string') return false
-  if (typeof header.createdAt !== 'number') return false
+  if (typeof header.id !== 'string' || !isValidSessionId(header.id)) return false
+  if (typeof header.createdAt !== 'number' || !Number.isFinite(header.createdAt)) return false
 
   if (!Array.isArray(b.files)) return false
 
+  try { validateSessionBundleFiles(b.files as BundleFile[]) } catch { return false }
+  if (session.messages.some(message => !message || typeof message !== 'object' || typeof message.id !== 'string' || typeof message.content !== 'string')) return false
   return true
 }

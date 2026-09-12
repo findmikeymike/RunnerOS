@@ -153,7 +153,7 @@ import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
 import { resolveAuthEnvVars } from '@craft-agent/shared/config'
 import { toolMetadataStore, getLastApiError } from '@craft-agent/shared/interceptor'
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
-import { restoreFiles } from '@craft-agent/shared/utils/bundle-files'
+import { publishImportedSession } from '../../../shared/src/sessions/import-bundle'
 import { getCredentialManager, isValidUserSecretName, normalizeUserSecretName } from '@craft-agent/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, type CreateSessionOptions, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
@@ -16278,6 +16278,7 @@ user a clickable link to where the thing now lives.`
       throw new Error('Invalid session bundle')
     }
 
+    bundle = structuredClone(bundle)
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) {
       throw new Error(`Workspace ${workspaceId} not found`)
@@ -16304,7 +16305,7 @@ user a clickable link to where the thing now lives.`
       : {}
 
     // Create session directory with all subdirectories
-    const sessionDir = ensureSessionDir(workspaceRootPath, sessionId)
+    // Directory publication occurs only after all metadata has been validated.
 
     // Build the stored session from bundle data
     const header = bundle.session.header
@@ -16335,7 +16336,7 @@ user a clickable link to where the thing now lives.`
       hidden: header.hidden,
       transferredSessionSummary: header.transferredSessionSummary,
       transferredSessionSummaryApplied: header.transferredSessionSummaryApplied,
-      messages: bundle.session.messages,
+      messages: bundle.session.messages.map(message => ({ ...message, isQueued: false })),
       tokenUsage: header.tokenUsage ?? DEFAULT_TOKEN_USAGE,
       ...focusedState,
     }
@@ -16463,11 +16464,7 @@ user a clickable link to where the thing now lives.`
     // Write JSONL file (after compatibility checks so remapped values are persisted)
     const sessionFile = getSessionFilePath(workspaceRootPath, sessionId)
     sessionLog.info(`[import] Writing JSONL: ${sessionFile} (llmConnection=${storedSession.llmConnection ?? 'default'}, messages=${storedSession.messages.length})`)
-    writeSessionJsonl(sessionFile, storedSession)
-
-    // Write all bundle files (attachments, plans, data, downloads, etc.)
-    // Uses restoreFiles() for path traversal, size, and base64 validation.
-    restoreFiles(sessionDir, bundle.files)
+    publishImportedSession(workspaceRootPath, storedSession, bundle.files)
 
     // Register in-memory — pass session metadata without messages to avoid
     // StoredMessage[] vs Message[] type mismatch, then convert messages separately
