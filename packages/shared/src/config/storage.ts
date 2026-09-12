@@ -15,7 +15,8 @@ import { extractWorkspaceSlugFromPath } from '../utils/workspace-slug.ts';
 import { initializeDocs } from '../docs/index.ts';
 import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.ts';
 import { debug } from '../utils/debug.ts';
-import { readJsonFileSync, atomicWriteFileSync } from '../utils/files.ts';
+import { readJsonFileSync } from '../utils/files.ts';
+import { backupConfigSnapshot, readConfigSnapshot, writeConfigSnapshot } from './config-recovery.ts';
 import { CONFIG_DIR } from './paths.ts';
 import { readPendingCampaignCleanup, isWorkspaceInitializationBlockedByCampaignCleanup } from './pending-campaign-cleanup.ts';
 import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
@@ -305,33 +306,10 @@ export function ensureConfigDefaults(): void {
 
 let configDirInitialized = false;
 
-const MAX_CONFIG_BACKUPS = 3;
-const CONFIG_BACKUP_DATE_RE = /^config\.json\.bak-\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Preserve the first config snapshot of the day before startup migrations or
- * recovery paths can mutate it. Backups stay inside the active product root.
- */
+/** Preserve the first valid config snapshot of the day within this product root. */
 export function backupConfigFile(): void {
-  try {
-    if (!existsSync(CONFIG_FILE)) return;
-
-    const now = new Date();
-    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const dated = join(CONFIG_DIR, `config.json.bak-${stamp}`);
-    if (existsSync(dated)) return;
-
-    writeFileSync(dated, readFileSync(CONFIG_FILE, 'utf-8'), 'utf-8');
-
-    const backups = readdirSync(CONFIG_DIR)
-      .filter(file => CONFIG_BACKUP_DATE_RE.test(file))
-      .sort();
-    for (const stale of backups.slice(0, Math.max(0, backups.length - MAX_CONFIG_BACKUPS))) {
-      try { rmSync(join(CONFIG_DIR, stale)); } catch { /* best-effort cleanup */ }
-    }
-  } catch (error) {
-    debug('[config] backupConfigFile failed:', error instanceof Error ? error.message : error);
-  }
+  try { backupConfigSnapshot(CONFIG_FILE); }
+  catch (error) { debug('[config] backupConfigFile failed:', error instanceof Error ? error.message : error); }
 }
 
 export function ensureConfigDir(): void {
@@ -355,15 +333,8 @@ export function ensureConfigDir(): void {
 
 export function loadStoredConfig(): StoredConfig | null {
   try {
-    if (!existsSync(CONFIG_FILE)) {
-      return null;
-    }
-    const config = readJsonFileSync<StoredConfig>(CONFIG_FILE);
-
-    // Must have workspaces array
-    if (!Array.isArray(config.workspaces)) {
-      return null;
-    }
+    const config = readConfigSnapshot(CONFIG_FILE);
+    if (!config) return null;
 
     // Expand path variables (~ and ${HOME}) for portability
     for (const workspace of config.workspaces) {
@@ -428,7 +399,11 @@ export function registerPostSaveConfigHook(hook: PostSaveHook): () => void {
 }
 
 export function saveConfig(config: StoredConfig): void {
+  // A failed read must never turn an existing damaged profile into a fresh one.
+  // Recover the registry first, or retain its evidence and refuse replacement.
+  readConfigSnapshot(CONFIG_FILE);
   ensureConfigDir();
+  backupConfigSnapshot(CONFIG_FILE);
 
   // Convert paths to portable form (~ prefix) for cross-machine compatibility
   const storageConfig: StoredConfig = {
@@ -439,10 +414,9 @@ export function saveConfig(config: StoredConfig): void {
     })),
   };
 
-  // Atomic write (temp + rename): a crash mid-write must not corrupt the
-  // primary config, which on a failed parse is discarded and takes every
-  // workspace/connection with it (silent total data loss).
-  atomicWriteFileSync(CONFIG_FILE, JSON.stringify(storageConfig, null, 2));
+  // Flush and atomically publish the registry so interrupted saves leave a
+  // complete primary or a validated recovery snapshot.
+  writeConfigSnapshot(CONFIG_FILE, JSON.stringify(storageConfig, null, 2));
 
   // Fire post-save hooks (cache invalidation, etc). Errors are swallowed so
   // an observer bug can't break config writes.
