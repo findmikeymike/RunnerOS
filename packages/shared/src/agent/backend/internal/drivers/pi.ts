@@ -1,3 +1,4 @@
+import type { LlmConnection } from '../../../../config/storage.ts';
 import type { ProviderDriver, DriverTestConnectionArgs } from '../driver-types.ts';
 import type { ModelDefinition } from '../../../../config/models.ts';
 import { getAllPiModels, getPiModelsForAuthProvider } from '../../../../config/models-pi.ts';
@@ -230,35 +231,37 @@ async function testAnthropicCompatible(
   }
 }
 
+export function buildPiConnectionRuntime(connection: LlmConnection | null, providerOverride?: string) {
+  const piAuthProvider = providerOverride || connection?.piAuthProvider;
+  const isOpenRouter = piAuthProvider === 'openrouter';
+  return {
+    piAuthProvider,
+    baseUrl: connection?.baseUrl || (isOpenRouter ? OPENROUTER_API_BASE_URL : undefined),
+    // OpenRouter adds models faster than the bundled Pi catalog. Register the
+    // connection's selected models dynamically so a freshly listed model is
+    // usable immediately instead of merely appearing in the picker.
+    customEndpoint: connection?.customEndpoint || (isOpenRouter ? { api: 'openai-completions' } : undefined),
+    customModels: connection?.models?.map(m => {
+      if (typeof m === 'string') return m;
+      const hasSupportsImages = 'supportsImages' in m && typeof m.supportsImages === 'boolean'
+      if (m.contextWindow || hasSupportsImages) {
+        return {
+          id: m.id,
+          ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
+          ...(hasSupportsImages ? { supportsImages: m.supportsImages } : {}),
+        }
+      }
+      return m.id;
+    }),
+  };
+}
+
 export const piDriver: ProviderDriver = {
   provider: 'pi',
   buildRuntime: ({ context, providerOptions, resolvedPaths }) => {
-    const piAuthProvider = providerOptions?.piAuthProvider || context.connection?.piAuthProvider;
-    const isOpenRouter = piAuthProvider === 'openrouter';
-    return {
-      paths: {
-        piServer: resolvedPaths.piServerPath,
-        interceptor: resolvedPaths.interceptorBundlePath,
-        node: resolvedPaths.nodeRuntimePath,
-      },
-      piAuthProvider,
-      baseUrl: context.connection?.baseUrl || (isOpenRouter ? OPENROUTER_API_BASE_URL : undefined),
-      // OpenRouter adds models faster than the bundled Pi catalog. Register the
-      // connection's selected models dynamically so a freshly listed model is
-      // usable immediately instead of merely appearing in the picker.
-      customEndpoint: context.connection?.customEndpoint || (isOpenRouter ? { api: 'openai-completions' } : undefined),
-      customModels: context.connection?.models?.map(m => {
-        if (typeof m === 'string') return m;
-        const hasSupportsImages = 'supportsImages' in m && typeof m.supportsImages === 'boolean'
-        if (m.contextWindow || hasSupportsImages) {
-          return {
-            id: m.id,
-            ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
-            ...(hasSupportsImages ? { supportsImages: m.supportsImages } : {}),
-          }
-        }
-        return m.id;
-      }),
+    return { ...buildPiConnectionRuntime(context.connection, providerOptions?.piAuthProvider),
+      paths: { piServer: resolvedPaths.piServerPath, interceptor: resolvedPaths.interceptorBundlePath,
+        node: resolvedPaths.nodeRuntimePath },
     };
   },
   fetchModels: async ({ connection, credentials, timeoutMs }) => {

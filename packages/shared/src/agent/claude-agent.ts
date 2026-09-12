@@ -1,3 +1,4 @@
+import { readStableLlmConnection } from '../config/connection-lifecycle.ts';
 import { sanitizePrivateSkillHookInput } from './core/private-skill-activity.ts';
 import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
@@ -18,7 +19,6 @@ import { runErrorDiagnostics } from './diagnostics.ts';
 import { loadStoredConfig, loadConfigDefaults, type Workspace, type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
 import { getValidClaudeOAuthToken } from '../auth/state.ts';
 import {
-  clearClaudeBedrockRoutingEnvVars,
   resolveAuthEnvVars,
 } from '../config/llm-connections.ts';
 import type { McpClientPool } from '../mcp/mcp-pool.ts';
@@ -499,6 +499,7 @@ export class ClaudeAgent extends BaseAgent {
   private persistentAbortController: AbortController | null = null;
   private persistentConsumerActive = false;
   private persistentGeneration = 0;
+  private persistentEnvironment: string | undefined;
   private activeTurnChannel: PushableInputStream<SDKMessage> | null = null;
   private onBackgroundEvent: ((event: AgentEvent) => void) | null = null;
 
@@ -519,6 +520,13 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   private beginPersistentTurn(prompt: SDKUserMessage, options: Options): AsyncIterable<SDKMessage> {
+    // Only chat admission retires a transport. Separate utility calls never
+    // interrupt a running turn when an account or saved CLI secret changes.
+    const environment = JSON.stringify(options.env);
+    if (this.persistentEnvironment !== undefined && this.persistentEnvironment !== environment) {
+      this.teardownPersistentQuery('connection environment changed');
+    }
+    this.persistentEnvironment = environment;
     if (!this.persistentInput || !this.currentQuery) {
       this.persistentInput = createPushableInputStream<SDKUserMessage>();
       this.persistentAbortController = this.currentQueryAbortController;
@@ -770,7 +778,7 @@ export class ClaudeAgent extends BaseAgent {
 
   /**
    * Post-construction auth setup.
-   * Fetches credentials and sets process.env before the SDK subprocess spawns.
+   * Validates credentials without changing the shared host environment.
    * The subprocess spawns lazily on first chat(), so postInit() is early enough.
    */
   override async postInit(): Promise<PostInitResult> {
@@ -779,41 +787,53 @@ export class ClaudeAgent extends BaseAgent {
       return { authInjected: false, authWarning: 'No connection slug available', authWarningLevel: 'error' };
     }
 
-    const connection = getLlmConnection(slug);
-    if (!connection) {
-      return { authInjected: false, authWarning: `Connection not found: ${slug}`, authWarningLevel: 'error' };
-    }
+    return readStableLlmConnection(slug, async (): Promise<PostInitResult> => {
+      const connection = getLlmConnection(slug);
+      if (!connection) {
+        return { authInjected: false, authWarning: `Connection not found: ${slug}`, authWarningLevel: 'error' };
+      }
 
-    // Clear all auth env vars first for clean state.
-    // Claude subprocesses must never inherit Bedrock-routing toggles from a
-    // previous connection or parent process environment.
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
-    delete process.env.ANTHROPIC_BASE_URL;
-    clearClaudeBedrockRoutingEnvVars();
+      const result = await resolveAuthEnvVars(connection, slug, getCredentialManager(), getValidClaudeOAuthToken);
+      if (!result.success) {
+        return { authInjected: false, authWarning: result.warning, authWarningLevel: 'error' };
+      }
+      // Authentication belongs to each SDK invocation, never the shared host env.
+      return { authInjected: true };
+    });
+  }
 
-    // Resolve auth env vars via shared utility
-    const manager = getCredentialManager();
-    const result = await resolveAuthEnvVars(connection, slug, manager, getValidClaudeOAuthToken);
-
-    if (!result.success) {
-      return { authInjected: false, authWarning: result.warning, authWarningLevel: 'error' };
-    }
-
-    // Apply env vars to process.env (for SDK subprocess) and envOverrides (per-session isolation)
-    for (const [key, value] of Object.entries(result.envVars)) {
-      process.env[key] = value;
-    }
-
-    // Pass mini model to SDK subprocess so built-in tools like WebFetch
-    // use the correct summarization model (instead of hardcoded Haiku).
-    // This is critical for custom providers where the default Haiku model ID
-    // doesn't exist on the provider's endpoint.
-    if (this.config.miniModel) {
-      process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = this.config.miniModel;
-    }
-
-    return { authInjected: true };
+  private async getOperationOptions(): Promise<Partial<Options>> {
+    const options = getDefaultOptions(this.config.envOverrides);
+    const slug = this.config.connectionSlug;
+    if (!slug) return options; // Explicit connection-test env overrides.
+    return readStableLlmConnection(slug, async () => {
+      const connection = getLlmConnection(slug);
+      if (!connection) {
+        // Connection probes intentionally use an unsaved synthetic connection.
+        // Their explicit credentials must not inherit a second host auth mode.
+        if (slug.startsWith('__test-') && this.config.envOverrides) {
+          const env = { ...options.env };
+          for (const key of ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN']) {
+            delete env[key];
+          }
+          Object.assign(env, this.config.envOverrides);
+          return { ...options, env };
+        }
+        throw new Error(`Connection not found: ${slug}`);
+      }
+      const auth = await resolveAuthEnvVars(connection, slug, getCredentialManager(), getValidClaudeOAuthToken);
+      if (!auth.success) throw new Error(auth.warning || `Authentication unavailable: ${slug}`);
+      const env = { ...options.env };
+      if (connection.authType !== 'environment') {
+        delete env.ANTHROPIC_API_KEY;
+        delete env.CLAUDE_CODE_OAUTH_TOKEN;
+        delete env.ANTHROPIC_BASE_URL;
+        delete env.ANTHROPIC_AUTH_TOKEN;
+      }
+      Object.assign(env, auth.envVars);
+      if (this.config.miniModel) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = this.config.miniModel;
+      return { ...options, env };
+    });
   }
 
   // Config watcher methods (startConfigWatcher, stopConfigWatcher) are now inherited from BaseAgent
@@ -1070,7 +1090,7 @@ export class ClaudeAgent extends BaseAgent {
         : model;
 
       const options: Options = {
-        ...getDefaultOptions(this.config.envOverrides),
+        ...await this.getOperationOptions(),
         model: effectiveModel,
         // Capture stderr from SDK subprocess for error diagnostics
         // This helps identify why sessions fail with "process exited with code 1"
@@ -2864,7 +2884,7 @@ This is a branched conversation. All prior messages in this conversation are par
     const model = this.config.miniModel;
 
     const options = {
-      ...getDefaultOptions(this.config.envOverrides),
+      ...await this.getOperationOptions(),
       model,
       maxTurns: 1,
       systemPrompt: 'Reply with ONLY the requested text. No explanation.', // Minimal - no Claude Code preset
@@ -2910,7 +2930,7 @@ This is a branched conversation. All prior messages in this conversation are par
     const model = request.model ?? this.config.miniModel ?? getDefaultSummarizationModel();
 
     const options = {
-      ...getDefaultOptions(this.config.envOverrides),
+      ...await this.getOperationOptions(),
       model,
       // Reasoning-model outputs (Opus 4.7 extended thinking) can span multiple SDK-counted
       // turns even with no tools exposed. Tool surface here is empty, so no tool-use loop risk.

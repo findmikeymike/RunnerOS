@@ -4,7 +4,7 @@
  * 2. Provider files (google-oauth, slack-oauth, microsoft-oauth) import and use OAuthSessionContext
  * 3. credential-manager.ts accepts and threads sessionContext
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, spyOn } from 'bun:test';
 
 describe('auth barrel exports', () => {
   it('exports OAuthSessionContext type from auth/index.ts', async () => {
@@ -105,6 +105,18 @@ describe('SourceCredentialManager sessionContext threading', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('does not use OAuth');
+  });
+
+  it('unsupported authentication never changes an existing sign-in intent', async () => {
+    const { SourceCredentialManager } = await import('../../sources/credential-manager.ts');
+    const manager = new SourceCredentialManager();
+    const begin = spyOn(manager, 'beginAuthentication').mockRejectedValue(new Error('must not touch credentials'));
+    try {
+      const result = await manager.authenticate({ config: { slug: 'local', type: 'local' } } as any);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('does not use OAuth');
+      expect(begin).not.toHaveBeenCalled();
+    } finally { begin.mockRestore(); }
   });
 
   it('authenticate passes partial sessionContext without error', async () => {

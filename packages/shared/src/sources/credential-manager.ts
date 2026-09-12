@@ -1046,6 +1046,13 @@ export class SourceCredentialManager {
     callbacks?: OAuthCallbacks,
     sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
+    // Unsupported sources have no authentication intent to invalidate and do
+    // not need a filesystem or credential-store ownership snapshot.
+    const providerOAuth = ['google', 'slack', 'microsoft'].includes(source.config.provider ?? '');
+    if (!providerOAuth && source.config.api?.authType !== 'oauth'
+      && !(source.config.type === 'mcp' && source.config.mcp?.authType === 'oauth')) {
+      return { success: false, error: `Source ${source.config.slug} does not use OAuth authentication` };
+    }
     const identity = captureSourceAuthIdentity(source);
     const authRevision = await this.beginAuthentication(source);
     const snapshot = await getCredentialManager().captureSnapshot(this.getCredentialId(source));

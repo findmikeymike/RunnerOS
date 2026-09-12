@@ -1,5 +1,6 @@
 export * from './types.ts';
 export * from './llm-connections.ts';
+export * from './connection-lifecycle.ts';
 export * from './model-fallback.ts';
 export * from './llm-validation.ts';
 export * from './models.ts';

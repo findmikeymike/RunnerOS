@@ -23,7 +23,7 @@
  */
 
 export { CredentialManager, getCredentialManager, isValidUserSecretName, maskSecretValue, normalizeUserSecretName } from './manager.ts';
-export type { UserSecretSummary } from './manager.ts';
+export type { UserSecretSummary, CredentialSnapshot } from './manager.ts';
 export {
   INWORLD_API_KEY_NAME,
   INWORLD_VOICE_ID_NAME,

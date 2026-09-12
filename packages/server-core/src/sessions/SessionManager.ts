@@ -37,7 +37,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { assertAdBrowserProvider, getAdBrowserAccount, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, listAdBrowserAccounts, resetManagedAnthropicAuthEnvVars, updateLlmConnection } from '@craft-agent/shared/config'
+import { readStableLlmConnection, assertAdBrowserProvider, getAdBrowserAccount, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, listAdBrowserAccounts, resetManagedAnthropicAuthEnvVars, updateLlmConnection } from '@craft-agent/shared/config'
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
@@ -2088,6 +2088,7 @@ function isCreativeLabWorkspaceInfo(workspace: { id?: string; name?: string; roo
 export class SessionManager implements ISessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
   private sourceUpdateVersions = new WeakMap<ManagedSession, number>()
+  private agentProviders = new WeakMap<AgentInstance, ReturnType<typeof resolveBackendContext>['provider']>()
   private sendMessageAdmissionLocks: Map<string, Promise<void>> = new Map()
   private taskModeOpenings = new Map<string, SendMessageOptions>()
   private canvasVisualReviewAttempts: Map<string, number> = new Map()
@@ -7988,6 +7989,46 @@ user a clickable link to where the thing now lives.`
    * 3. global defaultLlmConnection
    * 4. fallback: no connection configured
    */
+  private async resolveCurrentBackendContext(managed: ManagedSession) {
+    const resolve = async () => resolveBackendContext({
+      sessionConnectionSlug: managed.llmConnection,
+      workspaceDefaultConnectionSlug: loadWorkspaceConfig(managed.workspace.rootPath)?.defaults?.defaultLlmConnection,
+      managedModel: managed.model,
+    })
+    const slug = managed.llmConnection
+      ?? loadWorkspaceConfig(managed.workspace.rootPath)?.defaults?.defaultLlmConnection
+      ?? getDefaultLlmConnection()
+    return slug ? readStableLlmConnection(slug, resolve) : resolve()
+  }
+
+  /** Called under send admission, after the busy-turn redirect path. */
+  private async refreshIdleAgentBackend(managed: ManagedSession): Promise<void> {
+    const agent = managed.agent
+    if (!agent || managed.isProcessing) return
+    const previousProvider = this.agentProviders.get(agent)
+    if (!previousProvider) return
+    const context = await this.resolveCurrentBackendContext(managed)
+    if (managed.isProcessing || managed.agent !== agent || context.provider === previousProvider) return
+    agent.dispose()
+    managed.agent = null
+    this.beginSourceUpdate(managed)
+    if (managed.mcpPool) await managed.mcpPool.disconnectAll()
+    managed.mcpPool = undefined
+    if (managed.poolServer) await managed.poolServer.stop()
+    managed.poolServer = undefined
+    managed.sdkSessionId = undefined
+    managed.branchFromSdkSessionId = undefined
+    managed.branchFromSessionPath = undefined
+    managed.branchFromSdkCwd = undefined
+    managed.branchFromSdkTurnId = undefined
+    // The existing fresh-session replay path preserves conversation history across
+    // incompatible provider session formats, without making a new branch.
+    managed.branchContextStrategy = 'seeded-fresh-session'
+    managed.branchSeedApplied = false
+    this.persistSession(managed)
+    sessionLog.info(`Recreating idle agent ${managed.id}: ${previousProvider} → ${context.provider}`)
+  }
+
   private async getOrCreateAgent(
     managed: ManagedSession,
     turnContext: Pick<ManagedSession, 'customSystemPrompt' | 'agentSkillSlugs' | 'enabledSourceSlugs' | 'launchReceipt'> = managed,
@@ -8008,12 +8049,8 @@ user a clickable link to where the thing now lives.`
       }
 
       const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
-      const backendContext = resolveBackendContext({
-        sessionConnectionSlug: managed.llmConnection,
-        workspaceDefaultConnectionSlug: workspaceConfig?.defaults?.defaultLlmConnection,
-        managedModel: managed.model,
-      })
-      const connection = backendContext.connection
+      let backendContext = await this.resolveCurrentBackendContext(managed)
+      let connection = backendContext.connection
 
       // Stick to the resolved connection until the user deliberately changes it.
       if (connection && !managed.connectionLocked) {
@@ -8031,7 +8068,7 @@ user a clickable link to where the thing now lives.`
         }, managed.workspace.id)
       }
 
-      const provider = backendContext.provider
+      let provider = backendContext.provider
       if (connection) {
         sessionLog.info(`Using LLM connection "${connection.slug}" (${connection.providerType}) for session ${managed.id}`)
       } else {
@@ -8070,6 +8107,12 @@ user a clickable link to where the thing now lives.`
         mcpServers = built.mcpServers
         apiServers = built.apiServers
       } while (this.sourceUpdateVersions.get(managed) !== sourceVersion)
+
+      // Source/credential setup may have yielded while a connection setup completed.
+      // Construct the backend from the latest fully configured provider kind.
+      backendContext = await this.resolveCurrentBackendContext(managed)
+      connection = backendContext.connection
+      provider = backendContext.provider
 
       // Create centralized MCP client pool (all backends use it)
       managed.mcpPool = new McpClientPool({ debug: (msg) => sessionLog.debug(msg), workspaceRootPath: managed.workspace.rootPath, sessionPath })
@@ -8329,6 +8372,8 @@ user a clickable link to where the thing now lives.`
         },
         },
       }) as AgentInstance
+
+      this.agentProviders.set(managed.agent, provider)
 
       sessionLog.info(`Created ${provider} agent for session ${managed.id} (model: ${backendContext.resolvedModel})${managed.sdkSessionId ? ' (resuming)' : ''}`)
 
@@ -13177,6 +13222,8 @@ user a clickable link to where the thing now lives.`
         onAck?.(userMessage.id)
         return
       }
+
+      await this.refreshIdleAgentBackend(managed)
 
       // Add user message with stored attachments for persistence
       // Skip if existingMessageId is provided (message was already created when queued)

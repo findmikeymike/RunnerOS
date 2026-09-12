@@ -338,6 +338,7 @@ describe('task-mode selection', () => {
     const fallbackContexts: AgentContextUpdate[] = []
     const primary = {
       setAgentContext: (context: AgentContextUpdate) => { primaryContexts.push(context) },
+      setSourceServers: async () => {}, applyBridgeUpdates: async () => {},
       setAllSources: () => {}, getModel: () => 'primary',
       getSummarizeCallback: () => async () => null,
       async *chat(): AsyncGenerator<AgentEvent> {
@@ -349,6 +350,7 @@ describe('task-mode selection', () => {
     } as unknown as AgentBackend
     const fallback = {
       setAgentContext: (context: AgentContextUpdate) => { fallbackContexts.push(context) },
+      setSourceServers: async () => {}, applyBridgeUpdates: async () => {},
       setAllSources: () => {}, getModel: () => 'fallback',
       getSummarizeCallback: () => async () => null,
       postInit: async () => ({}), destroy: () => {},

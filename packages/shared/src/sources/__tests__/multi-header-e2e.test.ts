@@ -65,7 +65,7 @@ describe('Multi-header auth end-to-end', () => {
     });
 
     // Mock credential loading
-    const loadSpy = spyOn(credManager, 'load').mockResolvedValue({
+    const loadSpy = spyOn(credManager, 'loadEffective').mockResolvedValue({
       value: storedCredential,
     });
 
@@ -91,7 +91,7 @@ describe('Multi-header auth end-to-end', () => {
 
   test('should return null when credentials missing', async () => {
     // Source is authenticated but no stored credential
-    const loadSpy = spyOn(credManager, 'load').mockResolvedValue(null);
+    const loadSpy = spyOn(credManager, 'loadEffective').mockResolvedValue(null);
 
     const cred = await credManager.getApiCredential(datadogLikeSource);
     expect(cred).toBeNull();
@@ -116,7 +116,7 @@ describe('Multi-header auth end-to-end', () => {
       'DD-APPLICATION-KEY': 'test-app-key',
     });
 
-    const loadSpy = spyOn(credManager, 'load').mockResolvedValue({
+    const loadSpy = spyOn(credManager, 'loadEffective').mockResolvedValue({
       value: storedCredential,
     });
 
@@ -146,7 +146,7 @@ describe('Multi-header auth end-to-end', () => {
       },
     });
 
-    const loadSpy = spyOn(credManager, 'load').mockResolvedValue({
+    const loadSpy = spyOn(credManager, 'loadEffective').mockResolvedValue({
       value: 'simple-api-key',
     });
 
@@ -163,7 +163,7 @@ describe('Multi-header auth end-to-end', () => {
   });
 
   test('should handle malformed credential JSON gracefully', async () => {
-    const loadSpy = spyOn(credManager, 'load').mockResolvedValue({
+    const loadSpy = spyOn(credManager, 'loadEffective').mockResolvedValue({
       value: 'not-valid-json{{{',
     });
 
@@ -181,7 +181,7 @@ describe('Multi-header auth end-to-end', () => {
       // Missing DD-APPLICATION-KEY
     });
 
-    const loadSpy = spyOn(credManager, 'load').mockResolvedValue({
+    const loadSpy = spyOn(credManager, 'loadEffective').mockResolvedValue({
       value: storedCredential,
     });
 

@@ -1,3 +1,4 @@
+import { readStableLlmConnection } from '../config/connection-lifecycle.ts';
 import { isPrivateSkillLoaderTool, privateSkillActivityStatus } from './core/private-skill-activity.ts';
 /**
  * Pi Backend (Subprocess RPC Client)
@@ -37,7 +38,8 @@ import { getModelById } from '../config/models.ts';
 
 // BaseAgent provides common functionality
 import { BaseAgent } from './base-agent.ts';
-import type { Workspace } from '../config/storage.ts';
+import { getLlmConnection, type Workspace } from '../config/storage.ts';
+import { buildPiConnectionRuntime } from './backend/internal/drivers/pi.ts';
 
 // Event adapter
 import { PiEventAdapter } from './backend/pi/event-adapter.ts';
@@ -48,7 +50,7 @@ import { getSystemPrompt } from '../prompts/system.ts';
 import { getCoAuthorPreference } from '../config/preferences.ts';
 
 // Credential manager for token storage
-import { getCredentialManager } from '../credentials/manager.ts';
+import { getCredentialManager, type CredentialSnapshot } from '../credentials/manager.ts';
 import { toPiTransportCredential } from './pi-auth-credential.ts';
 
 // ChatGPT OAuth token refresh (shared with CodexAgent)
@@ -346,10 +348,74 @@ export class PiAgent extends BaseAgent {
   // Subprocess Management
   // ============================================================
 
-  /**
-   * Ensure the subprocess is spawned and ready.
-   * Lazy initialization -- spawns on first use.
-   */
+  private subprocessCredentials: string | undefined;
+  private subprocessAuthOwner: CredentialSnapshot | undefined;
+  private knownStoredConnection = !!(this.config.connectionSlug && getLlmConnection(this.config.connectionSlug));
+
+  private currentConnectionConfig(): BackendConfig {
+    if (this.config.durableExecution) return this.config;
+    const slug = this.config.connectionSlug;
+    const connection = slug ? getLlmConnection(slug) : null;
+    if (!connection) {
+      if (this.knownStoredConnection) throw new Error(`Connection not found: ${slug}`);
+      return this.config; // Synthetic probes and directly constructed backends.
+    }
+    this.knownStoredConnection = true;
+    return { ...this.config, authType: connection.authType,
+      providerType: connection.providerType,
+      runtime: { ...getBackendRuntime(this.config), ...buildPiConnectionRuntime(connection) } };
+  }
+  private utilityOperations = new Set<Promise<unknown>>();
+
+  private async credentialFingerprint(): Promise<string | undefined> {
+    if (!this.config.connectionSlug || this.config.durableExecution) return undefined;
+    return readStableLlmConnection(this.config.connectionSlug, () => this.captureCredentialFingerprint(this.currentConnectionConfig()));
+  }
+
+  private async captureCredentialFingerprint(config: BackendConfig): Promise<string> {
+    const manager = getCredentialManager();
+    const connectionSlug = config.connectionSlug!;
+    const records = await Promise.all((['llm_api_key', 'llm_oauth', 'llm_iam'] as const)
+      .map(type => manager.captureSnapshot({ type, connectionSlug })));
+    const secrets = await manager.exportUserSecretsEnv();
+    // Internal equality only. Never log this value or expose it as a receipt.
+    return JSON.stringify([records.map(record => record.credential), secrets,
+      config.authType, config.providerType, getBackendRuntime(config)]);
+  }
+
+  private async ensureCurrentChatSubprocess(): Promise<void> {
+    const current = await this.credentialFingerprint();
+    if (this.subprocessCredentials !== undefined && current !== this.subprocessCredentials) {
+      // An earlier utility may still own an in-flight request on this process.
+      await Promise.allSettled([...this.utilityOperations]);
+      this.killSubprocess();
+    }
+    if (!this.subprocess) this.config = this.currentConnectionConfig();
+    await this.ensureSubprocess();
+  }
+
+  private async withCurrentUtility<T>(run: (agent: PiAgent) => Promise<T>): Promise<T> {
+    const current = await this.credentialFingerprint();
+    if (this.subprocessCredentials !== undefined && current !== this.subprocessCredentials) {
+      if (this._isProcessing || this.utilityOperations.size > 0) {
+        // call_llm may be a tool in the active turn, so waiting for that turn
+        // would deadlock. Give only this utility a fresh, unshared transport.
+        const config = this.currentConnectionConfig();
+        const utility = new PiAgent({ provider: 'pi', providerType: config.providerType,
+          authType: config.authType, connectionSlug: config.connectionSlug, runtime: config.runtime,
+          workspace: config.workspace, model: this.getModel(), miniModel: config.miniModel,
+          envOverrides: config.envOverrides, isHeadless: true, skipConfigWatcher: true });
+        try { return await run(utility); } finally { utility.destroy(); }
+      }
+      this.killSubprocess();
+    }
+    if (!this.subprocess) this.config = this.currentConnectionConfig();
+    const operation = run(this);
+    this.utilityOperations.add(operation);
+    try { return await operation; } finally { this.utilityOperations.delete(operation); }
+  }
+
+  /** Ensure the subprocess is spawned and ready; lazy on first use. */
   private async ensureSubprocess(): Promise<void> {
     if (this.subprocessStartup) return this.subprocessStartup;
     if (this.subprocess && this.subprocessReady) {
@@ -394,7 +460,7 @@ export class PiAgent extends BaseAgent {
    * Spawn the pi-agent-server subprocess and set up JSONL communication.
    */
   private async spawnSubprocess(): Promise<void> {
-    const runtime = getBackendRuntime(this.config);
+    let runtime = getBackendRuntime(this.config);
     const piServerPath = runtime.paths?.piServer;
     if (!piServerPath) {
       throw new Error('piServerPath not configured. Cannot spawn Pi subprocess.');
@@ -439,13 +505,32 @@ export class PiAgent extends BaseAgent {
       }
     }
 
-    // Retrieve auth credentials for the subprocess.
-    // Custom endpoint mode must NOT fall back to global API keys — keyless local endpoints
-    // are valid, and non-local endpoints should fail explicitly instead of using unrelated creds.
-    const piAuth = await this.getPiAuth();
+    // Capture route and credentials as one stable setup revision. A settings
+    // save may await credential storage after writing its endpoint configuration.
+    const resolveOwnedAuth = async () => {
+      const config = this.currentConnectionConfig();
+      const runtime = getBackendRuntime(config);
+      const fingerprint = config.connectionSlug && !config.durableExecution
+        ? await this.captureCredentialFingerprint(config) : undefined;
+      const piAuth = await this.getPiAuth(config);
+      const authOwner = config.connectionSlug && config.authType === 'oauth'
+        ? await getCredentialManager().captureSnapshot({ type: 'llm_oauth', connectionSlug: config.connectionSlug }) : undefined;
+      const legacyApiKey = !piAuth && !runtime.customEndpoint && !config.connectionSlug ? await this.getApiKey() : undefined;
+      return { config, runtime, fingerprint, piAuth, legacyApiKey, authOwner };
+    };
+    const owned = this.config.connectionSlug
+      ? await readStableLlmConnection(this.config.connectionSlug, resolveOwnedAuth) : await resolveOwnedAuth();
+    this.config = owned.config;
+    runtime = owned.runtime;
+    this.subprocessCredentials = owned.fingerprint;
+    this.subprocessAuthOwner = owned.authOwner;
+    const { piAuth, legacyApiKey } = owned;
     if (this.config.durableExecution && (this.config.authType === 'environment' || this.config.authType === 'iam_credentials' || piAuth && piAuth.credential.type !== 'api_key')) throw new Error('Durable execution supports pinned API-key/bearer credentials only');
     const isCustomEndpointMode = !!runtime.customEndpoint;
-    const legacyApiKey = (!piAuth && !isCustomEndpointMode) ? await this.getApiKey() : undefined;
+    if (!piAuth && this.config.connectionSlug && this.config.authType !== 'environment'
+      && !(isCustomEndpointMode && this.config.authType !== 'oauth')) {
+      throw new Error(`Authentication unavailable: ${this.config.connectionSlug}`);
+    }
     if (isCustomEndpointMode && !piAuth) {
       this.debug('Custom endpoint mode: no provider credential configured, sending empty API key');
     }
@@ -619,21 +704,21 @@ export class PiAgent extends BaseAgent {
    * Subscription providers supported natively by Pi retain their complete OAuth
    * credential. Other OAuth access tokens continue to use bearer/API-key transport.
    */
-  private async getPiAuth(): Promise<{
+  private async getPiAuth(config: BackendConfig = this.config): Promise<{
     provider: string;
     credential:
       | { type: 'api_key'; key: string }
       | { type: 'oauth'; access: string; refresh: string; expires: number }
       | { type: 'iam'; accessKeyId: string; secretAccessKey: string; region?: string; sessionToken?: string }
   } | null> {
-    const piAuthProvider = getBackendRuntime(this.config).piAuthProvider;
+    const piAuthProvider = getBackendRuntime(config).piAuthProvider;
     if (!piAuthProvider) return null;
 
     try {
       const credentialManager = getCredentialManager();
-      const slug = this.config.connectionSlug || 'pi';
+      const slug = config.connectionSlug || 'pi';
 
-      if (this.config.authType === 'oauth') {
+      if (config.authType === 'oauth') {
         if (piAuthProvider === 'openai-codex') await getChatGptAccessToken(slug);
         const oauth = await credentialManager.getLlmOAuth(slug);
         if (oauth?.accessToken) {
@@ -643,7 +728,7 @@ export class PiAgent extends BaseAgent {
             credential: toPiTransportCredential(piAuthProvider, oauth),
           };
         }
-      } else if (this.config.authType === 'iam_credentials') {
+      } else if (config.authType === 'iam_credentials') {
         // AWS IAM credentials — pass structured fields so the subprocess can
         // identify the credential type. Actual AWS env var injection happens
         // at spawn time (see spawnSubprocess) for proper process isolation.
@@ -724,6 +809,24 @@ export class PiAgent extends BaseAgent {
    * Refresh OAuth tokens and push updated credentials to the running subprocess.
    * Handles both Copilot (Pi SDK) and ChatGPT Plus token refresh.
    */
+  private async pushRefreshedOAuth(owner: CredentialSnapshot): Promise<void> {
+    const child = this.subprocess;
+    const provider = getBackendRuntime(this.config).piAuthProvider;
+    if (!child || !provider || this.subprocessAuthOwner?.authRevision !== owner.authRevision) return;
+    const manager = getCredentialManager();
+    const current = await manager.captureSnapshot(owner.id);
+    if (current.authRevision !== owner.authRevision || !current.credential?.value) return;
+    const credential = current.credential;
+    await manager.withCurrentSnapshot(current, () => {
+      if (this.subprocess !== child) return false;
+      this.send({ type: 'token_update', piAuth: { provider, credential: toPiTransportCredential(provider, {
+        accessToken: credential.value, refreshToken: credential.refreshToken,
+        expiresAt: credential.expiresAt,
+      }) } });
+      return true;
+    });
+  }
+
   private async refreshAndPushTokens(): Promise<void> {
     if (this.config.authType !== 'oauth') return;
 
@@ -735,22 +838,18 @@ export class PiAgent extends BaseAgent {
     const existing = PiAgent.globalRefreshMutex.get(slug);
     if (existing) {
       this.debug(`Waiting on existing refresh for slug "${slug}"`);
+      const owner = await getCredentialManager().captureSnapshot({ type: 'llm_oauth', connectionSlug: slug });
       await existing;
-      // The other instance refreshed the credential store — push to our subprocess
-      if (this.subprocess) {
-        const piAuth = await this.getPiAuth();
-        if (piAuth) {
-          this.send({ type: 'token_update', piAuth });
-          this.debug('Pushed credentials refreshed by sibling instance');
-        }
-      }
+      await this.pushRefreshedOAuth(owner);
       return;
     }
 
     const refreshPromise = (async () => {
       const piAuthProvider = getBackendRuntime(this.config).piAuthProvider;
       const credentialManager = getCredentialManager();
-      const stored = await credentialManager.getLlmOAuth(slug);
+      const snapshot = await credentialManager.captureSnapshot({ type: 'llm_oauth', connectionSlug: slug });
+      const stored = snapshot.credential && { accessToken: snapshot.credential.value,
+        refreshToken: snapshot.credential.refreshToken, expiresAt: snapshot.credential.expiresAt };
 
       if (!stored?.refreshToken) {
         this.debug('No refresh token available — re-auth required');
@@ -768,29 +867,27 @@ export class PiAgent extends BaseAgent {
             { type: 'oauth', access: stored.accessToken || '', refresh: stored.refreshToken, expires: stored.expiresAt || 0 },
             AbortSignal.timeout(30_000),
           );
-          await credentialManager.setLlmOAuth(slug, {
-            accessToken: newCreds.access,
-            refreshToken: newCreds.refresh,
-            expiresAt: newCreds.expires,
+          const saved = await credentialManager.compareAndSetSnapshot(snapshot, {
+            ...snapshot.credential!, value: newCreds.access,
+            refreshToken: newCreds.refresh, expiresAt: newCreds.expires,
           });
+          if (!saved) return; // A newer login/logout owns this connection now.
         } else {
           // ChatGPT Plus: use existing refresh utility
           await getChatGptAccessToken(slug, undefined, true);
         }
         this.debug('Token refresh successful');
 
-        // Push refreshed credentials to running subprocess
-        if (this.subprocess) {
-          const piAuth = await this.getPiAuth();
-          if (piAuth) {
-            this.send({ type: 'token_update', piAuth });
-            this.debug('Pushed refreshed credentials to subprocess');
-          }
-        }
+        // A token rotation may update this transport; a different user login
+        // waits for fresh operation admission and never retargets a running turn.
+        await this.pushRefreshedOAuth(snapshot);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         this.debug(`Token refresh failed: ${msg}`);
-        this.onBackendAuthRequired?.(`Token refresh failed: ${msg}`);
+        await credentialManager.withCurrentSnapshot(snapshot, () => {
+          this.onBackendAuthRequired?.(`Token refresh failed: ${msg}`);
+          return true;
+        });
       }
     })();
 
@@ -1963,7 +2060,7 @@ export class PiAgent extends BaseAgent {
     try {
       // Ensure subprocess is spawned and ready
       try {
-        await this.ensureSubprocess();
+        await this.ensureCurrentChatSubprocess();
       } catch (subprocessError) {
         const errorMsg = subprocessError instanceof Error ? subprocessError.message : String(subprocessError);
         this.debug(`Failed to spawn Pi subprocess: ${errorMsg}`);
@@ -1981,7 +2078,7 @@ export class PiAgent extends BaseAgent {
             this.debug('Injected recovery context into message');
           }
 
-          await this.ensureSubprocess();
+          await this.ensureCurrentChatSubprocess();
         } else {
           throw subprocessError;
         }
@@ -2365,6 +2462,8 @@ export class PiAgent extends BaseAgent {
 
     this.subprocessReady = null;
     this.subprocessReadyResolve = null;
+    this.subprocessCredentials = undefined;
+    this.subprocessAuthOwner = undefined;
     this.callbackPort = 0;
     this.preToolMetadataByCallId.clear();
   }
@@ -2378,6 +2477,10 @@ export class PiAgent extends BaseAgent {
    * Sends a mini_completion request and waits for the result.
    */
   async runMiniCompletion(prompt: string): Promise<string | null> {
+    return this.withCurrentUtility(agent => agent.runMiniCompletionOnSubprocess(prompt));
+  }
+
+  private async runMiniCompletionOnSubprocess(prompt: string): Promise<string | null> {
     // If subprocess isn't running, spawn it
     await this.ensureSubprocess();
 
@@ -2415,6 +2518,10 @@ export class PiAgent extends BaseAgent {
    * packages/pi-agent-server/src/index.ts → handleLlmQuery for the invariant.
    */
   async queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
+    return this.withCurrentUtility(agent => agent.queryLlmOnSubprocess(request));
+  }
+
+  private async queryLlmOnSubprocess(request: LLMQueryRequest): Promise<LLMQueryResult> {
     this.debug('[PiAgent.queryLlm] Starting');
 
     await this.ensureSubprocess();
