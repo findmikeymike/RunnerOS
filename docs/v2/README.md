@@ -22,3 +22,4 @@ the feature and delete the note.
 ## Notes
 
 - [Team chat: more than one person per agent](./team-chat-multi-sender.md)
+- [Durable artist profile enrichment](./artist-profile-enrichment-durable.md)
