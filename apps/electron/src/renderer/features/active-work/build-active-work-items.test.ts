@@ -384,3 +384,17 @@ describe('buildActiveWorkItems', () => {
     expect(items.find((item) => item.section === 'attention')?.source).toBe('workflow-run')
   })
 })
+
+test('late-start evidence follows a deduplicated workflow row', () => {
+  const items = buildActiveWorkItems({
+    workspaceId: 'workspace-1', sessions: [], automations: [],
+    workflowRuns: [{ id: 'late-run', workspaceId: 'workspace-1', workflowSlug: 'lyric-clips', state: 'running', createdAt: '2026-09-02T15:05:00.000Z', updatedAt: '2026-09-02T15:05:00.000Z' }],
+    scheduledWork: [order({ status: 'running', runs: [{ id: 'attempt', jobId: 'job', startedAt: '2026-09-02T15:05:00.000Z', status: 'running', workflowRunId: 'late-run' }] })],
+  })
+  expect(items).toHaveLength(1)
+  expect(items[0]?.source).toBe('workflow-run')
+  expect(items[0]?.timingLabel).toBe('Started 5m late')
+  expect(items[0]?.plannedStartAt).toBe('2026-09-02T15:00:00.000Z')
+  expect(items[0]?.actualStartAt).toBe('2026-09-02T15:05:00.000Z')
+  expect(items[0]?.section).toBe('running')
+})

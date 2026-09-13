@@ -76,6 +76,21 @@ describe('AutomationSystem', () => {
     }), 'utf-8');
   }
 
+  it('reports whether a scheduler is actually started, without starting one during inspection', () => {
+    const stopped = new AutomationSystem({ workspaceId: 'status-off', workspaceRootPath: tempDir, enableScheduler: false });
+    try {
+      expect(stopped.isDisposed()).toBe(false);
+      expect(stopped.isSchedulerRunning()).toBe(false);
+    } finally { stopped.dispose(); }
+    const active = new AutomationSystem({ workspaceId: 'status-on', workspaceRootPath: tempDir, enableScheduler: true, runSchedulerCatchUpOnStart: false });
+    try {
+      expect(active.isSchedulerRunning()).toBe(true);
+      active.stopScheduler();
+      expect(active.isSchedulerRunning()).toBe(false);
+    } finally { active.dispose(); }
+    expect(active.isSchedulerRunning()).toBe(false);
+  });
+
   describe('constructor', () => {
     it('persists sustained poll failures so HQ can surface them', async () => {
       writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({

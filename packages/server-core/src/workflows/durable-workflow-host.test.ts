@@ -24,7 +24,7 @@ function fixture() {
   const runnerOptions: Omit<DurableReadRunnerOptions, 'journal'> = { hostRuntime: { appRootPath: root, isPackaged: false }, resolveBinding: () => binding, createBackend: args => {
     creations++; return { async *chat() { const bridge = args.coreConfig.durableExecution!; await bridge.checkpoint({ kind: 'model-start', turn: 0, context: { messages: [] } }); await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'finished' }] } }); await bridge.checkpoint({ kind: 'complete' }); }, async abort() {}, destroy() {} };
   } };
-  const open = (resolvePrincipal: (workspaceId: string, actor: { clientId: string; workspaceId?: string }) => string | Promise<string> = () => 'alice') => { const host = DurableWorkflowHost.open({ configRoot: root, protection, runnerOptions, resolvePrincipal }); cleanup.push(() => host.close()); return host; };
+  const open = (resolvePrincipal: (workspaceId: string, actor: { clientId: string; workspaceId?: string }) => string | Promise<string> = () => 'alice', resolveScheduledPrincipal?: (workspaceId: string) => string) => { const host = DurableWorkflowHost.open({ configRoot: root, protection, runnerOptions, resolvePrincipal, resolveScheduledPrincipal }); cleanup.push(() => host.close()); return host; };
   return { root, input, runnerOptions, open, creations: () => creations };
 }
 const actor = { clientId: 'connection', workspaceId: 'w' };
@@ -233,4 +233,47 @@ test('cancelled durable backend keeps workflow admission blocked until actual ba
   expect(cancelled.state.status).toBe('cancelled'); expect(aborts).toBe(1); expect(destroyed).toBe(false);
   expect(await host.hasUnfinishedWorkflow('w', 'read')).toBe(true);
   release(); await admitted.execution; expect(destroyed).toBe(true); expect(await host.hasUnfinishedWorkflow('w', 'read')).toBe(false);
+});
+
+
+function observeRun(root: string, runId: string) {
+  const key = loadDurableKey(root, protection), journal = new DurableJournal({ configRoot: root, key }); key.fill(0);
+  try { return journal.get(runId, 'w'); } finally { journal.close(); }
+}
+
+test('scheduler cancels only its authorized exact run and acknowledges before backend drain', async () => {
+  const f = fixture(); let entered!: () => void, release!: () => void, abortEntered = false;
+  const ready = new Promise<void>(resolve => entered = resolve), gate = new Promise<void>(resolve => release = resolve);
+  f.runnerOptions.createBackend = () => ({ async *chat() { entered(); await gate; }, async abort() { abortEntered = true; await gate; }, destroy() {} });
+  const host = f.open(() => 'alice', () => 'alice');
+  const running = host.start(f.input); await ready;
+  try {
+    await host.cancelRunForScheduler('w', f.input.runId);
+    expect(observeRun(f.root, f.input.runId).status).toBe('cancelled');
+    expect(abortEntered).toBe(true);
+    // Repeated cleanup does not revise a terminal cancellation.
+    const version = observeRun(f.root, f.input.runId).version;
+    await host.cancelRunForScheduler('w', f.input.runId);
+    expect(observeRun(f.root, f.input.runId).version).toBe(version);
+    await expect(host.cancelRunForScheduler('other', f.input.runId)).rejects.toThrow();
+  } finally { release(); await running; }
+});
+
+for (const principal of [undefined, 'mallory'] as const) {
+  test(`scheduler cleanup fails closed with ${principal ?? 'missing'} scheduler authority`, async () => {
+    const f = fixture(), host = f.open(() => 'alice', principal === undefined ? undefined : () => principal);
+    await host.start(f.input);
+    await expect(host.cancelRunForScheduler('w', f.input.runId)).rejects.toThrow(principal === undefined ? 'durable-scheduler-authority-unavailable' : 'durable-attention-principal-mismatch');
+    expect(observeRun(f.root, f.input.runId).status).toBe('succeeded');
+  });
+}
+
+test('scheduler cleanup preserves completed results and rejects calls after close', async () => {
+  const f = fixture(), host = f.open(() => 'alice', () => 'alice');
+  await host.start(f.input);
+  const before = observeRun(f.root, f.input.runId);
+  await host.cancelRunForScheduler('w', f.input.runId);
+  expect(observeRun(f.root, f.input.runId)).toEqual(before);
+  await host.close();
+  await expect(host.cancelRunForScheduler('w', f.input.runId)).rejects.toThrow('durable-host-closing');
 });

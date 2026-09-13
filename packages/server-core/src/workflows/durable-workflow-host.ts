@@ -117,6 +117,21 @@ export class DurableWorkflowHost {
     return this.track(async () => this.runService.getForPrincipal(workspaceId, runId, this.scheduledPrincipal(workspaceId)));
   }
 
+  /** Host cleanup of an obsolete scheduled admission, with no renderer authority. */
+  cancelRunForScheduler(workspaceId: string, runId: string): Promise<void> {
+    return this.track(async () => {
+      const principal = this.scheduledPrincipal(workspaceId);
+      const state = this.journal.get(runId, workspaceId);
+      if (state.spec.approvalPrincipalId !== principal) throw new Error('durable-attention-principal-mismatch');
+      // Terminal results remain immutable; cancel only the exact admitted run.
+      if (!['running', 'paused', 'waiting-approval'].includes(state.status)) return;
+      const result = await this.runner.control({ workspaceId, runId, action: 'cancel',
+        commandId: `scheduler-obsolete:${runId}:${state.version}`, expectedVersion: state.version });
+      // Cancellation is durable before cooperative backend shutdown completes.
+      void result.execution?.catch(() => {});
+    });
+  }
+
   /** Scheduler ownership includes terminal or paused runs whose backend is still draining. */
   isRunActive(workspaceId: string, runId: string): Promise<boolean> {
     return this.track(async () => {

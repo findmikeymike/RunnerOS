@@ -1,4 +1,6 @@
 import { loadActiveAgentsForWorkspace, shouldBackfillLegacyAgentActivation } from './agent-registration'
+import { buildScheduledWorkRuntimeStatus } from '../scheduled-work/runtime-status'
+import { readAutomationSchedulerState } from '@craft-agent/shared/automations'
 import { createDurableWorkflowStart } from '../workflows/durable-workflow-start'
 import { DurableWorkflowStartupGate } from '../workflows/durable-workflow-startup-gate'
 import { assertDurableWorkflowAgentMetadata, assertDurableWorkflowSourcesBeforeComposition, resolveDurableWorkflowBundle } from '../workflows/durable-workflow-bundle'
@@ -3665,6 +3667,11 @@ export class SessionManager implements ISessionManager {
           const workspace = getWorkspaces().find(item => item.rootPath === root)
           return this.durableWorkflowHost && workspace ? this.durableWorkflowHost.isRunActive(workspace.id, runId) : false
         },
+        abortWorkflowRun: async (workspaceId, runId) => {
+          const run = await this.durableWorkflowHost?.getRunForScheduler(workspaceId, runId)
+          if (run?.durable) await this.durableWorkflowHost!.cancelRunForScheduler(workspaceId, runId)
+          else await this.workflowRunner.cancel(workspaceId, runId)
+        },
         listOutputManifests,
         postProcessAgentTask: (input) => this.postProcessScheduledAgentTask(input),
         readAgentSession: async (sessionId) => {
@@ -7283,6 +7290,30 @@ user a clickable link to where the thing now lives.`
     return count
   }
 
+  getScheduledWorkRuntimeStatus(workspaceId: string): import('@craft-agent/shared/scheduled-work').ScheduledWorkRuntimeStatus {
+    const checkedAt = new Date().toISOString()
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return { workspaceId, checkedAt, state: 'unavailable' }
+    if (workspace.remoteServer) return { workspaceId, checkedAt, state: 'remote-host' }
+    try {
+      // Inspection must not instantiate a runner, deliver a tick, or change work.
+      const system = this.automationSystems.get(workspace.rootPath)
+      let lastTickAt: string | undefined
+      try { lastTickAt = readAutomationSchedulerState(workspace.rootPath)?.lastDeliveredTickAt } catch { /* unreadable history is unknown */ }
+      return buildScheduledWorkRuntimeStatus({
+        workspaceId, checkedAt, remote: false,
+        executionAuthorized: this.isPaidExecutionAuthorized(),
+        schedulerRunning: system?.isSchedulerRunning() ?? false,
+        background: MIGRATING_WORKSPACE_ROOTS.has(workspace.rootPath)
+          ? { allowed: false, reason: 'migration' }
+          : evaluateTeamRunnerGate(workspace.rootPath),
+        lastTickAt,
+      })
+    } catch {
+      return { workspaceId, checkedAt, state: 'unavailable' }
+    }
+  }
+
   getWorkspaceAutomationSummary(workspaceId: string): { automationCount: number; schedulerRunning: boolean } {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) return { automationCount: 0, schedulerRunning: false }
@@ -7300,8 +7331,7 @@ user a clickable link to where the thing now lives.`
 
     return {
       automationCount,
-      // SchedulerService is running if the system was created with enableScheduler
-      schedulerRunning: !automationSystem.isDisposed(),
+      schedulerRunning: automationSystem.isSchedulerRunning(),
     }
   }
 

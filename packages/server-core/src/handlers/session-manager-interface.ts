@@ -269,6 +269,8 @@ export interface ISessionManager {
 
   /** Count of sessions with active backend processes. Pass workspaceId to scope. */
   getActiveSessionCount(workspaceId?: string): number
+  /** Read-only scheduler availability; does not change scheduled work. */
+  getScheduledWorkRuntimeStatus(workspaceId: string): import('@craft-agent/shared/scheduled-work').ScheduledWorkRuntimeStatus
   /** Automation summary for a workspace (count of configured automations + scheduler state). */
   getWorkspaceAutomationSummary(workspaceId: string): { automationCount: number; schedulerRunning: boolean }
   /** Active sessions across all workspaces (sessions with running backend processes). */

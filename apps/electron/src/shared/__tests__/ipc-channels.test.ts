@@ -327,6 +327,7 @@ const EXPECTED_CHANNELS: string[] = [
   "scheduledWork:cancelCampaign",
   "scheduledWork:decideCampaign",
   "scheduledWork:get",
+  "scheduledWork:getRuntimeStatus",
   "scheduledWork:manageGoalRun",
   "scheduledWork:migrateCampaign",
   "scheduledWork:mutate",

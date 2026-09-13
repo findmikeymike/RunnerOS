@@ -993,9 +993,12 @@ export class AutomationSystem implements AutomationsConfigProvider {
   // Lifecycle
   // ============================================================================
 
-  /**
-   * Check if the system has been disposed.
-   */
+  /** True only while this system owns a started scheduler, including resource pauses. */
+  isSchedulerRunning(): boolean {
+    return !this.disposed && this.scheduler !== null;
+  }
+
+  /** Check if the system has been disposed. */
   isDisposed(): boolean {
     return this.disposed;
   }
