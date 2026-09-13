@@ -127,7 +127,7 @@ function checkStaticBoundaries(repoRoot: string): void {
   const bootstrapSource = readFileSync(join(repoRoot, 'apps/electron/src/main/bootstrap.ts'), 'utf8');
   const mainSource = readFileSync(join(repoRoot, 'apps/electron/src/main/index.ts'), 'utf8');
   const shellEnvSource = readFileSync(join(repoRoot, 'apps/electron/src/main/shell-env.ts'), 'utf8');
-  const serverSource = readFileSync(join(repoRoot, 'packages/server/src/index.ts'), 'utf8');
+  const serverSource = readFileSync(join(repoRoot, 'packages/server/src/server.ts'), 'utf8');
   assert(
     bootstrapSource.includes('CRAFT_INTEGRATION_CACHE_ROOT: RUNTIME_IDENTITY.integrationCacheRoot'),
     'Electron does not propagate the product-owned integration cache root',

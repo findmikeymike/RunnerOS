@@ -16,7 +16,6 @@ import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 
 import type { AgentEvent } from '@craft-agent/core/types';
@@ -1042,7 +1041,7 @@ ${formattedMessages}
       return skill;
     });
     for (const oldRoot of [join(GLOBAL_AGENT_SKILLS_DIR, managedSlug), join(root, 'skills', managedSlug),
-      join(homedir(), '.agents', 'skills', managedSlug), `~/.agents/skills/${managedSlug}`,
+      expandPath(`~/.agents/skills/${managedSlug}`), `~/.agents/skills/${managedSlug}`,
       available.path, ...(this.config.session?.workingDirectory ? [join(this.config.session.workingDirectory, PROJECT_AGENT_SKILLS_DIR, managedSlug)] : [])]) {
       this.skillPathAliases.set(oldRoot, record.path);
     }
