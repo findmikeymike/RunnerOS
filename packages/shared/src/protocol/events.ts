@@ -11,6 +11,7 @@ import type { DeepResearchRunSnapshot } from '../deep-research'
 import type { LoadedSource } from '../sources/types'
 import type { SkillDescriptor } from '../skills/types'
 import type { LoadedContextDoc } from '../workspace-context/types'
+import type { CareerResearchView } from '../artist-context/career-research'
 import type { LoadedWorkflow, WorkflowRunSnapshot } from '../workflows'
 import type { WorkspaceSyncChange } from '../workspaces/sync-events'
 import { RPC_CHANNELS } from './channels'
@@ -53,6 +54,7 @@ export interface BroadcastEventMap {
     run: DeepResearchRunSnapshot,
     eventType: 'created' | 'updated' | 'completed',
   ]
+  [RPC_CHANNELS.artistProfileEnrichment.CHANGED]: [workspaceId: string, view: CareerResearchView]
   [RPC_CHANNELS.outputs.UPDATED]: [workspaceId: string, outputs?: OutputSummary[]]
   [RPC_CHANNELS.lab.UPDATED]: [workspaceId: string]
   [RPC_CHANNELS.notifications.UPDATED]: [workspaceId: string, entries: NotificationEntry[]]

@@ -985,7 +985,7 @@ export const WebsiteCaptureSyncSchema = z.object({
 });
 
 export const GetArtistContextSchema = z.object({
-  topic: z.enum(['profile', 'branding', 'voice', 'month-plan', 'growth', 'intel', 'calendar', 'timeline', 'network', 'community', 'vault']),
+  topic: z.enum(['profile', 'branding', 'voice', 'career', 'month-plan', 'growth', 'intel', 'calendar', 'timeline', 'network', 'community', 'vault']),
   month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
   query: z.string().max(240).optional(),
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

@@ -53,6 +53,10 @@ describe('Manager Brief', () => {
           metrics: { followers: 12000, followerDelta: 140, accountsReached: 44000 },
           updatedAt: '2026-08-27T13:00:00.000Z',
         }),
+        jsonDoc('artist-career-research', {
+          version: 1, revision: 4, identityKey: 'artist-key', lastSuccessfulResearchAt: '2026-08-25T00:00:00.000Z', gaps: [],
+          findings: [{ claimKey: 'award-key', category: 'achievement', text: 'Won the North Star Award.', eventDate: '2025', state: 'historical', correctedByUser: false, sources: [{ title: 'Award site', url: 'https://awards.example/' }] }],
+        }),
       ],
       relatedCampaigns: [campaign('campaign-1', 'September single', '2026-09-12')],
       operatingState: {
@@ -66,6 +70,8 @@ describe('Manager Brief', () => {
     expect(brief.campaignFocus).toEqual(expect.objectContaining({ label: 'Current campaign', releaseDate: '2026-09-12' }));
     expect(brief.growth.spotify).toEqual(expect.objectContaining({ value: 181000 }));
     expect(brief.growth.instagram).toEqual(expect.objectContaining({ delta: 140 }));
+    expect(brief.career?.revision).toBe(4);
+    expect(renderManagerBriefPromptSection(brief)).toContain('Won the North Star Award.');
     expect(brief.revision).toMatch(/^manager-v1:fnv1a:[0-9a-f]{8}$/);
     expect(brief.budget.actualChars).toBe(renderManagerBriefPromptSection(brief).length);
     expect(brief.budget.actualChars).toBeLessThanOrEqual(MANAGER_BRIEF_MAX_CHARS);

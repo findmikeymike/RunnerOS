@@ -45,6 +45,7 @@ export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 import type { SharedFolderProvider, SharedPathOverrides, TeamModeStatus } from '@craft-agent/shared/workspaces';
 import type { TeamSharedFolderMigrationResult } from '@craft-agent/shared/workspaces';
 import type { SharedRecordClobberIssue, SharedRecordConflict } from '@craft-agent/shared/records';
+import type { CareerResearchDeliveryInput, CareerResearchSeedInput, CareerResearchView } from '@craft-agent/shared/artist-context';
 import type { AddAgendaTaskCommentInput, AgendaTaskThread } from '@craft-agent/shared/agenda';
 import type {
   CommunityContactRecord,
@@ -1429,6 +1430,17 @@ export interface ElectronAPI {
   onDeepResearchRunUpdated(
     callback: (workspaceId: string, run: DeepResearchRunDTO, eventType: 'created' | 'updated' | 'completed') => void,
   ): () => void
+
+  // Artist profile enrichment
+  getArtistProfileEnrichment(workspaceId: string): Promise<CareerResearchView>
+  updateArtistProfileEnrichmentSeeds(workspaceId: string, expectedRevision: number, input: CareerResearchSeedInput): Promise<CareerResearchView>
+  updateArtistProfileEnrichmentDelivery(workspaceId: string, expectedRevision: number, input: CareerResearchDeliveryInput): Promise<CareerResearchView>
+  startArtistProfileEnrichment(workspaceId: string, input: { requestId: string; expectedIdentityKey?: string }): Promise<CareerResearchView>
+  cancelArtistProfileEnrichment(workspaceId: string, runId: string, attempt: number): Promise<CareerResearchView>
+  correctArtistProfileEnrichment(workspaceId: string, input: { claimKey: string; expectedRevision: number; text?: string }): Promise<CareerResearchView>
+  removeArtistProfileEnrichment(workspaceId: string, input: { claimKey: string; expectedRevision: number }): Promise<CareerResearchView>
+  undoArtistProfileEnrichment(workspaceId: string, input: { claimKey: string; expectedRevision: number }): Promise<CareerResearchView>
+  onArtistProfileEnrichmentChanged(callback: (workspaceId: string, view: CareerResearchView) => void): () => void
 
   // Outputs
   listOutputs(workspaceId: string): Promise<OutputSummaryDTO[]>

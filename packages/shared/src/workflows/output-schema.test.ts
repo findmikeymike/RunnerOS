@@ -67,3 +67,20 @@ test('nested schema required fields cannot be satisfied by inherited methods', (
   expect(parseStructuredStepOutput('{"nested":{}}', schema)).toMatchObject({ ok: false, code: 'schema-validation-failed' });
   expect(parseStructuredStepOutput('{"nested":{"valueOf":"present"}}', schema).ok).toBe(true);
 });
+
+test('enforces bounded strings, arrays, numbers, uniqueness, and closed objects', () => {
+  const schema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['name', 'scores'],
+    properties: {
+      name: { type: 'string', minLength: 2, maxLength: 5, pattern: '^[A-Z]' },
+      scores: { type: 'array', minItems: 1, maxItems: 2, uniqueItems: true, items: { type: 'number', minimum: 0, maximum: 10 } },
+    },
+  };
+  expect(parseStructuredStepOutput('{"name":"Artist","scores":[1]}', schema).ok).toBe(false);
+  expect(parseStructuredStepOutput('{"name":"Ada","scores":[1,1]}', schema).ok).toBe(false);
+  expect(parseStructuredStepOutput('{"name":"Ada","scores":[11]}', schema).ok).toBe(false);
+  expect(parseStructuredStepOutput('{"name":"Ada","scores":[1],"extra":true}', schema).ok).toBe(false);
+  expect(parseStructuredStepOutput('{"name":"Ada","scores":[1,2]}', schema)).toEqual({ ok: true, value: { name: 'Ada', scores: [1, 2] } });
+});

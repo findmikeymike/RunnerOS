@@ -55,6 +55,27 @@ function validateAgainstSchema(value: unknown, schema: JsonSchema, path = '$'): 
     errors.push(`${path} must be one of ${schema.enum.map(String).join(', ')}`);
   }
 
+  if (typeof value === 'string') {
+    if (typeof schema.minLength === 'number' && value.length < schema.minLength) {
+      errors.push(`${path} must contain at least ${schema.minLength} characters`);
+    }
+    if (typeof schema.maxLength === 'number' && value.length > schema.maxLength) {
+      errors.push(`${path} must contain at most ${schema.maxLength} characters`);
+    }
+    if (typeof schema.pattern === 'string') {
+      try {
+        if (!new RegExp(schema.pattern, 'u').test(value)) errors.push(`${path} must match ${schema.pattern}`);
+      } catch {
+        errors.push(`${path} has an invalid schema pattern`);
+      }
+    }
+  }
+
+  if (typeof value === 'number') {
+    if (typeof schema.minimum === 'number' && value < schema.minimum) errors.push(`${path} must be >= ${schema.minimum}`);
+    if (typeof schema.maximum === 'number' && value > schema.maximum) errors.push(`${path} must be <= ${schema.maximum}`);
+  }
+
   if (isPlainObject(value)) {
     const required = Array.isArray(schema.required)
       ? schema.required.filter((item): item is string => typeof item === 'string')
@@ -68,12 +89,28 @@ function validateAgainstSchema(value: unknown, schema: JsonSchema, path = '$'): 
       if (!Object.prototype.hasOwnProperty.call(value, key) || !isPlainObject(propSchema)) continue;
       errors.push(...validateAgainstSchema(value[key], propSchema, `${path}.${key}`));
     }
+    if (schema.additionalProperties === false) {
+      for (const key of Object.keys(value)) {
+        if (!Object.prototype.hasOwnProperty.call(properties, key)) errors.push(`${path}.${key} is not allowed`);
+      }
+    }
   }
 
-  if (Array.isArray(value) && isPlainObject(schema.items)) {
-    value.forEach((item, index) => {
-      errors.push(...validateAgainstSchema(item, schema.items as JsonSchema, `${path}[${index}]`));
-    });
+  if (Array.isArray(value)) {
+    if (typeof schema.minItems === 'number' && value.length < schema.minItems) {
+      errors.push(`${path} must contain at least ${schema.minItems} items`);
+    }
+    if (typeof schema.maxItems === 'number' && value.length > schema.maxItems) {
+      errors.push(`${path} must contain at most ${schema.maxItems} items`);
+    }
+    if (schema.uniqueItems === true && new Set(value.map((item) => JSON.stringify(item))).size !== value.length) {
+      errors.push(`${path} must contain unique items`);
+    }
+    if (isPlainObject(schema.items)) {
+      value.forEach((item, index) => {
+        errors.push(...validateAgainstSchema(item, schema.items as JsonSchema, `${path}[${index}]`));
+      });
+    }
   }
 
   return errors;

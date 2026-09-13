@@ -336,6 +336,13 @@ export interface ManagerBriefV1 {
     spotify?: ManagerGrowthSignal;
     instagram?: ManagerGrowthSignal;
   };
+  career?: {
+    revision: number;
+    lastSuccessfulResearchAt?: string;
+    highlights: Array<{ claimKey: string; category: string; text: string; date?: string; state: string; source: ManagerSourceRef }>;
+    gaps: string[];
+    source: ManagerSourceRef;
+  };
   intelligence: ManagerIntelligenceItem[];
   operatingState: {
     nextMove?: { title: string; why: string; worker?: string };

@@ -5,7 +5,7 @@ import { errorResponse, successResponse } from '../response.ts';
 export interface GetManagerBriefInput { knownRevision?: string }
 export interface GetCampaignBriefInput { knownRevision?: string }
 export interface GetArtistContextInput {
-  topic: 'profile' | 'branding' | 'voice' | 'month-plan' | 'growth' | 'intel' | 'calendar' | 'timeline' | 'network' | 'community' | 'vault';
+  topic: 'profile' | 'branding' | 'voice' | 'career' | 'month-plan' | 'growth' | 'intel' | 'calendar' | 'timeline' | 'network' | 'community' | 'vault';
   month?: string;
   query?: string;
   /** Window start (YYYY-MM-DD) for calendar and timeline topics. Defaults to today. */

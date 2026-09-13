@@ -13063,6 +13063,21 @@ user a clickable link to where the thing now lives.`
       isRetry: Boolean(_isAuthRetry || sourceRetry),
     })
     const resumeSkillRun = Boolean(_isAuthRetry || sourceRetry || (existingMessageId && existingMessageId === managed.managedSkillRunId))
+    if (!sourceRetry && !_isAuthRetry && managed.spawnedFromAgent?.agentSlug) {
+      try {
+        const selectionSource = managed.launchReceipt?.taskMode?.selectionSource
+        const refreshed = await this.resolveAgentSessionOptions(managed.workspace.id, managed.spawnedFromAgent.agentSlug, {
+          taskModeId: managed.launchReceipt?.taskMode?.id,
+          taskModeSelectionSource: selectionSource === 'legacy' ? 'handoff' : selectionSource,
+        })
+        managed.customSystemPrompt = refreshed.customSystemPrompt ?? managed.customSystemPrompt
+        managed.agentSkillSlugs = refreshed.agentSkillSlugs ?? managed.agentSkillSlugs
+        managed.enabledSourceSlugs = refreshed.enabledSourceSlugs ?? managed.enabledSourceSlugs
+        managed.launchReceipt = refreshed.launchReceipt ?? managed.launchReceipt
+      } catch (error) {
+        sessionLog.warn('[context] Could not refresh current agent context before turn; preserving the last valid prompt.', error)
+      }
+    }
     const turnContext = sourceRetry?.turnContext || (_isAuthRetry && managed.lastSentTurnContext) || {
       customSystemPrompt: managed.customSystemPrompt,
       agentSkillSlugs: managed.agentSkillSlugs ? [...managed.agentSkillSlugs] : undefined,
@@ -15362,6 +15377,8 @@ user a clickable link to where the thing now lives.`
             sessionId: managed.id,
             toolUseId: event.toolUseId,
             toolName: resolvedToolMessage.toolName ?? toolName,
+            toolInput: event.input ?? resolvedToolMessage.toolInput,
+            toolResult: event.result,
             isError: resolvedToolMessage.isError === true,
           })
         }

@@ -304,14 +304,14 @@ export function listDeepResearchRuns(workspaceRootPath: string): DeepResearchRun
   return runs;
 }
 
-export function markRunningDeepResearchRunsInterrupted(
+export function markActiveDeepResearchRunsInterrupted(
   workspaceRootPath: string,
   reason: string,
 ): DeepResearchRunSnapshot[] {
   const ts = new Date().toISOString();
   const interrupted: DeepResearchRunSnapshot[] = [];
   for (const run of listDeepResearchRuns(workspaceRootPath)) {
-    if (run.state !== 'running') continue;
+    if (run.state !== 'running' && run.state !== 'created') continue;
     run.state = 'interrupted';
     run.error = reason;
     run.updatedAt = ts;
@@ -328,6 +328,9 @@ export function markRunningDeepResearchRunsInterrupted(
   }
   return interrupted;
 }
+
+/** @deprecated Use markActiveDeepResearchRunsInterrupted. */
+export const markRunningDeepResearchRunsInterrupted = markActiveDeepResearchRunsInterrupted;
 
 export function deleteDeepResearchRun(workspaceRootPath: string, runId: string): boolean {
   const dir = resolveRunDir(workspaceRootPath, runId);

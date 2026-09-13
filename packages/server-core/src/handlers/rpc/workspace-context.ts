@@ -18,6 +18,8 @@ import type { HandlerDeps } from '../handler-deps'
 import { prepareAgentLaunchContext } from '../../agent-launch/context'
 export { selectContextDocsForAgentLaunch } from '../../agent-launch/context'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
+import { ARTIST_CAREER_RESEARCH_CONTEXT_SLUG, rebuildCareerResearchProjection } from '@craft-agent/shared/artist-context'
+import { getArtistProfileEnrichmentService } from './artist-profile-enrichment'
 import {
   refreshArtistManagerStateForWorkspaceBestEffort,
   shouldRefreshHqStateForContextSlug,
@@ -65,16 +67,22 @@ function resolveRootPath(workspaceId: string): string {
   return workspace.rootPath
 }
 
+function refreshManagedProjection(rootPath: string): void {
+  rebuildCareerResearchProjection(rootPath)
+}
+
 export function registerWorkspaceContextHandlers(server: RpcServer, deps: HandlerDeps): void {
   server.handle(RPC_CHANNELS.workspaceContext.LIST, async (_ctx, workspaceId: string): Promise<LoadedContextDoc[]> => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) return []
+    refreshManagedProjection(workspace.rootPath)
     return loadAllContextDocs(workspace.rootPath)
   })
 
   server.handle(RPC_CHANNELS.workspaceContext.GET, async (_ctx, workspaceId: string, slug: string): Promise<LoadedContextDoc | null> => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) return null
+    if (slug === ARTIST_CAREER_RESEARCH_CONTEXT_SLUG) refreshManagedProjection(workspace.rootPath)
     return loadContextDoc(workspace.rootPath, slug)
   })
 
@@ -84,6 +92,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
       if (taskModeId !== undefined) throw new Error(`Workspace not found: ${workspaceId}`)
       return []
     }
+    refreshManagedProjection(workspace.rootPath)
     let taskMode: ResolvedAgentTaskMode | undefined
     if (taskModeId !== undefined) {
       if (!agentSlug || typeof taskModeId !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(taskModeId)) {
@@ -101,6 +110,21 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
     const rootPath = resolveRootPath(workspaceId)
     const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
     assertTeamPermission(rootPath, 'files.write')
+    if (payload.slug === ARTIST_CAREER_RESEARCH_CONTEXT_SLUG) {
+      const current = loadContextDoc(rootPath, payload.slug)
+      if (!Object.prototype.hasOwnProperty.call(payload, 'expectedBody')) throw new Error('MANAGED_CONTEXT: Expected body is required for career context settings.');
+      assertExpectedContextBody(payload.slug, current?.body ?? null, payload.expectedBody ?? null)
+      if (!current || payload.body !== current.body) throw new Error('MANAGED_CONTEXT: Career findings must be edited from Profile.');
+      const service = getArtistProfileEnrichmentService()
+      if (!service) throw new Error('Artist profile enrichment is unavailable on this host.')
+      const view = service.get(workspaceId)
+      await service.updateDelivery(workspaceId, view.revision, {
+        enabled: payload.metadata.enabled,
+        routing: payload.metadata.routing,
+        delivery: payload.metadata.delivery,
+      })
+      return loadContextDoc(rootPath, payload.slug)!
+    }
     return withWorkspaceContextLock(rootPath, async () => {
       if (Object.prototype.hasOwnProperty.call(payload, 'expectedBody')) {
         const currentBody = loadContextDoc(rootPath, payload.slug)?.body ?? null
@@ -123,6 +147,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
     const rootPath = resolveRootPath(workspaceId)
     const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
     assertTeamPermission(rootPath, 'files.write')
+    if (slug === ARTIST_CAREER_RESEARCH_CONTEXT_SLUG) throw new Error('MANAGED_CONTEXT: Career context can be disabled or edited from Profile, not deleted here.')
     return withWorkspaceContextLock(rootPath, async () => {
       const ok = deleteContextDoc(rootPath, slug)
       if (ok) {

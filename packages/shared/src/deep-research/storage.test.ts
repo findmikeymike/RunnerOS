@@ -174,17 +174,22 @@ describe('deep research run storage', () => {
     expect(deleteDeepResearchRun(root, '../bad')).toBe(false)
   })
 
-  test('marks running runs interrupted on recovery', () => {
+  test('marks created and running automatic runs interrupted on recovery', () => {
     const root = tempRoot()
     const run = sampleRun()
     run.state = 'running'
     run.steps[0]!.state = 'running'
+    const created = sampleRun()
+    created.state = 'created'
+    created.planPolicy = 'auto'
     writeDeepResearchRun(root, run)
+    writeDeepResearchRun(root, created)
     const changed = markRunningDeepResearchRunsInterrupted(root, 'recovered after restart')
-    expect(changed).toHaveLength(1)
+    expect(changed).toHaveLength(2)
     const recovered = readDeepResearchRun(root, run.id)
     expect(recovered?.state).toBe('interrupted')
     expect(recovered?.steps[0]?.state).toBe('failed')
     expect(recovered?.error).toBe('recovered after restart')
+    expect(readDeepResearchRun(root, created.id)?.state).toBe('interrupted')
   })
 })

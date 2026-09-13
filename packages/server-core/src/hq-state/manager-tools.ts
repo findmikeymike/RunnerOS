@@ -3,6 +3,7 @@ import { withScriptwriterArtistContext } from './scriptwriter-context';
 import { getWorkspaces } from '@craft-agent/shared/config';
 import {
   ARTIST_CALENDAR_CONTEXT_SLUG,
+  ARTIST_CAREER_RESEARCH_CONTEXT_SLUG,
   ARTIST_BRANDING_CONTEXT_SLUG,
   ARTIST_INSTAGRAM_SNAPSHOT_CONTEXT_SLUG,
   ARTIST_NETWORK_CONTEXT_SLUG,
@@ -15,6 +16,7 @@ import {
   artistVoiceDoc,
   missionReleaseDateKey,
   parseArtistCalendarDocResult,
+  parseCareerResearchProjection,
   parseArtistInstagramSnapshotDocResult,
   parseArtistNetworkDocResult,
   parseArtistReleaseHorizonDocResult,
@@ -236,6 +238,14 @@ export function getArtistContextDetail(
       if (!parsed.ok) return missing(source, parsed.error);
       data = parsed.value;
       updatedAt = parsed.value.updatedAt;
+      break;
+    }
+    case 'career': {
+      source = ARTIST_CAREER_RESEARCH_CONTEXT_SLUG;
+      const parsed = parseCareerResearchProjection(bySlug.get(source));
+      if (!parsed) return missing(source, 'Career research is unavailable, disabled, unauthorized, or malformed.');
+      data = parsed;
+      updatedAt = parsed.lastSuccessfulResearchAt;
       break;
     }
     case 'month-plan': {

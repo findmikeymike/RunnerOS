@@ -654,6 +654,17 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.deepResearch.DELETE,
   RPC_CHANNELS.deepResearch.UPDATED,
 
+  // artist profile enrichment — HQ-owned career research
+  RPC_CHANNELS.artistProfileEnrichment.GET,
+  RPC_CHANNELS.artistProfileEnrichment.UPDATE_SEEDS,
+  RPC_CHANNELS.artistProfileEnrichment.UPDATE_DELIVERY,
+  RPC_CHANNELS.artistProfileEnrichment.START,
+  RPC_CHANNELS.artistProfileEnrichment.CANCEL,
+  RPC_CHANNELS.artistProfileEnrichment.CORRECT,
+  RPC_CHANNELS.artistProfileEnrichment.REMOVE,
+  RPC_CHANNELS.artistProfileEnrichment.UNDO,
+  RPC_CHANNELS.artistProfileEnrichment.CHANGED,
+
   // pulses — tick history lives on the workspace server
   RPC_CHANNELS.pulses.LIST_TICKS,
   RPC_CHANNELS.pulses.TICK,

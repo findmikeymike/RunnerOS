@@ -176,7 +176,7 @@ export const TIER_ONE_TASK_MODES: Record<string, AgentTaskModeDefinition[]> = {
       { optionalSourceSlugs: ['google-drive', 'printing-press-social'], retrieve: ['Exact Release Kit delivery items, master, artwork, metadata, and relevant provider status'] }),
     mode('rights-credits', 'Rights & Credits', 'Organize contributors, ownership, splits, and clearances.', [releaseSkills[1]!], ['artist-profile', 'mission-brief'],
       { optionalSourceSlugs: ['google-drive'], retrieve: ['Exact contributors, composition and master ownership, samples, agreements, and clearance evidence; legal uncertainty belongs to Legal & Deals'] }),
-    mode('dsp-pitch', 'DSP Pitch', 'Draft a factual editorial pitch for your release.', [releaseSkills[2]!], [...campaign, 'artist-release-horizon'],
+    mode('dsp-pitch', 'DSP Pitch', 'Draft a factual editorial pitch for your release.', [releaseSkills[2]!], [...campaign, 'artist-release-horizon', 'artist-career-research'],
       { retrieve: ['Approved song story, credits, release date, relevant audience evidence, and DSP form requirements'] }),
     mode('final-release-check', 'Final Release Check', 'Find the blockers before submission.', [releaseSkills[3]!], release,
       { optionalSourceSlugs: ['google-drive', 'printing-press-social'], retrieve: ['Current Release Kit, exact asset files, provider receipts, missing facts, and conflicting versions'] }),
@@ -189,13 +189,13 @@ export const TIER_ONE_TASK_MODES: Record<string, AgentTaskModeDefinition[]> = {
     'artist-os-release-package-qa': 'Use when a prepared package needs a final readiness check.',
   }),
   'ads-strategist': withAdjacency([
-    mode('audience-market', 'Audience & Market', 'Find who this release fits and what comparable ads reveal.', strategySkills.slice(0, 2), [...campaign, 'artist-community'],
+    mode('audience-market', 'Audience & Market', 'Find who this release fits and what comparable ads reveal.', strategySkills.slice(0, 2), [...campaign, 'artist-community', 'artist-career-research'],
       { retrieve: ['Comparable artists, current public ad examples, and audience evidence'] }),
     mode('budget-channels', 'Budget & Channels', 'Choose channels, territories, budget, and tests.', ['ads-strategy'], release,
       { retrieve: ['Approved audience and creative summaries, actual budget, territories, timing, and previous campaign results'] }),
     mode('streaming-conversion', 'Streaming Conversion', 'Check the path from an ad click to meaningful listening.', ['music-ad-conversion-protocol'], ['artist-profile', 'mission-brief', 'artist-spotify-snapshot'],
       { retrieve: ['Exact smart link, pixel events, placements, territories, and dated streaming-quality evidence'] }),
-    mode('full-ad-strategy', 'Full Ad Strategy', 'Build a complete paid campaign plan from audience through conversion.', strategySkills, [...campaign, 'artist-community', 'artist-spotify-snapshot'],
+    mode('full-ad-strategy', 'Full Ad Strategy', 'Build a complete paid campaign plan from audience through conversion.', strategySkills, [...campaign, 'artist-community', 'artist-spotify-snapshot', 'artist-career-research'],
       { fullMode: true, retrieve: ['Actual budget, current public research, approved assets, and conversion evidence; creative belongs to Ad Creative and execution to Ad Runner'] }),
   ], {
     'artist-ad-dna': 'Use when audience psychology, proof assets, or artist boundaries remain undefined.',
@@ -204,7 +204,7 @@ export const TIER_ONE_TASK_MODES: Record<string, AgentTaskModeDefinition[]> = {
     'music-ad-conversion-protocol': 'Use for Meta streaming campaigns when the conversion path or listening quality needs review.',
   }),
   'ad-creative-agent': withAdjacency([
-    mode('ad-research', 'Ad Research', 'Find useful ad formats and evidence from comparable artists.', ['ad-library-intel'], ['artist-profile', 'mission-brief'],
+    mode('ad-research', 'Ad Research', 'Find useful ad formats and evidence from comparable artists.', ['ad-library-intel'], ['artist-profile', 'mission-brief', 'artist-career-research'],
       { retrieve: ['Comparable artists, platform, campaign goal, and current public ad examples'] }),
     mode('hooks-concepts', 'Hooks & Concepts', 'Develop song-native hooks and campaign concepts.', ['artist-ad-dna', 'music-ad-visual-hooks', 'artist-campaign-angle-builder'], campaign,
       { retrieve: ['Selected lyrics, sonic world, proof assets, voice, and audience response'] }),

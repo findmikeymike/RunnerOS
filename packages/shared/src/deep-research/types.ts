@@ -172,18 +172,12 @@ export interface DeepResearchRunSnapshot {
 }
 
 export interface StartDeepResearchRunInput {
-  /** Optional host-generated UUID for create-then-bind-then-execute flows. */
-  runId?: string;
   topic: string;
   title?: string;
   planPolicy?: DeepResearchPlanPolicy;
   sourceSlugs?: string[];
   depth?: DeepResearchDepth;
   reportFormat?: DeepResearchReportFormat;
-  purpose?: string;
-  owner?: DeepResearchOwnerBinding;
-  executionContract?: Partial<Omit<DeepResearchExecutionContract, 'startedAt' | 'deadlineAt'>>;
-  outputSchema?: Record<string, unknown>;
 }
 
 export interface ReviseDeepResearchPlanInput {

@@ -614,6 +614,17 @@ export const CHANNEL_MAP = {
   deleteDeepResearchRun: invoke(RPC_CHANNELS.deepResearch.DELETE),
   onDeepResearchRunUpdated: listener(RPC_CHANNELS.deepResearch.UPDATED),
 
+  // Artist profile enrichment
+  getArtistProfileEnrichment: invoke(RPC_CHANNELS.artistProfileEnrichment.GET),
+  updateArtistProfileEnrichmentSeeds: invoke(RPC_CHANNELS.artistProfileEnrichment.UPDATE_SEEDS),
+  updateArtistProfileEnrichmentDelivery: invoke(RPC_CHANNELS.artistProfileEnrichment.UPDATE_DELIVERY),
+  startArtistProfileEnrichment: invoke(RPC_CHANNELS.artistProfileEnrichment.START),
+  cancelArtistProfileEnrichment: invoke(RPC_CHANNELS.artistProfileEnrichment.CANCEL),
+  correctArtistProfileEnrichment: invoke(RPC_CHANNELS.artistProfileEnrichment.CORRECT),
+  removeArtistProfileEnrichment: invoke(RPC_CHANNELS.artistProfileEnrichment.REMOVE),
+  undoArtistProfileEnrichment: invoke(RPC_CHANNELS.artistProfileEnrichment.UNDO),
+  onArtistProfileEnrichmentChanged: listener(RPC_CHANNELS.artistProfileEnrichment.CHANGED),
+
   // Notifications (bell entries — pulse + system)
   listNotifications: invoke(RPC_CHANNELS.notifications.LIST),
   acknowledgeNotification: invoke(RPC_CHANNELS.notifications.ACKNOWLEDGE),

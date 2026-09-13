@@ -39,6 +39,7 @@ export {
   attachDeepResearchAgentMessageReceipts,
   isValidDeepResearchRunId,
   listDeepResearchRuns,
+  markActiveDeepResearchRunsInterrupted,
   markRunningDeepResearchRunsInterrupted,
   readDeepResearchRun,
   writeDeepResearchRun,

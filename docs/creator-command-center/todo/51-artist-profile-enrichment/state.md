@@ -1,5 +1,9 @@
 # Resume state
 
+## Implementation update — September 13, 2026
+
+The V1 implementation is complete on `codex/artist-profile-enrichment-v1`; see [implementation evidence](evidence/implementation.md). Automated integration checks pass. Live source/UI acceptance is intentionally still pending because this work did not restart the canonical app or execute paid research without separate authorization.
+
 Plan revision r1; compiled September 13, 2026. Scope: specification only. No feature code, provider calls, app restart, or live artist enrichment has been performed.
 
 Baseline/main: f25bbf48c. Worktree: .worktrees/active/profile-enrichment-spec, branch codex/profile-enrichment-spec. Other agents' unfinished release changes in canonical main must remain untouched.

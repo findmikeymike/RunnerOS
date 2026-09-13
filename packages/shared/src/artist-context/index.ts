@@ -23,3 +23,4 @@ export * from './mission-brief.ts';
 export * from './release-board.ts';
 export * from './campaign-worker-context.ts';
 export * from './release-horizon.ts';
+export * from './career-research.ts';

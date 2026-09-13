@@ -4,6 +4,7 @@ import { refreshCampaignStateContextDocBestEffort, refreshHqStateContextDocBestE
 import { withScriptwriterArtistContext } from '../hq-state/scriptwriter-context'
 import { refreshVerifiedTrackContextForAgents } from '../track-intelligence/agent-visibility'
 import { ReleaseKitService } from '../release-kit/ReleaseKitService'
+import { rebuildCareerResearchProjection } from '@craft-agent/shared/artist-context'
 
 /** A focus changes delivery, never authorization or the artist's disabled rules. */
 export function selectContextDocsForAgentLaunch(
@@ -46,6 +47,12 @@ export function prepareAgentLaunchContext(
     ...overrides,
   }
   const scope = workspace.artistWorkspaceScope
+  if (scope === 'hq') {
+    try { rebuildCareerResearchProjection(workspace.rootPath) }
+    catch (error) {
+      deps.warn('[career-research] Could not rebuild verified launch context', { workspaceId: workspace.id, error: error instanceof Error ? error.message : String(error) })
+    }
+  }
   if (agentSlug?.trim().toLowerCase() === CONCIERGE_SLUG) {
     if (scope === 'hq') deps.refreshHq(workspace.rootPath)
     else if (scope === 'campaign') deps.refreshCampaign(workspace.rootPath)

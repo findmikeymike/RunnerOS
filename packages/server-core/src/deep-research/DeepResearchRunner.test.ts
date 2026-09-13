@@ -107,10 +107,11 @@ describe('DeepResearchRunner', () => {
     })
 
     const prepared = runner.prepare('workspace-1', {
-      runId,
       topic: 'artist background',
       planPolicy: 'auto',
       sourceSlugs: ['exa'],
+    }, {
+      runId,
       purpose: 'artist-profile-enrichment',
       owner: { type: 'artist-career-research', id: 'artist-42', generation: 3 },
     })
@@ -130,6 +131,36 @@ describe('DeepResearchRunner', () => {
     expect(created).toHaveLength(3)
   })
 
+  test('public start ignores forged host-only fields', () => {
+    workspaceRoot = mkdtempSync(join(tmpdir(), 'deep-research-public-boundary-'))
+    const forgedId = '11111111-1111-4111-8111-111111111111'
+    const runner = new DeepResearchRunner({
+      createSession: async () => ({ id: 'unused' }),
+      sendMessage: async () => {},
+      getLastAssistantText: () => '',
+      getSessionToolUseSummary: () => ({ count: 0, names: [] }),
+      abortSession: async () => {},
+      getWorkspaceRootPath: () => workspaceRoot,
+      resolveSourceReadiness: () => ({ requested: ['exa'], usable: ['exa'], missing: [], unusable: [] }),
+      resolveSourceProfiles: () => [{ slug: 'exa', name: 'Exa', provider: 'exa', type: 'api', capabilities: ['search'] }],
+    })
+    const run = runner.start('workspace-1', {
+      topic: 'public research',
+      planPolicy: 'approve',
+      sourceSlugs: ['exa'],
+      runId: forgedId,
+      purpose: 'forged',
+      owner: { type: 'forged', id: 'forged' },
+      executionContract: { overallTimeoutMs: 1 },
+      outputSchema: { type: 'string' },
+    } as unknown as Parameters<DeepResearchRunner['start']>[1])
+    expect(run.id).not.toBe(forgedId)
+    expect(run.purpose).toBeUndefined()
+    expect(run.owner).toBeUndefined()
+    expect(run.outputSchema).toBeUndefined()
+    expect(run.executionContract?.overallTimeoutMs).toBe(15 * 60 * 1000)
+  })
+
   test('host guard blocks search, concurrency, and per-page retry overflow before execution', async () => {
     workspaceRoot = mkdtempSync(join(tmpdir(), 'deep-research-budget-'))
     const outputs = new Map<string, string>()
@@ -146,23 +177,23 @@ describe('DeepResearchRunner', () => {
       },
       sendMessage: async (sessionId) => {
         if (sessionId !== 'budget-1' || !guard) return
-        const call = (name: string, toolUseId: string, toolName: string, url?: string) => {
+        const call = (name: string, toolUseId: string, input: Record<string, unknown>) => {
           const decision = guard!.beforeToolUse({
             sessionId,
             toolUseId,
-            toolName,
-            input: url ? { url } : {},
+            toolName: 'mcp__exa__api_exa',
+            input,
           })
           decisions.push({ name, allowed: decision.allowed })
         }
-        call('search-1', 'search-1', 'web_search')
-        call('search-2', 'search-2', 'web_search')
-        call('page-1', 'page-1', 'web_fetch', 'https://example.com/a')
-        call('page-concurrent', 'page-2', 'web_fetch', 'https://example.com/b')
-        guard.onToolUseCompleted?.({ sessionId, toolUseId: 'page-1', toolName: 'web_fetch', isError: false })
-        call('page-retry', 'page-3', 'web_fetch', 'https://example.com/a')
-        call('page-2', 'page-4', 'web_fetch', 'https://example.com/b')
-        guard.onToolUseCompleted?.({ sessionId, toolUseId: 'page-4', toolName: 'web_fetch', isError: false })
+        call('search-1', 'search-1', { path: '/search', method: 'POST' })
+        call('search-2', 'search-2', { path: '/search', method: 'POST' })
+        call('page-1', 'page-1', { path: '/contents', params: { urls: ['https://example.com/a?view=one'] } })
+        call('page-concurrent', 'page-2', { path: '/contents', params: { urls: ['https://example.com/b'] } })
+        guard.onToolUseCompleted?.({ sessionId, toolUseId: 'page-1', toolName: 'mcp__exa__api_exa', isError: false })
+        call('page-retry', 'page-3', { path: '/contents', params: { urls: ['https://example.com/a?view=one'] } })
+        call('page-2', 'page-4', { path: '/contents', params: { urls: ['https://example.com/a?view=two'] } })
+        guard.onToolUseCompleted?.({ sessionId, toolUseId: 'page-4', toolName: 'mcp__exa__api_exa', isError: false })
       },
       getLastAssistantText: (sessionId) => outputs.get(sessionId) ?? '',
       getSessionToolUseSummary: () => ({ count: 1, names: ['web_search'] }),
@@ -174,10 +205,11 @@ describe('DeepResearchRunner', () => {
       emit: (event) => events.push(event),
     })
 
-    runner.start('workspace-1', {
+    const prepared = runner.prepare('workspace-1', {
       topic: 'bounded research',
       planPolicy: 'auto',
       sourceSlugs: ['exa'],
+    }, {
       executionContract: {
         maxSearchCalls: 1,
         maxPageReads: 2,
@@ -186,6 +218,7 @@ describe('DeepResearchRunner', () => {
         maxTotalResearchToolCalls: 3,
       },
     })
+    runner.begin('workspace-1', prepared.id)
 
     await waitFor(() => events.some((event) => event.type === 'run.completed'))
     expect(decisions).toEqual([
@@ -217,8 +250,8 @@ describe('DeepResearchRunner', () => {
       },
       getLastAssistantText: (sessionId) => outputs.get(sessionId) ?? '',
       getSessionToolUseSummary: () => ({ count: 1, names: ['web_fetch'] }),
-      getSessionToolUseRecords: (sessionId) => sessionId === 'receipt-1' ? [{
-        toolUseId: 'page-1',
+      getSessionToolUseRecords: (sessionId) => sessionId === 'receipt-1' || sessionId === 'receipt-2' ? [{
+        toolUseId: `page-${sessionId.at(-1)}`,
         toolName: 'web_fetch',
         toolInput: { url: 'https://user:pass@example.com/profile?token=secret#private' },
         toolResult: '{"url":"https://example.com/profile?token=secret","token":"raw-secret","text":"Career evidence"}',
@@ -231,16 +264,18 @@ describe('DeepResearchRunner', () => {
       emit: (event) => events.push(event),
     })
 
-    runner.start('workspace-1', {
+    const prepared = runner.prepare('workspace-1', {
       topic: 'structured artist research',
       planPolicy: 'auto',
       sourceSlugs: ['exa'],
+    }, {
       outputSchema: {
         type: 'object',
         required: ['summary'],
         properties: { summary: { type: 'string' } },
       },
     })
+    runner.begin('workspace-1', prepared.id)
 
     await waitFor(() => events.some((event) => event.type === 'run.completed'))
     const completed = [...events].reverse().find((event) => event.type === 'run.completed')
@@ -250,7 +285,7 @@ describe('DeepResearchRunner', () => {
     expect(sendCounts.get('receipt-3')).toBe(2)
     const receipt = completed.run.steps[0]?.toolReceipts?.[0]
     expect(receipt?.requestUrl).toBe('https://example.com/profile')
-    expect(receipt?.responseUrl).toBe('https://example.com/profile')
+    expect(receipt?.responseUrl).toBeUndefined()
     expect(receipt?.resultSha256).toHaveLength(64)
     expect(receipt?.supportExcerpt).not.toContain('secret')
   })
@@ -272,12 +307,14 @@ describe('DeepResearchRunner', () => {
       emit: (event) => events.push(event),
     })
 
-    runner.start('workspace-1', {
+    const prepared = runner.prepare('workspace-1', {
       topic: 'deadline research',
       planPolicy: 'auto',
       sourceSlugs: ['exa'],
+    }, {
       executionContract: { overallTimeoutMs: 20 },
     })
+    runner.begin('workspace-1', prepared.id)
 
     await waitFor(() => events.some((event) => event.type === 'run.completed'))
     const completed = [...events].reverse().find((event) => event.type === 'run.completed')
@@ -285,6 +322,35 @@ describe('DeepResearchRunner', () => {
     expect(completed.run.state).toBe('failed')
     expect(completed.run.error).toBe('Deep research deadline exceeded.')
     expect(aborted).toBe(1)
+  })
+
+  test('overall deadline fences session creation and cleans up a late child', async () => {
+    workspaceRoot = mkdtempSync(join(tmpdir(), 'deep-research-create-deadline-'))
+    const events: DeepResearchRunnerEvent[] = []
+    const deleted: string[] = []
+    let finishCreate: ((value: { id: string }) => void) | undefined
+    const runner = new DeepResearchRunner({
+      createSession: async () => new Promise<{ id: string }>((resolve) => { finishCreate = resolve }),
+      sendMessage: async () => {},
+      getLastAssistantText: () => '',
+      getSessionToolUseSummary: () => ({ count: 0, names: [] }),
+      abortSession: async () => {},
+      deleteSession: async (sessionId) => { deleted.push(sessionId) },
+      getWorkspaceRootPath: () => workspaceRoot,
+      resolveSourceReadiness: () => ({ requested: ['exa'], usable: ['exa'], missing: [], unusable: [] }),
+      resolveSourceProfiles: () => [{ slug: 'exa', name: 'Exa', provider: 'exa', type: 'api', capabilities: ['search'] }],
+      emit: (event) => events.push(event),
+    })
+    const prepared = runner.prepare('workspace-1', {
+      topic: 'deadline before child exists',
+      planPolicy: 'auto',
+      sourceSlugs: ['exa'],
+    }, { executionContract: { overallTimeoutMs: 20 } })
+    runner.begin('workspace-1', prepared.id)
+    await waitFor(() => events.some((event) => event.type === 'run.completed'))
+    finishCreate?.({ id: 'late-session' })
+    await waitFor(() => deleted.includes('late-session'))
+    expect(readDeepResearchRun(workspaceRoot, prepared.id)?.state).toBe('failed')
   })
 
   test('cancellation is durable before abort and late completion cannot publish', async () => {

@@ -333,6 +333,8 @@ export interface HostToolExecutionGuard {
     sessionId: string;
     toolUseId: string;
     toolName: string;
+    toolInput?: Record<string, unknown>;
+    toolResult?: string;
     isError: boolean;
   }): void;
 }

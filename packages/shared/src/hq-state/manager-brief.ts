@@ -14,6 +14,7 @@ import {
   type ArtistSpotifySnapshot,
 } from '../artist-context/spotify.ts';
 import { missionCampaignWindow, missionReleaseDateKey } from '../artist-context/mission-brief.ts';
+import { ARTIST_CAREER_RESEARCH_CONTEXT_SLUG, parseCareerResearchProjection } from '../artist-context/career-research.ts';
 import {
   ARTIST_CALENDAR_CONTEXT_SLUG,
   parseArtistCalendarDocResult,
@@ -104,6 +105,15 @@ export function buildManagerBrief(input: BuildManagerBriefInput): ManagerBriefV1
     staleMessage: 'Instagram snapshot is older than 9 days.',
   }));
 
+  const careerDoc = docBySlug.get(ARTIST_CAREER_RESEARCH_CONTEXT_SLUG);
+  const career = parseCareerResearchProjection(careerDoc);
+  if (careerDoc) health.push(sourceHealth({
+    source: ARTIST_CAREER_RESEARCH_CONTEXT_SLUG,
+    present: true, parseOk: Boolean(career), partial: Boolean(career?.gaps.length),
+    observedAt: career?.lastSuccessfulResearchAt, staleDays: 120, now,
+    malformedMessage: 'Career research is malformed.', partialMessage: career?.gaps[0], staleMessage: 'Career research has not been refreshed in 120 days.',
+  }));
+
   const campaignFocus = resolveHqCampaignFocus(input.relatedCampaigns, now);
   if (campaignFocus) health.push(...campaignFocus.sourceHealth);
   health.push(...input.relatedCampaigns.flatMap((campaign) => campaign.sourceHealth.filter((item) =>
@@ -172,6 +182,17 @@ export function buildManagerBrief(input: BuildManagerBriefInput): ManagerBriefV1
       spotify: spotify ? spotifySignal(input.workspaceId, spotify) : undefined,
       instagram: instagram ? instagramSignal(input.workspaceId, instagram) : undefined,
     },
+    career: career ? {
+      revision: career.revision,
+      lastSuccessfulResearchAt: career.lastSuccessfulResearchAt,
+      highlights: career.findings.slice(0, 8).map((finding) => ({
+        claimKey: finding.claimKey, category: finding.category, text: cap(finding.text, 360)!,
+        date: finding.eventDate ?? finding.validAsOf, state: finding.state,
+        source: sourceRef(input.workspaceId, ARTIST_CAREER_RESEARCH_CONTEXT_SLUG, career.lastSuccessfulResearchAt),
+      })),
+      gaps: career.gaps.map((gap) => cap(gap, 180)).filter(isString).slice(0, 3),
+      source: sourceRef(input.workspaceId, ARTIST_CAREER_RESEARCH_CONTEXT_SLUG, career.lastSuccessfulResearchAt),
+    } : undefined,
     intelligence,
     operatingState: {
       nextMove: nextMove ? {
@@ -455,6 +476,12 @@ export function renderManagerBriefPromptSection(brief: ManagerBriefV1, options: 
     if (brief.growth.instagram) lines.push(renderGrowth('Instagram', brief.growth.instagram));
   }
 
+  if (brief.career?.highlights.length) {
+    lines.push('', '### Sourced Career Context', 'Artist-written direction governs goals and branding. Public descriptions are attributed; current performance remains in Growth.');
+    for (const item of brief.career.highlights) lines.push(`- [${item.category}; ${item.state}] ${item.text}${item.date ? ` (${item.date})` : ''} — claim ${item.claimKey}`);
+    if (brief.career.gaps.length) lines.push(`Gaps: ${brief.career.gaps.join(' | ')}`);
+  }
+
   if (brief.intelligence.length) {
     lines.push('', '### Intelligence');
     if (brief.intelligence.some(item => item.signal)) {
@@ -477,6 +504,7 @@ function finalizeBudget(source: ManagerBriefV1): ManagerBriefV1 {
     if (brief.operatingState.activeWork.length) return Boolean(brief.operatingState.activeWork.pop());
     if (brief.operatingState.attention.length) return Boolean(brief.operatingState.attention.pop());
     if (brief.intelligence.length) return Boolean(brief.intelligence.pop());
+    if (brief.career?.highlights.length) return Boolean(brief.career.highlights.pop());
     if ((brief.growth.instagram?.highlights.length ?? 0) > 0) return Boolean(brief.growth.instagram!.highlights.pop());
     if ((brief.growth.spotify?.highlights.length ?? 0) > 0) return Boolean(brief.growth.spotify!.highlights.pop());
     // Timeline degrades internally, then drops whole — always before trajectory
@@ -530,6 +558,7 @@ function managerBriefRevision(brief: ManagerBriefV1): string {
     timeline: brief.timeline,
     campaignFocus: brief.campaignFocus,
     growth: brief.growth,
+    career: brief.career,
     intelligence: brief.intelligence,
     operatingState: brief.operatingState,
     sourceHealth: brief.sourceHealth.map(({ source, status, observedAt, staleAfter, message }) => ({ source, status, observedAt, staleAfter, message })),

@@ -688,6 +688,17 @@ export const RPC_CHANNELS = {
     DELETE: 'deep-research:delete',
     UPDATED: 'deep-research:updated',
   },
+  artistProfileEnrichment: {
+    GET: 'artist-profile-enrichment:get',
+    UPDATE_SEEDS: 'artist-profile-enrichment:update-seeds',
+    UPDATE_DELIVERY: 'artist-profile-enrichment:update-delivery',
+    START: 'artist-profile-enrichment:start',
+    CANCEL: 'artist-profile-enrichment:cancel',
+    CORRECT: 'artist-profile-enrichment:correct',
+    REMOVE: 'artist-profile-enrichment:remove',
+    UNDO: 'artist-profile-enrichment:undo',
+    CHANGED: 'artist-profile-enrichment:changed',
+  },
   outputs: {
     LIST: 'outputs:list',
     GET: 'outputs:get',

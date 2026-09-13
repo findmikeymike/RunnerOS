@@ -196,6 +196,7 @@ import {
   YOUTUBE_INTELLIGENCE_AGENT_SLUG,
 } from '@/lib/artist-intel'
 import type { SocialAccountsDoctorResult } from '../../../shared/types'
+import type { CareerResearchCategory, CareerResearchView } from '@craft-agent/shared/artist-context'
 import {
   buildHqThisWeekItems,
   buildHqWorkerItems,
@@ -387,6 +388,11 @@ export function ArtistHQHome({
   const [calendarComposerTarget, setCalendarComposerTarget] = React.useState<'hq' | 'campaign' | null>(null)
   const [calendarComposerType, setCalendarComposerType] = React.useState<ScheduledWorkComposerEntry['suggestedType']>()
   const [profileDraft, setProfileDraft] = React.useState<ProfileDraft>(emptyProfileDraft)
+  const profileDraftRef = React.useRef(profileDraft)
+  profileDraftRef.current = profileDraft
+  const profileBaselineRef = React.useRef<ProfileDraft>(emptyProfileDraft)
+  const profileBodyRef = React.useRef<string | null>(null)
+  const [profileConflict, setProfileConflict] = React.useState(false)
   const [brandingDraft, setBrandingDraft] = React.useState<BrandingDraft>(emptyBrandingDraft)
   const [voiceDraft, setVoiceDraft] = React.useState<VoiceDraft>(emptyVoiceDraft)
   const [automations, setAutomations] = React.useState<AutomationListItem[]>([])
@@ -412,6 +418,7 @@ export function ArtistHQHome({
     () => parseArtistProfileDocResult(docs.find((doc) => doc.slug === ARTIST_PROFILE_CONTEXT_SLUG)),
     [docs],
   )
+  const profileDoc = React.useMemo(() => docs.find((doc) => doc.slug === ARTIST_PROFILE_CONTEXT_SLUG) ?? null, [docs])
   const profile = profileResult.profile
   const releaseHorizon = React.useMemo(
     () => parseArtistReleaseHorizon(docs.find((doc) => doc.slug === ARTIST_RELEASE_HORIZON_CONTEXT_SLUG)),
@@ -936,8 +943,15 @@ export function ArtistHQHome({
   }, [selectedPerson, selectedPersonId])
 
   React.useEffect(() => {
-    setProfileDraft(profileToDraft(profile))
-  }, [profile])
+    const nextBody = profileDoc?.body ?? null
+    if (profileBodyRef.current === nextBody) return
+    const nextDraft = profileToDraft(profile)
+    const dirty = JSON.stringify(profileDraftRef.current) !== JSON.stringify(profileBaselineRef.current)
+    profileBodyRef.current = nextBody
+    profileBaselineRef.current = nextDraft
+    if (dirty) setProfileConflict(true)
+    else { setProfileDraft(nextDraft); setProfileConflict(false) }
+  }, [profile, profileDoc?.body])
 
   React.useEffect(() => {
     let cancelled = false
@@ -1037,10 +1051,14 @@ export function ArtistHQHome({
     [calendarResult, upsert],
   )
 
-  const saveProfile = React.useCallback(async () => {
+  const saveProfile = React.useCallback(async (): Promise<boolean> => {
+    if (profileConflict) {
+      toast.error('Profile changed elsewhere. Choose which version to keep before saving.')
+      return false
+    }
     if (!profileResult.ok) {
       toast.error(`${profileResult.error} Open Workspace Context to recover it before saving.`)
-      return
+      return false
     }
     const nextProfile: ArtistProfile = {
       version: 1,
@@ -1048,16 +1066,22 @@ export function ArtistHQHome({
       updatedAt: new Date().toISOString(),
     }
     try {
-      await upsert({
+      const saved = await upsert({
         slug: ARTIST_PROFILE_CONTEXT_SLUG,
         metadata: artistProfileMetadata(),
         body: serializeArtistProfileBody(nextProfile),
+        expectedBody: profileDoc?.body ?? null,
       })
+      profileBaselineRef.current = profileToDraft(nextProfile)
+      profileBodyRef.current = saved.body
+      setProfileConflict(false)
       toast.success('Profile saved')
+      return true
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
+      return false
     }
-  }, [profileDraft, profileResult, upsert])
+  }, [profileConflict, profileDraft, profileResult, profileDoc?.body, upsert])
 
   const saveReleaseMonthPlan = React.useCallback(async (monthKey: string, value: ArtistReleaseMonthPlan | null) => {
     const nextMonths = { ...releaseHorizon.months }
@@ -2102,8 +2126,21 @@ export function ArtistHQHome({
                 {profileResult.error} Saving is paused so existing artist context is not overwritten.
               </div>
             ) : null}
+            {profileConflict ? (
+              <div className="mb-4 rounded-[14px] border border-amber-400/20 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100/80">
+                Profile changed elsewhere. Your unsaved edits are still here.
+                <button type="button" className="ml-2 font-semibold text-white underline" onClick={() => setProfileConflict(false)}>Keep my edits</button>
+                <button type="button" className="ml-2 font-semibold text-white underline" onClick={() => { const next = profileToDraft(profile); profileBaselineRef.current = next; setProfileDraft(next); setProfileConflict(false) }}>Use external version</button>
+              </div>
+            ) : null}
 
             <ArtistProfileForm draft={profileDraft} onChange={setProfileDraft} />
+            <CareerResearchPanel
+              workspaceId={workspaceId}
+              savedProfile={profile}
+              profileDirty={JSON.stringify(profileDraft) !== JSON.stringify(profileBaselineRef.current)}
+              onSaveProfile={saveProfile}
+            />
           </HQCard>
         )}
 
@@ -4369,6 +4406,106 @@ function EmptyLine({ title, detail }: { title: string; detail: string }) {
   )
 }
 
+const careerCategoryLabels: Record<CareerResearchCategory, string> = {
+  achievement: 'Achievements', release: 'Releases', collaboration: 'Collaborations', performance: 'Live history',
+  press: 'Press', 'professional-relationship': 'Professional relationships', 'public-description': 'What sources say',
+}
+
+function CareerResearchPanel({ workspaceId, savedProfile, profileDirty, onSaveProfile }: {
+  workspaceId: string
+  savedProfile: ArtistProfile
+  profileDirty: boolean
+  onSaveProfile: () => Promise<boolean>
+}) {
+  const [view, setView] = React.useState<CareerResearchView | null>(null)
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const [editingSeeds, setEditingSeeds] = React.useState(false)
+  const [dirtyChoice, setDirtyChoice] = React.useState(false)
+  const [artistName, setArtistName] = React.useState('')
+  const [spotifyProfile, setSpotifyProfile] = React.useState('')
+  const [officialUrl, setOfficialUrl] = React.useState('')
+  const [supportingUrls, setSupportingUrls] = React.useState('')
+  const [expanded, setExpanded] = React.useState<Set<string>>(new Set())
+  const [correcting, setCorrecting] = React.useState<{ claimKey: string; text: string } | null>(null)
+  const [lastRemoved, setLastRemoved] = React.useState<string | null>(null)
+
+  const load = React.useCallback(async () => {
+    try { setView(await window.electronAPI.getArtistProfileEnrichment(workspaceId)); setError(null) }
+    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+  }, [workspaceId])
+  React.useEffect(() => {
+    void load()
+    return window.electronAPI.onArtistProfileEnrichmentChanged((changedId, next) => { if (changedId === workspaceId) setView(next) })
+  }, [load, workspaceId])
+  React.useEffect(() => {
+    setArtistName(view?.identity?.artistName ?? savedProfile.artistName ?? '')
+    setSpotifyProfile(view?.identity?.spotifyUrl ?? savedProfile.spotifyProfile ?? '')
+    setOfficialUrl(view?.identity?.officialUrl ?? '')
+    setSupportingUrls(view?.identity?.supportingUrls.join('\n') ?? '')
+  }, [savedProfile.artistName, savedProfile.spotifyProfile, view?.identity?.key])
+
+  const start = async (ignoreDirty = false) => {
+    if (profileDirty && !ignoreDirty) { setDirtyChoice(true); return }
+    if (!view?.identity || (!view.identity.spotifyUrl && !view.identity.officialUrl && view.identity.supportingUrls.length === 0)) { setEditingSeeds(true); return }
+    setBusy(true); setError(null)
+    try { setView(await window.electronAPI.startArtistProfileEnrichment(workspaceId, { requestId: crypto.randomUUID(), expectedIdentityKey: view.identity.key })) }
+    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { setBusy(false) }
+  }
+  const saveSeedsAndStart = async () => {
+    setBusy(true); setError(null)
+    try {
+      const saved = await window.electronAPI.updateArtistProfileEnrichmentSeeds(workspaceId, view?.revision ?? 0, {
+        artistName, spotifyProfile, officialUrl, supportingUrls: supportingUrls.split('\n').map((item) => item.trim()).filter(Boolean),
+      })
+      setView(saved); setEditingSeeds(false)
+      setView(await window.electronAPI.startArtistProfileEnrichment(workspaceId, { requestId: crypto.randomUUID(), expectedIdentityKey: saved.identity?.key }))
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { setBusy(false) }
+  }
+  const active = view?.run && ['researching', 'validating', 'publishing'].includes(view.run.state)
+  const stage = view?.run?.state === 'validating' ? 'Checking matches' : view?.run?.state === 'publishing' ? 'Saving' : active ? 'Finding sources → Building career context' : null
+  const grouped = React.useMemo(() => {
+    const result = new Map<CareerResearchCategory, NonNullable<CareerResearchView['findings']>>()
+    for (const finding of view?.findings ?? []) result.set(finding.category, [...(result.get(finding.category) ?? []), finding])
+    return result
+  }, [view?.findings])
+  const mutate = async (work: () => Promise<CareerResearchView>) => {
+    setBusy(true); setError(null)
+    try { setView(await work()) } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) } finally { setBusy(false) }
+  }
+
+  return (
+    <section className="mt-6 border-t border-white/[0.08] pt-5" aria-labelledby="career-context-title">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><h3 id="career-context-title" className="text-sm font-semibold text-white/90">Career & public context</h3>
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-white/45">Public career context researched for your agents. Your own profile and branding stay yours.</p></div>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setEditingSeeds((value) => !value)} className="h-8 rounded-full border border-white/10 px-3 text-xs text-white/65 hover:bg-white/5">Research links</button>
+          <button type="button" onClick={() => void start()} disabled={busy || Boolean(active)} className="h-8 rounded-full bg-orange-400 px-4 text-xs font-semibold text-black hover:bg-orange-300 disabled:opacity-40">{view?.lastSuccessfulResearchAt ? 'Refresh research' : 'Enrich my profile'}</button>
+        </div>
+      </div>
+      {dirtyChoice ? <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs text-amber-50/85">You have unsaved Profile edits. <div className="mt-2 flex gap-2"><button className="rounded-full bg-white px-3 py-1.5 font-semibold text-black" onClick={() => void onSaveProfile().then((ok) => { setDirtyChoice(false); if (ok) void start(true) })}>Save and enrich</button><button className="rounded-full border border-white/15 px-3 py-1.5" onClick={() => { setDirtyChoice(false); if (view?.identity) void start(true); else void saveSeedsAndStart() }}>Use saved profile</button></div></div> : null}
+      {editingSeeds ? <div className="mt-4 grid gap-3 rounded-2xl border border-white/[0.08] bg-black/20 p-4 md:grid-cols-2">
+        <ProfileField label="Artist name"><Input value={artistName} onChange={setArtistName} placeholder="Artist name" /></ProfileField>
+        <ProfileField label="Spotify artist page"><Input value={spotifyProfile} onChange={setSpotifyProfile} placeholder="URL or artist ID (optional)" /></ProfileField>
+        <ProfileField label="Official artist website"><Input value={officialUrl} onChange={setOfficialUrl} placeholder="https://…" /></ProfileField>
+        <ProfileField label="Supporting public links"><TextArea value={supportingUrls} onChange={setSupportingUrls} placeholder="One press or artist link per line" /></ProfileField>
+        <div className="md:col-span-2 flex justify-end gap-2"><button className="rounded-full border border-white/10 px-3 py-2 text-xs" onClick={() => setEditingSeeds(false)}>Cancel</button><button className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black" disabled={busy} onClick={() => void saveSeedsAndStart()}>Save links & start</button></div>
+      </div> : null}
+      {stage ? <div className="mt-4 flex items-center justify-between rounded-xl border border-orange-400/20 bg-orange-400/10 px-3 py-2 text-xs text-orange-100" aria-live="polite"><span><RefreshCw className="mr-2 inline h-3.5 w-3.5 animate-spin" />{stage}</span><button onClick={() => view?.run && void mutate(() => window.electronAPI.cancelArtistProfileEnrichment(workspaceId, view.run!.id, view.run!.attempt))}>Cancel</button></div> : null}
+      {error ? <div className="mt-3 rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-xs text-red-100">{error}</div> : null}
+      {view?.run && !active && ['failed', 'interrupted', 'cancelled', 'needs-identity'].includes(view.run.state) ? <p className="mt-3 text-xs text-amber-200/75">{view.run.state === 'cancelled' ? 'Research cancelled. Existing findings are unchanged.' : view.run.state === 'needs-identity' ? 'The sources did not prove this is the right artist. Add one more exact public link and retry.' : view.run.lastError?.message ?? 'Research stopped before new findings were saved.'}</p> : null}
+      {view?.lastSuccessfulResearchAt ? <p className="mt-3 text-[11px] text-white/35">Last researched {new Date(view.lastSuccessfulResearchAt).toLocaleDateString()}{view.lastAttemptAt ? ` · Last attempt ${new Date(view.lastAttemptAt).toLocaleDateString()}` : ''}</p> : null}
+      {[...grouped].map(([category, findings]) => { const shown = expanded.has(category) ? findings : findings.slice(0, 3); return <div key={category} className="mt-4"><div className="mb-2 flex items-center justify-between"><h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">{careerCategoryLabels[category]}</h4>{findings.length > 3 ? <button className="text-xs text-orange-300" onClick={() => setExpanded((current) => { const next = new Set(current); next.has(category) ? next.delete(category) : next.add(category); return next })}>{expanded.has(category) ? 'Show less' : `Show ${findings.length - 3} more`}</button> : null}</div><div className="grid gap-2">{shown.map((finding) => <article key={finding.claimKey} className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-3"><p className="text-sm leading-5 text-white/80">{finding.text}{finding.correctedByUser ? <span className="ml-2 text-[10px] font-semibold uppercase text-orange-300">Corrected by you</span> : null}</p>{correcting?.claimKey === finding.claimKey ? <div className="mt-2 flex gap-2"><Input value={correcting.text} onChange={(text) => setCorrecting({ ...correcting, text })} /><button className="rounded-full bg-white px-3 text-xs text-black" onClick={() => void mutate(() => window.electronAPI.correctArtistProfileEnrichment(workspaceId, { claimKey: finding.claimKey, expectedRevision: view!.revision, text: correcting.text })).then(() => setCorrecting(null))}>Save</button></div> : null}<details className="mt-2 text-xs text-white/45"><summary className="cursor-pointer">{finding.evidence.length} source{finding.evidence.length === 1 ? '' : 's'} · {finding.eventDate ?? finding.validAsOf ?? 'date not reported'}</summary>{finding.evidence.map((source) => <div key={source.receiptId} className="mt-2"><a href={source.url} target="_blank" rel="noreferrer" className="text-orange-300 hover:underline">{source.title} <ExternalLink className="inline h-3 w-3" /></a><p className="mt-1">{source.support}</p></div>)}</details><div className="mt-2 flex gap-3 text-xs"><button className="text-white/50 hover:text-white" onClick={() => setCorrecting({ claimKey: finding.claimKey, text: finding.text })}>Correct</button><button className="text-white/50 hover:text-red-300" onClick={() => { setLastRemoved(finding.claimKey); void mutate(() => window.electronAPI.removeArtistProfileEnrichment(workspaceId, { claimKey: finding.claimKey, expectedRevision: view!.revision })) }}>Remove</button></div></article>)}</div></div> })}
+      {lastRemoved && view ? <button className="mt-3 text-xs text-orange-300" onClick={() => { const key = lastRemoved; setLastRemoved(null); void mutate(() => window.electronAPI.undoArtistProfileEnrichment(workspaceId, { claimKey: key, expectedRevision: view.revision })) }}>Undo last removal</button> : null}
+      {view && !active && view.findings.length === 0 && !view.lastSuccessfulResearchAt ? <p className="mt-5 text-sm text-white/40">Add an identity link, then run one focused research pass.</p> : null}
+      {view?.gaps.length ? <p className="mt-4 text-xs leading-5 text-white/40">Gaps: {view.gaps.join(' ')}</p> : null}
+    </section>
+  )
+}
+
 function ArtistProfileForm({
   draft,
   onChange,
@@ -4989,7 +5126,7 @@ function Input({
 }: {
   value: string
   onChange: (value: string) => void
-  placeholder: string
+  placeholder?: string
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'placeholder'>) {
   return (
     <input
