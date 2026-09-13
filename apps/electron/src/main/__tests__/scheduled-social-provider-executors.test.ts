@@ -1,3 +1,5 @@
+import { ScheduledSocialExecutionUncertainError } from '@craft-agent/shared/scheduled-work'
+import { executeScheduledSocialAuto } from '../scheduled-social-auto-executor'
 import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -273,7 +275,7 @@ describe('scheduled social provider adapters', () => {
     expect(await routes[1]!.prepare(socialInput())).toBeUndefined()
   })
 
-  test('does not accept an ambiguous same-caption Postiz receipt', async () => {
+  test.each([1, 2])('does not accept %s older same-caption Postiz receipts as the new post', async (count) => {
     const fetcher = async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
       if (url.endsWith('/integrations')) return new Response(JSON.stringify([{ id: 'integration-1', identifier: 'x', profile: 'artist', disabled: false }]))
@@ -282,7 +284,7 @@ describe('scheduled social provider adapters', () => {
         return new Response(JSON.stringify({ posts: [
           { id: 'post-old-1', content: 'Out now.', releaseURL: 'https://x.com/artist/status/old-1', integration: { id: 'integration-1' } },
           { id: 'post-old-2', content: 'Out now.', releaseURL: 'https://x.com/artist/status/old-2', integration: { id: 'integration-1' } },
-        ] }))
+        ].slice(0, count) }))
       }
       return new Response('not found', { status: 404 })
     }
@@ -291,7 +293,7 @@ describe('scheduled social provider adapters', () => {
       sleep: async () => {}, receiptTimeoutMs: 0,
     })
     const prepared = await routes[1]!.prepare(socialInput())
-    await expect(prepared!.execute()).rejects.toThrow(/ambiguous publication receipt/i)
+    await expect(prepared!.execute()).rejects.toThrow(ScheduledSocialExecutionUncertainError)
   })
 
   test('surfaces terminal and timeout receipt states', async () => {
@@ -312,7 +314,9 @@ describe('scheduled social provider adapters', () => {
         sleep: async () => {}, receiptTimeoutMs: 0,
       })
       const tryPost = await tryPostRoutes[0]!.prepare(socialInput())
-      await expect(tryPost!.execute()).rejects.toThrow(new RegExp(terminalStatus))
+      const error = await tryPost!.execute().catch(error => error)
+      expect(error).toBeInstanceOf(ScheduledSocialExecutionUncertainError)
+      expect(error.message).toContain(terminalStatus)
     }
 
     const postizRoutes = createScheduledSocialProviderRoutes({
@@ -326,5 +330,62 @@ describe('scheduled social provider adapters', () => {
     })
     const postiz = await postizRoutes[1]!.prepare(socialInput())
     await expect(postiz!.execute()).rejects.toThrow(/last observed status: pending/i)
+  })
+})
+
+describe('provider submission uncertainty boundary', () => {
+  test.each(['preview', 'publish', 'receipt'] as const)('TryPost %s failure preserves its boundary and never switches routes', async (stage) => {
+    const failure = new Error('Connection lost')
+    let browserCalls = 0
+    let nextRouteCalls = 0
+    let publishCalls = 0
+    const client = {
+      listTools: async () => ['list-social-accounts-tool', 'list-content-types-tool', 'create-post-tool', 'publish-post-tool', 'get-post-tool', 'preview-post-tool'].map(name => ({ name })),
+      callTool: async (name: string) => {
+        if (name === 'list-social-accounts-tool') return mcpResult({ accounts: [{ id: 'account-1', platform: 'x', username: 'artist', status: 'connected' }] })
+        if (name === 'list-content-types-tool') return mcpResult({ platforms: [{ content_types: ['x_post'] }] })
+        if (name === 'create-post-tool') return mcpResult({ id: 'post-1' })
+        if (name === 'publish-post-tool') publishCalls++
+        if (name === ({ preview: 'preview-post-tool', publish: 'publish-post-tool', receipt: 'get-post-tool' }[stage])) throw failure
+        return mcpResult({ ok: true })
+      },
+      close: async () => {},
+    }
+    const routes = createScheduledSocialProviderRoutes({ loadSources: () => [source('trypost')], getToken: async () => 'token', createMcpClient: () => client, sleep: async () => {}, receiptTimeoutMs: 0 })
+    const error = await executeScheduledSocialAuto(socialInput(), {
+      providerRoutes: [routes[0]!, { provider: 'postiz', prepare: async () => { nextRouteCalls++; return undefined } }],
+      executeBrowser: async () => { browserCalls++; throw new Error('unexpected browser call') },
+    }).catch(error => error)
+    if (stage === 'preview') expect(error).toBe(failure)
+    else {
+      expect(error).toBeInstanceOf(ScheduledSocialExecutionUncertainError)
+      expect(error.cause).toBe(failure)
+    }
+    expect(publishCalls).toBe(stage === 'preview' ? 0 : 1)
+    expect(nextRouteCalls).toBe(0)
+    expect(browserCalls).toBe(0)
+  })
+
+  test.each(['request', 'malformed', 'missing-id', 'receipt'] as const)('Postiz %s failure is uncertain after publish was attempted', async (stage) => {
+    let browserCalls = 0
+    const routes = createScheduledSocialProviderRoutes({
+      loadSources: () => [source('postiz')], getToken: async () => 'token', sleep: async () => {}, receiptTimeoutMs: 0,
+      fetch: async (input, init) => {
+        const url = String(input)
+        if (url.endsWith('/integrations')) return new Response(JSON.stringify([{ id: 'integration-1', identifier: 'x', profile: 'artist', disabled: false }]))
+        if (init?.method === 'POST') {
+          if (stage === 'request') throw new Error('Network timeout')
+          if (stage === 'malformed') return new Response('not json')
+          return new Response(JSON.stringify(stage === 'missing-id' ? [{}] : [{ postId: 'post-1' }]))
+        }
+        throw new Error('Receipt unavailable')
+      },
+    })
+    const error = await executeScheduledSocialAuto(socialInput(), {
+      providerRoutes: routes,
+      executeBrowser: async () => { browserCalls++; throw new Error('unexpected browser call') },
+    }).catch(error => error)
+    expect(error).toBeInstanceOf(ScheduledSocialExecutionUncertainError)
+    expect(browserCalls).toBe(0)
   })
 })

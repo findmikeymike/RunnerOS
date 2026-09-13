@@ -15,6 +15,7 @@ import {
 import { materializeReleaseKitItem, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit'
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
+  ScheduledSocialExecutionUncertainError,
   parseScheduledWorkDocResult,
   scheduledWorkMetadata,
   serializeScheduledWorkBody,
@@ -1713,6 +1714,67 @@ describe('ScheduledWorkRunner', () => {
     const saved = readWork(root).items[0]!
     expect(saved.status).toBe('needs-approval')
     expect(saved.runs).toEqual([])
+  })
+
+  test.each(['uncertain', 'ordinary', 'receipt-write'] as const)('persists %s social errors without automatic retry, including a fresh runner', async (kind) => {
+    const root = makeRoot()
+    const order = buildOrder({
+      id: 'social-outcome', type: 'social-publish', status: 'needs-approval',
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Out Friday.' },
+      executionKey: { payloadDigest: 'payload-social', idempotencyKey: 'idem-social' },
+      socialAction: {
+        actionId: 'act-social', actionDigest: 'sha256:action', platform: 'x', profileId: 'artist-main',
+        preparedAt: '2026-07-10T14:00:00.000Z', payloadDigest: 'payload-social', dryRun: { ok: true },
+      },
+      socialApproval: {
+        id: 'approval-social', approvedAt: '2026-07-10T14:01:00.000Z', expiresAt: '2026-07-10T14:31:00.000Z',
+        actionId: 'act-social', actionDigest: 'sha256:action', payloadDigest: 'payload-social', platform: 'x', profileId: 'artist-main',
+        approvedBy: { type: 'user', clientId: 'test-client' },
+      },
+    })
+    writeWork(root, [order])
+    const cause = new Error('Browser response lost')
+    const failure = kind === 'uncertain'
+      ? new ScheduledSocialExecutionUncertainError('Submission attempted; verify the post before retrying.', { cause })
+      : new Error(kind === 'receipt-write' ? 'Failed to save the verified receipt.' : 'x: compose step failed — post composer selector is missing or ambiguous.')
+    if (kind === 'uncertain') expect(failure.cause).toBe(cause)
+    let executeCalls = 0
+    const deps = {
+      canRunBackgroundWork: () => true, withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null, listOutputManifests: () => [],
+      executeSocial: async () => {
+        executeCalls++
+        if (kind === 'receipt-write') return { receiptId: 'verified-receipt', externalUrl: 'https://x.com/artist/status/123', summary: 'Published.' }
+        throw failure
+      },
+    }
+    const runner = new ScheduledWorkRunner(deps)
+    const persistence = runner as unknown as { writeWork(path: string, work: ScheduledWorkDocument): void }
+    const persist = persistence.writeWork.bind(runner)
+    let failedReceiptWrites = 0
+    const writeSpy = spyOn(persistence, 'writeWork').mockImplementation((path, work) => {
+      if (kind === 'receipt-write' && work.items.some(item => item.status === 'done')) {
+        failedReceiptWrites++
+        throw failure
+      }
+      persist(path, work)
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
+    await waitFor(() => readWork(root).items[0]?.status === 'needs-attention')
+    const saved = readWork(root).items[0]!
+    expect(saved.attention).toEqual({ reason: kind === 'ordinary' ? 'execution-failed' : 'execution-uncertain', message: failure.message })
+    expect(saved.result).toBeUndefined()
+    expect(saved.runs).toHaveLength(1)
+    expect(saved.runs[0]).toMatchObject({ status: 'failed', error: failure.message })
+    expect(saved.runs[0]?.externalReceipt).toBeUndefined()
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:03:00.000Z'))
+    await new ScheduledWorkRunner(deps).scanWorkspace(workspaceId, root, new Date('2026-07-10T14:04:00.000Z'))
+    expect(executeCalls).toBe(1)
+    expect(failedReceiptWrites).toBe(kind === 'receipt-write' ? 1 : 0)
+    writeSpy.mockRestore()
+    expect(readWork(root).items[0]?.runs).toHaveLength(1)
+    expect(readWork(root).items[0]?.attention).toEqual(saved.attention)
   })
 
   test('prepares, exact-approves, and publishes social work once with a receipt', async () => {

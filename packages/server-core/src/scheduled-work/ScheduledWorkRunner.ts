@@ -12,6 +12,7 @@ import { isOutputUsable, type OutputManifest } from '@craft-agent/shared/outputs
 import { assertReleaseKitSocialUseAllowed, loadReleaseKitManifest } from '@craft-agent/shared/release-kit'
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
+  ScheduledSocialExecutionUncertainError,
   assertScheduledWorkDocument,
   migrateCampaignCalendarJobs,
   parseScheduledWorkDocResult,
@@ -801,6 +802,7 @@ export class ScheduledWorkRunner {
   }
 
   private async runSocial(workspaceId: string, workspaceRootPath: string, order: ScheduledWorkOrder, capturedFence: string | null): Promise<void> {
+    let executionCompleted = false
     try {
       if (!this.deps.executeSocial || order.execution.type !== 'social-publish' || !order.socialAction || !order.socialApproval) return
       if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before social execution.')
@@ -810,6 +812,7 @@ export class ScheduledWorkRunner {
         this.readArtistSocialWorkEntries(workspaceId, workspaceRootPath),
       )
       const result = await this.deps.executeSocial({ workspaceId, workspaceRootPath, order, preview: order.socialAction, approval: order.socialApproval })
+      executionCompleted = true
       const nowIso = (this.deps.now?.() ?? new Date()).toISOString()
       const receipt: CampaignExternalExecutionReceipt = {
         id: result.receiptId,
@@ -834,7 +837,7 @@ export class ScheduledWorkRunner {
           }
         : null)
     } catch (error) {
-      await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, this.buildAttention('execution-failed', errorMessage(error)))
+      await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, this.buildAttention(executionCompleted || error instanceof ScheduledSocialExecutionUncertainError ? 'execution-uncertain' : 'execution-failed', errorMessage(error)))
     }
   }
 

@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { materializeReleaseKitItem, resolveReleaseKitItemPath, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit'
+import { ScheduledSocialExecutionUncertainError } from '@craft-agent/shared/scheduled-work'
 import type { ScheduledSocialApproval, ScheduledSocialActionPreview, ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import {
   computeScheduledSocialBrowserActionDigest,
@@ -122,6 +123,7 @@ const depsFor = (browserPaneManager: FakeBrowserPaneManager) => ({
   browserPaneManager,
   now: () => new Date('2026-07-09T00:10:00.000Z'),
   successTimeoutMs: 0,
+  cleanBaselineTimeoutMs: 0,
 })
 
 describe('executeScheduledSocialBrowser', () => {
@@ -170,6 +172,68 @@ describe('executeScheduledSocialBrowser', () => {
 
     await expect(executeScheduledSocialBrowser({ workspaceRootPath: '/workspace', ...tuple }, depsFor(browser))).rejects.toThrow(/no positive success evidence/i)
     expect(browser.mutations).toEqual(['fill:@caption:Out Friday.', 'click:@submit'])
+  })
+
+  test.each(['click rejection', 'proof timeout', 'invalid receipt', 'lost browser'])('keeps %s after submit uncertain without a second click', async (failure) => {
+    const browser = new FakeBrowserPaneManager()
+    browser.responses.set('identity:x', [{ loggedIn: true, candidates: [{ handle: '@artist-main', accountUrl: 'https://x.com/artist-main' }] }])
+    browser.responses.set('draft:x', [{ caption: 'Out Friday.', hasMediaPreview: false }])
+    browser.responses.set('success:x', [
+      { proven: false },
+      ...(failure === 'lost browser' ? [] : [failure === 'invalid receipt'
+        ? { proven: true, externalUrl: 'https://example.com/not-a-post' }
+        : { proven: false }]),
+    ])
+    if (failure === 'click rejection') browser.clickElement = async (_id, ref) => {
+      browser.mutations.push(`click:${ref}`)
+      throw new Error('Browser disconnected after dispatch')
+    }
+    const error = await executeScheduledSocialBrowser({ workspaceRootPath: '/workspace', ...approvedXTuple() }, depsFor(browser)).catch(error => error)
+    expect(error).toBeInstanceOf(ScheduledSocialExecutionUncertainError)
+    expect(error.message).toContain('may already be live')
+    expect(error.cause).toBeInstanceOf(Error)
+    expect(browser.mutations.filter(value => value.startsWith('click:'))).toEqual(['click:@submit'])
+  })
+
+  test('an explicit baseline budget can outwait stale evidence beyond five seconds', async () => {
+    const browser = new FakeBrowserPaneManager()
+    browser.responses.set('identity:x', [{ loggedIn: true, candidates: [{ handle: '@artist-main', accountUrl: 'https://x.com/artist-main' }] }])
+    browser.responses.set('draft:x', [{ caption: 'Out Friday.', hasMediaPreview: false }])
+    browser.responses.set('success:x', [
+      ...Array.from({ length: 6 }, () => ({ proven: true, externalUrl: 'https://x.com/artist-main/status/999' })),
+      { proven: false },
+      { proven: true, externalUrl: 'https://x.com/artist-main/status/123' },
+    ])
+    let clock = 0
+    const now = spyOn(Date, 'now').mockImplementation(() => clock)
+    try {
+      const result = await executeScheduledSocialBrowser({ workspaceRootPath: '/workspace', ...approvedXTuple() }, {
+        ...depsFor(browser), cleanBaselineTimeoutMs: 7_000, successPollMs: 1_000,
+        sleep: async ms => { clock += ms },
+      })
+      expect(clock).toBe(6_000)
+      expect(result.receiptId).toBe('x:123')
+      expect(browser.mutations.filter(value => value.startsWith('click:'))).toEqual(['click:@submit'])
+    } finally { now.mockRestore() }
+  })
+
+  test('default baseline budget stays separate from a longer receipt timeout', async () => {
+    const browser = new FakeBrowserPaneManager()
+    browser.responses.set('identity:x', [{ loggedIn: true, candidates: [{ handle: '@artist-main', accountUrl: 'https://x.com/artist-main' }] }])
+    browser.responses.set('draft:x', [{ caption: 'Out Friday.', hasMediaPreview: false }])
+    browser.responses.set('success:x', Array.from({ length: 10 }, () => ({ proven: true, externalUrl: 'https://x.com/artist-main/status/999' })))
+    let clock = 0
+    const now = spyOn(Date, 'now').mockImplementation(() => clock)
+    try {
+      const error = await executeScheduledSocialBrowser({ workspaceRootPath: '/workspace', ...approvedXTuple() }, {
+        ...depsFor(browser), cleanBaselineTimeoutMs: undefined, successTimeoutMs: 60_000, successPollMs: 1_000,
+        sleep: async ms => { clock += ms },
+      }).catch(error => error)
+      expect(error).not.toBeInstanceOf(ScheduledSocialExecutionUncertainError)
+      expect(error.message).toContain('already shows success evidence')
+      expect(clock).toBe(5_000)
+      expect(browser.mutations).toEqual(['fill:@caption:Out Friday.'])
+    } finally { now.mockRestore() }
   })
 
   test('executes the exact successful X flow in the persisted account partition', async () => {

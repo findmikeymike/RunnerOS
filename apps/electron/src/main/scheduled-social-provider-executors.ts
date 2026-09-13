@@ -1,3 +1,4 @@
+import { ScheduledSocialExecutionUncertainError } from '@craft-agent/shared/scheduled-work'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { basename, extname } from 'node:path'
@@ -141,12 +142,16 @@ async function executeTryPost(
     await callMcpJson(client, 'attach-media-from-upload-tool', { post_id: postId, upload_token: uploadToken })
   }
   await callMcpJson(client, 'preview-post-tool', { post_id: postId })
-  await callMcpJson(client, 'publish-post-tool', { post_id: postId })
-  const published = await pollTryPostReceipt(client, postId, deps)
-  return {
-    receiptId: `trypost:${postId}`,
-    externalUrl: published.externalUrl,
-    summary: `Published through TryPost to ${input.order.execution.type === 'social-publish' ? input.order.execution.platform : 'social'}; provider receipt ${postId} verified.`,
+  try {
+    await callMcpJson(client, 'publish-post-tool', { post_id: postId })
+    const published = await pollTryPostReceipt(client, postId, deps)
+    return {
+      receiptId: `trypost:${postId}`,
+      externalUrl: published.externalUrl,
+      summary: `Published through TryPost to ${input.order.execution.type === 'social-publish' ? input.order.execution.platform : 'social'}; provider receipt ${postId} verified.`,
+    }
+  } catch (error) {
+    throw new ScheduledSocialExecutionUncertainError(`TryPost publish was attempted but publication could not be verified: ${errorMessage(error)}`, { cause: error })
   }
 }
 
@@ -218,22 +223,26 @@ async function executePostiz(
     media = [{ id, path }]
   }
   const caption = input.order.execution.type === 'social-publish' ? input.order.execution.caption : ''
-  const created = await fetchJson(deps.fetch, `${baseUrl}/posts`, token, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type: 'now', date: deps.now().toISOString(), shortLink: false, tags: [],
-      posts: [{ integration: { id: stringField(integration, 'id') }, value: [{ content: caption, image: media }], settings }],
-    }),
-  })
-  const row = asArray(created).find(isRecord)
-  const postId = row ? firstString(row, ['postId', 'id']) : undefined
-  if (!postId) throw new Error('Postiz accepted the publish call without returning a post ID.')
-  const externalUrl = await pollPostizReceipt(baseUrl, token, postId, stringField(integration, 'id'), caption, deps)
-  return {
-    receiptId: `postiz:${postId}`,
-    externalUrl,
-    summary: `Published through Postiz to ${input.order.execution.type === 'social-publish' ? input.order.execution.platform : 'social'}; provider receipt ${postId} verified.`,
+  try {
+    const created = await fetchJson(deps.fetch, `${baseUrl}/posts`, token, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'now', date: deps.now().toISOString(), shortLink: false, tags: [],
+        posts: [{ integration: { id: stringField(integration, 'id') }, value: [{ content: caption, image: media }], settings }],
+      }),
+    })
+    const row = asArray(created).find(isRecord)
+    const postId = row ? firstString(row, ['postId', 'id']) : undefined
+    if (!postId) throw new Error('Postiz accepted the publish call without returning a post ID.')
+    const externalUrl = await pollPostizReceipt(baseUrl, token, postId, deps)
+    return {
+      receiptId: `postiz:${postId}`,
+      externalUrl,
+      summary: `Published through Postiz to ${input.order.execution.type === 'social-publish' ? input.order.execution.platform : 'social'}; provider receipt ${postId} verified.`,
+    }
+  } catch (error) {
+    throw new ScheduledSocialExecutionUncertainError(`Postiz publish was attempted but publication could not be verified: ${errorMessage(error)}`, { cause: error })
   }
 }
 
@@ -241,8 +250,6 @@ async function pollPostizReceipt(
   baseUrl: string,
   token: string,
   postId: string,
-  integrationId: string,
-  caption: string,
   deps: ScheduledSocialProviderRuntimeDeps,
 ): Promise<string> {
   const started = deps.now().getTime()
@@ -254,15 +261,10 @@ async function pollPostizReceipt(
     const response = await fetchJson(deps.fetch, `${baseUrl}/posts?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`, token)
     const posts = asArray(unwrap(response, ['posts']))
     const exactMatch = posts.find((post) => stringField(post, 'id') === postId)
-    const fallbackMatches = posts.filter((post) => {
-      const integration = recordField(post, 'integration')
-      return stringField(integration, 'id') === integrationId
-        && stringField(post, 'content') === caption
-    })
-    if (!exactMatch && fallbackMatches.length > 1) {
-      throw new Error(`Postiz returned an ambiguous publication receipt for ${postId}: ${fallbackMatches.length} posts matched the approved caption and account.`)
-    }
-    const match = exactMatch ?? (fallbackMatches.length === 1 ? fallbackMatches[0] : undefined)
+    // The create response postId and list response id are Postiz's internal
+    // post identity; releaseId identifies the external platform publication.
+    // Caption/account matches can refer to an earlier identical post.
+    const match = exactMatch
     lastStatus = match ? (firstString(match, ['status', 'state'])?.toLowerCase() || 'receipt-without-live-url') : 'missing'
     const url = match ? firstString(match, ['releaseURL', 'releaseUrl']) : undefined
     if (url) return url
