@@ -221,6 +221,8 @@ export interface ClaudeAgentConfig {
   connectionSlug?: string;
   /** Enable 1M context window for Opus 4.7. Default: true. Set false to use 200K and conserve usage limits. */
   enable1MContext?: boolean;
+  /** Runtime-only host policy evaluated immediately before tool dispatch. */
+  hostToolExecutionGuard?: BackendConfig['hostToolExecutionGuard'];
 }
 
 // Permission request tracking
@@ -711,6 +713,7 @@ export class ClaudeAgent extends BaseAgent {
       mcpPool: config.mcpPool,
       connectionSlug: config.connectionSlug,
       automationSystem: config.automationSystem,
+      hostToolExecutionGuard: config.hostToolExecutionGuard,
     };
 
     // Call BaseAgent constructor - initializes model, thinkingLevel, permissionManager, sourceManager, etc.
@@ -1232,6 +1235,14 @@ export class ClaudeAgent extends BaseAgent {
               this.onDebug?.(`PreToolUse hook: ${input.tool_name} (sessionId=${sessionId}, permissionMode=${permissionMode})`);
 
               const toolInput = input.tool_input as Record<string, unknown>;
+              const hostDecisionFor = (guardInput: Record<string, unknown>) => (
+                this.config.hostToolExecutionGuard?.beforeToolUse({
+                  sessionId,
+                  toolUseId: input.tool_use_id,
+                  toolName: input.tool_name,
+                  input: guardInput,
+                }) ?? { allowed: true as const }
+              );
 
               // R7 / Plan 01-07: subconscious-mode gate. When this session
               // was created with `subconsciousMode: "subconscious"`, route
@@ -1311,7 +1322,9 @@ export class ClaudeAgent extends BaseAgent {
 
               // Translate result to SDK format
               switch (checkResult.type) {
-                case 'allow':
+                case 'allow': {
+                  const hostDecision = hostDecisionFor(toolInput);
+                  if (!hostDecision.allowed) return blockWithReason(hostDecision.reason);
                   if (steerMsg) {
                     return {
                       continue: true,
@@ -1322,8 +1335,11 @@ export class ClaudeAgent extends BaseAgent {
                     };
                   }
                   return { continue: true };
+                }
 
-                case 'modify':
+                case 'modify': {
+                  const hostDecision = hostDecisionFor(checkResult.input);
+                  if (!hostDecision.allowed) return blockWithReason(hostDecision.reason);
                   return {
                     continue: true,
                     hookSpecificOutput: {
@@ -1332,6 +1348,7 @@ export class ClaudeAgent extends BaseAgent {
                       ...(steerMsg ? { additionalContext: `The user just sent a new message while you were working. Stop what you are currently doing and address their message instead:\n\n${steerMsg}` } : {}),
                     },
                   };
+                }
 
                 case 'block': {
                   const diagnostics = getPermissionModeDiagnostics(sessionId);
@@ -1457,6 +1474,10 @@ export class ClaudeAgent extends BaseAgent {
                       reason: 'User denied permission',
                     };
                   }
+
+                  const guardedInput = approvalPrompt.modifiedInput ?? toolInput;
+                  const hostDecision = hostDecisionFor(guardedInput);
+                  if (!hostDecision.allowed) return blockWithReason(hostDecision.reason);
 
                   // User approved — return with modified input if transforms were applied
                   if (approvalPrompt.modifiedInput) {

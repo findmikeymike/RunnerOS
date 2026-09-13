@@ -1,3 +1,5 @@
+import type { AgentMessageStatus } from '../agent-messaging/types.ts';
+
 export type DeepResearchPlanPolicy = 'approve' | 'auto';
 
 export type DeepResearchRunState =
@@ -24,6 +26,41 @@ export interface DeepResearchLoopBudget {
   maxSearchRounds: number;
   maxPagesToOpen: number;
   minFollowUpRounds: number;
+}
+
+export interface DeepResearchOwnerBinding {
+  type: string;
+  id: string;
+  generation?: number;
+}
+
+export interface DeepResearchExecutionContract {
+  overallTimeoutMs: number;
+  maxSearchCalls: number;
+  maxPageReads: number;
+  maxConcurrentPageReads: number;
+  maxRetriesPerPage: number;
+  maxTotalResearchToolCalls: number;
+  maxStructuredOutputRepairs: number;
+  startedAt?: string;
+  deadlineAt?: string;
+}
+
+export type DeepResearchToolKind = 'search' | 'page-read' | 'source-read';
+
+export interface DeepResearchToolReceipt {
+  id: string;
+  toolUseId: string;
+  toolName: string;
+  kind: DeepResearchToolKind;
+  sourceSlug?: string;
+  status: 'succeeded' | 'failed';
+  requestUrl?: string;
+  responseUrl?: string;
+  resultSha256?: string;
+  resultChars: number;
+  supportExcerpt?: string;
+  observedAt: string;
 }
 
 export interface DeepResearchSourceProfile {
@@ -87,6 +124,7 @@ export interface DeepResearchStepRun {
   state: DeepResearchStepState;
   sessionId?: string;
   agentMessageReceipts?: DeepResearchStepAgentMessageReceipt[];
+  toolReceipts?: DeepResearchToolReceipt[];
   output?: string;
   error?: string;
   startedAt?: string;
@@ -117,11 +155,16 @@ export interface DeepResearchRunSnapshot {
   topic: string;
   state: DeepResearchRunState;
   planPolicy: DeepResearchPlanPolicy;
+  purpose?: string;
+  owner?: DeepResearchOwnerBinding;
+  executionContract?: DeepResearchExecutionContract;
   sourceReadiness: DeepResearchSourceReadiness;
   plan: DeepResearchPlan;
   steps: DeepResearchStepRun[];
   events: DeepResearchRunEvent[];
   outputId?: string;
+  outputSchema?: Record<string, unknown>;
+  structuredOutput?: unknown;
   error?: string;
   createdAt: string;
   updatedAt: string;
@@ -129,12 +172,18 @@ export interface DeepResearchRunSnapshot {
 }
 
 export interface StartDeepResearchRunInput {
+  /** Optional host-generated UUID for create-then-bind-then-execute flows. */
+  runId?: string;
   topic: string;
   title?: string;
   planPolicy?: DeepResearchPlanPolicy;
   sourceSlugs?: string[];
   depth?: DeepResearchDepth;
   reportFormat?: DeepResearchReportFormat;
+  purpose?: string;
+  owner?: DeepResearchOwnerBinding;
+  executionContract?: Partial<Omit<DeepResearchExecutionContract, 'startedAt' | 'deadlineAt'>>;
+  outputSchema?: Record<string, unknown>;
 }
 
 export interface ReviseDeepResearchPlanInput {
@@ -146,4 +195,3 @@ export interface DeepResearchRunEventEnvelope {
   run: DeepResearchRunSnapshot;
   eventType: 'created' | 'updated' | 'completed';
 }
-import type { AgentMessageStatus } from '../agent-messaging/types.ts';

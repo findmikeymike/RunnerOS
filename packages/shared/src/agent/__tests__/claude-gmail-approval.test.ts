@@ -3,14 +3,15 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ClaudeAgent } from '../claude-agent.ts';
-import { AbortReason } from '../backend/types.ts';
+import { AbortReason, type HostToolExecutionGuard } from '../backend/types.ts';
 
-async function harness(prepare: () => Promise<any>) {
+async function harness(prepare: () => Promise<any>, hostToolExecutionGuard?: HostToolExecutionGuard) {
   const root = mkdtempSync(join(tmpdir(), 'claude-gmail-'));
   const agent = new ClaudeAgent({ isHeadless: true, skipConfigWatcher: true,
     workspace: { id: 'gmail-test', name: 'Gmail', rootPath: root } as any,
     session: { id: 'gmail-test', workingDirectory: root } as any,
     mcpPool: { disconnectAll: async () => {}, getConnectedSlugs: () => [], getProxyToolDefs: () => [], prepareGmailDraftSend: prepare } as any,
+    hostToolExecutionGuard,
   }) as any;
   agent.keepBackgroundTasksAlive = true;
   agent.setPermissionMode('allow-all');
@@ -52,6 +53,23 @@ test('Claude denied send has no approved SDK input', async () => {
     const result = await h.request();
     expect(result.decision).toBe('block');
     expect(result.hookSpecificOutput).toBeUndefined();
+  } finally { h.dispose(); }
+});
+
+test('Claude applies the host execution guard to the final prepared tool input', async () => {
+  let guardedInput: Record<string, unknown> | undefined;
+  const h = await harness(async () => structuredClone(prepared), {
+    beforeToolUse: (input) => {
+      guardedInput = input.input;
+      return { allowed: false, reason: 'Host research budget exhausted.' };
+    },
+  });
+  h.agent.onPermissionRequest = (request: any) => h.agent.respondToPermission(request.requestId, true);
+  try {
+    const result = await h.request();
+    expect(guardedInput).toEqual(prepared.input);
+    expect(result.decision).toBe('block');
+    expect(result.reason).toContain('Host research budget exhausted.');
   } finally { h.dispose(); }
 });
 

@@ -35,6 +35,7 @@ import {
   providerTypeToAgentProvider,
   type AgentBackend,
   type BackendHostRuntimeContext,
+  type HostToolExecutionGuard,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
 import { readStableLlmConnection, assertAdBrowserProvider, getAdBrowserAccount, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, listAdBrowserAccounts, resetManagedAnthropicAuthEnvVars, updateLlmConnection } from '@craft-agent/shared/config'
@@ -1517,6 +1518,8 @@ interface ManagedSession {
   // Incremented each time a new message starts processing.
   // Used to detect if a follow-up message has superseded the current one (stale-request guard).
   processingGeneration: number
+  /** Runtime-only host policy for bounded internal tool execution. */
+  hostToolExecutionGuard?: HostToolExecutionGuard
   /** Exact human message whose turn is currently executing; never model supplied. */
   activeHumanMessageId?: string
   // NOTE: Parent-child tracking state (pendingTools, parentToolStack, toolToParentMap,
@@ -6598,7 +6601,12 @@ user a clickable link to where the thing now lives.`
       }
 
       this.deepResearchRunner = new DeepResearchRunner({
-        createSession: (wsId, opts) => this.createSession(wsId, opts).then((s) => ({ id: s.id })),
+        createSession: async (wsId, opts, hostToolExecutionGuard) => {
+          const session = await this.createSession(wsId, opts)
+          const managed = this.sessions.get(session.id)
+          if (managed && hostToolExecutionGuard) managed.hostToolExecutionGuard = hostToolExecutionGuard
+          return { id: session.id }
+        },
         sendMessage: (sessionId, prompt) => this.sendMessage(sessionId, prompt),
         getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
         getSessionToolUseSummary: (sessionId) => {
@@ -6614,6 +6622,24 @@ user a clickable link to where the thing now lives.`
             ))
             .map((message) => message.toolName!)
           return { count: names.length, names: Array.from(new Set(names)).sort() }
+        },
+        getSessionToolUseRecords: (sessionId) => {
+          const managed = this.sessions.get(sessionId)
+          if (!managed) return []
+          return managed.messages
+            .filter((message) => (
+              message.role === 'tool' &&
+              typeof message.toolUseId === 'string' &&
+              typeof message.toolName === 'string' &&
+              (message.toolStatus === 'completed' || message.toolStatus === 'error')
+            ))
+            .map((message) => ({
+              toolUseId: message.toolUseId!,
+              toolName: message.toolName!,
+              toolInput: message.toolInput,
+              toolResult: message.toolResult,
+              isError: message.isError === true || message.toolStatus === 'error',
+            }))
         },
         abortSession: async (sessionId) => {
           const managed = this.sessions.get(sessionId)
@@ -8284,6 +8310,7 @@ user a clickable link to where the thing now lives.`
         hostRuntime: buildBackendHostRuntimeContext(),
         coreConfig: {
         workspace: managed.workspace,
+        hostToolExecutionGuard: managed.hostToolExecutionGuard,
         miniModel,
         thinkingLevel: managed.thinkingLevel,
         session: sessionConfig,
@@ -15328,6 +15355,15 @@ user a clickable link to where the thing now lives.`
           }
           managed.messages.push(toolMessage)
           resolvedToolMessage = toolMessage
+        }
+
+        if (!wasAlreadyComplete) {
+          managed.hostToolExecutionGuard?.onToolUseCompleted?.({
+            sessionId: managed.id,
+            toolUseId: event.toolUseId,
+            toolName: resolvedToolMessage.toolName ?? toolName,
+            isError: resolvedToolMessage.isError === true,
+          })
         }
 
         // message_agent returns immediately for background work. Persist that

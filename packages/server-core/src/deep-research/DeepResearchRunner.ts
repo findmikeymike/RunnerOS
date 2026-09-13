@@ -1,15 +1,24 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import {
   createOutputBundle,
 } from '@craft-agent/shared/outputs'
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol'
+import type { HostToolExecutionGuard } from '@craft-agent/shared/agent/backend'
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import {
+  appendOutputSchemaInstruction,
+  isValidWorkflowOutputSchema,
+  parseStructuredStepOutput,
+} from '@craft-agent/shared/workflows'
+import {
   attachDeepResearchAgentMessageReceipts,
+  getDeepResearchRunFile,
   readDeepResearchRun,
   markRunningDeepResearchRunsInterrupted,
   writeDeepResearchRun,
   type DeepResearchDepth,
+  type DeepResearchExecutionContract,
   type DeepResearchLoopBudget,
   type DeepResearchPlan,
   type DeepResearchPlanPolicy,
@@ -19,7 +28,10 @@ import {
   type DeepResearchSourceProfile,
   type DeepResearchSourceReadiness,
   type DeepResearchStepRun,
+  type DeepResearchToolKind,
+  type DeepResearchToolReceipt,
   type StartDeepResearchRunInput,
+  isValidDeepResearchRunId,
 } from '@craft-agent/shared/deep-research'
 
 export type DeepResearchRunnerEvent =
@@ -27,10 +39,15 @@ export type DeepResearchRunnerEvent =
   | { type: 'outputs.updated'; workspaceId: string }
 
 export interface DeepResearchRunnerDeps {
-  createSession: (workspaceId: string, options: CreateSessionOptions) => Promise<{ id: string }>
+  createSession: (
+    workspaceId: string,
+    options: CreateSessionOptions,
+    hostToolExecutionGuard?: HostToolExecutionGuard,
+  ) => Promise<{ id: string }>
   sendMessage: (sessionId: string, prompt: string) => Promise<void>
   getLastAssistantText: (sessionId: string) => string
   getSessionToolUseSummary: (sessionId: string) => { count: number; names: string[] }
+  getSessionToolUseRecords?: (sessionId: string) => DeepResearchToolUseRecord[]
   abortSession: (sessionId: string) => Promise<void>
   deleteSession?: (sessionId: string) => Promise<void>
   getWorkspaceRootPath: (workspaceId: string) => string
@@ -39,10 +56,29 @@ export interface DeepResearchRunnerDeps {
   emit?: (event: DeepResearchRunnerEvent) => void
 }
 
+export interface DeepResearchToolUseRecord {
+  toolUseId: string
+  toolName: string
+  toolInput?: Record<string, unknown>
+  toolResult?: string
+  isError?: boolean
+}
+
+interface DeepResearchToolBudgetState {
+  searchCalls: number
+  pageReads: number
+  totalCalls: number
+  activePageReads: Set<string>
+  pageAttempts: Map<string, number>
+  admittedToolUseIds: Set<string>
+}
+
 interface ActiveDeepResearchRun {
   snapshot: DeepResearchRunSnapshot
   abort: AbortController
   currentSessionId?: string
+  toolBudget: DeepResearchToolBudgetState
+  hostToolExecutionGuard?: HostToolExecutionGuard
 }
 
 const DEEP_RESEARCH_SYSTEM_PROMPT = [
@@ -60,6 +96,15 @@ const DEEP_RESEARCH_STEP_TIMEOUT_MS_BY_DEPTH: Record<DeepResearchDepth, number> 
   standard: 10 * 60 * 1000,
   deep: 20 * 60 * 1000,
 }
+
+const DEEP_RESEARCH_OVERALL_TIMEOUT_MS_BY_DEPTH: Record<DeepResearchDepth, number> = {
+  quick: 8 * 60 * 1000,
+  standard: 15 * 60 * 1000,
+  deep: 30 * 60 * 1000,
+}
+
+const EXECUTION_LIMIT_MAX = 1000
+const SUPPORT_EXCERPT_MAX_CHARS = 300
 
 function nowIso(): string {
   return new Date().toISOString()
@@ -83,6 +128,134 @@ function loopBudgetForDepth(depth: DeepResearchDepth): DeepResearchLoopBudget {
   if (depth === 'quick') return { depth, maxSearchRounds: 2, maxPagesToOpen: 5, minFollowUpRounds: 1 }
   if (depth === 'deep') return { depth, maxSearchRounds: 5, maxPagesToOpen: 16, minFollowUpRounds: 2 }
   return { depth, maxSearchRounds: 3, maxPagesToOpen: 10, minFollowUpRounds: 1 }
+}
+
+function boundedInteger(value: unknown, fallback: number, min: number, max = EXECUTION_LIMIT_MAX): number {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return fallback
+  return Math.max(min, Math.min(max, value))
+}
+
+function executionContractForDepth(
+  depth: DeepResearchDepth,
+  budget: DeepResearchLoopBudget,
+  requested: StartDeepResearchRunInput['executionContract'],
+): DeepResearchExecutionContract {
+  const maxSearchCalls = boundedInteger(requested?.maxSearchCalls, budget.maxSearchRounds, 0)
+  const maxPageReads = boundedInteger(requested?.maxPageReads, budget.maxPagesToOpen, 0)
+  return {
+    overallTimeoutMs: boundedInteger(
+      requested?.overallTimeoutMs,
+      DEEP_RESEARCH_OVERALL_TIMEOUT_MS_BY_DEPTH[depth],
+      1,
+      24 * 60 * 60 * 1000,
+    ),
+    maxSearchCalls,
+    maxPageReads,
+    maxConcurrentPageReads: boundedInteger(
+      requested?.maxConcurrentPageReads,
+      2,
+      1,
+      Math.max(1, maxPageReads),
+    ),
+    maxRetriesPerPage: boundedInteger(requested?.maxRetriesPerPage, 1, 0, 10),
+    maxTotalResearchToolCalls: boundedInteger(
+      requested?.maxTotalResearchToolCalls,
+      maxSearchCalls + maxPageReads + 4,
+      1,
+    ),
+    maxStructuredOutputRepairs: boundedInteger(requested?.maxStructuredOutputRepairs, 1, 0, 2),
+  }
+}
+
+function cleanOptionalText(value: string | undefined, maxChars: number): string | undefined {
+  const cleaned = value?.trim().replace(/\s+/g, ' ')
+  if (!cleaned) return undefined
+  return cleaned.slice(0, maxChars)
+}
+
+function sanitizePublicUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
+    url.username = ''
+    url.password = ''
+    url.search = ''
+    url.hash = ''
+    return url.toString()
+  } catch {
+    return undefined
+  }
+}
+
+function findUrlInValue(value: unknown, depth = 0): string | undefined {
+  if (depth > 4) return undefined
+  const direct = sanitizePublicUrl(value)
+  if (direct) return direct
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = findUrlInValue(item, depth + 1)
+      if (nested) return nested
+    }
+    return undefined
+  }
+  if (!value || typeof value !== 'object') return undefined
+  const record = value as Record<string, unknown>
+  for (const key of ['url', 'uri', 'link', 'href', 'pageUrl', 'page_url', 'sourceUrl', 'source_url']) {
+    const nested = findUrlInValue(record[key], depth + 1)
+    if (nested) return nested
+  }
+  return undefined
+}
+
+function urlFromToolResult(result: string | undefined): string | undefined {
+  if (!result) return undefined
+  try {
+    return findUrlInValue(JSON.parse(result))
+  } catch {
+    const match = result.match(/https?:\/\/[^\s<>'"`]+/i)
+    return sanitizePublicUrl(match?.[0]?.replace(/[),.;]+$/, ''))
+  }
+}
+
+function supportExcerpt(result: string | undefined): string | undefined {
+  if (!result) return undefined
+  const cleaned = result
+    .replace(/"(api[_-]?key|x[_-]?api[_-]?key|access[_-]?token|refresh[_-]?token|token|authorization|client[_-]?secret|secret|password|set[_-]?cookie|cookie)"\s*:\s*"[^"]*"/gi, '"$1":"[redacted]"')
+    .replace(/\b(api[_-]?key|x[_-]?api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|client[_-]?secret|password|set[_-]?cookie|cookie)\b\s*[:=]\s*[^\s,;}]+/gi, '$1=[redacted]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+    .replace(/https?:\/\/[^\s<>'"`]+/gi, (url) => sanitizePublicUrl(url.replace(/[),.;]+$/, '')) ?? '[url omitted]')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return cleaned ? cleaned.slice(0, SUPPORT_EXCERPT_MAX_CHARS) : undefined
+}
+
+function sourceSlugFromToolName(toolName: string): string | undefined {
+  const parts = toolName.split('__')
+  return parts[0]?.toLowerCase() === 'mcp'
+    ? cleanOptionalText(parts[1], 120)
+    : undefined
+}
+
+function classifyResearchTool(
+  toolName: string,
+  sourceProfiles: DeepResearchSourceProfile[],
+): DeepResearchToolKind | null {
+  if (!isRelevantResearchToolName(toolName, sourceProfiles)) return null
+  const normalized = toolName.toLowerCase()
+  const leaf = normalized.split('__').at(-1) ?? normalized
+  if (normalized.startsWith('web_search') || /(?:^|_)(search|query|discover|lookup)(?:_|$)/.test(leaf)) {
+    return 'search'
+  }
+  if (
+    normalized.startsWith('web_fetch') ||
+    normalized.startsWith('browser') ||
+    normalized.includes('chrome') ||
+    /(?:^|_)(fetch|open|read|inspect|visit|browse|page|contents?)(?:_|$)/.test(leaf)
+  ) {
+    return 'page-read'
+  }
+  return 'source-read'
 }
 
 function buildPlan(params: {
@@ -109,7 +282,8 @@ function buildPlan(params: {
       title: 'Browser/Search Research Loop',
       instructions: [
         `Research topic: ${params.topic}`,
-        `Run up to ${budget.maxSearchRounds} search rounds and inspect up to ${budget.maxPagesToOpen} promising pages/items.`,
+        `Across the whole run, use no more than ${budget.maxSearchRounds} search calls and inspect no more than ${budget.maxPagesToOpen} promising pages/items.`,
+        `Reserve at least ${budget.minFollowUpRounds} search call(s) for the follow-up gap step.`,
         `Run at least ${budget.minFollowUpRounds} follow-up search round(s) when gaps, weak claims, or contradictions remain.`,
         searchSources.length > 0
           ? `Prefer selected search-capable sources first: ${searchSources.join(', ')}.`
@@ -217,8 +391,42 @@ export class DeepResearchRunner {
   constructor(private readonly deps: DeepResearchRunnerDeps) {}
 
   start(workspaceId: string, input: StartDeepResearchRunInput): DeepResearchRunSnapshot {
+    const prepared = this.prepare(workspaceId, input)
+    return prepared.planPolicy === 'auto'
+      ? this.begin(workspaceId, prepared.id)
+      : prepared
+  }
+
+  /**
+   * Persist a run before any child work starts. Feature adapters can bind the
+   * returned run id to their own durable owner record, then call begin().
+   */
+  prepare(workspaceId: string, input: StartDeepResearchRunInput): DeepResearchRunSnapshot {
     const topic = cleanTopic(input.topic)
     if (!topic) throw new Error('Deep research topic is required.')
+    if (input.runId !== undefined && !isValidDeepResearchRunId(input.runId)) {
+      throw new Error(`Invalid deep research run id: ${input.runId}`)
+    }
+    if (input.runId && existsSync(getDeepResearchRunFile(this.deps.getWorkspaceRootPath(workspaceId), input.runId))) {
+      throw new Error(`Deep research run already exists: ${input.runId}`)
+    }
+    if (input.outputSchema !== undefined && !isValidWorkflowOutputSchema(input.outputSchema)) {
+      throw new Error('Deep research output schema must be a JSON Schema object with a type.')
+    }
+    const purpose = cleanOptionalText(input.purpose, 241)
+    if (purpose && purpose.length > 240) throw new Error('Deep research purpose cannot exceed 240 characters.')
+    const ownerType = cleanOptionalText(input.owner?.type, 121)
+    const ownerId = cleanOptionalText(input.owner?.id, 241)
+    if (input.owner && (!ownerType || !ownerId)) {
+      throw new Error('Deep research owner binding requires a type and id.')
+    }
+    if (ownerType && ownerType.length > 120) throw new Error('Deep research owner type cannot exceed 120 characters.')
+    if (ownerId && ownerId.length > 240) throw new Error('Deep research owner id cannot exceed 240 characters.')
+    if (input.owner?.generation !== undefined && (
+      !Number.isInteger(input.owner.generation) || input.owner.generation < 0
+    )) {
+      throw new Error('Deep research owner generation must be a non-negative integer.')
+    }
 
     const policy = input.planPolicy ?? 'approve'
     const sourceSlugs = uniqueStrings(input.sourceSlugs)
@@ -253,16 +461,23 @@ export class DeepResearchRunner {
       reportFormat,
       createdAt,
     })
-    if (policy === 'auto') plan.approvedAt = createdAt
+    const executionContract = executionContractForDepth(depth, plan.loopBudget, input.executionContract)
 
     const run: DeepResearchRunSnapshot = {
       schemaVersion: 1,
-      id: randomUUID(),
+      id: input.runId ?? randomUUID(),
       workspaceId,
       title,
       topic,
-      state: policy === 'auto' ? 'running' : 'awaiting_plan_approval',
+      state: policy === 'auto' ? 'created' : 'awaiting_plan_approval',
       planPolicy: policy,
+      purpose,
+      owner: input.owner ? {
+        type: ownerType!,
+        id: ownerId!,
+        ...(input.owner.generation !== undefined ? { generation: input.owner.generation } : {}),
+      } : undefined,
+      executionContract,
       sourceReadiness,
       plan,
       steps: buildStepRuns(plan),
@@ -271,9 +486,10 @@ export class DeepResearchRunner {
         {
           ts: createdAt,
           type: 'plan.created',
-          message: policy === 'auto' ? 'Plan created and auto-approved.' : 'Plan created; waiting for approval.',
+          message: policy === 'auto' ? 'Plan created and ready for execution.' : 'Plan created; waiting for approval.',
         },
       ],
+      outputSchema: input.outputSchema ? structuredClone(input.outputSchema) : undefined,
       createdAt,
       updatedAt: createdAt,
     }
@@ -281,7 +497,15 @@ export class DeepResearchRunner {
     this.persist(run)
     this.emit({ type: 'run.created', run })
 
-    if (policy === 'auto') this.executeSoon(run)
+    return this.clone(run)
+  }
+
+  begin(workspaceId: string, runId: string): DeepResearchRunSnapshot {
+    const run = this.requireRun(workspaceId, runId)
+    if (run.planPolicy !== 'auto' || run.state !== 'created') {
+      throw new Error(`Deep research run "${runId}" is not ready for automatic execution.`)
+    }
+    this.activateExecution(run, 'Plan auto-approved; execution started.')
     return this.clone(run)
   }
 
@@ -290,15 +514,27 @@ export class DeepResearchRunner {
     if (run.state !== 'awaiting_plan_approval') {
       throw new Error(`Deep research run "${runId}" is not waiting for plan approval.`)
     }
+    this.activateExecution(run, 'Plan approved; execution started.')
+    return this.clone(run)
+  }
+
+  private activateExecution(run: DeepResearchRunSnapshot, message: string): void {
     const ts = nowIso()
+    const contract = run.executionContract ?? executionContractForDepth(
+      run.plan.depth ?? 'standard',
+      run.plan.loopBudget ?? loopBudgetForDepth(run.plan.depth ?? 'standard'),
+      undefined,
+    )
+    contract.startedAt = ts
+    contract.deadlineAt = new Date(Date.now() + contract.overallTimeoutMs).toISOString()
+    run.executionContract = contract
     run.state = 'running'
     run.plan.approvedAt = ts
     run.updatedAt = ts
-    run.events.push({ ts, type: 'plan.approved', message: 'Plan approved; execution started.' })
+    run.events.push({ ts, type: 'plan.approved', message })
     this.persist(run)
     this.emit({ type: 'run.updated', run })
     this.executeSoon(run)
-    return this.clone(run)
   }
 
   revisePlan(workspaceId: string, runId: string, feedback: string): DeepResearchRunSnapshot {
@@ -324,17 +560,11 @@ export class DeepResearchRunner {
 
   async cancel(workspaceId: string, runId: string): Promise<DeepResearchRunSnapshot> {
     const active = this.activeRuns.get(runId)
-    if (active) active.abort.abort()
-    if (active?.currentSessionId) {
-      try {
-        await this.deps.abortSession(active.currentSessionId)
-      } catch {
-        // Cancellation must remain terminal even if the underlying session is already gone.
-      }
-    }
     const run = active?.snapshot ?? this.requireRun(workspaceId, runId)
     if (run.workspaceId !== workspaceId) throw new Error(`Deep research run "${runId}" does not belong to workspace "${workspaceId}".`)
     if (isTerminalRunState(run.state)) return this.clone(run)
+
+    // Fence publication first. Child abort is cleanup and may resolve late.
     const ts = nowIso()
     run.state = 'cancelled'
     run.updatedAt = ts
@@ -343,21 +573,91 @@ export class DeepResearchRunner {
     this.persist(run)
     this.activeRuns.delete(runId)
     this.emit({ type: 'run.completed', run })
+
+    if (active) active.abort.abort()
+    if (active?.currentSessionId) {
+      try {
+        await this.deps.abortSession(active.currentSessionId)
+      } catch {
+        // Cancellation is already durable; abort cleanup is best-effort.
+      }
+    }
     return this.clone(run)
   }
 
   private executeSoon(run: DeepResearchRunSnapshot): void {
+    const toolBudget: ActiveDeepResearchRun['toolBudget'] = {
+      searchCalls: 0,
+      pageReads: 0,
+      totalCalls: 0,
+      activePageReads: new Set<string>(),
+      pageAttempts: new Map<string, number>(),
+      admittedToolUseIds: new Set<string>(),
+    }
     const active: ActiveDeepResearchRun = {
       snapshot: this.clone(run),
       abort: new AbortController(),
+      toolBudget,
     }
+    active.hostToolExecutionGuard = this.createToolExecutionGuard(active)
     this.activeRuns.set(run.id, active)
     void this.execute(active).catch((err) => this.fail(active, err))
+  }
+
+  private createToolExecutionGuard(active: ActiveDeepResearchRun): HostToolExecutionGuard {
+    return {
+      beforeToolUse: ({ toolUseId, toolName, input }) => {
+        if (this.shouldStop(active)) {
+          return { allowed: false, reason: 'Deep research run is no longer active.' }
+        }
+        if (this.isDeadlineExceeded(active.snapshot)) {
+          return { allowed: false, reason: 'Deep research deadline exceeded.' }
+        }
+        if (active.toolBudget.admittedToolUseIds.has(toolUseId)) return { allowed: true }
+
+        const kind = classifyResearchTool(toolName, active.snapshot.plan.sourceProfiles ?? [])
+        if (!kind) return { allowed: true }
+        const contract = this.executionContract(active.snapshot)
+        if (active.toolBudget.totalCalls >= contract.maxTotalResearchToolCalls) {
+          return { allowed: false, reason: 'Deep research tool-call limit reached.' }
+        }
+        if (kind === 'search' && active.toolBudget.searchCalls >= contract.maxSearchCalls) {
+          return { allowed: false, reason: 'Deep research search-call limit reached.' }
+        }
+        if (kind === 'page-read') {
+          if (active.toolBudget.pageReads >= contract.maxPageReads) {
+            return { allowed: false, reason: 'Deep research page-read limit reached.' }
+          }
+          if (active.toolBudget.activePageReads.size >= contract.maxConcurrentPageReads) {
+            return { allowed: false, reason: 'Deep research concurrent page-read limit reached.' }
+          }
+          const requestUrl = findUrlInValue(input)
+          if (requestUrl) {
+            const priorAttempts = active.toolBudget.pageAttempts.get(requestUrl) ?? 0
+            if (priorAttempts >= contract.maxRetriesPerPage + 1) {
+              return { allowed: false, reason: 'Deep research per-page retry limit reached.' }
+            }
+            active.toolBudget.pageAttempts.set(requestUrl, priorAttempts + 1)
+          }
+          active.toolBudget.pageReads += 1
+          active.toolBudget.activePageReads.add(toolUseId)
+        } else if (kind === 'search') {
+          active.toolBudget.searchCalls += 1
+        }
+        active.toolBudget.totalCalls += 1
+        active.toolBudget.admittedToolUseIds.add(toolUseId)
+        return { allowed: true }
+      },
+      onToolUseCompleted: ({ toolUseId }) => {
+        active.toolBudget.activePageReads.delete(toolUseId)
+      },
+    }
   }
 
   private async execute(active: ActiveDeepResearchRun): Promise<void> {
     for (const planStep of active.snapshot.plan.steps) {
       if (this.shouldStop(active)) return
+      this.assertWithinDeadline(active.snapshot)
       const stepRun = active.snapshot.steps.find((step) => step.id === planStep.id)
       if (!stepRun) throw new Error(`Missing deep research step record: ${planStep.id}`)
 
@@ -391,7 +691,7 @@ export class DeepResearchRunner {
             systemPromptChars: DEEP_RESEARCH_SYSTEM_PROMPT.length,
           },
         },
-      })
+      }, active.hostToolExecutionGuard)
       stepRun.sessionId = session.id
       active.currentSessionId = session.id
       try {
@@ -407,8 +707,28 @@ export class DeepResearchRunner {
 
         await this.sendMessageWithTimeout(active, session.id, this.buildStepPrompt(active.snapshot, planStep))
         if (this.shouldStop(active)) return
-        const output = this.deps.getLastAssistantText(session.id).trim()
+        let output = this.deps.getLastAssistantText(session.id).trim()
         if (!output) throw new Error(`Step "${planStep.id}" produced no output.`)
+
+        if (planStep.kind === 'synthesis' && active.snapshot.outputSchema) {
+          let parsed = parseStructuredStepOutput(output, active.snapshot.outputSchema)
+          const repairs = this.executionContract(active.snapshot).maxStructuredOutputRepairs
+          for (let attempt = 0; !parsed.ok && attempt < repairs; attempt += 1) {
+            await this.sendMessageWithTimeout(active, session.id, [
+              'Your prior answer failed the required JSON output contract.',
+              `Validation error: ${parsed.message}`,
+              'Repair the answer using only evidence already gathered. Return only valid JSON matching the requested schema.',
+            ].join('\n'))
+            if (this.shouldStop(active)) return
+            output = this.deps.getLastAssistantText(session.id).trim()
+            parsed = parseStructuredStepOutput(output, active.snapshot.outputSchema)
+          }
+          if (!parsed.ok) {
+            throw new Error(`Structured deep research output was invalid: ${parsed.message}`)
+          }
+          active.snapshot.structuredOutput = parsed.value
+        }
+        this.captureToolReceipts(active.snapshot, stepRun, session.id)
         if (requiresResearchToolUse(active.snapshot, planStep)) {
           const toolUseSummary = this.deps.getSessionToolUseSummary(session.id)
           const relevantToolNames = toolUseSummary.names.filter((name) => (
@@ -430,6 +750,7 @@ export class DeepResearchRunner {
         active.snapshot.events.push({ ts: completedAt, type: 'step.completed', message: `${planStep.title} completed.` })
         this.persistAndEmit(active.snapshot)
       } finally {
+        this.captureToolReceipts(active.snapshot, stepRun, session.id)
         active.currentSessionId = undefined
         await this.deleteHiddenStepSession(session.id)
       }
@@ -452,12 +773,12 @@ export class DeepResearchRunner {
     const sourceProfiles = (run.plan.sourceProfiles ?? []).map((source) => (
       `- ${source.slug} (${source.name}; ${source.type}; ${source.capabilities.join(', ') || 'general'}${source.tagline ? `): ${source.tagline}` : ')'}`
     )).join('\n')
-    return [
+    const prompt = [
       `Deep Research topic: ${run.topic}`,
       `Current step: ${step.title}`,
       `Depth: ${depth}`,
       `Report format: ${reportFormat}`,
-      `Loop budget: ${loopBudget.maxSearchRounds} search rounds, ${loopBudget.maxPagesToOpen} page/item inspections, minimum ${loopBudget.minFollowUpRounds} follow-up round(s) when gaps remain.`,
+      `Run-wide loop budget: ${loopBudget.maxSearchRounds} search calls, ${loopBudget.maxPagesToOpen} page/item inspections, minimum ${loopBudget.minFollowUpRounds} follow-up call(s) when gaps remain.`,
       '',
       'Selected source/tool profiles:',
       sourceProfiles || '- none',
@@ -468,23 +789,88 @@ export class DeepResearchRunner {
       '',
       'Return only the completed work for this step.',
     ].join('\n')
+    return step.kind === 'synthesis' && run.outputSchema
+      ? appendOutputSchemaInstruction(prompt, run.outputSchema)
+      : prompt
+  }
+
+  private executionContract(run: DeepResearchRunSnapshot): DeepResearchExecutionContract {
+    return run.executionContract ?? executionContractForDepth(
+      run.plan.depth ?? 'standard',
+      run.plan.loopBudget ?? loopBudgetForDepth(run.plan.depth ?? 'standard'),
+      undefined,
+    )
+  }
+
+  private isDeadlineExceeded(run: DeepResearchRunSnapshot): boolean {
+    const deadlineAt = this.executionContract(run).deadlineAt
+    return deadlineAt !== undefined && Date.now() >= Date.parse(deadlineAt)
+  }
+
+  private assertWithinDeadline(run: DeepResearchRunSnapshot): void {
+    if (this.isDeadlineExceeded(run)) throw new Error('Deep research deadline exceeded.')
+  }
+
+  private captureToolReceipts(
+    run: DeepResearchRunSnapshot,
+    step: DeepResearchStepRun,
+    sessionId: string,
+  ): void {
+    const records = this.deps.getSessionToolUseRecords?.(sessionId) ?? []
+    if (records.length === 0) return
+    const existing = new Map((step.toolReceipts ?? []).map((receipt) => [receipt.id, receipt]))
+    for (const record of records) {
+      const kind = classifyResearchTool(record.toolName, run.plan.sourceProfiles ?? [])
+      if (!kind) continue
+      const result = record.toolResult ?? ''
+      const id = createHash('sha256')
+        .update(`${run.id}\0${step.id}\0${record.toolUseId}`)
+        .digest('hex')
+        .slice(0, 32)
+      const receipt: DeepResearchToolReceipt = {
+        id,
+        toolUseId: record.toolUseId,
+        toolName: record.toolName,
+        kind,
+        sourceSlug: sourceSlugFromToolName(record.toolName),
+        status: record.isError ? 'failed' : 'succeeded',
+        requestUrl: findUrlInValue(record.toolInput),
+        responseUrl: urlFromToolResult(record.toolResult),
+        resultSha256: result ? createHash('sha256').update(result).digest('hex') : undefined,
+        resultChars: result.length,
+        supportExcerpt: !record.isError && kind !== 'search' ? supportExcerpt(result) : undefined,
+        observedAt: existing.get(id)?.observedAt ?? nowIso(),
+      }
+      existing.set(id, receipt)
+    }
+    step.toolReceipts = Array.from(existing.values()).sort((a, b) => a.id.localeCompare(b.id))
   }
 
   private async sendMessageWithTimeout(active: ActiveDeepResearchRun, sessionId: string, prompt: string): Promise<void> {
     const depth = active.snapshot.plan.depth ?? 'standard'
-    const timeoutMs = DEEP_RESEARCH_STEP_TIMEOUT_MS_BY_DEPTH[depth] ?? DEEP_RESEARCH_STEP_TIMEOUT_MS_BY_DEPTH.standard
+    const stepTimeoutMs = DEEP_RESEARCH_STEP_TIMEOUT_MS_BY_DEPTH[depth] ?? DEEP_RESEARCH_STEP_TIMEOUT_MS_BY_DEPTH.standard
+    const deadlineAt = this.executionContract(active.snapshot).deadlineAt
+    const deadlineRemainingMs = deadlineAt ? Date.parse(deadlineAt) - Date.now() : stepTimeoutMs
+    if (deadlineRemainingMs <= 0) throw new Error('Deep research deadline exceeded.')
+    const timeoutMs = Math.min(stepTimeoutMs, deadlineRemainingMs)
+    const deadlineBound = timeoutMs === deadlineRemainingMs
     let timeoutId: ReturnType<typeof setTimeout> | undefined
     try {
       await Promise.race([
         this.deps.sendMessage(sessionId, prompt),
         new Promise<never>((_, reject) => {
           timeoutId = setTimeout(() => {
-            reject(new Error(`Deep research step timed out after ${Math.round(timeoutMs / 1000)} seconds.`))
+            reject(new Error(deadlineBound
+              ? 'Deep research deadline exceeded.'
+              : `Deep research step timed out after ${Math.round(timeoutMs / 1000)} seconds.`))
           }, timeoutMs)
         }),
       ])
     } catch (err) {
-      if (err instanceof Error && err.message.startsWith('Deep research step timed out')) {
+      if (err instanceof Error && (
+        err.message.startsWith('Deep research step timed out') ||
+        err.message === 'Deep research deadline exceeded.'
+      )) {
         try {
           await this.deps.abortSession(sessionId)
         } catch {
@@ -547,8 +933,8 @@ export class DeepResearchRunner {
   }
 
   private fail(active: ActiveDeepResearchRun, err: unknown): void {
-    if (active.abort.signal.aborted || active.snapshot.state === 'cancelled') {
-      this.activeRuns.delete(active.snapshot.id)
+    if (this.shouldStop(active)) {
+      if (this.activeRuns.get(active.snapshot.id) === active) this.activeRuns.delete(active.snapshot.id)
       return
     }
     const ts = nowIso()
@@ -594,7 +980,9 @@ export class DeepResearchRunner {
   }
 
   private shouldStop(active: ActiveDeepResearchRun): boolean {
-    return active.abort.signal.aborted || isTerminalRunState(active.snapshot.state)
+    return active.abort.signal.aborted ||
+      isTerminalRunState(active.snapshot.state) ||
+      this.activeRuns.get(active.snapshot.id) !== active
   }
 
   private persistAndEmit(run: DeepResearchRunSnapshot): void {

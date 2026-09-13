@@ -1308,6 +1308,17 @@ export class PiAgent extends BaseAgent {
     const rootPath = this.config.workspace.rootPath ?? this.workingDirectory;
     const workspaceSlug = extractWorkspaceSlug(rootPath, this.config.workspace.id);
     const sessionId = this.config.session?.id || this._sessionId;
+    const allowByHostGuard = (guardInput: Record<string, unknown>): boolean => {
+      const decision = this.config.hostToolExecutionGuard?.beforeToolUse({
+        sessionId,
+        toolUseId: toolCallId ?? requestId,
+        toolName,
+        input: guardInput,
+      }) ?? { allowed: true as const };
+      if (decision.allowed) return true;
+      this.send({ type: 'pre_tool_use_response', requestId, action: 'block', reason: decision.reason });
+      return false;
+    };
     const plansFolderPath = sessionId
       ? getSessionPlansPath(rootPath, sessionId)
       : undefined;
@@ -1340,10 +1351,12 @@ export class PiAgent extends BaseAgent {
 
     switch (checkResult.type) {
       case 'allow':
+        if (!allowByHostGuard(input)) return;
         this.send({ type: 'pre_tool_use_response', requestId, action: 'allow' });
         return;
 
       case 'modify':
+        if (!allowByHostGuard(checkResult.input)) return;
         this.send({ type: 'pre_tool_use_response', requestId, action: 'modify', input: checkResult.input });
         return;
 
@@ -1414,10 +1427,12 @@ export class PiAgent extends BaseAgent {
         });
 
         if (postResult.type === 'modify') {
+          if (!allowByHostGuard(postResult.input)) return;
           this.send({ type: 'pre_tool_use_response', requestId, action: 'modify', input: postResult.input });
         } else if (postResult.type === 'block') {
           this.send({ type: 'pre_tool_use_response', requestId, action: 'block', reason: postResult.reason });
         } else {
+          if (!allowByHostGuard(input)) return;
           this.send({ type: 'pre_tool_use_response', requestId, action: 'allow' });
         }
         return;
@@ -1450,6 +1465,7 @@ export class PiAgent extends BaseAgent {
             return;
           }
           // No permission handler — allow
+          if (!allowByHostGuard(approvalPrompt.modifiedInput ?? input)) return;
           if (approvalPrompt.modifiedInput) {
             this.send({ type: 'pre_tool_use_response', requestId, action: 'modify', input: approvalPrompt.modifiedInput });
           } else {
@@ -1492,6 +1508,7 @@ export class PiAgent extends BaseAgent {
           return;
         }
 
+        if (!allowByHostGuard(approvalPrompt.modifiedInput ?? input)) return;
         if (approvalPrompt.modifiedInput) {
           this.send({ type: 'pre_tool_use_response', requestId, action: 'modify', input: approvalPrompt.modifiedInput });
         } else {

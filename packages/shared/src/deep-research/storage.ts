@@ -38,6 +38,7 @@ const RUN_STATES = new Set<DeepResearchRunState>([
 const PLAN_POLICIES = new Set<DeepResearchPlanPolicy>(['approve', 'auto']);
 const STEP_KINDS = new Set<DeepResearchStepKind>(['research', 'analysis', 'synthesis']);
 const STEP_STATES = new Set<DeepResearchStepState>(['queued', 'running', 'succeeded', 'failed', 'skipped']);
+const TOOL_KINDS = new Set(['search', 'page-read', 'source-read']);
 
 export function isValidDeepResearchRunId(runId: string): boolean {
   return RUN_ID_REGEX.test(runId);
@@ -53,6 +54,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value));
+}
+
+function isSanitizedPublicUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    const parsed = new URL(value);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:')
+      && !parsed.username
+      && !parsed.password
+      && !parsed.search
+      && !parsed.hash;
+  } catch {
+    return false;
+  }
 }
 
 function isContainedPath(parent: string, child: string): boolean {
@@ -122,6 +145,26 @@ function isDeepResearchRunSnapshot(value: unknown, expectedRunId: string): value
   if (typeof value.topic !== 'string' || !value.topic) return false;
   if (typeof value.state !== 'string' || !RUN_STATES.has(value.state as DeepResearchRunState)) return false;
   if (typeof value.planPolicy !== 'string' || !PLAN_POLICIES.has(value.planPolicy as DeepResearchPlanPolicy)) return false;
+  if (value.purpose !== undefined && (typeof value.purpose !== 'string' || value.purpose.length > 240)) return false;
+  if (value.owner !== undefined) {
+    if (!isRecord(value.owner)) return false;
+    if (typeof value.owner.type !== 'string' || !value.owner.type || value.owner.type.length > 120) return false;
+    if (typeof value.owner.id !== 'string' || !value.owner.id || value.owner.id.length > 240) return false;
+    if (value.owner.generation !== undefined && !isNonNegativeInteger(value.owner.generation)) return false;
+  }
+  const executionContract = value.executionContract;
+  if (executionContract !== undefined) {
+    if (!isRecord(executionContract)) return false;
+    if (!isNonNegativeInteger(executionContract.overallTimeoutMs) || executionContract.overallTimeoutMs === 0) return false;
+    if (!isNonNegativeInteger(executionContract.maxSearchCalls)) return false;
+    if (!isNonNegativeInteger(executionContract.maxPageReads)) return false;
+    if (!isNonNegativeInteger(executionContract.maxConcurrentPageReads) || executionContract.maxConcurrentPageReads === 0) return false;
+    if (!isNonNegativeInteger(executionContract.maxRetriesPerPage)) return false;
+    if (!isNonNegativeInteger(executionContract.maxTotalResearchToolCalls)) return false;
+    if (!isNonNegativeInteger(executionContract.maxStructuredOutputRepairs)) return false;
+    if (executionContract.startedAt !== undefined && !isIsoTimestamp(executionContract.startedAt)) return false;
+    if (executionContract.deadlineAt !== undefined && !isIsoTimestamp(executionContract.deadlineAt)) return false;
+  }
   if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') return false;
 
   const sourceReadiness = value.sourceReadiness;
@@ -165,6 +208,24 @@ function isDeepResearchRunSnapshot(value: unknown, expectedRunId: string): value
     if (typeof step.title !== 'string' || !step.title) return false;
     if (typeof step.state !== 'string' || !STEP_STATES.has(step.state as DeepResearchStepState)) return false;
     if (step.sessionId !== undefined && typeof step.sessionId !== 'string') return false;
+    if (step.toolReceipts !== undefined) {
+      if (!Array.isArray(step.toolReceipts)) return false;
+      for (const receipt of step.toolReceipts) {
+        if (!isRecord(receipt)) return false;
+        if (typeof receipt.id !== 'string' || !/^[0-9a-f]{32}$/i.test(receipt.id)) return false;
+        if (typeof receipt.toolUseId !== 'string' || !receipt.toolUseId) return false;
+        if (typeof receipt.toolName !== 'string' || !receipt.toolName) return false;
+        if (typeof receipt.kind !== 'string' || !TOOL_KINDS.has(receipt.kind)) return false;
+        if (receipt.sourceSlug !== undefined && typeof receipt.sourceSlug !== 'string') return false;
+        if (receipt.status !== 'succeeded' && receipt.status !== 'failed') return false;
+        if (receipt.requestUrl !== undefined && !isSanitizedPublicUrl(receipt.requestUrl)) return false;
+        if (receipt.responseUrl !== undefined && !isSanitizedPublicUrl(receipt.responseUrl)) return false;
+        if (receipt.resultSha256 !== undefined && (typeof receipt.resultSha256 !== 'string' || !/^[0-9a-f]{64}$/i.test(receipt.resultSha256))) return false;
+        if (!isNonNegativeInteger(receipt.resultChars)) return false;
+        if (receipt.supportExcerpt !== undefined && (typeof receipt.supportExcerpt !== 'string' || receipt.supportExcerpt.length > 300)) return false;
+        if (!isIsoTimestamp(receipt.observedAt)) return false;
+      }
+    }
     if (step.output !== undefined && typeof step.output !== 'string') return false;
     if (step.error !== undefined && typeof step.error !== 'string') return false;
   }
@@ -176,6 +237,7 @@ function isDeepResearchRunSnapshot(value: unknown, expectedRunId: string): value
   }
 
   if (value.outputId !== undefined && typeof value.outputId !== 'string') return false;
+  if (value.outputSchema !== undefined && (!isRecord(value.outputSchema) || typeof value.outputSchema.type !== 'string')) return false;
   if (value.error !== undefined && typeof value.error !== 'string') return false;
   if (value.completedAt !== undefined && typeof value.completedAt !== 'string') return false;
   return true;
