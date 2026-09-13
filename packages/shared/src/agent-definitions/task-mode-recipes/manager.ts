@@ -22,7 +22,7 @@ export const MANAGER_TASK_MODES: AgentTaskModeDefinition[] = [
     { slug: 'automation-creator', when: 'Schedule work or connect it to an explicit trigger.', expansion: 'same-session' },
     { slug: 'source-recipe', when: 'Choose a small connection bundle for the requested job.', expansion: 'same-session' },
   ]),
-  focus('just-talk', 'Just Talk', 'Talk through what is on your mind and find a useful next step.', ['Only the context needed for the current question'], 'You can start here without choosing a project or knowing which worker you need.', [
+  focus('general', 'General', 'Talk through what is on your mind and find a useful next step.', ['Only the context needed for the current question'], 'You can start here without choosing a project or knowing which worker you need.', [
     { slug: 'artist-os-guide', when: 'Explain where a feature lives or how to use it.', expansion: 'same-session' },
     { slug: 'agent-creator', when: 'The artist asks to create or revise a saved worker.', expansion: 'same-session' },
     { slug: 'workflow-creator', when: 'The artist asks for tracked work with distinct steps and owners.', expansion: 'same-session' },

@@ -2,6 +2,15 @@ import type { AgentTaskModeDefinition, LoadedAgent } from './types.ts';
 
 export const GENERAL_AGENT_TASK_MODE_ID = 'general';
 
+/** Keep older installed Manager recipes compatible without rewriting saved agents. */
+export function consolidateManagerGeneralModes(modes: AgentTaskModeDefinition[]): AgentTaskModeDefinition[] {
+  const hasGeneral = modes.some(mode => mode.id === GENERAL_AGENT_TASK_MODE_ID);
+  return modes.flatMap(mode => {
+    if (mode.id !== 'just-talk' || !mode.primarySkillSlugs.includes('artist-manager-operating-system')) return [mode];
+    return hasGeneral ? [] : [{ ...mode, id: GENERAL_AGENT_TASK_MODE_ID, label: 'General' }];
+  });
+}
+
 export function isGeneralAgentTaskMode(mode: Pick<ResolvedAgentTaskMode, 'id' | 'definitionRevision'> | undefined): boolean {
   return mode?.id === GENERAL_AGENT_TASK_MODE_ID && mode.definitionRevision.startsWith('task-mode-general-v1-');
 }
@@ -39,7 +48,9 @@ export function resolveAgentTaskMode(
   taskModeId: string | undefined,
 ): ResolvedAgentTaskMode | undefined {
   if (!taskModeId) return undefined;
-  const declaredMode = agent.metadata.taskModes?.find((candidate) => candidate.id === taskModeId);
+  if (agent.slug === 'concierge' && taskModeId === 'just-talk') taskModeId = GENERAL_AGENT_TASK_MODE_ID;
+  const modes = consolidateManagerGeneralModes(agent.metadata.taskModes ?? []);
+  const declaredMode = modes.find((candidate) => candidate.id === taskModeId);
   const virtualGeneral = !declaredMode && taskModeId === GENERAL_AGENT_TASK_MODE_ID;
   const mode: AgentTaskModeDefinition | undefined = declaredMode ?? (virtualGeneral ? {
     id: GENERAL_AGENT_TASK_MODE_ID,
@@ -105,9 +116,7 @@ export function resolveAgentSessionTaskMode(
   selectionSource?: 'user' | 'manager' | 'workflow' | 'automation' | 'handoff',
 ): ResolvedAgentTaskMode | undefined {
   if (taskModeId) return resolveAgentTaskMode(agent, taskModeId);
-  if (agent.slug === 'concierge' && agent.metadata.taskModes?.some(mode => mode.id === 'just-talk')) {
-    return resolveAgentTaskMode(agent, 'just-talk');
-  }
+  if (agent.slug === 'concierge') return resolveAgentTaskMode(agent, GENERAL_AGENT_TASK_MODE_ID);
   if (selectionSource === 'workflow' || selectionSource === 'automation') {
     if (agent.slug !== 'concierge' && (agent.metadata.taskModes?.length ?? 0) > 1) {
       throw new Error(`Choose a focus for ${agent.metadata.name} before starting this work: ${agent.metadata.taskModes!.map(mode => `${mode.label} (${mode.id})`).join(', ')}.`);

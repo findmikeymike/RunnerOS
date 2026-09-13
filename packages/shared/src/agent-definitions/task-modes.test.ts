@@ -178,5 +178,9 @@ test('session resolution defaults interactive workers to General but preserves u
   const chosen = worker.metadata.taskModes![0]!.id;
   expect(resolveAgentSessionTaskMode(worker, chosen, 'workflow')?.id).toBe(chosen);
   const manager = STARTER_AGENTS.find(agent => agent.slug === 'concierge')! as LoadedAgent;
-  expect(resolveAgentSessionTaskMode(manager)?.id).toBe('just-talk');
+  expect(resolveAgentSessionTaskMode(manager)?.id).toBe('general');
+  expect(resolveAgentTaskMode(manager, 'just-talk')).toEqual(resolveAgentTaskMode(manager, 'general'));
+  const legacy = { ...manager, metadata: { ...manager.metadata, taskModes: manager.metadata.taskModes!.map(mode => mode.id === 'general' ? { ...mode, id: 'just-talk', label: 'Just Talk' } : mode) } };
+  expect(resolveAgentSessionTaskMode(legacy)).toEqual(resolveAgentSessionTaskMode(manager));
+  expect(resolveAgentTaskMode(legacy, 'just-talk')?.primarySkillSlugs).toEqual(['artist-manager-operating-system']);
 });

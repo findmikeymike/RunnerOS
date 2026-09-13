@@ -98,7 +98,7 @@ export function buildAgentCreateSessionOptions(
   },
   taskModeId?: string,
 ): CreateSessionOptions {
-  const taskMode = resolveAgentTaskMode(agent, taskModeId ?? (agent.slug === CONCIERGE_SLUG && agent.metadata.taskModes?.some(mode => mode.id === 'just-talk') ? 'just-talk' : undefined))
+  const taskMode = resolveAgentTaskMode(agent, taskModeId ?? (agent.slug === CONCIERGE_SLUG ? GENERAL_AGENT_TASK_MODE_ID : undefined))
   const promptAgent = taskMode
     ? {
         ...agent,
@@ -309,11 +309,7 @@ export async function openAgentSessionComposer(params: {
   const assertCurrent = () => { if (params.shouldContinue && !params.shouldContinue()) throw new Error('Command handoff was cancelled.') }
   assertCurrent()
   // Chat always has a usable default. Explicit presets remain optional shortcuts.
-  const taskModeId = params.taskModeId ?? (
-    params.agent.slug === CONCIERGE_SLUG && params.agent.metadata.taskModes?.some(mode => mode.id === 'just-talk')
-      ? 'just-talk'
-      : GENERAL_AGENT_TASK_MODE_ID
-  )
+  const taskModeId = params.taskModeId ?? GENERAL_AGENT_TASK_MODE_ID
   const taskMode = resolveAgentTaskMode(params.agent, taskModeId)
   const launchAgent = taskMode
     ? {

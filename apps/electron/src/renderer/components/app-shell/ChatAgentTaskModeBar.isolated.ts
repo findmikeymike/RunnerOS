@@ -61,6 +61,18 @@ describe('Agent focus controls', () => {
     expect(html.match(/>General<\/span>/g)).toHaveLength(1)
   })
 
+  test('Manager shows one General first and retains the selection for old chats', () => {
+    const legacy: AgentTaskModeDefinition = { id: 'just-talk', label: 'Just Talk', description: 'Conversation', kind: 'focus', primarySkillSlugs: ['artist-manager-operating-system'] }
+    for (const managerModes of [[...modes, legacy], [...modes, { ...legacy, id: 'general', label: 'General' }], [...modes, legacy, { ...legacy, id: 'general', label: 'General' }]]) {
+      const props = { modes: managerModes, selectedModeId: 'just-talk' }
+      expect(option('General', props).props['aria-pressed']).toBe(true)
+      expect(elements(controls(props)[0]!.props.children).some(child => child.type === 'span' && child.props.children === 'General')).toBe(true)
+      const html = renderToStaticMarkup(React.createElement(ChatAgentTaskModeBar, { ...props, onSelect: () => undefined }))
+      expect(html.match(/>General<\/span>/g)).toHaveLength(1)
+      expect(html).not.toContain('Just Talk')
+    }
+  })
+
   test('busy controls are disabled and refuse selection while help remains available', () => {
     let calls = 0
     for (const busy of [{ applyingModeId: 'story' }, { openingConversation: true }]) {

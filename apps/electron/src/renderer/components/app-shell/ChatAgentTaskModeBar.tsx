@@ -9,7 +9,7 @@ import {
   SlidersHorizontal, Sparkles, Target, Users, Video,
 } from 'lucide-react'
 import type { AgentTaskModeDefinition } from '@craft-agent/shared/agent-definitions/types'
-import { GENERAL_AGENT_TASK_MODE_ID } from '@craft-agent/shared/agent-definitions/task-modes'
+import { GENERAL_AGENT_TASK_MODE_ID, consolidateManagerGeneralModes } from '@craft-agent/shared/agent-definitions/task-modes'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@craft-agent/ui'
@@ -86,10 +86,13 @@ export function ChatAgentTaskModeBar({
   openingConversation = false,
   onSelect,
 }: ChatAgentTaskModeBarProps) {
-  const focusModes = modes.some((mode) => mode.id === GENERAL_AGENT_TASK_MODE_ID)
-    ? modes
-    : [GENERAL_MODE, ...modes]
-  const activeModeId = selectedModeId ?? GENERAL_AGENT_TASK_MODE_ID
+  const consolidated = consolidateManagerGeneralModes(modes)
+  const focusModes = [
+    consolidated.find(mode => mode.id === GENERAL_AGENT_TASK_MODE_ID) ?? GENERAL_MODE,
+    ...consolidated.filter(mode => mode.id !== GENERAL_AGENT_TASK_MODE_ID),
+  ]
+  const legacyManagerSelection = selectedModeId === 'just-talk' && consolidated.some(mode => mode.id === GENERAL_AGENT_TASK_MODE_ID && mode.primarySkillSlugs.includes('artist-manager-operating-system'))
+  const activeModeId = legacyManagerSelection ? GENERAL_AGENT_TASK_MODE_ID : selectedModeId ?? GENERAL_AGENT_TASK_MODE_ID
   const busy = Boolean(applyingModeId) || openingConversation
   const helperText = busy
     ? 'Updating focus…'
