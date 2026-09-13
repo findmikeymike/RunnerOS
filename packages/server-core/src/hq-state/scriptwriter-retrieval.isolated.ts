@@ -44,6 +44,17 @@ test('on-demand tools retrieve latest HQ world with provenance, never stale camp
   write(hq, 'artist-branding', 'disabled secret', false);
   expect(tools.getAuthorizedWorkspaceContext(campaign, 'scriptwriter', { slug: 'artist-branding' }).ok).toBe(false);
 });
+test('every campaign agent can retrieve public context without preloading it', () => {
+  context.upsertContextDoc(hq, {
+    slug: 'artist-public-context',
+    body: 'long pages and useful interviews',
+    metadata: { name: 'Public articles & context', enabled: true, delivery: 'on-demand', routing: { mode: 'broadcast' } },
+  });
+  const listed = tools.listAuthorizedWorkspaceContext(campaign, 'writer', { query: 'artist-public-context' });
+  expect(listed).toMatchObject({ documents: [{ slug: 'artist-public-context', delivery: 'on-demand' }] });
+  expect(tools.getAuthorizedWorkspaceContext(campaign, 'writer', { slug: 'artist-public-context' }))
+    .toMatchObject({ ok: true, document: { body: 'long pages and useful interviews' } });
+});
 test('actual focus RPC includes HQ identity for each Scriptwriter mode', async () => {
   write(hq, 'artist-branding', 'shared approved world'); write(campaign, 'mission-brief', 'release details');
   const { STARTER_AGENTS, writeGlobalAgent } = await import('@craft-agent/shared/agent-definitions');
