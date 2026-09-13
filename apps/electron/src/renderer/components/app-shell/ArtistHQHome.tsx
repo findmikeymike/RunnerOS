@@ -332,6 +332,9 @@ const emptyVoiceDraft: VoiceDraft = {
   writingExcerpts: '',
 }
 
+const ARTIST_PUBLIC_CONTEXT_SLUG = 'artist-public-context'
+const ENABLE_DURABLE_ARTIST_PROFILE_ENRICHMENT_V2 = false
+
 export function ArtistHQHome({
   workspaceId,
   workspaceName,
@@ -412,13 +415,17 @@ export function ArtistHQHome({
   const [hqRouteBusy, setHqRouteBusy] = React.useState(false)
   const [hqRefreshBusy, setHqRefreshBusy] = React.useState(false)
   const googleAutoSyncInFlightRef = React.useRef(false)
-  const { docs, loading, upsert, refresh: refreshContext } = useWorkspaceContext(workspaceId)
+  const { docs, loading, upsert, remove, refresh: refreshContext } = useWorkspaceContext(workspaceId)
   const { outputs, loading: outputsLoading, getOutput } = useOutputs(workspaceId)
   const profileResult = React.useMemo(
     () => parseArtistProfileDocResult(docs.find((doc) => doc.slug === ARTIST_PROFILE_CONTEXT_SLUG)),
     [docs],
   )
   const profileDoc = React.useMemo(() => docs.find((doc) => doc.slug === ARTIST_PROFILE_CONTEXT_SLUG) ?? null, [docs])
+  const artistPublicContextDoc = React.useMemo(
+    () => docs.find((doc) => doc.slug === ARTIST_PUBLIC_CONTEXT_SLUG) ?? null,
+    [docs],
+  )
   const profile = profileResult.profile
   const releaseHorizon = React.useMemo(
     () => parseArtistReleaseHorizon(docs.find((doc) => doc.slug === ARTIST_RELEASE_HORIZON_CONTEXT_SLUG)),
@@ -1082,6 +1089,26 @@ export function ArtistHQHome({
       return false
     }
   }, [profileConflict, profileDraft, profileResult, profileDoc?.body, upsert])
+
+  const saveArtistPublicContext = React.useCallback(async (body: string, expectedBody: string | null) => {
+    const saved = await upsert({
+      slug: ARTIST_PUBLIC_CONTEXT_SLUG,
+      metadata: {
+        name: 'Public articles & context',
+        description: 'Artist-supplied articles, interviews, facts, and background for every agent.',
+        routing: { mode: 'broadcast' },
+        enabled: true,
+        delivery: 'always',
+      },
+      body: body.trim(),
+      expectedBody,
+    })
+    return saved.body
+  }, [upsert])
+
+  const clearArtistPublicContext = React.useCallback(async () => {
+    return remove(ARTIST_PUBLIC_CONTEXT_SLUG)
+  }, [remove])
 
   const saveReleaseMonthPlan = React.useCallback(async (monthKey: string, value: ArtistReleaseMonthPlan | null) => {
     const nextMonths = { ...releaseHorizon.months }
@@ -2135,12 +2162,20 @@ export function ArtistHQHome({
             ) : null}
 
             <ArtistProfileForm draft={profileDraft} onChange={setProfileDraft} />
-            <CareerResearchPanel
-              workspaceId={workspaceId}
-              savedProfile={profile}
-              profileDirty={JSON.stringify(profileDraft) !== JSON.stringify(profileBaselineRef.current)}
-              onSaveProfile={saveProfile}
-            />
+            {ENABLE_DURABLE_ARTIST_PROFILE_ENRICHMENT_V2 ? (
+              <CareerResearchPanel
+                workspaceId={workspaceId}
+                savedProfile={profile}
+                profileDirty={JSON.stringify(profileDraft) !== JSON.stringify(profileBaselineRef.current)}
+                onSaveProfile={saveProfile}
+              />
+            ) : (
+              <ArtistPublicContextPanel
+                savedBody={artistPublicContextDoc?.body ?? null}
+                onSave={saveArtistPublicContext}
+                onClear={clearArtistPublicContext}
+              />
+            )}
           </HQCard>
         )}
 
@@ -4409,6 +4444,95 @@ function EmptyLine({ title, detail }: { title: string; detail: string }) {
 const careerCategoryLabels: Record<CareerResearchCategory, string> = {
   achievement: 'Achievements', release: 'Releases', collaboration: 'Collaborations', performance: 'Live history',
   press: 'Press', 'professional-relationship': 'Professional relationships', 'public-description': 'What sources say',
+}
+
+function ArtistPublicContextPanel({ savedBody, onSave, onClear }: {
+  savedBody: string | null
+  onSave: (body: string, expectedBody: string | null) => Promise<string>
+  onClear: () => Promise<boolean>
+}) {
+  const [draft, setDraft] = React.useState(savedBody ?? '')
+  const [baseline, setBaseline] = React.useState(savedBody)
+  const [busy, setBusy] = React.useState(false)
+  const [changedElsewhere, setChangedElsewhere] = React.useState(false)
+
+  React.useEffect(() => {
+    if (draft !== (baseline ?? '')) {
+      setChangedElsewhere(savedBody !== baseline)
+      return
+    }
+    setDraft(savedBody ?? '')
+    setBaseline(savedBody)
+    setChangedElsewhere(false)
+  }, [baseline, draft, savedBody])
+
+  const save = async () => {
+    if (!draft.trim() || busy) return
+    setBusy(true)
+    try {
+      const body = await onSave(draft, baseline)
+      setDraft(body)
+      setBaseline(body)
+      setChangedElsewhere(false)
+      toast.success('Public context saved for your agents')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const clear = async () => {
+    if (busy || !savedBody || !window.confirm('Clear the saved public articles and context?')) return
+    setBusy(true)
+    try {
+      if (!await onClear()) throw new Error('Could not clear public context')
+      setDraft('')
+      setBaseline(null)
+      setChangedElsewhere(false)
+      toast.success('Public context cleared')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="mt-6 border-t border-white/[0.08] pt-5" aria-labelledby="artist-public-context-title">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 id="artist-public-context-title" className="text-sm font-semibold text-white/90">Public articles & context</h3>
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-white/45">
+            Paste useful article links, interview excerpts, bios, or facts. Saved context is immediately available to every agent.
+          </p>
+        </div>
+        {savedBody ? <span className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-200/70">Saved</span> : null}
+      </div>
+
+      {changedElsewhere ? (
+        <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs text-amber-50/85">
+          This context changed elsewhere. Your draft is still here.
+          <button type="button" className="ml-2 font-semibold text-white underline" onClick={() => { setDraft(savedBody ?? ''); setBaseline(savedBody); setChangedElsewhere(false) }}>Use saved version</button>
+        </div>
+      ) : null}
+
+      <textarea
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        placeholder={'Paste links or context here. Example:\nhttps://example.com/interview\nKnown for live performances that...'}
+        className="mt-4 min-h-[150px] w-full resize-y rounded-[12px] border border-white/[0.07] bg-black/25 px-3 py-3 text-sm leading-6 text-white/78 outline-none placeholder:text-white/25 focus:border-orange-300/30"
+      />
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[11px] leading-4 text-white/35">Use only context you want Artist OS workers to rely on.</p>
+        <div className="flex items-center gap-2">
+          {savedBody ? <button type="button" onClick={() => void clear()} disabled={busy || changedElsewhere} className="h-8 rounded-full border border-white/10 px-3 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40">Clear</button> : null}
+          <button type="button" onClick={() => void save()} disabled={busy || !draft.trim() || draft === (baseline ?? '') || changedElsewhere} className="h-8 rounded-full bg-orange-400 px-4 text-xs font-semibold text-black hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-40">{busy ? 'Saving…' : 'Save context'}</button>
+        </div>
+      </div>
+    </section>
+  )
 }
 
 function CareerResearchPanel({ workspaceId, savedProfile, profileDirty, onSaveProfile }: {
