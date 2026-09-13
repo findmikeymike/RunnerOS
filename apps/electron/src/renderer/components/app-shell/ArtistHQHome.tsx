@@ -196,7 +196,12 @@ import {
   YOUTUBE_INTELLIGENCE_AGENT_SLUG,
 } from '@/lib/artist-intel'
 import type { SocialAccountsDoctorResult } from '../../../shared/types'
-import type { CareerResearchCategory, CareerResearchView } from '@craft-agent/shared/artist-context'
+import {
+  ARTIST_PUBLIC_CONTEXT_SLUG,
+  type CareerResearchCategory,
+  type CareerResearchView,
+} from '@craft-agent/shared/artist-context'
+import { FEATURE_FLAGS } from '@craft-agent/shared/feature-flags'
 import {
   buildHqThisWeekItems,
   buildHqWorkerItems,
@@ -331,9 +336,6 @@ const emptyVoiceDraft: VoiceDraft = {
   postExamples: '',
   writingExcerpts: '',
 }
-
-const ARTIST_PUBLIC_CONTEXT_SLUG = 'artist-public-context'
-const ENABLE_DURABLE_ARTIST_PROFILE_ENRICHMENT_V2 = false
 
 export function ArtistHQHome({
   workspaceId,
@@ -2162,7 +2164,7 @@ export function ArtistHQHome({
             ) : null}
 
             <ArtistProfileForm draft={profileDraft} onChange={setProfileDraft} />
-            {ENABLE_DURABLE_ARTIST_PROFILE_ENRICHMENT_V2 ? (
+            {FEATURE_FLAGS.artistProfileEnrichmentV2 ? (
               <CareerResearchPanel
                 workspaceId={workspaceId}
                 savedProfile={profile}

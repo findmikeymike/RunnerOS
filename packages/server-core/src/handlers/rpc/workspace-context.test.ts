@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { assertExpectedContextBody, selectContextDocsForAgentLaunch } from './workspace-context'
+import { assertExpectedContextBody, selectContextDocsForAgentLaunch, visibleContextDocs } from './workspace-context'
 import { resolveAgentTaskMode, STARTER_AGENTS } from '@craft-agent/shared/agent-definitions'
 import { artistInstagramSnapshotMetadata } from '@craft-agent/shared/artist-context'
 import type { LoadedContextDoc } from '@craft-agent/shared/workspace-context'
@@ -53,5 +53,12 @@ describe('workspace context compare-and-swap', () => {
   test('rejects a stale body before it can overwrite a newer write', () => {
     expect(() => assertExpectedContextBody('campaign-calendar', 'runner update', 'stale renderer copy'))
       .toThrow('CONTEXT_DOC_CONFLICT')
+  })
+})
+
+describe('V1 context surface', () => {
+  test('hides parked V2 research while preserving simple public context', () => {
+    expect(visibleContextDocs([doc('artist-career-research'), doc('artist-public-context')]).map(item => item.slug))
+      .toEqual(['artist-public-context'])
   })
 })

@@ -19,6 +19,7 @@ import { prepareAgentLaunchContext } from '../../agent-launch/context'
 export { selectContextDocsForAgentLaunch } from '../../agent-launch/context'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 import { ARTIST_CAREER_RESEARCH_CONTEXT_SLUG, rebuildCareerResearchProjection } from '@craft-agent/shared/artist-context'
+import { FEATURE_FLAGS } from '@craft-agent/shared/feature-flags'
 import { getArtistProfileEnrichmentService } from './artist-profile-enrichment'
 import {
   refreshArtistManagerStateForWorkspaceBestEffort,
@@ -61,6 +62,12 @@ function broadcastChanged(deps: HandlerDeps, workspaceId: string, docs: LoadedCo
   wsServerLike.wsServer?.push?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
 }
 
+export function visibleContextDocs(docs: LoadedContextDoc[]): LoadedContextDoc[] {
+  return FEATURE_FLAGS.artistProfileEnrichmentV2
+    ? docs
+    : docs.filter(doc => doc.slug !== ARTIST_CAREER_RESEARCH_CONTEXT_SLUG)
+}
+
 function resolveRootPath(workspaceId: string): string {
   const workspace = getWorkspaceByNameOrId(workspaceId)
   if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
@@ -68,7 +75,7 @@ function resolveRootPath(workspaceId: string): string {
 }
 
 function refreshManagedProjection(rootPath: string): void {
-  rebuildCareerResearchProjection(rootPath)
+  if (FEATURE_FLAGS.artistProfileEnrichmentV2) rebuildCareerResearchProjection(rootPath)
 }
 
 export function registerWorkspaceContextHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -76,12 +83,13 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) return []
     refreshManagedProjection(workspace.rootPath)
-    return loadAllContextDocs(workspace.rootPath)
+    return visibleContextDocs(loadAllContextDocs(workspace.rootPath))
   })
 
   server.handle(RPC_CHANNELS.workspaceContext.GET, async (_ctx, workspaceId: string, slug: string): Promise<LoadedContextDoc | null> => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) return null
+    if (!FEATURE_FLAGS.artistProfileEnrichmentV2 && slug === ARTIST_CAREER_RESEARCH_CONTEXT_SLUG) return null
     if (slug === ARTIST_CAREER_RESEARCH_CONTEXT_SLUG) refreshManagedProjection(workspace.rootPath)
     return loadContextDoc(workspace.rootPath, slug)
   })
@@ -111,6 +119,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
     const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
     assertTeamPermission(rootPath, 'files.write')
     if (payload.slug === ARTIST_CAREER_RESEARCH_CONTEXT_SLUG) {
+      if (!FEATURE_FLAGS.artistProfileEnrichmentV2) throw new Error('Artist profile enrichment is parked for V2.')
       const current = loadContextDoc(rootPath, payload.slug)
       if (!Object.prototype.hasOwnProperty.call(payload, 'expectedBody')) throw new Error('MANAGED_CONTEXT: Expected body is required for career context settings.');
       assertExpectedContextBody(payload.slug, current?.body ?? null, payload.expectedBody ?? null)
@@ -138,7 +147,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
       if (shouldRefreshHqStateForContextSlug(payload.slug)) {
         refreshArtistManagerStateForWorkspaceBestEffort(rootPath)
       }
-      broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+      broadcastChanged(deps, workspaceId, visibleContextDocs(loadAllContextDocs(rootPath)))
       return loaded
     })
   })
@@ -154,7 +163,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
         if (shouldRefreshHqStateForContextSlug(slug)) {
           refreshArtistManagerStateForWorkspaceBestEffort(rootPath)
         }
-        broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+        broadcastChanged(deps, workspaceId, visibleContextDocs(loadAllContextDocs(rootPath)))
       }
       return ok
     })

@@ -1,5 +1,6 @@
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { FEATURE_FLAGS } from '@craft-agent/shared/feature-flags'
 
 import { registerAuthHandlers } from './auth'
 import { registerAutomationsHandlers } from './automations'
@@ -72,7 +73,7 @@ export function registerCoreRpcHandlers(
   registerWorkflowsHandlers(server, deps)
   registerWorkflowRunsHandlers(server, deps)
   registerDeepResearchHandlers(server, deps)
-  registerArtistProfileEnrichmentHandlers(server, deps)
+  if (FEATURE_FLAGS.artistProfileEnrichmentV2) registerArtistProfileEnrichmentHandlers(server, deps)
   registerVideoStudioHandlers(server, deps)
   registerFilesHandlers(server, deps)
   registerLabelsHandlers(server, deps)
