@@ -1,8 +1,11 @@
 const { execFileSync } = require('node:child_process')
 const { existsSync } = require('node:fs')
 const { join } = require('node:path')
+const { assertPublicArtistOsUpdateUrl } = require('./artist-os-release-config.cjs')
 
 exports.default = async function beforePack(context) {
+  assertPublicArtistOsUpdateUrl(process.env.ARTIST_OS_UPDATE_URL)
+
   const projectDir = context?.packager?.projectDir
   if (typeof projectDir !== 'string' || !projectDir) {
     throw new Error('electron-builder did not provide the project directory')

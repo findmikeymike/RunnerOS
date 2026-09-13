@@ -25,7 +25,6 @@ export interface RuntimeIdentity {
   rpcNamespace: 'runner' | 'artist-os';
   defaultRpcPort: 9100 | 9200;
   defaultTriggerPort: 9101 | 9201;
-  updateFeedUrl: string;
 }
 
 export interface ResolveRuntimeIdentityOptions {
@@ -106,7 +105,6 @@ export function resolveRuntimeIdentity(
       rpcNamespace: 'artist-os',
       defaultRpcPort: 9200,
       defaultTriggerPort: 9201,
-      updateFeedUrl: 'https://github.com/findmikeymike/ArtistOS/releases/latest/download',
     });
   }
 
@@ -133,7 +131,6 @@ export function resolveRuntimeIdentity(
     rpcNamespace: 'runner',
     defaultRpcPort: 9100,
     defaultTriggerPort: 9101,
-    updateFeedUrl: 'https://github.com/findmikeymike/RunnerOS/releases/latest/download',
   });
 }
 

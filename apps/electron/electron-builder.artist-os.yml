@@ -27,13 +27,18 @@ extraResources:
       - "node_modules/**/*"
 
 extraMetadata:
+  # electron-builder derives updaterCacheDirName from package name. Keep Artist
+  # OS downloads isolated from Runner's @craft-agent/electron-updater cache.
+  name: artist-os
   main: dist/main.cjs
   productName: Artist OS
   description: Agentic operating system for independent artists and music teams
 
 publish:
   provider: generic
-  url: https://github.com/findmikeymike/ArtistOS/releases/latest/download
+  # Missing values fail macro expansion. beforePack additionally rejects URLs
+  # that are not public HTTPS endpoints or still target the private GitHub repo.
+  url: ${env.ARTIST_OS_UPDATE_URL}
 
 mac:
   icon: resources/artist-os-icon.icns

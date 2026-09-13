@@ -66,13 +66,15 @@ export async function rebuildMenu(): Promise<void> {
     ? {
         label: i18n.t("menu.installUpdateVersion", { version: updateInfo.latestVersion }),
         click: async () => {
-          await installUpdate()
+          try { await installUpdate() }
+          catch (error) { mainLog.error('Update install failed:', error) }
         }
       }
     : {
         label: i18n.t("menu.checkForUpdatesEllipsis"),
         click: async () => {
-          await checkForUpdates({ autoDownload: true })
+          try { await checkForUpdates({ autoDownload: true }) }
+          catch (error) { mainLog.error('Update check failed:', error) }
         }
       }
 
@@ -199,8 +201,10 @@ export async function rebuildMenu(): Promise<void> {
           label: i18n.t("menu.checkForUpdates"),
           click: async () => {
             const { checkForUpdates } = await import('./auto-update')
-            const info = await checkForUpdates({ autoDownload: true })
-            mainLog.info('[debug-menu] Update check result:', info)
+            try {
+              const info = await checkForUpdates({ autoDownload: true })
+              mainLog.info('[debug-menu] Update check result:', info)
+            } catch (error) { mainLog.error('[debug-menu] Update check failed:', error) }
           }
         },
         {

@@ -1,0 +1,49 @@
+name: Artist OS Release Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      update_url:
+        description: Public HTTPS base URL that will host latest-mac.yml and update artifacts
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: artist-os-release-preflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    env:
+      ARTIST_OS_UPDATE_URL: ${{ inputs.update_url }}
+
+    steps:
+      - name: Checkout selected revision without publishing credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - name: Install dependencies without changing the lockfile
+        run: bun install --frozen-lockfile
+
+      - name: Validate branch, clean tree, versions, and update feed
+        run: bun run release
+
+      - name: Run focused release gates
+        run: |
+          bun test ./scripts/release-preflight.test.ts --path-ignore-patterns='**/release-artist-os/**' --path-ignore-patterns='**/dist/**'
+          bun run test:product-isolation
+
+      # This workflow intentionally cannot build, sign, tag, push, or publish.
+      # Signed artifacts are built separately and can then be checked locally with
+      # `bun run release -- --verify-artifacts` before upload.
