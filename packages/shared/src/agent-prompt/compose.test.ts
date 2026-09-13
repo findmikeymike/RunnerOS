@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { ARTIST_OS_TEAM_MISSION, ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE } from './artist-team-guidance.ts';
+import { ARTIST_OS_TEAM_MISSION, ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE, buildArtistSpecialistGuidance } from './artist-team-guidance.ts';
 import {
   AGENT_CATALOG_HEADER,
   ARTIST_ASSET_CONTRACT_HEADER,
@@ -42,6 +42,28 @@ const source = (slug: string, name: string, tagline?: string) => ({
 });
 
 describe('Artist OS team mission routing', () => {
+  test('delivers only the matching specialist emphasis and never leaks it into general sessions', () => {
+    const slugs = ['ads-strategist', 'ads-agent', 'content-genius', 'scriptwriter'];
+    for (const slug of slugs) {
+      const guidance = buildArtistSpecialistGuidance(slug);
+      expect(guidance.length).toBeGreaterThan(0);
+      expect(guidance.length).toBeLessThan(450);
+      for (const artistWorkspaceScope of ['hq', 'campaign', 'lab'] as const) {
+        const result = composeAgentSystemPrompt({ ...agent(), slug }, [], [], [], [], { artistWorkspaceScope });
+        expect(result.split(guidance)).toHaveLength(2);
+        for (const other of slugs.filter(candidate => candidate !== slug)) {
+          expect(result).not.toContain(buildArtistSpecialistGuidance(other));
+        }
+      }
+      for (const artistWorkspaceScope of [undefined, 'general'] as const) {
+        expect(composeAgentSystemPrompt({ ...agent(), slug }, [], [], [], [], { artistWorkspaceScope })).not.toContain(guidance);
+      }
+    }
+    for (const slug of [undefined, 'concierge', 'world-builder', 'custom-worker', 'constructor', '__proto__']) {
+      expect(buildArtistSpecialistGuidance(slug)).toBe('');
+    }
+  });
+
   test('shares the mission across artist workers without replacing their role or adding skills', () => {
     for (const artistWorkspaceScope of ['hq', 'campaign', 'lab'] as const) {
       for (const slug of ['ads-agent', 'content-genius', 'scriptwriter', 'custom-worker']) {

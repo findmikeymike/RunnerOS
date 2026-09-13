@@ -2,6 +2,7 @@ import { STARTER_AGENTS } from '@craft-agent/shared/agent-definitions/starter-te
 import { describe, expect, test } from 'bun:test'
 import { buildAgentCreateSessionOptions, buildPendingAgentTaskModeSessionOptions, ensureAgentDeclaredSkillsEnabled, openAgentSessionComposer, resolveArtistWorkspaceScope, sendAgentDraft, shouldDeferAgentTaskModeSelection } from './run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
+import { buildArtistSpecialistGuidance } from '@craft-agent/shared/agent-prompt'
 import type { AgentDefinitionDTO, LoadedSource, SkillDescriptor, Session, CreateSessionOptions } from '../../shared/types'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 
@@ -448,6 +449,28 @@ describe('artist workspace scope reaches the composed prompt', () => {
 
     expect(without.customSystemPrompt ?? '').not.toContain(contractHeader)
     expect(withScope.customSystemPrompt ?? '').toContain(contractHeader)
+  })
+
+  test('real focused specialists gain guidance without changing their recipe or authority', () => {
+    for (const slug of ['ads-strategist', 'ads-agent', 'content-genius', 'scriptwriter']) {
+      const definition = STARTER_AGENTS.find(candidate => candidate.slug === slug)!
+      const focus = definition.metadata.taskModes![0]!
+      const agent = { ...makeAgent(), ...definition } as AgentDefinitionDTO
+      const before = JSON.stringify(agent)
+      const context = {
+        skills: (definition.metadata.skills ?? []).map(skillSlug => ({ slug: skillSlug, metadata: { name: skillSlug } })) as SkillDescriptor[],
+        sources: [...new Set([...(definition.metadata.sources ?? []), ...(definition.metadata.optionalSources ?? [])])].map(sourceSlug => makeSource(sourceSlug)),
+      }
+      const ordinary = buildAgentCreateSessionOptions(agent, context, focus.id)
+      const artist = buildAgentCreateSessionOptions(agent, { ...context, artistWorkspaceScope: 'campaign' }, focus.id)
+      expect(artist.customSystemPrompt).toContain(buildArtistSpecialistGuidance(slug))
+      expect(artist.agentSkillSlugs).toEqual(focus.primarySkillSlugs)
+      expect(artist.enabledSourceSlugs).toEqual(ordinary.enabledSourceSlugs)
+      expect(artist.trustedWorkerTools).toEqual(ordinary.trustedWorkerTools)
+      expect(artist.permissionMode).toBe(ordinary.permissionMode)
+      expect(artist.launchReceipt?.taskMode).toEqual(ordinary.launchReceipt?.taskMode)
+      expect(JSON.stringify(agent)).toBe(before)
+    }
   })
 })
 
