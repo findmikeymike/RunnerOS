@@ -1,3 +1,4 @@
+import { readCareerResearchBaseline, readCareerResearchRecord, rebuildCareerResearchProjection, writeCareerResearchRecord } from '@craft-agent/shared/artist-context/career-research-storage';
 import { createHash, randomUUID } from 'node:crypto';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
 import {
@@ -8,10 +9,6 @@ import {
   normalizeCareerResearchDelivery,
   normalizeCareerResearchUrl,
   normalizeSpotifyArtistProfile,
-  readCareerResearchBaseline,
-  readCareerResearchRecord,
-  rebuildCareerResearchProjection,
-  writeCareerResearchRecord,
   type CareerResearchCategory,
   type CareerResearchDeliveryInput,
   type CareerResearchFinding,

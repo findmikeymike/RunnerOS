@@ -1,6 +1,7 @@
+import { rebuildCareerResearchProjection } from '@craft-agent/shared/artist-context/career-research-storage';
 import { getWorkspaces } from '@craft-agent/shared/config';
 import { canAgentAccessContextDoc, loadAllContextDocs, type LoadedContextDoc } from '@craft-agent/shared/workspace-context';
-import { ARTIST_CAREER_RESEARCH_CONTEXT_SLUG, ARTIST_PUBLIC_CONTEXT_SLUG, rebuildCareerResearchProjection } from '@craft-agent/shared/artist-context';
+import { ARTIST_CAREER_RESEARCH_CONTEXT_SLUG, ARTIST_PUBLIC_CONTEXT_SLUG } from '@craft-agent/shared/artist-context';
 import { FEATURE_FLAGS } from '@craft-agent/shared/feature-flags';
 
 type Workspace = { rootPath: string; artistWorkspaceScope?: string };

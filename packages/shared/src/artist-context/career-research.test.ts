@@ -1,3 +1,4 @@
+import { rebuildCareerResearchProjection, writeCareerResearchRecord } from './career-research-storage.ts';
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -8,8 +9,6 @@ import {
   buildCareerResearchView,
   normalizeCareerResearchSeeds,
   normalizeSpotifyArtistProfile,
-  rebuildCareerResearchProjection,
-  writeCareerResearchRecord,
   type CareerResearchRecordData,
 } from './career-research.ts';
 

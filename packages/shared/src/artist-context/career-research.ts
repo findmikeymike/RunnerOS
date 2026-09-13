@@ -1,9 +1,7 @@
-import type { SharedRecord, SharedRecordBaseline } from '../records/types.ts';
-import { readSharedRecord, readSharedRecordBaseline, writeSharedRecord } from '../records/storage.ts';
+import type { SharedRecord } from '../records/types.ts';
 import { buildContextDocBody, extractJsonBlock } from './json-block.ts';
-import type { ContextDocDelivery, ContextDocMetadata, ContextDocRouting } from '../workspace-context/types.ts';
+import type { ContextDocDelivery, ContextDocMetadata, ContextDocRouting, LoadedContextDoc } from '../workspace-context/types.ts';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
-import { deleteContextDoc, upsertContextDoc, type LoadedContextDoc } from '../workspace-context/index.ts';
 
 export const ARTIST_CAREER_RESEARCH_CONTEXT_SLUG = 'artist-career-research';
 export const ARTIST_CAREER_RESEARCH_COLLECTION = 'artist-career-research';
@@ -233,7 +231,7 @@ export function normalizeCareerResearchSeeds(input: CareerResearchSeedInput): Ca
   };
 }
 
-function isCareerResearchRecord(value: unknown): value is CareerResearchRecord {
+export function isCareerResearchRecord(value: unknown): value is CareerResearchRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const record = value as Partial<CareerResearchRecord>;
   const validIdentity = Boolean(record.identity && typeof record.identity === 'object' &&
@@ -267,23 +265,6 @@ function isCareerResearchRecord(value: unknown): value is CareerResearchRecord {
     typeof record.revision === 'number' && !!record.identity && typeof record.identity === 'object' &&
     validIdentity && Array.isArray(record.findings) && record.findings.length <= CAREER_RESEARCH_LIMITS.findings && record.findings.every(validFinding) &&
     Array.isArray(record.overrides) && record.overrides.every(validOverride) && validDelivery;
-}
-
-export function readCareerResearchRecord(workspaceRootPath: string): CareerResearchRecord | null {
-  const record = readSharedRecord<CareerResearchRecord>(workspaceRootPath, ARTIST_CAREER_RESEARCH_COLLECTION, ARTIST_CAREER_RESEARCH_ID);
-  return isCareerResearchRecord(record) ? record : null;
-}
-
-export function readCareerResearchBaseline(workspaceRootPath: string): SharedRecordBaseline<CareerResearchRecord> | null {
-  return readSharedRecordBaseline<CareerResearchRecord>(workspaceRootPath, ARTIST_CAREER_RESEARCH_COLLECTION, ARTIST_CAREER_RESEARCH_ID);
-}
-
-export function writeCareerResearchRecord(
-  workspaceRootPath: string,
-  data: CareerResearchRecordData,
-  options: { machineId: string; baseline?: SharedRecordBaseline<CareerResearchRecord>; now?: string },
-) {
-  return writeSharedRecord(workspaceRootPath, ARTIST_CAREER_RESEARCH_COLLECTION, ARTIST_CAREER_RESEARCH_ID, data, options);
 }
 
 export function buildCareerResearchView(record: CareerResearchRecord | null): CareerResearchView {
@@ -372,19 +353,6 @@ export function compileCareerResearchBody(record: CareerResearchRecord): string 
       correctedByUser: finding.correctedByUser === true,
       sources: finding.evidence.map((evidence) => ({ title: evidence.title, url: evidence.url, publishedAt: evidence.publishedAt })),
     })),
-  });
-}
-
-export function rebuildCareerResearchProjection(workspaceRootPath: string): LoadedContextDoc | null {
-  const record = readCareerResearchRecord(workspaceRootPath);
-  if (!record) {
-    deleteContextDoc(workspaceRootPath, ARTIST_CAREER_RESEARCH_CONTEXT_SLUG);
-    return null;
-  }
-  return upsertContextDoc(workspaceRootPath, {
-    slug: ARTIST_CAREER_RESEARCH_CONTEXT_SLUG,
-    metadata: careerResearchMetadata(record),
-    body: compileCareerResearchBody(record),
   });
 }
 

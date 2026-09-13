@@ -1,3 +1,4 @@
+import { rebuildCareerResearchProjection } from '@craft-agent/shared/artist-context/career-research-storage';
 /**
  * RPC handlers for per-workspace context docs.
  */
@@ -18,7 +19,7 @@ import type { HandlerDeps } from '../handler-deps'
 import { prepareAgentLaunchContext } from '../../agent-launch/context'
 export { selectContextDocsForAgentLaunch } from '../../agent-launch/context'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
-import { ARTIST_CAREER_RESEARCH_CONTEXT_SLUG, rebuildCareerResearchProjection } from '@craft-agent/shared/artist-context'
+import { ARTIST_CAREER_RESEARCH_CONTEXT_SLUG } from '@craft-agent/shared/artist-context'
 import { FEATURE_FLAGS } from '@craft-agent/shared/feature-flags'
 import { getArtistProfileEnrichmentService } from './artist-profile-enrichment'
 import {

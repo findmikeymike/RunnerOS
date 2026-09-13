@@ -1,10 +1,11 @@
+import { rebuildCareerResearchProjection } from '@craft-agent/shared/artist-context/career-research-storage';
 import { CONCIERGE_SLUG, filterContextDocsForTaskMode, type ResolvedAgentTaskMode } from '@craft-agent/shared/agent-definitions'
 import { canAgentAccessContextDoc, loadAllContextDocs, shouldInjectContextDoc, type LoadedContextDoc } from '@craft-agent/shared/workspace-context'
 import { refreshCampaignStateContextDocBestEffort, refreshHqStateContextDocBestEffort } from '../hq-state/refresh'
 import { withScriptwriterArtistContext } from '../hq-state/scriptwriter-context'
 import { refreshVerifiedTrackContextForAgents } from '../track-intelligence/agent-visibility'
 import { ReleaseKitService } from '../release-kit/ReleaseKitService'
-import { ARTIST_CAREER_RESEARCH_CONTEXT_SLUG, rebuildCareerResearchProjection } from '@craft-agent/shared/artist-context'
+import { ARTIST_CAREER_RESEARCH_CONTEXT_SLUG } from '@craft-agent/shared/artist-context'
 import { FEATURE_FLAGS } from '@craft-agent/shared/feature-flags'
 
 /** A focus changes delivery, never authorization or the artist's disabled rules. */
