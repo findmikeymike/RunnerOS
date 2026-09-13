@@ -5,7 +5,6 @@ test('artist-context public exports bundle for browsers without server storage o
   const result = await Bun.build({
     entrypoints: [join(import.meta.dir, 'index.ts')],
     target: 'browser',
-    write: false,
   });
 
   expect(result.logs.filter((log) => log.level === 'error')).toEqual([]);
