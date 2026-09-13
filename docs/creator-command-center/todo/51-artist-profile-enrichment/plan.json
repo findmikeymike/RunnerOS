@@ -1,0 +1,592 @@
+{
+  "schema_version": 1,
+  "revision": "r1",
+  "sources": [
+    {
+      "id": "SRC-U",
+      "path": "source-decisions.md",
+      "authority": "latest explicit user decisions",
+      "version": "conversation through 2026-09-13"
+    },
+    {
+      "id": "SRC-C",
+      "path": "architecture.md",
+      "authority": "verified current-code map; proposed contracts clearly labeled",
+      "version": "f25bbf48c",
+      "files": [
+        {
+          "path": "packages/shared/src/artist-context/profile.ts",
+          "sha256": "9f765578249776aa7290f9f971a327244918baa04ba6d0a8c8e1c6179c1c19d6"
+        },
+        {
+          "path": "packages/server-core/src/deep-research/DeepResearchRunner.ts",
+          "sha256": "af68337dcb9b07d56493477bbdc9d3c86ce8d6434930457be95563ff9613f669"
+        },
+        {
+          "path": "packages/server-core/src/pulses/spotify-snapshot-publisher.ts",
+          "sha256": "07e554353d3abf1427fc57fdf15c9d327a55611cba80991f7a83761d47bfee64"
+        },
+        {
+          "path": "packages/shared/src/hq-state/manager-brief.ts",
+          "sha256": "d19b3ed3ad268783ea94a75092ec37f4542a61b3c942c8a9eab999fb962c1f66"
+        },
+        {
+          "path": "packages/server-core/src/hq-state/manager-tools.ts",
+          "sha256": "5aeafe3fee0ecfcdb7bced9f184827e66c3e41716039a49abdd89d1db3009abc"
+        },
+        {
+          "path": "packages/server-core/src/agent-launch/context.ts",
+          "sha256": "0d352072d76c87d8f1d67410804c242ea795d2c4c1a908f7a449f4f876e66477"
+        }
+      ]
+    },
+    {
+      "id": "SRC-W",
+      "path": "source-decisions.md",
+      "authority": "primary provider documentation and explicit scope exclusions",
+      "version": "2026-09-12"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "R01",
+      "source_refs": [
+        "SRC-U",
+        "SRC-C"
+      ],
+      "acceptance": [
+        "A01: see specification.md requirements table and journey contracts"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R02",
+      "source_refs": [
+        "SRC-U",
+        "SRC-C"
+      ],
+      "acceptance": [
+        "A02: see specification.md requirements table and journey contracts"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R03",
+      "source_refs": [
+        "SRC-U",
+        "SRC-C"
+      ],
+      "acceptance": [
+        "A03: see specification.md requirements table and journey contracts"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R04",
+      "source_refs": [
+        "SRC-U",
+        "SRC-C"
+      ],
+      "acceptance": [
+        "A04: see specification.md requirements table and journey contracts"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R05",
+      "source_refs": [
+        "SRC-U",
+        "SRC-C"
+      ],
+      "acceptance": [
+        "A05: see specification.md requirements table and journey contracts"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R06",
+      "source_refs": [
+        "SRC-U",
+        "SRC-C"
+      ],
+      "acceptance": [
+        "A06: see specification.md requirements table and journey contracts"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R07",
+      "source_refs": [
+        "SRC-U",
+        "SRC-C"
+      ],
+      "acceptance": [
+        "A07: see specification.md requirements table and journey contracts"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R08",
+      "source_refs": [
+        "SRC-U",
+        "SRC-C"
+      ],
+      "acceptance": [
+        "A08: see specification.md requirements table and journey contracts"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R09",
+      "source_refs": [
+        "SRC-U",
+        "SRC-C"
+      ],
+      "acceptance": [
+        "A09: see specification.md requirements table and journey contracts"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R10",
+      "source_refs": [
+        "SRC-U",
+        "SRC-C"
+      ],
+      "acceptance": [
+        "A10: see specification.md requirements table and journey contracts"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R11",
+      "source_refs": [
+        "SRC-U",
+        "SRC-C"
+      ],
+      "acceptance": [
+        "A11: see specification.md requirements table and journey contracts"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "R12",
+      "source_refs": [
+        "SRC-U",
+        "SRC-C"
+      ],
+      "acceptance": [
+        "A12: see specification.md requirements table and journey contracts"
+      ],
+      "disposition": "in_scope"
+    },
+    {
+      "id": "D01",
+      "source_refs": [
+        "SRC-U"
+      ],
+      "acceptance": [
+        "No implementation in this feature"
+      ],
+      "disposition": "deferred",
+      "reason": "Manual refresh proves value before schedules"
+    },
+    {
+      "id": "D02",
+      "source_refs": [
+        "SRC-U"
+      ],
+      "acceptance": [
+        "No implementation in this feature"
+      ],
+      "disposition": "excluded",
+      "reason": "Pulse owns analytics; no duplicate integration"
+    },
+    {
+      "id": "D03",
+      "source_refs": [
+        "SRC-U"
+      ],
+      "acceptance": [
+        "No implementation in this feature"
+      ],
+      "disposition": "excluded",
+      "reason": "Artist branding has a separate authority workflow"
+    },
+    {
+      "id": "D04",
+      "source_refs": [
+        "SRC-U"
+      ],
+      "acceptance": [
+        "No implementation in this feature"
+      ],
+      "disposition": "deferred",
+      "reason": "Multi-HQ is independent product work"
+    },
+    {
+      "id": "D05",
+      "source_refs": [
+        "SRC-U"
+      ],
+      "acceptance": [
+        "No implementation in this feature"
+      ],
+      "disposition": "deferred",
+      "reason": "Manager already supplies opportunity reasoning"
+    },
+    {
+      "id": "D06",
+      "source_refs": [
+        "SRC-U"
+      ],
+      "acceptance": [
+        "No implementation in this feature"
+      ],
+      "disposition": "excluded",
+      "reason": "Shared-folder storage cannot promise distributed exactly-once"
+    }
+  ],
+  "phases": [
+    {
+      "id": "P1",
+      "act": "1",
+      "title": "Prove the core journey",
+      "entry_gate": "G1E",
+      "exit_gate": "G1X",
+      "brief": "phases/P1.md"
+    },
+    {
+      "id": "P2",
+      "act": "2",
+      "title": "Complete control and agent reuse",
+      "entry_gate": "G2E",
+      "exit_gate": "G2X",
+      "brief": "phases/P2.md"
+    },
+    {
+      "id": "P3",
+      "act": "3",
+      "title": "Verify and release",
+      "entry_gate": "G3E",
+      "exit_gate": "G3X",
+      "brief": "phases/P3.md"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "S01",
+      "kind": "setup",
+      "title": "Verify existing public research tool access",
+      "owner": "implementation-lead",
+      "depends_on": [],
+      "status": "planned",
+      "mode": "live"
+    },
+    {
+      "id": "S02",
+      "kind": "setup",
+      "title": "Designate intended artist and public live-test seeds",
+      "owner": "implementation-lead",
+      "depends_on": [],
+      "status": "planned",
+      "mode": "live"
+    },
+    {
+      "id": "S03",
+      "kind": "setup",
+      "title": "Verify canonical app build and authorized acceptance environment",
+      "owner": "implementation-lead",
+      "depends_on": [],
+      "status": "planned",
+      "mode": "live"
+    },
+    {
+      "id": "G1E",
+      "kind": "gate",
+      "title": "P1 entry contract review",
+      "owner": "lead",
+      "depends_on": [],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G1X",
+      "kind": "gate",
+      "title": "P1 outcome review",
+      "owner": "lead",
+      "depends_on": [
+        "T01",
+        "T02"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G2E",
+      "kind": "gate",
+      "title": "P2 entry contract review",
+      "owner": "lead",
+      "depends_on": [
+        "G1X"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G2X",
+      "kind": "gate",
+      "title": "P2 outcome review",
+      "owner": "lead",
+      "depends_on": [
+        "T03",
+        "T04"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G3E",
+      "kind": "gate",
+      "title": "P3 entry contract review",
+      "owner": "lead",
+      "depends_on": [
+        "G2X"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G3X",
+      "kind": "gate",
+      "title": "P3 outcome review",
+      "owner": "lead",
+      "depends_on": [
+        "T05",
+        "T06"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "T01",
+      "kind": "task",
+      "title": "Define identity, research data and guarded publication",
+      "owner": "implementation-lead",
+      "depends_on": [
+        "G1E"
+      ],
+      "status": "planned",
+      "phase": "P1",
+      "requirements": [
+        "R01",
+        "R02",
+        "R05",
+        "R07",
+        "R08",
+        "R10",
+        "R11",
+        "R12"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T01.md",
+      "resources": [
+        "packages/shared/src/artist-context/career-research.ts",
+        "packages/server-core/src/artist-profile-enrichment/",
+        "packages/shared/src/records/"
+      ],
+      "verification": [
+        {
+          "method": "Execute T01 packet outcome tests and associated A checks",
+          "expected": "Persisted outcome and failure/identity/permission assertions pass; live claims require live evidence",
+          "environment": "isolated Artist OS fixtures; designated public-source live run where required"
+        }
+      ]
+    },
+    {
+      "id": "T02",
+      "kind": "task",
+      "title": "Deliver source-to-profile-to-Manager thin slice",
+      "owner": "implementation-lead",
+      "depends_on": [
+        "G1E",
+        "T01",
+        "S01"
+      ],
+      "status": "planned",
+      "phase": "P1",
+      "requirements": [
+        "R01",
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R06",
+        "R08",
+        "R09",
+        "R10",
+        "R12"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T02.md",
+      "resources": [
+        "packages/server-core/src/artist-profile-enrichment/",
+        "packages/server-core/src/deep-research/DeepResearchRunner.ts",
+        "packages/server-core/src/handlers/rpc/artist-profile-enrichment.ts",
+        "packages/shared/src/protocol/channels.ts",
+        "apps/electron/src/renderer/components/app-shell/ArtistHQHome.tsx",
+        "packages/server-core/src/hq-state/manager-tools.ts"
+      ],
+      "verification": [
+        {
+          "method": "Execute T02 packet outcome tests and associated A checks",
+          "expected": "Persisted outcome and failure/identity/permission assertions pass; live claims require live evidence",
+          "environment": "isolated Artist OS fixtures; designated public-source live run where required"
+        }
+      ]
+    },
+    {
+      "id": "T03",
+      "kind": "task",
+      "title": "Finish user control, refresh and recovery",
+      "owner": "implementation-lead",
+      "depends_on": [
+        "G2E",
+        "T02"
+      ],
+      "status": "planned",
+      "phase": "P2",
+      "requirements": [
+        "R01",
+        "R02",
+        "R06",
+        "R07",
+        "R08",
+        "R10",
+        "R11"
+      ],
+      "detail": "outlined",
+      "packet": "tasks/T03.md",
+      "resources": [
+        "apps/electron/src/renderer/components/app-shell/ArtistHQHome.tsx",
+        "packages/server-core/src/artist-profile-enrichment/"
+      ],
+      "verification": [
+        {
+          "method": "Execute T03 packet outcome tests and associated A checks",
+          "expected": "Persisted outcome and failure/identity/permission assertions pass; live claims require live evidence",
+          "environment": "isolated Artist OS fixtures; designated public-source live run where required"
+        }
+      ]
+    },
+    {
+      "id": "T04",
+      "kind": "task",
+      "title": "Propagate current research consistently to agents",
+      "owner": "implementation-lead",
+      "depends_on": [
+        "G2E",
+        "T02"
+      ],
+      "status": "planned",
+      "phase": "P2",
+      "requirements": [
+        "R02",
+        "R03",
+        "R07",
+        "R09",
+        "R10",
+        "R11"
+      ],
+      "detail": "outlined",
+      "packet": "tasks/T04.md",
+      "resources": [
+        "packages/shared/src/hq-state/manager-brief.ts",
+        "packages/shared/src/hq-state/types.ts",
+        "packages/server-core/src/agent-launch/context.ts",
+        "packages/shared/src/agent-definitions/task-mode-recipes/",
+        "packages/server-core/src/sessions/SessionManager.ts"
+      ],
+      "verification": [
+        {
+          "method": "Execute T04 packet outcome tests and associated A checks",
+          "expected": "Persisted outcome and failure/identity/permission assertions pass; live claims require live evidence",
+          "environment": "isolated Artist OS fixtures; designated public-source live run where required"
+        }
+      ]
+    },
+    {
+      "id": "T05",
+      "kind": "task",
+      "title": "Adversarial verification and research-quality evaluation",
+      "owner": "implementation-lead",
+      "depends_on": [
+        "G3E",
+        "T03",
+        "T04"
+      ],
+      "status": "planned",
+      "phase": "P3",
+      "requirements": [
+        "R01",
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R06",
+        "R07",
+        "R08",
+        "R09",
+        "R10",
+        "R11",
+        "R12"
+      ],
+      "detail": "outlined",
+      "packet": "tasks/T05.md",
+      "resources": [
+        "packages/shared/src/artist-context/",
+        "packages/server-core/src/artist-profile-enrichment/",
+        "environment/disposable-test-fixtures"
+      ],
+      "verification": [
+        {
+          "method": "Execute T05 packet outcome tests and associated A checks",
+          "expected": "Persisted outcome and failure/identity/permission assertions pass; live claims require live evidence",
+          "environment": "isolated Artist OS fixtures; designated public-source live run where required"
+        }
+      ]
+    },
+    {
+      "id": "T06",
+      "kind": "task",
+      "title": "Canonical acceptance, documentation and landing",
+      "owner": "implementation-lead",
+      "depends_on": [
+        "G3E",
+        "T05",
+        "S02",
+        "S03"
+      ],
+      "status": "planned",
+      "phase": "P3",
+      "requirements": [
+        "R06",
+        "R09",
+        "R12"
+      ],
+      "detail": "outlined",
+      "packet": "tasks/T06.md",
+      "resources": [
+        "docs/creator-command-center/",
+        "environment/canonical-artist-os"
+      ],
+      "verification": [
+        {
+          "method": "Execute T06 packet outcome tests and associated A checks",
+          "expected": "Persisted outcome and failure/identity/permission assertions pass; live claims require live evidence",
+          "environment": "isolated Artist OS fixtures; designated public-source live run where required"
+        }
+      ]
+    }
+  ]
+}

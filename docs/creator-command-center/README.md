@@ -70,6 +70,8 @@ Implementation and live acceptance tracking (spec files retained at their existi
 - [38 Community Email Engine And The Community Agent](./todo/38-community-email-engine-spec.md) — sending, imports, approvals, and Community Agent implemented; live send/unsubscribe acceptance remains
 - [41 The Autonomous Website And Community Loop](./todo/41-autonomous-website-and-community-loop-spec.md) — publishing, capture, cadence, and routine implemented; live acceptance remains
 
+- [51 Artist Profile Enrichment](./todo/51-artist-profile-enrichment/start-here.md) — spec only; sourced career context with separate artist ownership and existing Pulse analytics
+
 When one ships, move it back up into the numbered list above.
 
 Current V1 implementation notes:

@@ -21,6 +21,7 @@ an implementing agent as-is.
 | [43 Approved Branding Amendments](./43-approved-branding-amendments-spec.md) | Turns agreed Branding Agent work into a durable Output and an artist-approved, append-only Branding amendment without replacing user text | no `ArtistBrandingAmendment`, `BrandingAmendmentProposal`, or dedicated branding amendment tools |
 | [44 State-Aware First-Use Guide](./44-state-aware-first-use-guide-spec.md) | Extends the existing question-mark Guide with an optional first-use setup path whose progress comes from real AI, Brain, Vault, and first-work state | no `ArtistSetupSnapshot`, onboarding presentation state, setup mode, or coach-mark target contract |
 | [45 HQ / Campaign Scope Clarity](./45-hq-campaign-scope-clarity-spec.md) | One stated rule for where shared work lives, the unified timeline shown inside campaigns, and cross-owner channel-collision warnings — no new space, no new store | `collectArtistTimeline` has no RPC and only `manager-tools.ts` calls it; no `TimelineCollision` or `channel` on `TimelineEntry` |
+| [51 Artist Profile Enrichment](./51-artist-profile-enrichment/start-here.md) | Adds sourced career research below artist inputs using Deep Research; reuses existing Spotify analytics | no `artist-career-research` or profile-enrichment host service in baseline; spec only |
 
 Specs 38 and 41 remain at their existing paths for cross-reference stability,
 and their core workflows are implemented; full live loop acceptance remains open. Spec 48 also stays here for stable links: its
