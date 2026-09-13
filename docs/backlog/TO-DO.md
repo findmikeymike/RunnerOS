@@ -21,6 +21,8 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 
 ### Artist OS Distribution
 
+- [ ] **Configure and verify public update distribution.** `NEXT`. Release/updater code is on main; packaging requires `ARTIST_OS_UPDATE_URL`, including unsigned verification packages. Select a public HTTPS feed, verify anonymous downloads, and complete signed/notarized two-architecture update and data-preservation smoke before publishing. Local development is unaffected. [Packaging/update backlog](./artist-os-update-distribution.md).
+
 - [ ] **Finish Artist OS Premium v1 release readiness.** Licensing, signed entitlements, the Premium test product, Cloudflare test service, real test-mode purchase/refund/revocation, three-seat enforcement, seat recovery, and desktop activation UI are implemented and verified on `codex/artist-os-licensing`. Next: finish app edits and desktop-shell smoke. Final gates are policies/customer URLs, production domain/secrets/deployment, release-authority verification, signed/notarized Mac packaging, clean-machine proof, and one production purchase-to-refund smoke. Source: [Artist OS V1 Release Readiness](./artist-os-v1-release-readiness.md). Detailed licensing evidence: [Artist OS Lemon Squeezy Licensing](../licensing/artist-os-lemon-squeezy-release-plan.md).
 
 ### Social Publishing Providers
