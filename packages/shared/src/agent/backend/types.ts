@@ -390,6 +390,11 @@ export type SdkMcpServerConfig =
  * 3. Support streaming via AsyncGenerator
  * 4. Allow capability-based UI adaptation
  */
+export interface PendingSteer {
+  messageId?: string;
+  message: string;
+}
+
 export interface AgentBackend {
   // ============================================================
   // Chat & Lifecycle
@@ -451,7 +456,14 @@ export interface AgentBackend {
    * @returns true if steered (events flow through existing stream),
    *          false if aborted (session layer must queue + re-send)
    */
-  redirect(message: string): boolean;
+  redirect(message: string, messageId?: string): boolean;
+
+  /** Whether accepted steering can be recovered until actual provider injection. */
+  readonly supportsSteerRecovery: boolean;
+  /** Atomically transfer undelivered text identities back to the session owner. */
+  takePendingSteers(): PendingSteer[];
+  /** Called only for messages actually injected, never merely accepted into a queue. */
+  onSteerDelivered: ((messageIds: string[]) => void) | null;
 
   /**
    * Run a simple text completion using the backend's auth infrastructure.

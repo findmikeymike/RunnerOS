@@ -12,7 +12,7 @@ describe('ClaudeAgent handoff interrupts', () => {
 
     agent.currentQuery = { interrupt }
     agent.currentQueryAbortController = { abort }
-    agent.pendingSteerMessage = 'queued steer'
+    agent.pendingSteers = [{ messageId: 'original-id', message: 'queued steer' }]
     agent.lastAbortReason = null
     agent.debug = debug
 
@@ -22,7 +22,7 @@ describe('ClaudeAgent handoff interrupts', () => {
     expect(interrupt).toHaveBeenCalledTimes(1)
     expect(abort).not.toHaveBeenCalled()
     expect(agent.lastAbortReason).toBe(AbortReason.AuthRequest)
-    expect(agent.pendingSteerMessage).toBeNull()
+    expect(agent.takePendingSteers()).toEqual([{ messageId: 'original-id', message: 'queued steer' }])
   })
 
   it('logs interrupt failures instead of falling back to AbortController', async () => {
@@ -36,7 +36,7 @@ describe('ClaudeAgent handoff interrupts', () => {
 
     agent.currentQuery = { interrupt }
     agent.currentQueryAbortController = { abort }
-    agent.pendingSteerMessage = null
+    agent.pendingSteers = []
     agent.lastAbortReason = null
     agent.debug = debug
 

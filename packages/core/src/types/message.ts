@@ -342,6 +342,10 @@ export interface Message {
   isPending?: boolean;
   // Queued: user message that is waiting to be processed (sent during ongoing response)
   isQueued?: boolean;
+  /** Replay-only choices retained until a queued update is admitted. */
+  queuedOptions?: { skillSlugs?: string[]; legacySkillReferences?: string[]; optimisticMessageId?: string };
+  /** Existing auth/plan boundary; pending updates resume with the next deliberate send. */
+  queuedHandoff?: 'auth' | 'plan';
   // Intermediate text (commentary between tool calls, not final response)
   isIntermediate?: boolean;
   // Turn ID: Correlation ID from the API's message.id, groups all messages in an assistant turn
@@ -491,6 +495,10 @@ export interface StoredMessage {
   authWorkspace?: string;
   // Queued: user message that is waiting to be processed (persisted for recovery)
   isQueued?: boolean;
+  /** Replay-only choices retained until a queued update is admitted. */
+  queuedOptions?: { skillSlugs?: string[]; legacySkillReferences?: string[]; optimisticMessageId?: string };
+  /** Existing auth/plan boundary; pending updates resume with the next deliberate send. */
+  queuedHandoff?: 'auth' | 'plan';
 }
 
 /**
@@ -654,7 +662,7 @@ export type AgentEvent =
   | { type: 'shell_killed'; shellId: string; turnId?: string }
   | { type: 'source_activated'; sourceSlug: string; originalMessage: string }
   | { type: 'usage_update'; usage: Pick<AgentEventUsage, 'inputTokens' | 'contextWindow'> }
-  | { type: 'steer_undelivered'; message: string };
+  | { type: 'steer_undelivered'; message: string; entries?: Array<{ messageId?: string; message: string }> };
 
 /**
  * Generate a unique message ID

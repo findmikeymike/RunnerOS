@@ -941,13 +941,14 @@ export class PiAgent extends BaseAgent {
   /**
    * Send a JSONL command to the subprocess stdin.
    */
-  private send(cmd: Record<string, unknown>): void {
+  private send(cmd: Record<string, unknown>): boolean {
     if (!this.subprocess?.stdin?.writable) {
       this.debug('Cannot send to subprocess: stdin not writable');
-      return;
+      return false;
     }
     const line = JSON.stringify(cmd);
     this.subprocess.stdin.write(line + '\n');
+    return true;
   }
 
   /**
@@ -2385,7 +2386,7 @@ export class PiAgent extends BaseAgent {
    * queued tools, and continues with full context intact.
    * Events flow through the existing generator — no abort needed.
    */
-  override redirect(message: string): boolean {
+  override redirect(message: string, _messageId?: string): boolean {
     if (this.config.durableExecution) return false;
     if (!this._isProcessing || !this.subprocess) {
       // Not streaming or no subprocess — fall back to abort
@@ -2393,8 +2394,11 @@ export class PiAgent extends BaseAgent {
       return false;
     }
     this.debug(`Steering mid-stream: "${message.slice(0, 100)}"`);
-    this.send({ type: 'steer', message });
-    return true;
+    try { return this.send({ type: 'steer', message }); }
+    catch (error) {
+      this.debug(`Could not send steering update: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
   }
 
   // ============================================================

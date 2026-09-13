@@ -1,5 +1,5 @@
 import type { AgentEvent } from '@craft-agent/core/types';
-import type { AgentBackend, AgentContextUpdate, RecoveryMessage } from './types.ts';
+import type { AgentBackend, AgentContextUpdate, RecoveryMessage, PendingSteer } from './types.ts';
 import type { ModelAttempt } from '../../config/llm-connections.ts';
 import type { ResolvedModelFallbackCandidate } from '../../config/model-fallback.ts';
 import {
@@ -239,8 +239,17 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
   let disposed = false;
   let cancellationEpoch = 0;
   const candidatesInUse = new Set<AgentBackend>();
+  const releasedPendingSteers: PendingSteer[] = [];
+  const steerSequenceById = new Map<string, number>();
+  let steerSequence = 0;
+  const preservePendingSteers = (backend: AgentBackend) => {
+    releasedPendingSteers.push(...(backend.takePendingSteers?.() ?? []));
+  };
   const releaseBackend = (backend: AgentBackend | undefined) => {
-    if (backend && candidatesInUse.delete(backend)) backend.destroy();
+    if (backend && candidatesInUse.delete(backend)) {
+      preservePendingSteers(backend);
+      backend.destroy();
+    }
     if (active === backend) active = primary;
   };
   const cancelled = (epoch: number) => disposed || epoch !== cancellationEpoch;
@@ -734,11 +743,29 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
       if (active !== primary) active.setAgentContext(agentContext);
     },
 
-    redirect(message: string): boolean {
-      const steered = active.redirect(message);
+    redirect(message: string, messageId?: string): boolean {
+      const steered = active.redirect(message, messageId);
+      if (steered && messageId && !steerSequenceById.has(messageId)) steerSequenceById.set(messageId, steerSequence++);
       // Non-steering backends abort internally, bypassing this proxy's forceAbort.
       if (!steered) cancellationEpoch += 1;
       return steered;
+    },
+    takePendingSteers(): PendingSteer[] {
+      const entries = releasedPendingSteers.splice(0);
+      for (const backend of new Set([primary, active, ...candidatesInUse])) {
+        entries.push(...(backend.takePendingSteers?.() ?? []));
+      }
+      const seen = new Set<string>();
+      const pending = entries.filter(entry => {
+        if (!entry.messageId) return true;
+        if (seen.has(entry.messageId)) return false;
+        seen.add(entry.messageId);
+        return true;
+      }).sort((left, right) =>
+        (left.messageId ? steerSequenceById.get(left.messageId) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER)
+        - (right.messageId ? steerSequenceById.get(right.messageId) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER));
+      for (const entry of pending) if (entry.messageId) steerSequenceById.delete(entry.messageId);
+      return pending;
     },
     async abort(...args: Parameters<AgentBackend['abort']>): Promise<void> {
       cancellationEpoch += 1;
@@ -757,6 +784,7 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
       disposed = true;
       cancellationEpoch += 1;
       for (const backend of candidatesInUse) releaseBackend(backend);
+      preservePendingSteers(primary);
       primary.destroy();
     },
     dispose(): void {

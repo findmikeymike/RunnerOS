@@ -86,18 +86,8 @@ export function handleComplete(
     })
   }
 
-  // Clear isQueued from any user messages once the turn completes. Pi's steer
-  // path never emits a 'processing' status update to clear it (the message is
-  // injected mid-stream and absorbed into the current response), so this is
-  // the natural place to drop the indicator. Claude's queued path has already
-  // cleared via the 'processing' status update before this fires; this is
-  // a safe no-op for that case.
-  const hasQueuedUserBubbles = updatedMessages.some(m => m.role === 'user' && m.isQueued)
-  if (hasQueuedUserBubbles) {
-    updatedMessages = updatedMessages.map(m =>
-      m.role === 'user' && m.isQueued ? { ...m, isQueued: false } : m
-    )
-  }
+  // Completion is not a delivery receipt for steering messages. Keep queued
+  // indicators until the backend confirms delivery or restores them on Stop.
 
   return {
     state: {
@@ -579,7 +569,7 @@ export function handleConnectionChanged(
  * Handle user_message - confirms optimistic user message from backend
  *
  * Three statuses:
- * - 'accepted': Message is being processed (confirms optimistic message)
+ * - 'accepted': Message persisted (isQueued distinguishes pending steering from delivery)
  * - 'queued': Message was queued during ongoing response (adds if not present, marks as queued)
  * - 'processing': Queued message is now being processed (updates status)
  */
@@ -590,33 +580,32 @@ export function handleUserMessage(
   const { session, streaming } = state
   const { message, status } = event
 
-  // Find existing message by ID match (backend ID, optimistic ID, or content+timestamp fallback)
-  const existingIndex = session.messages.findIndex(m =>
-    m.role === 'user' && (
-      m.id === message.id ||
-      (event.optimisticMessageId && m.id === event.optimisticMessageId) ||
-      (m.content === message.content && Math.abs(m.timestamp - message.timestamp) < 5000)
-    )
+  // Prefer identity before the legacy optimistic-content fallback. Repeated
+  // identical corrections sent within seconds are still distinct messages.
+  let existingIndex = session.messages.findIndex(m =>
+    m.role === message.role && (m.id === message.id || (event.optimisticMessageId && m.id === event.optimisticMessageId))
   )
+  if (existingIndex < 0 && !event.optimisticMessageId) {
+    existingIndex = session.messages.findIndex(m =>
+      m.role === 'user' && m.isPending && m.content === message.content
+      && Math.abs(m.timestamp - message.timestamp) < 5000
+    )
+  }
 
   let updatedMessages: Message[]
 
   if (existingIndex >= 0) {
     const existingMessage = session.messages[existingIndex]
 
-    // Event sequence protection: don't regress from 'processing' back to 'queued'
+    // Event sequence protection: don't regress delivered messages to pending steering.
     // This handles out-of-order events (e.g., 'processing' arrives before 'queued')
-    if (status === 'queued' && existingMessage.isQueued === false) {
+    if ((status === 'queued' || (status === 'accepted' && message.isQueued === true)) && !existingMessage.isPending && existingMessage.isQueued === false) {
       // Already progressed past queued state, ignore this late 'queued' event
       return { state, effects: [] }
     }
 
-    // Update existing message — clear isPending, set isQueued based on status.
-    //
-    // - 'queued'     → isQueued = true  (Claude path: backend queued for re-send)
-    // - 'processing' → isQueued = false (queued message is now actually running)
-    // - 'accepted'   → isQueued = false (Pi steer path: agent has the message)
-    //
+    // Acceptance confirms persistence; pending steering remains queued until
+    // an explicit processing receipt. Ordinary accepted messages are unqueued.
     // We deliberately do NOT swap `m.id` to the backend's canonical id here.
     // ChatDisplay's `getTurnKey` keys user-message bubbles by id, and a swap
     // would unmount/remount the UserMessageBubble — wiping its local timer
@@ -628,7 +617,7 @@ export function handleUserMessage(
         return {
           ...m,
           isPending: false,
-          isQueued: status === 'queued',
+          isQueued: status === 'queued' || (status === 'accepted' && (message.isQueued ?? existingMessage.isQueued ?? false)),
         }
       }
       return m
@@ -638,7 +627,7 @@ export function handleUserMessage(
     const newMessage: Message = {
       ...message,
       isPending: false,
-      isQueued: status === 'queued',
+      isQueued: status === 'queued' || (status === 'accepted' && message.isQueued === true),
     }
     updatedMessages = [...session.messages, newMessage]
   }
@@ -652,7 +641,7 @@ export function handleUserMessage(
         ...(message.role === 'user' && !message.hidden ? { lastMessageRole: 'user' as const } : {}),
         // Set isProcessing when message is accepted/processing (enables multi-window sync)
         isProcessing: message.role === 'user'
-          ? status === 'accepted' || status === 'processing'
+          ? status === 'accepted' || status === 'processing' || session.isProcessing
           : session.isProcessing,
       },
       streaming,
