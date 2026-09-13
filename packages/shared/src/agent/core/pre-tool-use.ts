@@ -1,3 +1,4 @@
+import { voiceTaskToolBlockReason, type VoiceTaskScope } from './voice-task-cap.ts';
 import { getSessionToolTrustPolicy, normalizeSessionToolName } from '@craft-agent/session-tools-core';
 import { checkManagedSkillToolAccess } from './managed-skill-tool-guard.ts';
 /**
@@ -621,6 +622,7 @@ export type PreToolUseCheckResult =
  * hook input. All fields needed for the pipeline are normalized here.
  */
 export interface PreToolUseInput {
+  voiceTaskScope?: VoiceTaskScope;
   containsPrivateSkillPath?: (path: string) => boolean;
   remapSkillInput?: (input: Record<string, unknown>) => Record<string, unknown>;
   classifyPrivateSkillPath?: (path: string) => { protected: true; helper: boolean } | null;
@@ -836,9 +838,13 @@ function withPermissionModeContext(reason: string, sessionId: string, effectiveM
 }
 
 export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult {
+  const voiceBlock = voiceTaskToolBlockReason(ctx);
+  if (voiceBlock) return { type: 'block', reason: voiceBlock };
   const originalInput = ctx.input;
   const mappedInput = ctx.remapSkillInput?.(originalInput) ?? originalInput;
   ctx = { ...ctx, input: mappedInput };
+  const mappedVoiceBlock = voiceTaskToolBlockReason(ctx);
+  if (mappedVoiceBlock) return { type: 'block', reason: mappedVoiceBlock };
   const skillBlock = checkManagedSkillToolAccess(ctx.toolName, mappedInput, ctx.workingDirectory ?? ctx.workspaceRootPath, ctx.classifyPrivateSkillPath, ctx.containsPrivateSkillPath);
   if (skillBlock) return { type: 'block', reason: skillBlock };
   const {

@@ -14,7 +14,7 @@ import {
   type VoiceFocusTurnRequest,
 } from '../shared/artist-manager-voice-focus'
 
-import { normalizeVoiceHandoffTargets, buildVoiceHandoffTool, parseVoiceHandoffProposal, isVoiceHandoffConfirmation, type VoiceHandoffTarget, type VoiceHandoffProposal } from '../shared/artist-manager-voice-handoff'
+import { normalizeVoiceHandoffTargets, buildVoiceHandoffTool, buildVoiceNativeDraftTool, parseVoiceHandoffProposal, parseVoiceNativeDraftProposal, isVoiceHandoffConfirmation, type VoiceHandoffTarget, type VoiceHandoffProposal, type VoiceNativeDraftProposal } from '../shared/artist-manager-voice-handoff'
 import { resolveVoiceHandoffIntent } from './artist-manager-voice-handoff-intent'
 import { selectVoiceOpener, voiceArtistName } from '../shared/artist-manager-voice-openers'
 import { buildVoiceOpeningGreetingPrompt } from '../shared/artist-manager-voice-persona'
@@ -29,6 +29,7 @@ export type VoiceFocusDiagnostic = {
   confirmation?: boolean
   targetCount?: number
   toolCalls?: number
+  route?: 'background-draft' | 'command'
   intent?: 'confirm' | 'continue' | 'clarify'
 }
 export type VoiceFocusDependencies = {
@@ -41,7 +42,7 @@ export type VoiceFocusDependencies = {
 
 const supportedApis = new Set(['openai-completions', 'openai-responses', 'anthropic-messages', 'openai-codex-responses'])
 const bareModel = (id: string) => id.startsWith('pi/') ? id.slice(3) : id
-const SPEECH_MODE_PROMPT = 'Respond using exactly one tool: voice_reply for conversation or advice; open_command_chat only for an agreed handoff. voice_reply streams directly to speech, so keep it to 1–3 short sentences and at most 60 words unless more is requested. Never put text outside the tool or combine tools.\n\n'
+const SPEECH_MODE_PROMPT = 'Respond using exactly one available tool. Use voice_reply for conversation or advice, open_command_chat for an agreed handoff, and propose_background_draft only when that tool is available for a local draft proposal. voice_reply streams directly to speech, so keep it to 1–3 short sentences and at most 60 words unless more is requested. Never put text outside the tool or combine tools.\n\n'
 const SPEECH_TOOL: NonNullable<Context['tools']>[number] = {
   name: 'voice_reply',
   description: 'Speak an ordinary conversational reply. This only speaks; it does not execute work, navigate, or hand off. Use for advice, questions, discussion, and acknowledgements.',
@@ -50,14 +51,15 @@ const SPEECH_TOOL: NonNullable<Context['tools']>[number] = {
 
 // Keep provider payload validation separate from speech parsing. A changed SDK
 // shape must not silently turn the enforced speech choice into a free-text turn.
-function requireSpeechChoice(payload: unknown): unknown {
+function requireSpeechChoice(payload: unknown, background = false): unknown {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('invalid voice payload')
   const value = payload as Record<string, unknown>
   const thinking = value.thinking
   if (!thinking || typeof thinking !== 'object' || !('type' in thinking) || thinking.type !== 'disabled') throw new Error('voice reasoning must be disabled')
   const tools = value.tools
-  if (!Array.isArray(tools) || tools.length !== 2 || !tools.every((tool, index) =>
-    tool?.type === 'function' && tool.function?.name === (index === 0 ? 'voice_reply' : 'open_command_chat'))) throw new Error('invalid voice tools')
+  const expected = ['voice_reply', 'open_command_chat', ...(background ? ['propose_background_draft'] : [])]
+  if (!Array.isArray(tools) || tools.length !== expected.length || !tools.every((tool, index) =>
+    tool?.type === 'function' && tool.function?.name === expected[index])) throw new Error('invalid voice tools')
   return { ...value, tool_choice: 'required', parallel_tool_calls: false }
 }
 
@@ -173,6 +175,14 @@ const productionDependencies: VoiceFocusDependencies = {
   },
 }
 
+export type VoiceFocusWorkHost = {
+  context?(ownerId: number, workspaceId: string, sessionId: string): Promise<{text: string; unresolved: boolean}>
+  enabled(ownerId: number, workspaceId: string): boolean
+  launch(input: { ownerId: number; workspaceId: string; sessionId: string; turnId: string; proposal: VoiceNativeDraftProposal }): Promise<{ taskId: string; state: string }>
+}
+
+const WORK_MODE_PROMPT = '\n\nNative local draft work is available through propose_background_draft. It proposes a bounded local draft with an active specialist; the app asks for confirmation and enforces permissions before launch. Publishing, sending, spending, credentials and destructive work are unavailable through voice. Use open_command_chat for those or unsupported work, explaining that it opens an unsent brief for review. ROUTING: local draft requests default to propose_background_draft, even when the artist names a specialist. For example, “ask Scriptwriter to draft a short-form script” means background work. Use open_command_chat when the artist explicitly wants to open Command or work directly in a specialist chat, for example “open Scriptwriter so I can work with him”. Do not substitute Command merely because a specialist is named. If the requested focus or route is unclear, ask one necessary question through voice_reply. Never offer both routes for the same request. Never claim work started from a proposal. Never put work instructions into voice_reply. Keep talking while admitted work runs.'
+
 type Exchange = { user: string | null; assistant: string }
 type ActiveTurn = { id: string; controller: AbortController }
 type SessionState = {
@@ -186,7 +196,14 @@ type SessionState = {
   active?: ActiveTurn
   usedTurns: Set<string>
   handoffTargets: VoiceHandoffTarget[]
-  pendingHandoff?: { proposal: VoiceHandoffProposal; expiresAt: number }
+  pendingHandoff?: { proposal: VoiceNativeDraftProposal; expiresAt: number; background?: boolean }
+  // Admission identity and its outcome outlive an interrupted speech turn or offer expiry.
+  workAdmission?: {
+    proposal: VoiceNativeDraftProposal
+    inFlight?: Promise<{ taskId: string; state: string }>
+    result?: { taskId: string; state: string }
+  }
+  deliveredWork?: Set<string>
   handedOff?: boolean
 }
 type OwnerState = { session?: SessionState }
@@ -198,6 +215,7 @@ export class ArtistManagerVoiceFocusService {
   constructor(
     private readonly deps: VoiceFocusDependencies = productionDependencies,
     private readonly onDiagnostic?: (event: VoiceFocusDiagnostic) => void,
+    private readonly work?: VoiceFocusWorkHost,
   ) {}
 
   async register(ownerId: number, request: VoiceFocusRegisterRequest): Promise<VoiceFocusSession> {
@@ -214,7 +232,9 @@ export class ArtistManagerVoiceFocusService {
       const resolved = await this.deps.resolveConfig(request)
       const model = await validateResolvedVoiceRoute(resolved.connection, resolved.model, this.deps.resolveModel)
       if (this.owners.get(ownerId) !== owner) throw new Error('Voice setup was cancelled')
-      const info: VoiceFocusSession = { sessionId: randomUUID(), connection: resolved.connection.slug, model: resolved.model, thinking: request.thinking ?? resolved.thinking ?? 'low' }
+      const nativeTasks = request.workBridgeVersion === 1 && this.work?.enabled(ownerId, request.workspaceId) === true
+        && (request.thinking ?? resolved.thinking) === 'off' && model.provider === 'deepseek' && model.api === 'openai-completions' && model.id === 'deepseek-v4-flash' && model.baseUrl === 'https://api.deepseek.com'
+      const info: VoiceFocusSession = { ...(nativeTasks ? { nativeTasks: true } : {}), sessionId: randomUUID(), connection: resolved.connection.slug, model: resolved.model, thinking: request.thinking ?? resolved.thinking ?? 'low' }
       owner.session = { info, workspaceId: request.workspaceId, artistName: voiceArtistName(request.artistName), sdkModel: model, systemPrompt: request.systemPrompt, greetingPrompt: buildVoiceOpeningGreetingPrompt(resolved.style), history: [], usedTurns: new Set(), handoffTargets: normalizeVoiceHandoffTargets(request.handoffTargets ?? []) }
       return { ...info }
     } catch (error) {
@@ -244,7 +264,7 @@ export class ArtistManagerVoiceFocusService {
       try { this.onDiagnostic?.({ ...details, sessionId: session.info.sessionId, turnId: request.turnId }) } catch { /* Logging cannot break a call. */ }
     }
     const current = () => this.owners.get(ownerId)?.session === session && session.active === active && !signal.aborted
-    const send = (event: { type: 'text_delta'; delta: string } | { type: 'done' } | VoiceFocusCompletion | { type: 'handoff_ready'; proposal: VoiceHandoffProposal }) => {
+    const send = (event: { type: 'text_delta'; delta: string } | { type: 'done' } | VoiceFocusCompletion | { type: 'handoff_ready'; proposal: VoiceHandoffProposal } | { type: 'work_admitted'; taskId: string }) => {
       if (current()) emit({ ...event, sessionId: session.info.sessionId, turnId: request.turnId })
     }
     let timedOut = false
@@ -273,14 +293,14 @@ export class ArtistManagerVoiceFocusService {
         send({ type: 'done' })
         return
       }
-      const pending = session.pendingHandoff
+      const pending = session.pendingHandoff ?? (session.workAdmission ? { proposal: session.workAdmission.proposal, background: true, expiresAt: Infinity } : undefined)
       const pendingOffer = Boolean(pending && pending.expiresAt > Date.now())
       if (!pendingOffer) session.pendingHandoff = undefined
       let confirmation = isVoiceHandoffConfirmation(request.text)
       diagnostic({ stage: 'turn', pendingOffer, confirmation, targetCount: session.handoffTargets.length })
       let apiKey: string | null | undefined
       let continuingAfterOffer = false
-      if (pending && pendingOffer && !confirmation) {
+      if (pending && pendingOffer && !confirmation && !pending.background) {
         pendingIntentUnresolved = true
         apiKey = await this.deps.getApiKey(session.info.connection, signal, session.sdkModel)
         if (!current()) return
@@ -306,6 +326,36 @@ export class ArtistManagerVoiceFocusService {
       }
       session.pendingHandoff = undefined
       if (pending && pendingOffer && confirmation) {
+        if (pending.background) {
+          if (!session.info.nativeTasks || !this.work?.enabled(ownerId, session.workspaceId)) {
+            send({ type: 'text_delta', delta: 'Background work is unavailable. We can keep talking or open this draft in Command.' })
+            send({ type: 'done' }); return
+          }
+          const admission = session.workAdmission ??= { proposal: pending.proposal }
+          pendingIntentUnresolved = true
+          try {
+            // Reuse the original attempt even if speech was interrupted while the host was admitting it.
+            if (!admission.result) {
+              const attempt = admission.inFlight ??= this.work.launch({ ownerId, workspaceId: session.workspaceId, sessionId: session.info.sessionId, turnId: request.turnId, proposal: admission.proposal })
+              try { admission.result = await attempt }
+              finally { if (admission.inFlight === attempt) admission.inFlight = undefined }
+            }
+            const admitted = admission.result
+            if (!['running', 'succeeded', 'waiting_for_user', 'waiting_for_approval'].includes(admitted.state)) throw new Error('admission uncertain')
+            if (!current()) return // Retain the outcome for reconciliation; detach speech only.
+            const reply = `${admission.proposal.agentName} has the draft task. We can keep talking while they work.`
+            remember(reply)
+            send({ type: 'work_admitted', taskId: admitted.taskId })
+            session.workAdmission = undefined
+            pendingIntentUnresolved = false
+            send({ type: 'text_delta', delta: reply }); send({ type: 'done' }); return
+          } catch {
+            if (!current()) return
+            // The separate admission record retains its original identity without an offer expiry.
+            send({ type: 'text_delta', delta: "I couldn't confirm that task started. Check its existing task status before retrying; we can keep talking." })
+            send({ type: 'done' }); return
+          }
+        }
         // The app's previous turn named the destination and task. Consume once;
         // a bare yes without that live offer cannot open anything.
         session.handedOff = true
@@ -323,13 +373,20 @@ export class ArtistManagerVoiceFocusService {
       // DeepSeek rejects required tools while reasoning is enabled. Enable this
       // verified streaming envelope only on its non-reasoning route; preserve
       // the existing protocol for other providers and thinking settings.
+      const workContext = session.info.nativeTasks && this.work?.context
+        ? await this.work.context(ownerId, session.workspaceId, session.info.sessionId).catch(() => ({text: '\nTask status is unavailable. Do not propose new background work until it is reconciled.', unresolved: true}))
+        : {text: '', unresolved: false}
+      if (!current()) return
+      const backgroundTool = !workContext.unresolved && handoffTool && !session.workAdmission && session.info.nativeTasks && this.work?.enabled(ownerId, session.workspaceId)
+        ? buildVoiceNativeDraftTool(session.handoffTargets) : null
+      if (backgroundTool && handoffTool) handoffTool.description = 'Open an UNSENT brief only when the artist explicitly requests Command or direct work in a specialist chat, or for work unsupported by local background drafting. A request to have a specialist draft something belongs to propose_background_draft. This tool ends the voice call after confirmation; it does not execute work. ' + handoffTool.description
       const speechEnvelope = !!handoffTool && session.info.thinking === 'off'
         && session.sdkModel.provider === 'deepseek' && session.sdkModel.api === 'openai-completions'
         && session.sdkModel.id === 'deepseek-v4-flash' && session.sdkModel.baseUrl === 'https://api.deepseek.com'
       const context: Context = {
-        systemPrompt: greetingOnly ? session.greetingPrompt : (speechEnvelope ? SPEECH_MODE_PROMPT : '') + session.systemPrompt + (continuingAfterOffer
+        systemPrompt: greetingOnly ? session.greetingPrompt : (speechEnvelope ? SPEECH_MODE_PROMPT : '') + session.systemPrompt + workContext.text + (backgroundTool ? WORK_MODE_PROMPT : '') + (session.workAdmission ? '\n\nAn earlier local draft admission is still being reconciled. Keep talking, but do not offer or imply a replacement draft or claim its execution outcome. Refer to its existing task status; a new call must recover its journal identity before any retry.' : '') + (continuingAfterOffer
           ? '\n\nThe artist wants to continue talking or change the plan. Answer their latest reply naturally. Do not repeat the previous handoff offer in this reply, and do not claim the app lacks handoff capability. A new handoff can be offered on a later turn after the revised work is agreed.' : ''),
-        tools: handoffTool ? [...(speechEnvelope ? [SPEECH_TOOL] : []), handoffTool as NonNullable<Context['tools']>[number]] : [],
+        tools: handoffTool ? [...(speechEnvelope ? [SPEECH_TOOL] : []), handoffTool as NonNullable<Context['tools']>[number], ...(backgroundTool ? [backgroundTool as NonNullable<Context['tools']>[number]] : [])] : [],
         messages: session.history.flatMap<Context['messages'][number]>(exchange => [
           ...(exchange.user === null ? [] : [{ role: 'user' as const, content: exchange.user, timestamp: 0 }]),
           { role: 'assistant', content: [{ type: 'text', text: exchange.assistant }], api: session.sdkModel.api, provider: session.sdkModel.provider, model: session.sdkModel.id, stopReason: 'stop', timestamp: 0, usage: emptyUsage() },
@@ -343,11 +400,12 @@ export class ArtistManagerVoiceFocusService {
         toolChoice: handoffTool ? 'auto' : 'none',
         // The common SDK options expose only auto/none; its supported payload
         // hook carries DeepSeek's required choice without a type cast or retry.
-        onPayload: speechEnvelope ? requireSpeechChoice : undefined,
+        onPayload: speechEnvelope ? payload => requireSpeechChoice(payload, !!backgroundTool) : undefined,
       })
       let text = ''
       let done = false
-      let proposal: VoiceHandoffProposal | null = null
+      let proposal: VoiceNativeDraftProposal | null = null
+      let backgroundProposal = false
       let toolStarts = 0
       let speechTool = false
       let toolCompleted = false
@@ -384,11 +442,12 @@ export class ArtistManagerVoiceFocusService {
                 if (!args || typeof args !== 'object' || Array.isArray(args) || Object.keys(args).length !== 1 || !('text' in args) || !text.trim()) throw new Error('invalid speech tool')
                 toolCompleted = true
               }
-            } else if (call.name !== 'open_command_chat') throw new Error('invalid handoff')
+            } else if (call.name !== 'open_command_chat' && !(backgroundTool && call.name === 'propose_background_draft')) throw new Error('invalid handoff')
           }
           if (event.type === 'toolcall_end' && !speechTool) {
-            if (proposal || event.toolCall?.name !== 'open_command_chat') throw new Error('invalid handoff')
-            proposal = parseVoiceHandoffProposal(event.toolCall.arguments, randomUUID(), session.handoffTargets)
+            if (proposal || (event.toolCall?.name !== 'open_command_chat' && !(backgroundTool && event.toolCall?.name === 'propose_background_draft'))) throw new Error('invalid handoff')
+            backgroundProposal = event.toolCall?.name === 'propose_background_draft'
+            proposal = (backgroundProposal ? parseVoiceNativeDraftProposal : parseVoiceHandoffProposal)(event.toolCall.arguments, randomUUID(), session.handoffTargets)
             if (!proposal) throw new Error('invalid handoff')
             toolCompleted = true
           }
@@ -414,11 +473,11 @@ export class ArtistManagerVoiceFocusService {
       if (!current()) return
       if (!done || (!text.trim() && !proposal)) throw new Error('incomplete response')
       if (proposal) {
-        const offer = `How about I open Command with ${proposal.agentName} to work on ${proposal.taskTitle}? I'll carry our plan over as a draft for you to review and send.`
+        const offer = backgroundProposal ? `Have ${proposal.agentName}${proposal.taskModeLabel ? ` using ${proposal.taskModeLabel}` : ''} draft ${proposal.taskTitle} while we keep talking? This only starts local draft work.` : `How about I open Command with ${proposal.agentName} to work on ${proposal.taskTitle}? I'll carry our plan over as a draft for you to review and send.`
         text = offer
         send({ type: 'text_delta', delta: offer })
-        session.pendingHandoff = { proposal, expiresAt: Date.now() + 120_000 }
-        diagnostic({ stage: 'offer', toolCalls: toolStarts || 1 })
+        session.pendingHandoff = { proposal, expiresAt: Date.now() + 120_000, ...(backgroundProposal ? { background: true } : {}) }
+        diagnostic({ stage: 'offer', toolCalls: toolStarts || 1, route: backgroundProposal ? 'background-draft' : 'command' })
       } else if (handoffTool && !speechTool) {
         send({ type: 'text_delta', delta: text })
       }
@@ -435,7 +494,7 @@ export class ArtistManagerVoiceFocusService {
       active.controller.abort()
       if (shouldPublish) {
         try {
-          emit({ sessionId: session.info.sessionId, turnId: request.turnId, type: 'error', message: timedOut ? 'Voice response timed out. Please try again.' : incomplete ? 'The voice reply was cut short. Please try again.' : 'Voice response failed. No fallback model was used.' })
+          emit({ sessionId: session.info.sessionId, turnId: request.turnId, type: 'error', message: session.workAdmission ? 'The voice reply stopped while draft admission was being confirmed. The task may still be running; check its existing task status before retrying.' : timedOut ? 'Voice response timed out. Please try again.' : incomplete ? 'The voice reply was cut short. Please try again.' : 'Voice response failed. No fallback model was used.' })
         } catch { /* A destroyed renderer must not prevent provider cancellation. */ }
       }
     } finally {
@@ -444,6 +503,17 @@ export class ArtistManagerVoiceFocusService {
       if (session.active === active) session.active = undefined
     }
   }
+
+  recordWorkDelivery(ownerId: number, sessionId: string, deliveryId: string, text: string): void {
+    const session = this.ownedSession(ownerId, sessionId)
+    session.deliveredWork ??= new Set()
+    if (session.deliveredWork.has(deliveryId)) return
+    session.deliveredWork.add(deliveryId)
+    if (session.deliveredWork.size > 100) session.deliveredWork.delete(session.deliveredWork.values().next().value!)
+    session.history.push({user: null, assistant: text})
+    while (session.history.length > VOICE_FOCUS_LIMITS.historyTurns || historySize(session.history) > VOICE_FOCUS_LIMITS.historyChars) session.history.shift()
+  }
+  ownedWorkspace(ownerId: number, sessionId: string): string { return this.ownedSession(ownerId, sessionId).workspaceId }
 
   cancel(ownerId: number, request: VoiceFocusCancelRequest): void {
     const session = this.ownedSession(ownerId, request.sessionId)

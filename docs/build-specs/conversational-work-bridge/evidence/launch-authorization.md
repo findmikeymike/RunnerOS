@@ -1,0 +1,1 @@
+2026-09-13: Michael asked to fire up the right version to test this. This authorizes launching the isolated conversational-work-spec candidate with the native bridge enabled. No commit/merge/push authorized. Main/preload and T204 source/renderer hashes freshly match recorded evidence. No existing Artist OS main process found. Live behavior remains unverified.

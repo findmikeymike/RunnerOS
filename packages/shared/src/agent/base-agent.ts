@@ -1,3 +1,4 @@
+import { assertVoiceTaskBackend, bindImmutableVoiceTaskScope } from './core/voice-task-cap.ts';
 import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 /**
  * BaseAgent Abstract Class
@@ -315,7 +316,9 @@ export abstract class BaseAgent implements AgentBackend {
   // ============================================================
 
   constructor(config: BackendConfig, defaultModel: string, contextWindow?: number) {
-    this.config = config;
+    assertVoiceTaskBackend(config.voiceTaskScope, config.provider);
+    this.config = { ...config };
+    bindImmutableVoiceTaskScope(this.config, config.voiceTaskScope);
     // Use session's workingDirectory if set (user-changeable), fallback to workspace root
     this.workingDirectory = config.session?.workingDirectory ?? config.workspace.rootPath ?? process.cwd();
     this._sessionId = config.session?.id || `agent-${Date.now()}`;

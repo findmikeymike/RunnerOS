@@ -1,0 +1,132 @@
+{
+  "revision": "r1",
+  "sources": [
+    {
+      "id": "S-USER",
+      "path": "specification.md",
+      "authority": "User requested detailed integration specification and isolated worktree; proposed details are not implementation approval",
+      "sections": [
+        "Product experience",
+        "Requirements"
+      ]
+    },
+    {
+      "id": "S-CODE-VOICE",
+      "path": "apps/electron/src/renderer/hooks/useArtistManagerVoice.ts",
+      "authority": "Observed existing source; not new behavior authorization",
+      "version": "4491d212283bf5c31599c4488201ccaf75236a29",
+      "files": [
+        {
+          "path": "apps/electron/src/renderer/hooks/useArtistManagerVoice.ts",
+          "sha256": "8e926995c918035caf3a68ce509562311859d0bf9ec73fbb6c567d0d5ac295f1"
+        },
+        {
+          "path": "apps/electron/src/main/artist-manager-voice-focus.ts",
+          "sha256": "3485e282ee3f1ddb957f5ed30fba1932bec9ee3598d6a8603bdf4459bd542a3f"
+        },
+        {
+          "path": "apps/electron/src/shared/artist-manager-voice-focus.ts",
+          "sha256": "4e9af7bf864f6790b120a2022b33ddf69e2045f5f15424788284adabd1a00b52"
+        },
+        {
+          "path": "apps/electron/src/renderer/lib/artist-manager-voice-focus-prompt.ts",
+          "sha256": "d942b1fb5e4b4158ffbafac0d77c032abbf36fa055c5fbe88acf531555a82e6d"
+        },
+        {
+          "path": "apps/electron/src/renderer/lib/artist-manager-voice-focus-transport.ts",
+          "sha256": "726a36cc9ee3c8ea4054270e29f3607f703f6bfd0fb64c7dcdee2dd7dbd5ea1a"
+        }
+      ]
+    },
+    {
+      "id": "S-CODE-WORK",
+      "path": "packages/server-core/src/agent-messaging/AgentMessageService.ts",
+      "authority": "Observed existing source; not new behavior authorization",
+      "version": "4491d212283bf5c31599c4488201ccaf75236a29",
+      "files": [
+        {
+          "path": "packages/server-core/src/agent-messaging/AgentMessageService.ts",
+          "sha256": "5cbc813db37cc9e986487875b8fe31ecc5960defceda3028c0451720cffc057c"
+        },
+        {
+          "path": "packages/shared/src/agent-messaging/types.ts",
+          "sha256": "154e9996983c026cb8ce77fbcdcb1e59a08fb65fd7465f0e987a9c8bc76713a1"
+        },
+        {
+          "path": "packages/shared/src/agent-messaging/storage.ts",
+          "sha256": "28848ec5931634eefd39dc6f9e1598b9cde1a059e661d9dc07adf7e8dff6672e"
+        },
+        {
+          "path": "packages/shared/src/agent-messaging/validation.ts",
+          "sha256": "c76b92ed142e6cb2d15483810743d162ee1de921e30ecc4b4142146ad1041f22"
+        },
+        {
+          "path": "packages/server-core/src/sessions/SessionManager.ts",
+          "sha256": "01462e8cc6b962a58a771528b476477dce4cd965d7d897c5b6ccdc4db6d0909f"
+        },
+        {
+          "path": "packages/server-core/src/handlers/rpc/sessions.ts",
+          "sha256": "c09f87ca57941e16f96dde737572236263edf1fe4e5893f7ad0454dd4a6f3688"
+        }
+      ]
+    },
+    {
+      "id": "S-CODE-SDK",
+      "path": "vendor/voice-core-web/dist/VoiceCoreWeb.js",
+      "authority": "Observed existing source; not new behavior authorization",
+      "version": "4491d212283bf5c31599c4488201ccaf75236a29",
+      "files": [
+        {
+          "path": "vendor/voice-core-web/dist/VoiceCoreWeb.js",
+          "sha256": "274f84313add24621f08353bdd850bdf7696c38edc1e366726c2fb0c837ef35b"
+        },
+        {
+          "path": "vendor/voice-core-web/dist/VoiceCoreWeb.d.ts",
+          "sha256": "d6a6cd61ee8309b260c77d2f06aabd6b175e44b2e1b147f64430edc02dafec52"
+        },
+        {
+          "path": "vendor/voice-core-snapshot.json",
+          "sha256": "837021d0a510b5a96cdb0f9d79734717abf445fa5caad3cbe7de6018c288f6e1"
+        }
+      ]
+    },
+    {
+      "id": "S-REPO",
+      "path": "AGENTS.md",
+      "authority": "Observed existing source; not new behavior authorization",
+      "version": "4491d212283bf5c31599c4488201ccaf75236a29",
+      "files": [
+        {
+          "path": "AGENTS.md",
+          "sha256": "12e0e49bb192b4a925bfe8aba0755ffd1fa063c36d2a0add5a14960fd7c0978e"
+        },
+        {
+          "path": "GIT-FACTS-ALWAYS-READ-ME.md",
+          "sha256": "9134abc4ebb861223ce81a6c9919223fa71543f429cebf2f83b516ae366cabd7"
+        },
+        {
+          "path": "package.json",
+          "sha256": "7c4b201adbcda28b7488abdc68b851da25e9e0235a40849e6066bd5ac66b6e3e"
+        }
+      ]
+    },
+    {
+      "id": "S-BODHI",
+      "path": "https://github.com/randombet/bodhi_realtime_agent",
+      "authority": "Nonbinding design reference; README inspected 2026-09-10; mutable main, no benchmark or imported code",
+      "version": "web read 2026-09-10; commit not pinned"
+    },
+    {
+      "id": "S-CICERO",
+      "path": "https://github.com/5uck1ess/cicero",
+      "authority": "Nonbinding design reference; README inspected 2026-09-10; mutable main, no benchmark or imported code",
+      "version": "web read 2026-09-10; commit not pinned"
+    },
+    {
+      "id": "S-LOGICA",
+      "path": "https://github.com/Rovemark/logica-voice",
+      "authority": "Nonbinding design reference; README inspected 2026-09-10; mutable main, no benchmark or imported code",
+      "version": "web read 2026-09-10; commit not pinned"
+    }
+  ]
+}

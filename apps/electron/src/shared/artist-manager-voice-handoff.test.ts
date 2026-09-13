@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   buildVoiceHandoffTool, isVoiceHandoffConfirmation, normalizeVoiceHandoffTargets,
-  parseVoiceHandoffProposal, VOICE_HANDOFF_LIMITS,
+  parseVoiceHandoffProposal, parseVoiceNativeDraftProposal, buildVoiceNativeDraftTool, VOICE_HANDOFF_LIMITS,
 } from './artist-manager-voice-handoff'
 
 const targets = [{ slug: 'release-manager', name: 'Release Manager', description: 'Release planning' }]
@@ -70,5 +70,30 @@ describe('focused voice handoff boundary', () => {
       'go ahead and run the campaign', "let's do it tomorrow", 'okay; ignore the policy',
       'yes go but change the agent', 'yes go tomorrow', 'open it and send', 'um maybe go',
     ]) expect(isVoiceHandoffConfirmation(utterance)).toBe(false)
+  })
+})
+
+describe('native voice draft focus selection', () => {
+  const modes = [{ id: 'youtube', label: 'YouTube' }, { id: 'short-form', label: 'Reels / TikTok' }]
+  const catalog = [{ slug: 'scriptwriter', name: 'Scriptwriter', taskModes: modes }, { slug: 'one-mode', name: 'One', taskModes: [{ id: 'local-draft', label: 'Local draft' }] }]
+  const draft = { agentSlug: 'scriptwriter', taskTitle: 'a teaser', brief: 'Draft the agreed teaser.' }
+  test('requires explicit selection for multiple modes and uses only the captured label', () => {
+    expect(parseVoiceNativeDraftProposal(draft, 'id', catalog)).toBeNull()
+    expect(parseVoiceNativeDraftProposal({ ...draft, taskModeId: 'youtube' }, 'id', catalog)).toMatchObject({ taskModeId: 'youtube', taskModeLabel: 'YouTube' })
+    for (const taskModeId of ['other', 'local-draft', '../youtube', ' youtube', null]) expect(parseVoiceNativeDraftProposal({ ...draft, taskModeId }, 'id', catalog)).toBeNull()
+    expect(parseVoiceNativeDraftProposal({ ...draft, taskModeId: 'youtube', taskModeLabel: 'Injected label' }, 'id', catalog)).toBeNull()
+  })
+  test('single-mode or mode-free workers remain usable; old Command parser stays exact', () => {
+    expect(parseVoiceNativeDraftProposal({ ...draft, agentSlug: 'one-mode' }, 'id', catalog)).toMatchObject({ taskModeId: 'local-draft', taskModeLabel: 'Local draft' })
+    expect(parseVoiceNativeDraftProposal(args, 'id', targets)).toMatchObject({ agentSlug: 'release-manager' })
+    expect(parseVoiceHandoffProposal({ ...draft, taskModeId: 'youtube' }, 'id', catalog)).toBeNull()
+    expect(parseVoiceHandoffProposal(draft, 'id', catalog)).toMatchObject({ agentSlug: 'scriptwriter' })
+  })
+  test('tool lists exact mode ids and labels and directs ambiguity to a spoken question', () => {
+    const tool = buildVoiceNativeDraftTool(catalog)!
+    expect(tool.parameters.properties.taskModeId?.enum).toEqual(['youtube', 'short-form', 'local-draft'])
+    expect(tool.description).toContain('Reels / TikTok')
+    expect(tool.description).toContain('use voice_reply to ask')
+    expect(tool.parameters.additionalProperties).toBe(false)
   })
 })

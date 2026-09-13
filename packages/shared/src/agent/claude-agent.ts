@@ -1,3 +1,4 @@
+import { voiceTaskToolBlockReason, type VoiceTaskScope } from './core/voice-task-cap.ts';
 import { sanitizePrivateSkillHookInput } from './core/private-skill-activity.ts';
 import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
@@ -172,6 +173,7 @@ export function resolveClaudeThinkingOptions(args: {
 }
 
 export interface ClaudeAgentConfig {
+  voiceTaskScope?: VoiceTaskScope;
   workspace: Workspace;
   session?: Session;           // Current session (primary isolation boundary)
   mcpToken?: string;           // Override token (for testing)
@@ -678,6 +680,7 @@ export class ClaudeAgent extends BaseAgent {
     const CLAUDE_CONTEXT_WINDOW = getModelContextWindow(model) ?? 200_000;
     const backendConfig: BackendConfig = {
       provider: 'anthropic',
+      voiceTaskScope: config.voiceTaskScope,
       workspace: config.workspace,
       session: config.session,
       model,
@@ -1136,7 +1139,7 @@ export class ClaudeAgent extends BaseAgent {
         // User hooks from automations.json are merged with internal hooks
         hooks: (() => {
           // Build user-defined hooks from automations.json using the workspace-level AutomationSystem
-          const userHooks: Partial<Record<string, SdkAutomationCallbackMatcher[]>> = this.automationSystem?.buildSdkHooks() ?? {};
+          const userHooks: Partial<Record<string, SdkAutomationCallbackMatcher[]>> = this.config.voiceTaskScope ? {} : (this.automationSystem?.buildSdkHooks() ?? {});
           if (Object.keys(userHooks).length > 0) {
             debug('[CraftAgent] User SDK hooks loaded:', Object.keys(userHooks).join(', '));
           }
@@ -1151,9 +1154,13 @@ export class ClaudeAgent extends BaseAgent {
               }
               // Validate the fields we depend on are actually present
               if (!_hookInput.tool_name || !_hookInput.tool_use_id) {
+                if (this.config.voiceTaskScope) return blockWithReason('Voice-origin tool invocation is missing correlation metadata. Use Command.');
                 return { continue: true };
               }
               const input = _hookInput as Required<Pick<typeof _hookInput, 'tool_name' | 'tool_use_id'>> & typeof _hookInput;
+
+              const voiceBlock = voiceTaskToolBlockReason({ voiceTaskScope: this.config.voiceTaskScope, workspaceId: this.config.workspace.id, workspaceRootPath: this.workspaceRootPath, toolName: input.tool_name, input: input.tool_input as Record<string, unknown> });
+              if (voiceBlock) return blockWithReason(voiceBlock);
 
               // Track Read tool calls for prerequisite checking
               if (input.tool_name === 'Read') {
@@ -1272,6 +1279,7 @@ export class ClaudeAgent extends BaseAgent {
                 allSourceSlugs: this.sourceManager.getAllSources().map(s => s.config.slug),
                 hasSourceActivation: !!this.onSourceActivationRequest,
                 trustedWorkerTools: this.config.session?.trustedWorkerTools,
+                voiceTaskScope: this.config.voiceTaskScope,
                 teamAutomationPolicy: this.config.teamAutomationPolicy,
                 permissionManager: this.permissionManager,
                 prerequisiteManager: this.prerequisiteManager,

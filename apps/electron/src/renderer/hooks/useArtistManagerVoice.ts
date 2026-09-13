@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { createVoiceWorkCall, type VoiceWorkView } from '@/lib/voice-task-delivery/call'
 import { createAvatarPlayback } from '@/lib/artist-manager-avatar-playback'
 import type { AvatarPlayback } from '@/lib/mikey-avatar/pose'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
@@ -21,6 +22,11 @@ import {
 } from '@/lib/artist-manager-voice-style'
 
 export type ArtistManagerVoiceState = {
+  work: VoiceWorkView
+  cancellingWork: string[]
+  cancelWorkTask(taskId: string, attemptId: string): Promise<void>
+  openWorkOutput(taskId: string, outputId: string): Promise<void>
+  retryWorkIntent(intentId: string): Promise<void>
   timingEnabled: boolean; setTimingEnabled(value: boolean): void
   typedTrial: boolean; setTypedTrial(value: boolean): void
   voiceModel: string | null; voiceRouteReady: boolean
@@ -54,6 +60,9 @@ export function useArtistManagerVoice(input: {
   const [timingRecords, setTimingRecords] = React.useState<VoiceTimingRecord[]>([])
   const timingRef = React.useRef<VoiceTimingTrace | null>(null)
   const runtimeRef = React.useRef<VoiceCoreWeb | null>(null)
+  const workCall = React.useRef<ReturnType<typeof createVoiceWorkCall> | null>(null)
+  const [work, setWork] = React.useState<VoiceWorkView>({tasks: [], unresolved: []})
+  const [cancellingWork, setCancellingWork] = React.useState<string[]>([])
   const avatarPlayback = React.useRef(createAvatarPlayback()).current
   const [avatarState, setAvatarState] = React.useState<'idle' | 'listening' | 'waiting' | 'speaking'>('idle')
   const typedSendingRef = React.useRef(false)
@@ -94,6 +103,8 @@ export function useArtistManagerVoice(input: {
 
   const stop = React.useCallback(async (cancelHandoff = true) => {
     preparedSettings.current = null
+    workCall.current?.stop(); workCall.current = null
+    if (mounted.current) setCancellingWork([])
     avatarPlayback.reset()
     if (cancelHandoff) handoff.current?.cancel()
     preparation.current = null; activationEpoch.current++; activating.current = false
@@ -118,7 +129,7 @@ export function useArtistManagerVoice(input: {
     mounted.current = true
     return () => { mounted.current = false; refreshEpoch.current++; void stop() }
   }, [stop])
-  React.useLayoutEffect(() => { void stop() }, [input.workspaceId, stop])
+  React.useLayoutEffect(() => { setWork({tasks: [], unresolved: []}); void stop() }, [input.workspaceId, stop])
 
   const refreshDevices = React.useCallback(async () => {
     try {
@@ -265,9 +276,24 @@ export function useArtistManagerVoice(input: {
             const profile = parseArtistProfileDocResult(profileDoc ?? undefined)
             lifecycle.assertOwner(ticket)
             const session = await window.electronAPI.artistManagerVoiceFocus.register({
+              ...(typeof runtime.externalAssistantTurn === 'function' && window.electronAPI.artistManagerVoiceWork ? {workBridgeVersion: 1 as const} : {}),
               workspaceId: input.workspaceId, systemPrompt, artistName: profile.ok ? profile.profile.artistName : undefined,
-              handoffTargets: currentInput.current.onOpenCommand ? normalizeVoiceHandoffTargets(currentInput.current.handoffTargets ?? []) : [],
+              handoffTargets: currentInput.current.onOpenCommand ? normalizeVoiceHandoffTargets((currentInput.current.handoffTargets ?? []).map(target => ({
+                ...target,
+                taskModes: currentInput.current.agents.find(agent => agent.slug === target.slug)?.metadata.taskModes?.map(mode => ({ id: mode.id, label: mode.label })),
+              }))) : [],
             })
+            if (alive() && session.nativeTasks && window.electronAPI.artistManagerVoiceWork) {
+              workCall.current?.stop()
+              const call = createVoiceWorkCall({
+                api: window.electronAPI.artistManagerVoiceWork, sessionId: session.sessionId, runtime,
+                onView: value => { if (alive()) setWork(value) },
+                onError: message => { if (alive()) setError(message) },
+              })
+              workCall.current = call
+              await call.ready
+              if (!alive()) call.stop()
+            }
             if (alive()) trace?.mark('session-setup-ready', { sessionId: session.sessionId, model: session.model, connection: session.connection, thinking: session.thinking })
             return session
           },
@@ -404,11 +430,36 @@ export function useArtistManagerVoice(input: {
     finally { typedSendingRef.current = false; if (mounted.current) setTypedSending(false) }
   }
 
+  const cancelWorkTask = async (taskId: string, attemptId: string) => {
+    const call = workCall.current
+    if (!call) { setError('Reconnect the call to manage this task.'); return }
+    const key = `${taskId}:${attemptId}`
+    setCancellingWork(previous => previous.includes(key) ? previous : [...previous, key])
+    try { await call.cancelTask(taskId, attemptId) }
+    catch { if (mounted.current && workCall.current === call) setError('Cancellation could not be confirmed. Check this task’s status before trying again.') }
+    finally { if (mounted.current && workCall.current === call) setCancellingWork(previous => previous.filter(item => item !== key)) }
+  }
+  const openWorkOutput = async (taskId: string, outputId: string) => {
+    const call = workCall.current
+    if (!call) { setError('Reconnect the call to verify this result.'); return }
+    try {
+      const output = await call.validateOutput(taskId, outputId)
+      if (workCall.current !== call) return
+      await window.electronAPI.openOutputFile(input.workspaceId, output.outputId)
+    } catch { if (workCall.current === call) setError('This saved result is no longer available.') }
+  }
+  const retryWorkIntent = async (intentId: string) => {
+    const call = workCall.current
+    if (!call) return
+    try { await call.retryIntent(intentId) }
+    catch { if (workCall.current === call) setError('That request could not be confirmed. Reconcile its existing task in Command before retrying.') }
+  }
   const change = <T extends string>(key: string, setter: React.Dispatch<React.SetStateAction<T>>, value: T) => { void stop(); setter(value); writePreference(key, value) }
   const hearingReady = sttSelection === 'assembly_ai' ? providers.assemblyAi
     : moonshine.available && moonshine.tiers.some(tier => tier.modelId === sttSelection && tier.registered && tier.installState === 'ready' && !tier.hasError)
   const voiceRouteReady = settingsLoaded && Boolean(voiceSettings.connectionSlug && voiceSettings.model)
   return {
+    work, cancellingWork, cancelWorkTask, openWorkOutput, retryWorkIntent,
     voiceModel: voiceSettings.model, voiceRouteReady,
     timingEnabled, setTimingEnabled: value => { if (!running && !starting && !stopping) { void stop(); setTimingEnabled(value); writePreference('measure', String(value)) } },
     typedTrial, setTypedTrial: value => { if (!running && !starting && !stopping) { void stop(); setTypedTrial(value) } },

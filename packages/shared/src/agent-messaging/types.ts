@@ -36,7 +36,27 @@ export interface MessageAgentResult {
   };
 }
 
+/** Host-only correlation, never accepted from a message_agent tool argument. */
+export interface VoiceTaskCorrelation {
+  schemaVersion: 1;
+  workspaceId: string;
+  taskId: string;
+  attemptId: string;
+  intentId: string;
+  admissionKey: string;
+  requestDigest: string;
+}
+
+export interface AgentMessageTerminalOutcome {
+  /** Outputs observed at this exact processing boundary, never later child prose. */
+  outputIds?: string[];
+  generation: number;
+  reason: 'complete' | 'interrupted' | 'error' | 'timeout' | 'unknown';
+}
+
 export interface AgentMessageReceipt {
+  voiceTask?: VoiceTaskCorrelation;
+  executionOutcome?: AgentMessageTerminalOutcome;
   schemaVersion: 1;
   id: string;
   workspaceId: string;

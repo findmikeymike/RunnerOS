@@ -1,3 +1,4 @@
+import type { VoiceTaskScope } from '../core/voice-task-cap.ts';
 /**
  * Backend Abstraction Types
  *
@@ -199,6 +200,8 @@ export interface CoreBackendConfig {
   agentSkillSlugs?: string[];
 
   /** Fail-closed external operator policy supplied by the host runtime. */
+  voiceTaskScope?: VoiceTaskScope;
+
   teamAutomationPolicy?: {
     enabled: boolean;
     automatedAncestry: boolean;

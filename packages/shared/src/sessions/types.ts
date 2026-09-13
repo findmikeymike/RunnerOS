@@ -109,6 +109,8 @@ export interface AgentCapabilityExpansionReceipt {
 }
 
 export interface SessionLaunchReceipt {
+  /** Immutable host correlation and restrictive voice origin, retained on descendants. */
+  voiceTask?: import('../agent-messaging/types.ts').VoiceTaskCorrelation & { receiptId: string };
   createdAt: number;
   origin: 'manual' | 'agent' | 'concierge' | 'workflow' | 'deep-research' | 'automation' | 'branch' | 'spawned-session';
   /** Immutable ancestry marker for sessions descended from background execution. */

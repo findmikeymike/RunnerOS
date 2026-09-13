@@ -165,7 +165,7 @@ export class AudioGraph {
                 if (event.data?.type === "outputFlushed") {
                     if (this.pendingOutputFlush === event.data.requestId) {
                         this.pendingOutputFlush = null;
-                        this.outputFlushedHandler?.();
+                        this.outputFlushedHandler?.({ requestId: event.data.requestId, playbackEpoch: this.getPlaybackEpoch() });
                     }
                     return;
                 }
@@ -339,11 +339,13 @@ export class AudioGraph {
     setOutputFlushedHandler(handler) {
         this.outputFlushedHandler = handler;
     }
-    flushOutputQueue() {
+    hasPendingOutputFlush() { return this.pendingOutputFlush !== null; }
+    flushOutputQueue(onRequest) {
         if (!this.outputNode || this.pendingOutputFlush !== null)
             return;
         const requestId = ++this.outputFlushSequence;
         this.pendingOutputFlush = requestId;
+        onRequest?.({ requestId, playbackEpoch: this.getPlaybackEpoch() });
         this.outputNode.port.postMessage({ type: "flushOutput", requestId });
     }
     setOutputQueuePressureHandler(handler) {

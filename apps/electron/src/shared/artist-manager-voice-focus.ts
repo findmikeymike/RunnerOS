@@ -4,6 +4,7 @@ import type { VoiceHandoffTarget, VoiceHandoffProposal } from './artist-manager-
 export type VoiceFocusThinking = 'off' | 'low'
 
 export type VoiceFocusRegisterRequest = {
+  workBridgeVersion?: 1
   workspaceId: string
   artistName?: string
   systemPrompt: string
@@ -14,6 +15,7 @@ export type VoiceFocusRegisterRequest = {
 }
 
 export type VoiceFocusSession = {
+  nativeTasks?: boolean
   sessionId: string
   model: string
   connection: string
@@ -43,6 +45,7 @@ export type VoiceFocusEvent = { sessionId: string; turnId: string } & (
   | { type: 'text_delta'; delta: string }
   | VoiceFocusCompletion
   | { type: 'handoff_ready'; proposal: VoiceHandoffProposal }
+  | { type: 'work_admitted'; taskId: string }
   | { type: 'done' }
   | { type: 'error'; message: string }
 )

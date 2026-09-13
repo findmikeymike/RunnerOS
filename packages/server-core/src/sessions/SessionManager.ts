@@ -1,3 +1,8 @@
+import { completeLaunchReceipt, hasAutomatedSessionAncestry } from './session-launch-receipt'
+export { hasAutomatedSessionAncestry } from './session-launch-receipt'
+import type { VoiceTaskBridgeHost, VoiceTaskRequest } from '../voice-tasks/VoiceTaskBridge'
+import { VoiceTaskBridgeError } from '../voice-tasks/VoiceTaskBridge'
+import { type VoiceTaskCorrelation, type AgentMessageTerminalOutcome } from '@craft-agent/shared/agent-messaging'
 import { loadActiveAgentsForWorkspace, shouldBackfillLegacyAgentActivation } from './agent-registration'
 import { createDurableWorkflowStart } from '../workflows/durable-workflow-start'
 import { DurableWorkflowStartupGate } from '../workflows/durable-workflow-startup-gate'
@@ -21,7 +26,7 @@ import {
 import { withAutomaticSchedulePlacementLock } from '../scheduled-work/AutomaticSchedulePlacementLock'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
 import { basename, dirname, join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, statSync, realpathSync } from 'fs'
 import { readFile, writeFile, mkdir, rename } from 'fs/promises'
 import { createHash, randomUUID } from 'node:crypto'
 import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary, resolveKeepBackgroundTasksAlive, modelFallbackAttentionReason } from '@craft-agent/shared/agent'
@@ -796,73 +801,6 @@ function truncateMemorySidecarText(value: string, maxLength = 8000): string {
   return `${normalized.slice(0, maxLength)}\n[truncated]`
 }
 
-function completeLaunchReceipt(
-  receipt: SessionLaunchReceipt | undefined,
-  fallback: {
-    origin: SessionLaunchReceipt['origin']
-    model?: string
-    llmConnection?: string
-    permissionMode?: PermissionMode
-    thinkingLevel?: ThinkingLevel
-    workingDirectory?: string
-    customSystemPrompt?: string
-    agentSkillSlugs?: string[]
-    enabledSourceSlugs?: string[]
-    spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
-    inheritedAutomatedAncestry?: boolean
-  },
-): SessionLaunchReceipt {
-  const injected = receipt?.injected ?? {
-    skills: fallback.agentSkillSlugs ?? [],
-    sources: fallback.enabledSourceSlugs ?? [],
-    contextDocs: [],
-  }
-  return {
-    createdAt: receipt?.createdAt ?? Date.now(),
-    origin: receipt?.origin ?? fallback.origin,
-    automatedAncestry: hasAutomatedSessionAncestry(receipt)
-      || fallback.inheritedAutomatedAncestry === true
-      || isAutomatedLaunchOrigin(receipt?.origin ?? fallback.origin),
-    summary: receipt?.summary,
-    agent: receipt?.agent ?? (fallback.spawnedFromAgent
-      ? {
-          slug: fallback.spawnedFromAgent.agentSlug,
-          name: fallback.spawnedFromAgent.agentName,
-        }
-      : undefined),
-    taskMode: receipt?.taskMode,
-    capabilityExpansions: receipt?.capabilityExpansions,
-    taskModeSelectionPending: receipt?.taskModeSelectionPending,
-    workflow: receipt?.workflow,
-    deepResearch: receipt?.deepResearch,
-    automation: receipt?.automation,
-    config: {
-      ...receipt?.config,
-      model: fallback.model,
-      llmConnection: fallback.llmConnection,
-      permissionMode: fallback.permissionMode,
-      thinkingLevel: fallback.thinkingLevel,
-      workingDirectory: fallback.workingDirectory,
-    },
-    injected: {
-      ...injected,
-      skills: injected.skills ?? [],
-      sources: injected.sources ?? [],
-      contextDocs: injected.contextDocs ?? [],
-      systemPromptChars: receipt?.injected.systemPromptChars
-        ?? (fallback.customSystemPrompt ? fallback.customSystemPrompt.length : undefined),
-    },
-    routing: receipt?.routing,
-  }
-}
-
-function isAutomatedLaunchOrigin(origin: SessionLaunchReceipt['origin'] | undefined): boolean {
-  return origin === 'automation' || origin === 'workflow' || origin === 'deep-research'
-}
-
-export function hasAutomatedSessionAncestry(receipt: SessionLaunchReceipt | undefined): boolean {
-  return receipt?.automatedAncestry === true || isAutomatedLaunchOrigin(receipt?.origin)
-}
 
 async function recordInjectedMemoryFromLaunchReceipt(
   receipt: SessionLaunchReceipt,
@@ -2083,6 +2021,8 @@ function isCreativeLabWorkspaceInfo(workspace: { id?: string; name?: string; roo
 
 export class SessionManager implements ISessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
+  private voiceReceiptListeners = new Set<(receipt: AgentMessageReceipt) => void>()
+  private voiceExecutionWaiters = new Map<string, { generation: number; resolve: (outcome: AgentMessageTerminalOutcome) => void }>()
   private sendMessageAdmissionLocks: Map<string, Promise<void>> = new Map()
   private taskModeOpenings = new Map<string, SendMessageOptions>()
   private canvasVisualReviewAttempts: Map<string, number> = new Map()
@@ -3072,6 +3012,170 @@ export class SessionManager implements ISessionManager {
       if (m.role === 'assistant') return m.content ?? ''
     }
     return ''
+  }
+
+
+  /** Shared host entry used by ordinary message_agent and the native voice adapter. */
+  private createAgentMessageService(managed: ManagedSession): AgentMessageService {
+    return new AgentMessageService({
+            createSession: async (wsId, opts) => {
+              const session = await this.createSession(wsId, opts)
+              await this.flushSession(session.id)
+              return { id: session.id }
+            },
+            resolveAgentSessionOptions: (wsId, agentSlug, options) => this.resolveAgentSessionOptions(wsId, agentSlug, options),
+            assertVoiceBackendSupported: (workspaceId, options) => this.assertVoiceTaskBackendSupported(workspaceId, options),
+            executeVoiceTurn: (sessionId, prompt, options) => this.executeVoiceTaskTurn(sessionId, prompt, options),
+            onReceiptChanged: (receipt) => { for (const listener of this.voiceReceiptListeners) listener(receipt) },
+            sendMessage: (sessionId, prompt, options) => this.sendMessage(
+              sessionId,
+              prompt,
+              undefined,
+              undefined,
+              {
+                ...(options?.skillSlugs?.length ? { skillSlugs: options.skillSlugs } : {}),
+                displayIntent: options?.displayIntent,
+                inputOrigin: 'agent',
+              },
+            ),
+            abortSession: async (sessionId) => {
+              const target = this.sessions.get(sessionId)
+              if (!target) return
+              target.agent?.forceAbort(AbortReason.UserStop)
+            },
+            getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
+            getSessionToolUseSummary: (sessionId) => getCompletedToolUseSummary(this.sessions.get(sessionId)),
+            getWorkspaceRootPath: (workspaceId) => {
+              const workspace = getWorkspaceByNameOrId(workspaceId)
+              if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+              return workspace.rootPath
+            },
+            isAgentActive: (workspaceId, agentSlug) => {
+              const workspace = getWorkspaceByNameOrId(workspaceId)
+              if (!workspace) return false
+              if (!isAgentAllowedInArtistWorkspace(agentSlug, workspace.artistWorkspaceScope)) return false
+              return loadActiveAgentsForWorkspace(workspace).some((agent) => agent.slug === agentSlug)
+            },
+            deliverPassiveMessage: async (sessionId, message, agentMessage) => {
+              const target = this.sessions.get(sessionId)
+              if (!target) throw new Error(`Session ${sessionId} not found`)
+              if (target.workspace.id !== managed.workspace.id) {
+                throw new Error(`Session "${sessionId}" is not in this workspace.`)
+              }
+              await this.deliverPassiveAgentMessage(target, message, agentMessage)
+            },
+            resolveUsableSourceSlugs: (workspaceId, sourceSlugs) => {
+              const workspace = getWorkspaceByNameOrId(workspaceId)
+              if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+              const sources = getSourcesBySlugs(workspace.rootPath, sourceSlugs)
+              const usable = new Set(sources.filter(isSourceUsable).map((source) => source.config.slug))
+              return {
+                usable: sourceSlugs.filter((slug) => usable.has(slug)),
+                unavailable: sourceSlugs.filter((slug) => !usable.has(slug)),
+              }
+            },
+          })
+  }
+
+  private assertVoiceTaskBackendSupported(workspaceId: string, options: Partial<CreateSessionOptions>): void {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace || workspace.remoteServer) throw new VoiceTaskBridgeError('unsupported_capability', 'Voice work requires a local workspace.')
+    const config = loadWorkspaceConfig(workspace.rootPath)
+    const context = resolveBackendContext({ sessionConnectionSlug: options.llmConnection, workspaceDefaultConnectionSlug: config?.defaults?.defaultLlmConnection, managedModel: options.model })
+    if (context.provider !== 'anthropic' || !context.connection) throw new VoiceTaskBridgeError('unsupported_capability', 'This specialist backend does not support the voice task permission cap. Use Command.')
+  }
+
+  private async executeVoiceTaskTurn(sessionId: string, prompt: string, options?: { skillSlugs?: string[]; displayIntent?: 'agent-delegation-task' }): Promise<AgentMessageTerminalOutcome> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed?.launchReceipt?.voiceTask || managed.isProcessing || this.voiceExecutionWaiters.has(sessionId)) throw new VoiceTaskBridgeError('forbidden', 'Voice task execution ownership mismatch.')
+    const generation = managed.processingGeneration + 1
+    let finish!: (outcome: AgentMessageTerminalOutcome) => void
+    const terminal = new Promise<AgentMessageTerminalOutcome>(resolve => { finish = resolve })
+    this.voiceExecutionWaiters.set(sessionId, { generation, resolve: finish })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      try { await this.sendMessage(sessionId, prompt, undefined, undefined, { skillSlugs: options?.skillSlugs, displayIntent: options?.displayIntent, inputOrigin: 'agent' }) }
+      catch { finish({ generation, reason: 'error' }) }
+      // A caught pre-generation send failure or unsupported queue path is uncertain, never success.
+      timer = setTimeout(() => finish({ generation, reason: 'unknown' }), 5000)
+      return await terminal
+    } finally { if (timer) clearTimeout(timer); this.voiceExecutionWaiters.delete(sessionId) }
+  }
+
+  getVoiceTaskBridgeHost(): VoiceTaskBridgeHost {
+    const workspaceFor = (workspaceId: string) => {
+      const workspace = getWorkspaceByNameOrId(workspaceId)
+      if (!workspace || workspace.remoteServer) throw new VoiceTaskBridgeError('forbidden', 'Workspace is unavailable for voice work.')
+      return workspace
+    }
+    const parentFor = async (workspaceId: string, parentId: string) => {
+      await this.getSession(parentId)
+      const parent = this.sessions.get(parentId)
+      if (!parent || parent.workspace.id !== workspaceId || parent.spawnedFromAgent?.agentSlug !== CONCIERGE_SLUG || parent.launchReceipt?.voiceTask) throw new VoiceTaskBridgeError('forbidden', 'Voice manager ownership mismatch.')
+      return parent
+    }
+    const matching = (a: VoiceTaskCorrelation | undefined, b: VoiceTaskCorrelation) => !!a && a.taskId === b.taskId && a.attemptId === b.attemptId && a.intentId === b.intentId && a.admissionKey === b.admissionKey && a.requestDigest === b.requestDigest && a.workspaceId === b.workspaceId
+    const validateRequest = async (workspaceId: string, request: VoiceTaskRequest) => {
+      const workspace = workspaceFor(workspaceId)
+      if (!loadActiveAgentsForWorkspace(workspace).some(agent => agent.slug === request.agentSlug)) throw new VoiceTaskBridgeError('unsupported_capability', 'Activate this specialist before using voice work.')
+      // Strict standard context composition preserves HQ, Essentials and Release Kit distinctions.
+      // Explicit references annotate that pipeline; they never load renderer-selected paths.
+      for (const ref of request.contextRefs) {
+        if (ref.id !== workspace.id || ref.revision || (ref.kind === 'hq' ? workspace.artistWorkspaceScope !== 'hq' : workspace.artistWorkspaceScope !== 'campaign')) throw new VoiceTaskBridgeError('forbidden', 'The requested task context is not this workspace.')
+      }
+      const options = await this.resolveAgentSessionOptions(workspaceId, request.agentSlug, { referenceMode: 'strict', taskModeId: request.taskModeId, taskModeSelectionSource: 'handoff' })
+      this.assertVoiceTaskBackendSupported(workspaceId, options)
+    }
+    return {
+      getWorkspaceRoot: workspaceId => workspaceFor(workspaceId).rootPath,
+      createManager: async workspaceId => {
+        workspaceFor(workspaceId)
+        const options = await this.resolveAgentSessionOptions(workspaceId, CONCIERGE_SLUG, { referenceMode: 'strict' })
+        const parent = await this.createSession(workspaceId, { ...options, name: 'Voice work', hidden: false })
+        await this.flushSession(parent.id)
+        return parent.id
+      },
+      assertParent: async (workspaceId, parentId) => { await parentFor(workspaceId, parentId) },
+      validateRequest,
+      dispatch: async (workspaceId, parentId, request, voiceTask) => {
+        const parent = await parentFor(workspaceId, parentId)
+        await validateRequest(workspaceId, request)
+        if (voiceTask.workspaceId !== workspaceId) throw new VoiceTaskBridgeError('forbidden', 'Task workspace mismatch.')
+        return this.createAgentMessageService(parent).messageAgent({ workspaceId, parentSessionId: parentId, callerAgentSlug: CONCIERGE_SLUG, parentPermissionMode: parent.permissionMode ?? 'ask', voiceTask }, {
+          agentSlug: request.agentSlug, taskModeId: request.taskModeId, task: request.task,
+          expectedOutput: request.expectedOutput ?? 'Save the requested local draft with create_output. Use an inline document or report. Do not claim success without its saved output receipt. If you cannot complete the task, explain the blocker; do not perform external actions.', background: true,
+        })
+      },
+      findReceipt: (workspaceId, voiceTask) => {
+        const matches = listAgentMessageReceipts(workspaceFor(workspaceId).rootPath).filter(receipt => matching(receipt.voiceTask, voiceTask))
+        if (matches.length > 1) throw new VoiceTaskBridgeError('unknown_outcome', 'More than one execution receipt has this identity. Use Command.')
+        return matches[0] ?? null
+      },
+      recoverChild: (workspaceId, parentId, voiceTask) => {
+        const matches = Array.from(this.sessions.values()).filter(child => child.workspace.id === workspaceId && child.launchReceipt?.delegation?.parentSessionId === parentId && matching(child.launchReceipt?.voiceTask, voiceTask))
+        if (matches.length > 1) throw new VoiceTaskBridgeError('unknown_outcome', 'Task child identity is uncertain. Use Command.')
+        return matches[0]?.id
+      },
+      cancelChild: async (workspaceId, parentId, childId, voiceTask) => {
+        await parentFor(workspaceId, parentId)
+        const child = this.sessions.get(childId)
+        if (!child || child.workspace.id !== workspaceId || child.launchReceipt?.delegation?.parentSessionId !== parentId || !matching(child.launchReceipt?.voiceTask, voiceTask)) throw new VoiceTaskBridgeError('forbidden', 'Task child ownership mismatch.')
+        await this.cancelProcessing(childId, true)
+      },
+      outputs: (workspaceId, childId) => {
+        const workspace = workspaceFor(workspaceId)
+        const child = this.sessions.get(childId)
+        if (!child || child.workspace.id !== workspaceId || !child.launchReceipt?.voiceTask) return []
+        return listOutputManifests(workspace.rootPath).filter(output => {
+          if (output.workspaceId !== workspaceId || output.origin.sessionId !== childId || !output.primary) return false
+          try {
+            const file = assertOutputAssetPath(workspace.rootPath, output.id, output.primary.path)
+            return realpathSync(file) === file && statSync(file).isFile() && statSync(file).size > 0
+          } catch { return false }
+        }).map(output => ({ outputId: output.id, title: output.title }))
+      },
+      onReceiptChanged: listener => { this.voiceReceiptListeners.add(listener); return () => { this.voiceReceiptListeners.delete(listener) } },
+    }
   }
 
   /**
@@ -8203,6 +8307,7 @@ user a clickable link to where the thing now lives.`
         systemPromptPreset: managed.systemPromptPreset,
         customSystemPrompt: turnContext.customSystemPrompt,
         agentSkillSlugs: turnContext.agentSkillSlugs,
+        voiceTaskScope: managed.launchReceipt?.voiceTask,
         teamAutomationPolicy: {
           enabled: workspaceConfig?.team?.enabled === true,
           automatedAncestry: hasAutomatedSessionAncestry(managed.launchReceipt),
@@ -10227,60 +10332,11 @@ user a clickable link to where the thing now lives.`
           } finally { release() }
         },
         messageAgentFn: async (input) => {
-          const service = new AgentMessageService({
-            createSession: (wsId, opts) => this.createSession(wsId, opts).then((session) => ({ id: session.id })),
-            resolveAgentSessionOptions: (wsId, agentSlug, options) => this.resolveAgentSessionOptions(wsId, agentSlug, options),
-            sendMessage: (sessionId, prompt, options) => this.sendMessage(
-              sessionId,
-              prompt,
-              undefined,
-              undefined,
-              {
-                ...(options?.skillSlugs?.length ? { skillSlugs: options.skillSlugs } : {}),
-                displayIntent: options?.displayIntent,
-                inputOrigin: 'agent',
-              },
-            ),
-            abortSession: async (sessionId) => {
-              const target = this.sessions.get(sessionId)
-              if (!target) return
-              target.agent?.forceAbort(AbortReason.UserStop)
-            },
-            getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
-            getSessionToolUseSummary: (sessionId) => getCompletedToolUseSummary(this.sessions.get(sessionId)),
-            getWorkspaceRootPath: (workspaceId) => {
-              const workspace = getWorkspaceByNameOrId(workspaceId)
-              if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-              return workspace.rootPath
-            },
-            isAgentActive: (workspaceId, agentSlug) => {
-              const workspace = getWorkspaceByNameOrId(workspaceId)
-              if (!workspace) return false
-              if (!isAgentAllowedInArtistWorkspace(agentSlug, workspace.artistWorkspaceScope)) return false
-              return loadActiveAgentsForWorkspace(workspace).some((agent) => agent.slug === agentSlug)
-            },
-            deliverPassiveMessage: async (sessionId, message, agentMessage) => {
-              const target = this.sessions.get(sessionId)
-              if (!target) throw new Error(`Session ${sessionId} not found`)
-              if (target.workspace.id !== managed.workspace.id) {
-                throw new Error(`Session "${sessionId}" is not in this workspace.`)
-              }
-              await this.deliverPassiveAgentMessage(target, message, agentMessage)
-            },
-            resolveUsableSourceSlugs: (workspaceId, sourceSlugs) => {
-              const workspace = getWorkspaceByNameOrId(workspaceId)
-              if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-              const sources = getSourcesBySlugs(workspace.rootPath, sourceSlugs)
-              const usable = new Set(sources.filter(isSourceUsable).map((source) => source.config.slug))
-              return {
-                usable: sourceSlugs.filter((slug) => usable.has(slug)),
-                unavailable: sourceSlugs.filter((slug) => !usable.has(slug)),
-              }
-            },
-          })
+          const service = this.createAgentMessageService(managed)
 
           return service.messageAgent({
             workspaceId: managed.workspace.id,
+            voiceTask: managed.launchReceipt?.voiceTask,
             parentSessionId: managed.id,
             parentRunId: managed.launchReceipt?.workflow?.runId ?? managed.launchReceipt?.deepResearch?.runId,
             parentStepId: managed.launchReceipt?.workflow?.stepId ?? managed.launchReceipt?.deepResearch?.stepId,
@@ -11774,6 +11830,8 @@ user a clickable link to where the thing now lives.`
       }
       managed.launchReceipt = completeLaunchReceipt({
         ...resolvedReceipt,
+        voiceTask: managed.launchReceipt?.voiceTask,
+        delegation: managed.launchReceipt?.delegation,
         createdAt: managed.launchReceipt?.createdAt ?? resolvedReceipt.createdAt,
         summary: managed.launchReceipt?.summary ?? resolvedReceipt.summary,
         taskModeSelectionPending: false,
@@ -14020,6 +14078,20 @@ user a clickable link to where the thing now lives.`
     const currentFinalMessageId = this.getLastFinalAssistantMessageId(managed.messages)
     const didReceiveNewFinalMessage = !!currentFinalMessageId && currentFinalMessageId !== turnStartFinalMessageId
 
+    // Host-owned terminal signal, after persistence; sendMessage resolution is not success.
+    const voiceWaiter = this.voiceExecutionWaiters.get(sessionId)
+    if (voiceWaiter?.generation === settledGeneration) {
+      const waitingApproval = Array.from(this.pendingPermissionRequests.values()).some(request => request.sessionId === sessionId)
+      const outcome: AgentMessageTerminalOutcome = {
+        generation: settledGeneration,
+        reason: reason === 'complete' && (!didReceiveNewFinalMessage || waitingApproval) ? 'unknown' : reason,
+        outputIds: listOutputManifests(managed.workspace.rootPath).filter(output => output.origin.sessionId === sessionId && output.workspaceId === managed.workspace.id).map(output => output.id),
+      }
+      this.persistSession(managed)
+      try { await this.flushSession(sessionId) } catch { outcome.reason = 'unknown' }
+      voiceWaiter.resolve(outcome)
+    }
+
     if (reason === 'complete' && didReceiveNewFinalMessage) {
       if (isViewing) {
         // User is watching - mark as read immediately
@@ -14564,6 +14636,8 @@ user a clickable link to where the thing now lives.`
     const managed = this.sessions.get(sessionId)
     if (managed?.agent) {
       const requestMeta = this.pendingPermissionRequests.get(requestId)
+      if (!requestMeta || requestMeta.sessionId !== sessionId) return false
+      if (managed.launchReceipt?.voiceTask && (alwaysAllow || options?.rememberForMinutes)) return false
       this.pendingPermissionRequests.delete(requestId)
 
       if (requestMeta?.type === 'admin_approval') {

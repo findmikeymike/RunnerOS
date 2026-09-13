@@ -1,0 +1,8 @@
+import {test,expect} from 'bun:test'
+import {renderToStaticMarkup} from 'react-dom/server'
+import {ArtistManagerVoiceTasks} from './ArtistManagerVoiceTasks'
+const task:any={taskId:'t',attemptId:'a',title:'A long teaser draft',targetAgentSlug:'scriptwriter',state:'running',outputs:[]}
+function render(state:string,attached=true,pending=false){return renderToStaticMarkup(<ArtistManagerVoiceTasks work={{tasks:[{...task,state,outputs:state==='succeeded'?[{outputId:'o',title:'Teaser draft'}]:[]}],unresolved:[]}} cancelling={pending?['t:a']:[]} attached={attached} onCancel={async()=>{}} onOpen={async()=>{}} onRetry={async()=>{}}/>)}
+test('details use native keyboard controls and name the exact task cancellation',()=>{const html=render('running');expect(html).toContain('<details');expect(html).toContain('<summary');expect(html).toContain('aria-label="Cancel task: A long teaser draft"');expect(html).toContain('Specialist: scriptwriter')})
+test('pending cancellation is truthful and cannot be submitted again',()=>{const html=render('cancelling');expect(html).toContain('Waiting for the worker to stop');expect(html).toContain('disabled=""');expect(html).not.toContain('>Cancelled<');expect(render('running',true,true)).toContain('Requesting cancellation')})
+test('terminal saved task exposes result but no cancel control; detached call disables controls',()=>{const html=render('succeeded');expect(html).toContain('Open Teaser draft');expect(html).not.toContain('Cancel task:');const detached=render('running',false);expect(detached).toContain('Reconnect to manage');expect(detached).toContain('disabled=""')})

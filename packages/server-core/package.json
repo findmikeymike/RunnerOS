@@ -27,7 +27,8 @@
     "./sessions": "./src/sessions/index.ts",
     "./webui": "./src/webui/index.ts",
     "./triggers": "./src/triggers/index.ts",
-    "./licensing": "./src/licensing/index.ts"
+    "./licensing": "./src/licensing/index.ts",
+    "./voice-tasks": "./src/voice-tasks/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

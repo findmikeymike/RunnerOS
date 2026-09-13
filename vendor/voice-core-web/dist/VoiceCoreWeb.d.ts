@@ -1,5 +1,5 @@
 import type { WebTransportBundle } from "./transport/types";
-import type { BrowserCapabilities, InputStats, PlaybackFrame, PocketInstallStatus, VoiceSdkCapabilities, VoiceEvent, VoiceRuntimeConfig, VoiceRecord } from "./types";
+import type { ExternalAssistantTurnInput, ExternalAssistantTurnResult, ExternalAssistantTurnStatus, BrowserCapabilities, InputStats, PlaybackFrame, PocketInstallStatus, VoiceSdkCapabilities, VoiceEvent, VoiceRuntimeConfig, VoiceRecord } from "./types";
 type EventHandler = (event: VoiceEvent) => void;
 export declare class VoiceCoreWeb {
     private static readonly OUTPUT_POLL_IDLE_MS;
@@ -44,6 +44,8 @@ export declare class VoiceCoreWeb {
     private sttRestartTimerId;
     private responseAbortController;
     private responseGeneration;
+    private externalDelivery;
+    private externalIdleSinceMs;
     private lastAssistantPreviewText;
     private activeTurnStartedAtMs;
     private userSpeechActive;
@@ -71,6 +73,15 @@ export declare class VoiceCoreWeb {
     private setTransportsInternal;
     pushPartialTranscript(text: string): Promise<void>;
     completeUserTranscript(text: string): Promise<void>;
+    /** Read-only eligibility; the offer rechecks and claims ownership synchronously. */
+    getExternalAssistantTurnStatus(): ExternalAssistantTurnStatus;
+    /** Uses the existing TTS/PCM pipeline; never records a fabricated user transcript. */
+    externalAssistantTurn(input: ExternalAssistantTurnInput): ExternalAssistantTurnResult;
+    private isExternalDeliveryCurrent;
+    private finishExternalDelivery;
+    private interruptExternalDelivery;
+    private synthesizeExternalDelivery;
+    private commitExternalDelivery;
     pushAssistantText(text: string, isFinal?: boolean): Promise<void>;
     pushTtsAudio(samples: Int16Array | number[], sampleRateHz: number, channels: number, timestampMs?: number): Promise<void>;
     private pushTtsAudioSlices;

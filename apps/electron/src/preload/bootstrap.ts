@@ -498,6 +498,15 @@ client.onConnectionStateChanged((state) => {
   get: () => ipcRenderer.invoke('__artist-manager-voice-settings:get'),
   update: settings => ipcRenderer.invoke('__artist-manager-voice-settings:update', settings),
 }
+;(api as ElectronAPI).artistManagerVoiceWork = {
+  invoke: request => ipcRenderer.invoke('__artist-manager-voice-work:invoke', request),
+  subscribe: request => ipcRenderer.invoke('__artist-manager-voice-work:subscribe', request),
+  onEvent: callback => {
+    const listener = (_event: Electron.IpcRendererEvent, value: Parameters<typeof callback>[0]) => callback(value)
+    ipcRenderer.on('__artist-manager-voice-work:event', listener)
+    return () => { ipcRenderer.removeListener('__artist-manager-voice-work:event', listener) }
+  },
+}
 ;(api as ElectronAPI).artistManagerVoiceFocus = {
   register: request => ipcRenderer.invoke('__artist-manager-voice-focus:register', request),
   startTurn: request => ipcRenderer.invoke('__artist-manager-voice-focus:turn', request),

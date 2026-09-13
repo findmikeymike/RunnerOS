@@ -1,3 +1,4 @@
+import type { VoiceWorkAPI } from './artist-manager-voice-work';
 // =============================================================================
 // Protocol re-exports (channels, DTOs, events, wire types)
 // =============================================================================
@@ -1516,6 +1517,7 @@ export interface ElectronAPI {
     get(): Promise<ArtistManagerVoiceSettings>
     update(settings: ArtistManagerVoiceSettings): Promise<ArtistManagerVoiceSettings>
   }
+  artistManagerVoiceWork: VoiceWorkAPI
   artistManagerVoiceFocus: {
     register(request: VoiceFocusRegisterRequest): Promise<VoiceFocusSession>
     startTurn(request: VoiceFocusTurnRequest): Promise<void>

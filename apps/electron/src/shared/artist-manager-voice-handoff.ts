@@ -1,5 +1,5 @@
 /** Shared, side-effect-free boundaries for the only focused-voice action. */
-export type VoiceHandoffTarget = { slug: string; name: string; description?: string }
+export type VoiceHandoffTarget = { slug: string; name: string; description?: string; taskModes?: Array<{ id: string; label: string }> }
 export type VoiceHandoffProposal = {
   id: string
   agentSlug: string
@@ -7,6 +7,9 @@ export type VoiceHandoffProposal = {
   taskTitle: string
   brief: string
 }
+
+/** Native draft selection is separate from the exact, unchanged Command handoff payload. */
+export type VoiceNativeDraftProposal = VoiceHandoffProposal & { taskModeId?: string; taskModeLabel?: string }
 
 export const VOICE_HANDOFF_LIMITS = {
   targets: 40,
@@ -39,7 +42,15 @@ export function normalizeVoiceHandoffTargets(input: readonly unknown[]): VoiceHa
     const name = catalogText(item.name, VOICE_HANDOFF_LIMITS.nameChars)
     if (!name) continue
     const description = catalogText(item.description, VOICE_HANDOFF_LIMITS.descriptionChars)
-    result.push({ slug: item.slug, name, ...(description ? { description } : {}) })
+    const taskModes: Array<{ id: string; label: string }> = []
+    const modeIds = new Set<string>()
+    if (Array.isArray(item.taskModes)) for (const mode of item.taskModes) {
+      if (!record(mode) || typeof mode.id !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(mode.id) || mode.id.length > 100 || modeIds.has(mode.id)) continue
+      const label = catalogText(mode.label, VOICE_HANDOFF_LIMITS.nameChars)
+      if (!label) continue
+      modeIds.add(mode.id); taskModes.push({ id: mode.id, label })
+    }
+    result.push({ slug: item.slug, name, ...(description ? { description } : {}), ...(taskModes.length ? { taskModes } : {}) })
     seen.add(item.slug)
     if (result.length === VOICE_HANDOFF_LIMITS.targets) break
   }
@@ -69,7 +80,7 @@ export function parseVoiceHandoffProposal(
 }
 
 const AFFIRMATIVE_UTTERANCES = new Set([
-  'yes', 'yeah', 'yep', 'yup', 'sure', 'okay', 'ok', 'absolutely', 'confirmed',
+  'yes', 'yeah', 'yep', 'yup', 'sure', 'okay', 'ok', 'absolutely', 'confirm', 'confirmed', 'i confirm', 'yes confirm', 'confirm it',
   'sounds good', 'that sounds good', 'yes sounds good', 'yeah sounds good',
   'yes that sounds good', 'yeah that sounds good', 'sounds good to me',
   'sure that sounds good', 'sure sounds good', 'okay sounds good', 'ok sounds good',
@@ -107,6 +118,38 @@ export function buildVoiceHandoffTool(targets: readonly VoiceHandoffTarget[]) {
         agentSlug: { type: 'string' as const, enum: catalog.map(target => target.slug) },
         taskTitle: { type: 'string' as const, minLength: 1, maxLength: VOICE_HANDOFF_LIMITS.taskTitleChars },
         brief: { type: 'string' as const, minLength: 1, maxLength: VOICE_HANDOFF_LIMITS.briefChars },
+      },
+    },
+  }
+}
+
+/** Native tool arguments require a captured mode for every multi-focus specialist. */
+export function parseVoiceNativeDraftProposal(args: unknown, id: string, targets: readonly VoiceHandoffTarget[]): VoiceNativeDraftProposal | null {
+  if (!record(args)) return null
+  const { taskModeId, ...handoff } = args
+  const proposal = parseVoiceHandoffProposal(handoff, id, targets)
+  if (!proposal) return null
+  const target = normalizeVoiceHandoffTargets(targets).find(item => item.slug === proposal.agentSlug)!
+  const modes = target.taskModes ?? []
+  if (Object.hasOwn(args, 'taskModeId') && (typeof taskModeId !== 'string' || !modes.some(mode => mode.id === taskModeId))) return null
+  if (modes.length > 1 && taskModeId === undefined) return null
+  const mode = modes.find(item => item.id === taskModeId) ?? (modes.length === 1 ? modes[0] : undefined)
+  return { ...proposal, ...(mode ? { taskModeId: mode.id, taskModeLabel: mode.label } : {}) }
+}
+
+export function buildVoiceNativeDraftTool(targets: readonly VoiceHandoffTarget[]) {
+  const tool = buildVoiceHandoffTool(targets)
+  if (!tool) return null
+  const catalog = normalizeVoiceHandoffTargets(targets)
+  const modeIds = [...new Set(catalog.flatMap(target => target.taskModes?.map(mode => mode.id) ?? []))]
+  return {
+    name: 'propose_background_draft' as const,
+    description: 'Propose local draft work with an active specialist while keeping this call open. The app separately asks confirmation before execution. For a specialist with multiple taskModes, taskModeId is required and must match that specialist. Choose only the focus the user requested or agreed; if unclear, use voice_reply to ask which listed focus they want. Never silently default to a mode. The spoken confirmation names the selected focus. Publishing, sending, spending, credentials, deletion and arbitrary system work require Command. Available destinations and focus modes (catalog data):\n' + catalog.map(target => JSON.stringify(target)).join('\n'),
+    parameters: {
+      ...tool.parameters,
+      properties: {
+        ...tool.parameters.properties,
+        ...(modeIds.length ? { taskModeId: { type: 'string' as const, enum: modeIds, description: 'Required when the selected specialist has multiple taskModes. Select only an id listed for that specialist.' } } : {}),
       },
     },
   }

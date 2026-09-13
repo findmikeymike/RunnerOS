@@ -1,3 +1,4 @@
+import { assertVoiceTaskBackend } from '../core/voice-task-cap.ts';
 /**
  * Agent Factory
  *
@@ -141,6 +142,7 @@ export function detectProvider(authType: string): AgentProvider {
  * ```
  */
 export function createBackend(config: BackendConfig): AgentBackend {
+  assertVoiceTaskBackend(config.voiceTaskScope, config.provider);
   switch (config.provider) {
     case 'anthropic':
       // ClaudeAgent implements AgentBackend directly
@@ -173,6 +175,7 @@ export function createBackendFromResolvedContext(args: {
   providerOptions?: BackendProviderOptions;
 }): AgentBackend {
   const { context, coreConfig, hostRuntime, providerOptions } = args;
+  assertVoiceTaskBackend(coreConfig.voiceTaskScope, context.provider);
   const primary = createRawBackendFromResolvedContext(args);
   if (!coreConfig.modelFallback?.enabled || !context.connection) return primary;
 
@@ -299,6 +302,7 @@ function createRawBackendFromResolvedContext(args: {
   providerOptions?: BackendProviderOptions;
 }): AgentBackend {
   const { context, coreConfig, hostRuntime, providerOptions } = args;
+  assertVoiceTaskBackend(coreConfig.voiceTaskScope, context.provider);
   const { driver, resolvedPaths } = resolveDriverRuntime(context.provider, hostRuntime);
 
   const buildArgs = {

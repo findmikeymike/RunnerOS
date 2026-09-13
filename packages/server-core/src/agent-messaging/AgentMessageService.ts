@@ -7,6 +7,8 @@ import {
   isPermissionEscalation,
   writeAgentMessageReceipt,
   type AgentMessageReceipt,
+  type VoiceTaskCorrelation,
+  type AgentMessageTerminalOutcome,
   type MessageAgentInput,
   type MessageAgentResult,
 } from '@craft-agent/shared/agent-messaging';
@@ -18,6 +20,7 @@ import type { PermissionMode } from '@craft-agent/shared/agent/mode-types';
 import type { AgentMessageNoticeMetadata } from '@craft-agent/core/types';
 
 export interface AgentMessageRuntimeContext {
+  voiceTask?: VoiceTaskCorrelation;
   workspaceId: string;
   parentSessionId?: string;
   parentRunId?: string;
@@ -33,6 +36,9 @@ export interface AgentMessageRuntimeContext {
 }
 
 export interface AgentMessageServiceDeps {
+  executeVoiceTurn?: (sessionId: string, prompt: string, options?: { skillSlugs?: string[]; displayIntent?: 'agent-delegation-task' }) => Promise<AgentMessageTerminalOutcome>;
+  assertVoiceBackendSupported?: (workspaceId: string, options: Partial<CreateSessionOptions>) => void;
+  onReceiptChanged?: (receipt: AgentMessageReceipt) => void;
   createSession: (workspaceId: string, options: CreateSessionOptions) => Promise<{ id: string }>;
   resolveAgentSessionOptions: (
     workspaceId: string,
@@ -155,6 +161,7 @@ export class AgentMessageService {
     const createdAt = now();
     const receipt: AgentMessageReceipt = {
       schemaVersion: 1,
+      ...(runtime.voiceTask ? { voiceTask: runtime.voiceTask } : {}),
       id: randomUUID(),
       workspaceId: runtime.workspaceId,
       parentSessionId: runtime.parentSessionId,
@@ -217,7 +224,10 @@ export class AgentMessageService {
     }
 
     const workspaceRootPath = this.deps.getWorkspaceRootPath(runtime.workspaceId);
-    const persist = () => writeAgentMessageReceipt(workspaceRootPath, receipt);
+    const persist = () => {
+      writeAgentMessageReceipt(workspaceRootPath, receipt);
+      this.deps.onReceiptChanged?.(structuredClone(receipt));
+    };
     const started = Date.now();
     const delegationKey = `${workspaceRootPath}:${runtime.parentRunId ?? runtime.parentSessionId ?? 'session'}:${runtime.parentStepId ?? ''}`;
     const reserved = await withDelegationMutex(delegationKey, () => {
@@ -252,6 +262,10 @@ export class AgentMessageService {
         input.agentSlug,
         input.taskModeId ? { taskModeId: input.taskModeId, taskModeSelectionSource: 'handoff' } : undefined,
       );
+      if (runtime.voiceTask) {
+        if (!this.deps.executeVoiceTurn || !this.deps.assertVoiceBackendSupported) throw new Error('Voice execution is unsupported.');
+        this.deps.assertVoiceBackendSupported(runtime.workspaceId, agentOptions);
+      }
       if (input.taskModeId && agentOptions.launchReceipt?.taskMode?.id !== input.taskModeId) {
         throw new Error(`Task mode "${input.taskModeId}" was not resolved for the target agent.`);
       }
@@ -300,6 +314,7 @@ export class AgentMessageService {
         },
         launchReceipt: {
           ...baseLaunchReceipt,
+          ...(runtime.voiceTask ? { voiceTask: { ...runtime.voiceTask, receiptId: receipt.id } } : {}),
           createdAt: Date.now(),
           origin: 'agent',
           automatedAncestry: runtime.automatedAncestry === true,
@@ -347,11 +362,11 @@ export class AgentMessageService {
       persist();
 
       const prompt = buildDelegationPrompt(input, runtime);
-      const startSend = () => this.deps.sendMessage(child.id, prompt, {
+      const startSend = () => (runtime.voiceTask ? this.deps.executeVoiceTurn! : this.deps.sendMessage)(child.id, prompt, {
         skillSlugs: agentSkillSlugs,
         displayIntent: 'agent-delegation-task',
       });
-      const finish = (sendPromise: Promise<void>) => this.finishDelegatedTurn({
+      const finish = (sendPromise: Promise<void | AgentMessageTerminalOutcome>) => this.finishDelegatedTurn({
         receipt,
         input,
         runtime,
@@ -363,7 +378,7 @@ export class AgentMessageService {
 
       if (input.background) {
         await this.notifyBackgroundParentStarted(receipt, runtime);
-        void finish(startSend());
+        void finish(startSend()).catch(() => { /* durable record remains uncertain; bridge quarantines */ });
         return this.resultFromReceipt(receipt, started);
       }
 
@@ -385,7 +400,7 @@ export class AgentMessageService {
     receipt: AgentMessageReceipt;
     input: ReturnType<typeof normalizeMessageAgentInput>;
     runtime: AgentMessageRuntimeContext;
-    sendPromise: Promise<void>;
+    sendPromise: Promise<void | AgentMessageTerminalOutcome>;
     started: number;
     persist: () => void;
     now: () => string;
@@ -410,6 +425,19 @@ export class AgentMessageService {
         return this.resultFromReceipt(receipt, started);
       }
 
+      if (runtime.voiceTask) {
+        const outcome = sent.value;
+        receipt.executionOutcome = outcome || { generation: 0, reason: 'unknown' };
+        if (!outcome || outcome.reason !== 'complete') {
+          receipt.status = outcome?.reason === 'interrupted' ? 'cancelled' : outcome?.reason === 'timeout' ? 'timed-out' : 'failed';
+          receipt.error = { code: outcome?.reason === 'unknown' || !outcome ? 'unknown-outcome' : 'execution-stopped', message: 'The specialist did not confirm a completed execution.' };
+          receipt.updatedAt = now();
+          receipt.completedAt = receipt.updatedAt;
+          persist();
+          await this.notifyBackgroundParent(receipt, runtime);
+          return this.resultFromReceipt(receipt, started);
+        }
+      }
       const text = receipt.childSessionId ? this.deps.getLastAssistantText(receipt.childSessionId) : '';
       let output: unknown = text;
       if (delegatedInput.outputSchema) {

@@ -1,5 +1,7 @@
 export type {
   AgentMessageReceipt,
+  VoiceTaskCorrelation,
+  AgentMessageTerminalOutcome,
   AgentMessageStatus,
   AgentMessageValidationOptions,
   MessageAgentInput,

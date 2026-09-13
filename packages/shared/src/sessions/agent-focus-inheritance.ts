@@ -39,6 +39,7 @@ export function inheritHostAgentFocus(
 export function createAgentFocusTransferIntent(
   source: Pick<HostAgentFocusState, 'spawnedFromAgent' | 'launchReceipt'>,
 ): AgentFocusTransferIntent | undefined {
+  if (source.launchReceipt?.voiceTask) throw new Error('Voice-origin task transfer is unsupported; keep its immutable permission scope on this host.')
   const binding = source.spawnedFromAgent?.agentSlug
   const receiptBinding = source.launchReceipt?.agent?.slug
   if (binding && receiptBinding && binding !== receiptBinding) {

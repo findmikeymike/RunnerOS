@@ -1,3 +1,5 @@
+import { VoiceTaskBridge } from '@craft-agent/server-core/voice-tasks'
+import { ArtistManagerVoiceWorkService } from './artist-manager-voice-work'
 import { recoverCampaignCleanupTransactions } from './campaign-cleanup-recovery'
 import { createSafeRelaunch } from './safe-relaunch'
 import { waitForSafeShutdown } from './shutdown-wait'
@@ -251,7 +253,31 @@ let messagingHandle: MessagingBootstrapHandle | null = null
 // before-quit handler can stop it cleanly.
 let triggerServerHandle: { url: string; stop: () => Promise<void> } | null = null
 let artistManagerVoiceProxy: ArtistManagerVoiceProxy | null = null
-const artistManagerVoiceFocus = new ArtistManagerVoiceFocusService(undefined, event => mainLog.info('[voice-handoff]', JSON.stringify(event)))
+let nativeVoiceTasks: VoiceTaskBridge | undefined
+const nativeVoiceWorkEnabled = () => process.env.CRAFT_ARTIST_VOICE_WORK_BRIDGE === '1'
+const artistManagerVoiceWork: ArtistManagerVoiceWorkService = new ArtistManagerVoiceWorkService({
+  enabled: nativeVoiceWorkEnabled,
+  delivered: (ownerId, sessionId, deliveryId, text) => artistManagerVoiceFocus.recordWorkDelivery(ownerId, sessionId, deliveryId, text),
+  bridge: () => {
+    if (!sessionManager) throw new Error('Session host is not ready')
+    return nativeVoiceTasks ??= new VoiceTaskBridge(sessionManager.getVoiceTaskBridgeHost(), {
+      enabled: nativeVoiceWorkEnabled,
+      validateAuthority: (authority, binding) => {
+        const ownerId = Number(authority.ownerId)
+        if (!Number.isSafeInteger(ownerId) || windowManager?.getWorkspaceForWindow(ownerId) !== authority.workspaceId
+          || artistManagerVoiceFocus.ownedWorkspace(ownerId, binding.voiceSessionId) !== authority.workspaceId) {
+          throw new Error('Voice workspace is no longer active')
+        }
+      },
+    })
+  },
+  workspace: (ownerId, sessionId): string => {
+    const workspaceId = windowManager?.getWorkspaceForWindow(ownerId)
+    if (!workspaceId || (sessionId && artistManagerVoiceFocus.ownedWorkspace(ownerId, sessionId) !== workspaceId)) throw new Error('Voice workspace is no longer active')
+    return workspaceId
+  },
+})
+const artistManagerVoiceFocus: ArtistManagerVoiceFocusService = new ArtistManagerVoiceFocusService(undefined, event => mainLog.info('[voice-handoff]', JSON.stringify(event)), artistManagerVoiceWork)
 let artistManagerMoonshine: ArtistManagerMoonshine | null = null
 let embeddedOmniRoute: EmbeddedOmniRoute | null = null
 
@@ -748,7 +774,7 @@ app.whenReady().then(async () => {
       }
       if (!observedFocusSenders.has(sender)) {
         observedFocusSenders.add(sender)
-        const release = () => artistManagerVoiceFocus.stopOwner(sender.id)
+        const release = () => { artistManagerVoiceWork.detachOwner(sender.id); artistManagerVoiceFocus.stopOwner(sender.id) }
         sender.once('destroyed', release)
         sender.on('render-process-gone', release)
         sender.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
@@ -770,8 +796,19 @@ app.whenReady().then(async () => {
       focusOwner(event)
       return updateArtistManagerVoiceSettings(settings)
     })
-    ipcMain.handle('__artist-manager-voice-focus:register', (event, request) =>
-      artistManagerVoiceFocus.register(focusOwner(event).id, request))
+    ipcMain.handle('__artist-manager-voice-focus:register', (event, request) => {
+      const owner = focusOwner(event).id
+      if (!request || request.workspaceId !== windowManager?.getWorkspaceForWindow(owner)) throw new Error('Voice workspace is no longer active')
+      artistManagerVoiceWork.detachOwner(owner)
+      return artistManagerVoiceFocus.register(owner, request)
+    })
+    ipcMain.handle('__artist-manager-voice-work:invoke', (event, request) => artistManagerVoiceWork.invoke(focusOwner(event).id, request))
+    ipcMain.handle('__artist-manager-voice-work:subscribe', (event, request) => {
+      const sender = focusOwner(event)
+      return artistManagerVoiceWork.subscribe(sender.id, request, value => {
+        if (!sender.isDestroyed()) sender.send('__artist-manager-voice-work:event', value)
+      })
+    })
     ipcMain.handle('__artist-manager-voice-focus:turn', (event, request) => {
       const sender = focusOwner(event)
       return artistManagerVoiceFocus.startTurn(sender.id, request, value => {
@@ -782,6 +819,8 @@ app.whenReady().then(async () => {
       artistManagerVoiceFocus.cancel(focusOwner(event).id, request))
     ipcMain.handle('__artist-manager-voice-focus:stop', (event, sessionId) => {
       const owner = focusOwner(event).id
+      if (sessionId !== undefined) artistManagerVoiceFocus.ownedWorkspace(owner, sessionId)
+      artistManagerVoiceWork.detachOwner(owner)
       if (sessionId === undefined) artistManagerVoiceFocus.stopOwner(owner)
       else artistManagerVoiceFocus.stop(owner, sessionId)
     })

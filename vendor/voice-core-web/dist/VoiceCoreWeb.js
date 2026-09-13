@@ -57,6 +57,8 @@ export class VoiceCoreWeb {
     sttRestartTimerId = null;
     responseAbortController = null;
     responseGeneration = 0;
+    externalDelivery = null;
+    externalIdleSinceMs = null;
     lastAssistantPreviewText = "";
     activeTurnStartedAtMs = null;
     userSpeechActive = false;
@@ -98,7 +100,15 @@ export class VoiceCoreWeb {
                 void this.failRuntime(error instanceof Error ? error : new Error(String(error)));
             });
         });
-        this.audioGraph.setOutputFlushedHandler(() => {
+        this.audioGraph.setOutputFlushedHandler((acknowledgement) => {
+            const delivery = this.externalDelivery;
+            if (delivery && acknowledgement && delivery.phase === "playing" && this.isExternalDeliveryCurrent(delivery)
+                && delivery.flushRequestId === acknowledgement.requestId && delivery.playbackEpoch === acknowledgement.playbackEpoch) {
+                void this.commitExternalDelivery(delivery);
+                return;
+            }
+            if (delivery)
+                return;
             if (!this.running || this.responseAbortController !== null)
                 return;
             void this.runtimeWorker.notifyOutputPlaybackFinished().catch((error) => {
@@ -121,6 +131,8 @@ export class VoiceCoreWeb {
             if (message.type === "events") {
                 for (const event of message.events) {
                     if (event.type === "bargeIn") {
+                        if (this.externalDelivery && this.externalDelivery.phase !== "committing")
+                            this.abortResponsePipeline();
                         this.outputDrainGeneration += 1;
                         this.visemeScheduler.reset();
                         this.ttsVisemeMetadata.reset();
@@ -210,6 +222,8 @@ export class VoiceCoreWeb {
         }
     }
     async stop() {
+        if (this.externalDelivery)
+            this.interruptExternalDelivery(this.externalDelivery, "interrupted");
         this.startupGeneration++;
         this.sttSendGeneration++;
         this.sttSendQueue.reset();
@@ -366,6 +380,116 @@ export class VoiceCoreWeb {
         this.scheduleDrainOutputAudio(0);
         await this.generateAssistantResponse(text);
     }
+    /** Read-only eligibility; the offer rechecks and claims ownership synchronously. */
+    getExternalAssistantTurnStatus() {
+        const supported = this.running && this.runtimeStatus === "running" && !this.destroyed && Boolean(this.transports.tts);
+        const idle = supported && !this.externalDelivery && !this.userSpeechActive && this.responseAbortController === null
+            && !this.drainingAudio && !this.outputPlaybackActive && !this.outputBackpressured && !this.audioGraph.hasPendingOutputFlush()
+            && (this.state === "idle" || this.state === "listening");
+        if (!idle)
+            this.externalIdleSinceMs = null;
+        else
+            this.externalIdleSinceMs ??= Date.now();
+        return { supported, idle, idleForMs: idle ? Math.max(0, Date.now() - this.externalIdleSinceMs) : 0 };
+    }
+    /** Uses the existing TTS/PCM pipeline; never records a fabricated user transcript. */
+    externalAssistantTurn(input) {
+        if (!input || input.origin !== "worker-result" || typeof input.turnId !== "string" || !input.turnId.trim() || input.turnId.length > 200
+            || typeof input.text !== "string" || !input.text.trim() || input.text.length > 2000 || input.text.trim().split(/\s+/).length > 40) {
+            throw new Error("Invalid external assistant turn");
+        }
+        const status = this.getExternalAssistantTurnStatus();
+        if (!status.supported)
+            return { status: "unsupported" };
+        if (!status.idle || status.idleForMs < 700)
+            return { status: "deferred" };
+        let resolve;
+        const done = new Promise(complete => { resolve = complete; });
+        const controller = new AbortController();
+        const delivery = {
+            turnId: input.turnId, text: input.text, generation: ++this.responseGeneration,
+            playbackEpoch: this.audioGraph.getPlaybackEpoch(), acceptedSamples: 0, phase: "synthesizing",
+            controller, timer: 0, resolve,
+        };
+        this.externalDelivery = delivery;
+        this.externalIdleSinceMs = null;
+        this.responseAbortController = controller;
+        delivery.timer = window.setTimeout(() => this.interruptExternalDelivery(delivery, "failed"), 45_000);
+        void this.synthesizeExternalDelivery(delivery);
+        return { status: "accepted", delivery: Object.freeze({
+                turnId: delivery.turnId, generation: delivery.generation, done,
+                cancel: () => this.interruptExternalDelivery(delivery, "interrupted"),
+            }) };
+    }
+    isExternalDeliveryCurrent(delivery) {
+        return this.externalDelivery === delivery && this.running && delivery.generation === this.responseGeneration
+            && delivery.playbackEpoch === this.audioGraph.getPlaybackEpoch() && !delivery.controller.signal.aborted;
+    }
+    finishExternalDelivery(delivery, outcome) {
+        if (this.externalDelivery !== delivery)
+            return;
+        this.externalDelivery = null;
+        window.clearTimeout(delivery.timer);
+        this.externalIdleSinceMs = null;
+        delivery.resolve(outcome);
+    }
+    interruptExternalDelivery(delivery, outcome) {
+        if (this.externalDelivery !== delivery)
+            return;
+        // Once consumption was acknowledged, cancellation cannot make already heard speech unseen.
+        if (delivery.phase === "committing" && outcome === "interrupted")
+            return;
+        const owned = delivery.generation === this.responseGeneration;
+        this.finishExternalDelivery(delivery, outcome);
+        if (!owned)
+            return;
+        this.abortResponsePipeline();
+        void this.runtimeWorker.triggerBargeIn().catch(error => {
+            void this.failRuntime(error instanceof Error ? error : new Error(String(error)));
+        });
+    }
+    async synthesizeExternalDelivery(delivery) {
+        try {
+            await this.pushAssistantText(delivery.text, false);
+            if (!this.isExternalDeliveryCurrent(delivery))
+                return;
+            await this.synthesizeAssistantChunk(this.prepareTextForTts(delivery.text), delivery.controller, delivery.generation);
+            if (!this.isExternalDeliveryCurrent(delivery))
+                return;
+            await this.runtimeWorker.flushOutputAudio();
+            if (!this.isExternalDeliveryCurrent(delivery))
+                return;
+            if (!delivery.acceptedSamples)
+                throw new Error("External assistant turn produced no audio");
+            delivery.phase = "playing";
+            if (this.responseAbortController === delivery.controller)
+                this.responseAbortController = null;
+            this.scheduleDrainOutputAudio(0);
+        }
+        catch {
+            this.interruptExternalDelivery(delivery, "failed");
+        }
+        finally {
+            if (this.externalDelivery === delivery && !this.isExternalDeliveryCurrent(delivery))
+                this.finishExternalDelivery(delivery, "interrupted");
+        }
+    }
+    async commitExternalDelivery(delivery) {
+        if (!this.isExternalDeliveryCurrent(delivery) || delivery.phase !== "playing")
+            return;
+        delivery.phase = "committing";
+        try {
+            // AudioGraph has accepted this generation's exact consumed flush. Commit before
+            // completion observers can start the next user turn; no final text existed earlier.
+            await this.runtimeWorker.pushAssistantText(delivery.text, true);
+            if (this.isExternalDeliveryCurrent(delivery))
+                await this.runtimeWorker.notifyOutputPlaybackFinished();
+            this.finishExternalDelivery(delivery, "delivered");
+        }
+        catch {
+            this.interruptExternalDelivery(delivery, "failed");
+        }
+    }
     async pushAssistantText(text, isFinal = true) {
         await this.runtimeWorker.pushAssistantText(text, isFinal);
         this.scheduleDrainOutputAudio(0);
@@ -400,6 +524,8 @@ export class VoiceCoreWeb {
                         return false;
                     const accepted = await this.runtimeWorker.pushTtsAudio(slice, sampleRateHz, channels, timestampMs);
                     if (accepted && isCurrent()) {
+                        if (this.externalDelivery?.generation === this.responseGeneration)
+                            this.externalDelivery.acceptedSamples += slice.length;
                         this.ttsVisemeMetadata.appendAcceptedSlice(slice.length * 1000 / sampleRateHz / channels, offset * 1000 / sampleRateHz / channels, visemes);
                     }
                     return accepted;
@@ -428,6 +554,7 @@ export class VoiceCoreWeb {
     }
     getSdkCapabilities() {
         return {
+            externalAssistantTurns: true,
             runtimeSetters: false,
             toolCalling: false,
             diagnostics: true,
@@ -484,12 +611,30 @@ export class VoiceCoreWeb {
         };
     }
     emit(event) {
-        for (const handler of this.handlers) {
-            handler(event);
+        if (["userSpeechStarted", "userSpeechPartial", "userSpeechComplete", "bargeIn"].includes(event.type)) {
+            this.externalIdleSinceMs = null;
+            if (this.externalDelivery)
+                this.interruptExternalDelivery(this.externalDelivery, "interrupted");
+        }
+        if (this.userSpeechActive || this.responseAbortController !== null || this.outputPlaybackActive || this.state === "speaking" || this.state === "thinking")
+            this.externalIdleSinceMs = null;
+        const generation = this.responseGeneration;
+        for (const handler of [...this.handlers]) {
+            if (generation !== this.responseGeneration)
+                break;
+            if (!this.handlers.has(handler))
+                continue;
+            try {
+                void Promise.resolve(handler(event)).catch(() => undefined);
+            }
+            catch { /* Observers cannot fail audio or delivery. */ }
         }
     }
     emitNormalizedEvent(event) {
+        const generation = this.responseGeneration;
         this.emit(event);
+        if (generation !== this.responseGeneration)
+            return; // An observer interrupted; do not resurrect the old speech alias.
         if (event.type === "assistantAudioStart") {
             this.emit({ type: "agentSpeechStarted" });
         }
@@ -533,7 +678,11 @@ export class VoiceCoreWeb {
                     // An underrun between synthesized sentences is not end-of-response.
                     // Only flush the browser queue after synthesis and Rust draining finish.
                     if (this.responseAbortController === null && this.state === "speaking") {
-                        this.audioGraph.flushOutputQueue();
+                        const delivery = this.externalDelivery;
+                        this.audioGraph.flushOutputQueue(request => {
+                            if (delivery && this.isExternalDeliveryCurrent(delivery) && delivery.phase === "playing")
+                                delivery.flushRequestId = request.requestId;
+                        });
                     }
                     break;
                 }
@@ -794,6 +943,9 @@ export class VoiceCoreWeb {
         this.userSpeechActive = false;
     }
     abortResponsePipeline() {
+        if (this.externalDelivery && this.externalDelivery.phase !== "committing")
+            this.finishExternalDelivery(this.externalDelivery, "interrupted");
+        this.externalIdleSinceMs = null;
         this.responseGeneration += 1;
         this.outputDrainGeneration += 1;
         this.responseAbortController?.abort();

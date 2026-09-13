@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { cn } from '@/lib/utils'
 import type { ArtistManagerVoiceState } from '@/hooks/useArtistManagerVoice'
 import { ArtistManagerVoiceSetup } from './ArtistManagerVoiceSetup'
+import { ArtistManagerVoiceTasks } from './ArtistManagerVoiceTasks'
 import { MikeyAvatar } from '@/components/voice/MikeyAvatar'
 import { getVoiceCallPresentation } from '@/components/voice/voice-call-readiness'
 
@@ -42,6 +43,7 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
           </div>
         )}
 
+        {!showSetup ? <ArtistManagerVoiceTasks work={voice.work} cancelling={voice.cancellingWork} attached={voice.prepared || voice.running} onCancel={voice.cancelWorkTask} onOpen={voice.openWorkOutput} onRetry={voice.retryWorkIntent} /> : null}
         {voice.error ? <p role="alert" className="mx-5 mb-3 max-h-20 shrink-0 overflow-y-auto rounded-xl bg-red-500/10 px-3 py-2 text-center text-xs leading-5 text-red-200">{voice.error}</p> : null}
         {!busy && !voice.providerReady && !showSetup ? <button type="button" onClick={() => setShowSetup(true)} className="mx-auto mb-3 text-xs text-white/65 underline underline-offset-4">Set up conversation</button> : null}
 

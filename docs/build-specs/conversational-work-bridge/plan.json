@@ -1,0 +1,1083 @@
+{
+  "schema_version": 1,
+  "revision": "r3",
+  "sources": [
+    {
+      "id": "S-USER",
+      "path": "specification.md",
+      "authority": "User requested detailed integration specification and isolated worktree; proposed details are not implementation approval",
+      "sections": [
+        "Product experience",
+        "Requirements"
+      ]
+    },
+    {
+      "id": "S-CODE-VOICE",
+      "path": "apps/electron/src/renderer/hooks/useArtistManagerVoice.ts",
+      "authority": "Observed existing source; not new behavior authorization",
+      "version": "4491d212283bf5c31599c4488201ccaf75236a29",
+      "files": [
+        {
+          "path": "apps/electron/src/renderer/hooks/useArtistManagerVoice.ts",
+          "sha256": "8e926995c918035caf3a68ce509562311859d0bf9ec73fbb6c567d0d5ac295f1"
+        },
+        {
+          "path": "apps/electron/src/main/artist-manager-voice-focus.ts",
+          "sha256": "3485e282ee3f1ddb957f5ed30fba1932bec9ee3598d6a8603bdf4459bd542a3f"
+        },
+        {
+          "path": "apps/electron/src/shared/artist-manager-voice-focus.ts",
+          "sha256": "4e9af7bf864f6790b120a2022b33ddf69e2045f5f15424788284adabd1a00b52"
+        },
+        {
+          "path": "apps/electron/src/renderer/lib/artist-manager-voice-focus-prompt.ts",
+          "sha256": "d942b1fb5e4b4158ffbafac0d77c032abbf36fa055c5fbe88acf531555a82e6d"
+        },
+        {
+          "path": "apps/electron/src/renderer/lib/artist-manager-voice-focus-transport.ts",
+          "sha256": "726a36cc9ee3c8ea4054270e29f3607f703f6bfd0fb64c7dcdee2dd7dbd5ea1a"
+        }
+      ]
+    },
+    {
+      "id": "S-CODE-WORK",
+      "path": "packages/server-core/src/agent-messaging/AgentMessageService.ts",
+      "authority": "Observed existing source; not new behavior authorization",
+      "version": "4491d212283bf5c31599c4488201ccaf75236a29",
+      "files": [
+        {
+          "path": "packages/server-core/src/agent-messaging/AgentMessageService.ts",
+          "sha256": "5cbc813db37cc9e986487875b8fe31ecc5960defceda3028c0451720cffc057c"
+        },
+        {
+          "path": "packages/shared/src/agent-messaging/types.ts",
+          "sha256": "154e9996983c026cb8ce77fbcdcb1e59a08fb65fd7465f0e987a9c8bc76713a1"
+        },
+        {
+          "path": "packages/shared/src/agent-messaging/storage.ts",
+          "sha256": "28848ec5931634eefd39dc6f9e1598b9cde1a059e661d9dc07adf7e8dff6672e"
+        },
+        {
+          "path": "packages/shared/src/agent-messaging/validation.ts",
+          "sha256": "c76b92ed142e6cb2d15483810743d162ee1de921e30ecc4b4142146ad1041f22"
+        },
+        {
+          "path": "packages/server-core/src/sessions/SessionManager.ts",
+          "sha256": "01462e8cc6b962a58a771528b476477dce4cd965d7d897c5b6ccdc4db6d0909f"
+        },
+        {
+          "path": "packages/server-core/src/handlers/rpc/sessions.ts",
+          "sha256": "c09f87ca57941e16f96dde737572236263edf1fe4e5893f7ad0454dd4a6f3688"
+        }
+      ]
+    },
+    {
+      "id": "S-CODE-SDK",
+      "path": "vendor/voice-core-web/dist/VoiceCoreWeb.js",
+      "authority": "Observed existing source; not new behavior authorization",
+      "version": "4491d212283bf5c31599c4488201ccaf75236a29",
+      "files": [
+        {
+          "path": "vendor/voice-core-web/dist/VoiceCoreWeb.js",
+          "sha256": "274f84313add24621f08353bdd850bdf7696c38edc1e366726c2fb0c837ef35b"
+        },
+        {
+          "path": "vendor/voice-core-web/dist/VoiceCoreWeb.d.ts",
+          "sha256": "d6a6cd61ee8309b260c77d2f06aabd6b175e44b2e1b147f64430edc02dafec52"
+        },
+        {
+          "path": "vendor/voice-core-snapshot.json",
+          "sha256": "837021d0a510b5a96cdb0f9d79734717abf445fa5caad3cbe7de6018c288f6e1"
+        }
+      ]
+    },
+    {
+      "id": "S-REPO",
+      "path": "AGENTS.md",
+      "authority": "Observed existing source; not new behavior authorization",
+      "version": "4491d212283bf5c31599c4488201ccaf75236a29",
+      "files": [
+        {
+          "path": "AGENTS.md",
+          "sha256": "12e0e49bb192b4a925bfe8aba0755ffd1fa063c36d2a0add5a14960fd7c0978e"
+        },
+        {
+          "path": "GIT-FACTS-ALWAYS-READ-ME.md",
+          "sha256": "9134abc4ebb861223ce81a6c9919223fa71543f429cebf2f83b516ae366cabd7"
+        },
+        {
+          "path": "package.json",
+          "sha256": "7c4b201adbcda28b7488abdc68b851da25e9e0235a40849e6066bd5ac66b6e3e"
+        }
+      ]
+    },
+    {
+      "id": "S-BODHI",
+      "path": "https://github.com/randombet/bodhi_realtime_agent",
+      "authority": "Nonbinding design reference; README inspected 2026-09-10; mutable main, no benchmark or imported code",
+      "version": "web read 2026-09-10; commit not pinned"
+    },
+    {
+      "id": "S-CICERO",
+      "path": "https://github.com/5uck1ess/cicero",
+      "authority": "Nonbinding design reference; README inspected 2026-09-10; mutable main, no benchmark or imported code",
+      "version": "web read 2026-09-10; commit not pinned"
+    },
+    {
+      "id": "S-LOGICA",
+      "path": "https://github.com/Rovemark/logica-voice",
+      "authority": "Nonbinding design reference; README inspected 2026-09-10; mutable main, no benchmark or imported code",
+      "version": "web read 2026-09-10; commit not pinned"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "R-01",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Preserve call behavior",
+      "acceptance": [
+        "specification.md R-01; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-02",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Idempotent native admission",
+      "acceptance": [
+        "specification.md R-02; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-03",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Concurrent conversation",
+      "acceptance": [
+        "specification.md R-03; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-04",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Audible playback scheduling",
+      "acceptance": [
+        "specification.md R-04; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-05",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Truthful results",
+      "acceptance": [
+        "specification.md R-05; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-06",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Correlated interaction",
+      "acceptance": [
+        "specification.md R-06; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-07",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Permission preservation",
+      "acceptance": [
+        "specification.md R-07; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-08",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Independent cancellation",
+      "acceptance": [
+        "specification.md R-08; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-09",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Recovery without duplicate work",
+      "acceptance": [
+        "specification.md R-09; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-10",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Compact accessible UI",
+      "acceptance": [
+        "specification.md R-10; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P1"
+    },
+    {
+      "id": "R-11",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Bounded work and notifications",
+      "acceptance": [
+        "specification.md R-11; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-12",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Ownership and cleanup",
+      "acceptance": [
+        "specification.md R-12; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-13",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Measured performance",
+      "acceptance": [
+        "specification.md R-13; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-14",
+      "source_refs": [
+        "S-USER",
+        "S-CODE-VOICE",
+        "S-CODE-WORK"
+      ],
+      "statement": "Controlled release",
+      "acceptance": [
+        "specification.md R-14; contracts.md; roadmap.md scenario matrix"
+      ],
+      "disposition": "in_scope",
+      "priority": "P0"
+    },
+    {
+      "id": "R-15",
+      "source_refs": [
+        "S-USER"
+      ],
+      "statement": "Voice engine replacement",
+      "acceptance": [
+        "Explicitly outside v1 as specified in exclusions"
+      ],
+      "disposition": "excluded",
+      "reason": "See specification.md exclusions; outside required native bridge scope"
+    },
+    {
+      "id": "R-16",
+      "source_refs": [
+        "S-USER"
+      ],
+      "statement": "Automatic crash resumption",
+      "acceptance": [
+        "Explicitly outside v1 as specified in exclusions"
+      ],
+      "disposition": "deferred",
+      "reason": "See specification.md exclusions; outside required native bridge scope"
+    },
+    {
+      "id": "R-17",
+      "source_refs": [
+        "S-USER"
+      ],
+      "statement": "Speech-only sensitive approval",
+      "acceptance": [
+        "Explicitly outside v1 as specified in exclusions"
+      ],
+      "disposition": "deferred",
+      "reason": "See specification.md exclusions; outside required native bridge scope"
+    },
+    {
+      "id": "R-18",
+      "source_refs": [
+        "S-USER"
+      ],
+      "statement": "New hosting or paid generation",
+      "acceptance": [
+        "Explicitly outside v1 as specified in exclusions"
+      ],
+      "disposition": "excluded",
+      "reason": "See specification.md exclusions; outside required native bridge scope"
+    }
+  ],
+  "phases": [
+    {
+      "id": "P1",
+      "act": "1",
+      "title": "Prove contracts",
+      "entry_gate": "G-P1",
+      "exit_gate": "G-P1-EXIT"
+    },
+    {
+      "id": "P2",
+      "act": "2",
+      "title": "One real working conversation",
+      "entry_gate": "G-P2",
+      "exit_gate": "G-P2-EXIT"
+    },
+    {
+      "id": "P3",
+      "act": "3",
+      "title": "Interactive and recoverable",
+      "entry_gate": "G-P3",
+      "exit_gate": "G-P3-EXIT"
+    },
+    {
+      "id": "P4",
+      "act": "4",
+      "title": "Release candidate",
+      "entry_gate": "G-P4",
+      "exit_gate": "G-P4-EXIT"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "G-START",
+      "kind": "gate",
+      "title": "Implementation scope authorized",
+      "owner": "lead",
+      "depends_on": [],
+      "status": "accepted",
+      "gate_type": "human",
+      "approval_ref": "evidence/implementation-authorization.md",
+      "evidence": [
+        {
+          "path": "evidence/implementation-authorization.md",
+          "revision": "r2",
+          "environment": "isolated worktree d0b5bae3c",
+          "result": "pass",
+          "kind": "manual",
+          "reviewer": "Michael"
+        },
+        {
+          "path": "evidence/pre-live-sequencing.md",
+          "revision": "r3",
+          "environment": "r3 impact re-attestation of dated r2 evidence; no repeated live or test claim",
+          "result": "pass",
+          "kind": "manual",
+          "reviewer": "Michael"
+        }
+      ]
+    },
+    {
+      "id": "S-LOCAL",
+      "kind": "setup",
+      "title": "Local toolchain and fixture readiness",
+      "owner": "implementer",
+      "depends_on": [],
+      "status": "accepted",
+      "mode": "live",
+      "evidence": [
+        {
+          "path": "evidence/P1-entry.md",
+          "revision": "r2",
+          "environment": "candidate d0b5bae3c local Node24 Bun1.3.13",
+          "result": "pass",
+          "kind": "manual",
+          "reviewer": "/root/host_map"
+        },
+        {
+          "path": "evidence/pre-live-sequencing.md",
+          "revision": "r3",
+          "environment": "r3 impact re-attestation of dated r2 evidence; no repeated live or test claim",
+          "result": "pass",
+          "kind": "manual",
+          "reviewer": "/root/host_map"
+        }
+      ]
+    },
+    {
+      "id": "S-LIVE",
+      "kind": "setup",
+      "title": "Existing voice providers and active specialist readiness",
+      "owner": "implementer",
+      "depends_on": [],
+      "status": "planned",
+      "mode": "live"
+    },
+    {
+      "id": "S-APP",
+      "kind": "setup",
+      "title": "Authorized candidate launch environment",
+      "owner": "implementer",
+      "depends_on": [],
+      "status": "accepted",
+      "mode": "live",
+      "evidence": [
+        {
+          "path": "evidence/T-203.md",
+          "revision": "r3",
+          "environment": "running isolated candidate verified through UI 2026-09-13",
+          "result": "pass",
+          "kind": "manual",
+          "reviewer": "Michael + /root"
+        }
+      ]
+    },
+    {
+      "id": "G-P1",
+      "kind": "gate",
+      "title": "Phase 1 entry review",
+      "owner": "lead",
+      "depends_on": [
+        "G-START",
+        "S-LOCAL"
+      ],
+      "status": "accepted",
+      "gate_type": "review",
+      "evidence": [
+        {
+          "path": "evidence/P1-entry.md",
+          "revision": "r2",
+          "environment": "candidate d0b5bae3c local Node24 Bun1.3.13",
+          "result": "pass",
+          "kind": "manual",
+          "reviewer": "/root/host_map"
+        },
+        {
+          "path": "evidence/pre-live-sequencing.md",
+          "revision": "r3",
+          "environment": "r3 impact re-attestation of dated r2 evidence; no repeated live or test claim",
+          "result": "pass",
+          "kind": "manual",
+          "reviewer": "/root/host_map"
+        }
+      ]
+    },
+    {
+      "id": "G-P2",
+      "kind": "gate",
+      "title": "Phase 2 entry review",
+      "owner": "lead",
+      "depends_on": [
+        "G-P1-EXIT"
+      ],
+      "status": "accepted",
+      "gate_type": "review",
+      "evidence": [
+        {
+          "path": "evidence/P2-entry.md",
+          "revision": "r2",
+          "environment": "candidate d0b5bae3c packet review",
+          "result": "pass",
+          "kind": "manual",
+          "reviewer": "/root/host_map"
+        },
+        {
+          "path": "evidence/pre-live-sequencing.md",
+          "revision": "r3",
+          "environment": "r3 impact re-attestation of dated r2 evidence; no repeated live or test claim",
+          "result": "pass",
+          "kind": "manual",
+          "reviewer": "/root/host_map"
+        }
+      ]
+    },
+    {
+      "id": "G-P3",
+      "kind": "gate",
+      "title": "Phase 3 entry review",
+      "owner": "lead",
+      "depends_on": [
+        "G-P2-EXIT"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G-P4",
+      "kind": "gate",
+      "title": "Phase 4 entry review",
+      "owner": "lead",
+      "depends_on": [
+        "G-P3-EXIT"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "T-101",
+      "kind": "task",
+      "title": "Host admission and lifecycle proof",
+      "owner": "implementer",
+      "depends_on": [
+        "G-P1"
+      ],
+      "status": "accepted",
+      "phase": "P1",
+      "requirements": [
+        "R-02",
+        "R-05",
+        "R-06",
+        "R-07",
+        "R-08",
+        "R-09",
+        "R-11",
+        "R-12"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-101.md",
+      "resources": [
+        "packages/server-core/src/voice-tasks",
+        "docs/build-specs/conversational-work-bridge/contracts.md"
+      ],
+      "verification": [
+        {
+          "method": "Follow tasks/T-101.md and roadmap.md acceptance procedures",
+          "expected": "All linked requirement outcomes pass; report failed and not-run separately",
+          "environment": "Isolated Artist OS fixture harness"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/T-101.md",
+          "revision": "r2",
+          "environment": "candidate d0b5bae3c isolated fixture",
+          "result": "pass",
+          "kind": "automated",
+          "reviewer": "/root/host_map"
+        },
+        {
+          "path": "evidence/pre-live-sequencing.md",
+          "revision": "r3",
+          "environment": "r3 impact re-attestation of dated r2 evidence; no repeated live or test claim",
+          "result": "pass",
+          "kind": "automated",
+          "reviewer": "/root/host_map"
+        }
+      ]
+    },
+    {
+      "id": "T-102",
+      "kind": "task",
+      "title": "External assistant turn proof",
+      "owner": "implementer",
+      "depends_on": [
+        "G-P1",
+        "T-101"
+      ],
+      "status": "accepted",
+      "phase": "P1",
+      "requirements": [
+        "R-01",
+        "R-03",
+        "R-04",
+        "R-12",
+        "R-13",
+        "R-14"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-102.md",
+      "resources": [
+        "apps/electron/src/renderer/lib/voice-task-delivery",
+        "docs/build-specs/conversational-work-bridge/contracts.md"
+      ],
+      "verification": [
+        {
+          "method": "Follow tasks/T-102.md and roadmap.md acceptance procedures",
+          "expected": "All linked requirement outcomes pass; report failed and not-run separately",
+          "environment": "Isolated Artist OS fixture harness"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/T-102.md",
+          "revision": "r2",
+          "environment": "candidate d0b5bae3c actual SDK with fixture devices",
+          "result": "pass",
+          "kind": "automated",
+          "reviewer": "/root/host_map"
+        },
+        {
+          "path": "evidence/pre-live-sequencing.md",
+          "revision": "r3",
+          "environment": "r3 impact re-attestation of dated r2 evidence; no repeated live or test claim",
+          "result": "pass",
+          "kind": "automated",
+          "reviewer": "/root/host_map"
+        }
+      ]
+    },
+    {
+      "id": "T-201",
+      "kind": "task",
+      "title": "Implement native task bridge",
+      "owner": "implementer",
+      "depends_on": [
+        "G-P2"
+      ],
+      "status": "accepted",
+      "phase": "P2",
+      "requirements": [
+        "R-02",
+        "R-05",
+        "R-07",
+        "R-08",
+        "R-11",
+        "R-12"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-201.md",
+      "resources": [
+        "packages/server-core/src/voice-tasks",
+        "packages/server-core/src/agent-messaging",
+        "packages/shared/src/agent-messaging",
+        "apps/electron/src/main/artist-manager-voice-focus.ts"
+      ],
+      "verification": [
+        {
+          "method": "Follow tasks/T-201.md and roadmap.md acceptance procedures",
+          "expected": "All linked requirement outcomes pass; report failed and not-run separately",
+          "environment": "Candidate build; real providers required for live scenarios"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/T-201.md",
+          "revision": "r2",
+          "environment": "candidate d0b5bae3c fixture execution and actual SDK proof",
+          "result": "pass",
+          "kind": "automated",
+          "reviewer": "/root/host_map"
+        },
+        {
+          "path": "evidence/pre-live-sequencing.md",
+          "revision": "r3",
+          "environment": "r3 impact re-attestation of dated r2 evidence; no repeated live or test claim",
+          "result": "pass",
+          "kind": "automated",
+          "reviewer": "/root/host_map"
+        }
+      ]
+    },
+    {
+      "id": "T-202",
+      "kind": "task",
+      "title": "Integrate event speech and task stream",
+      "owner": "implementer",
+      "depends_on": [
+        "G-P2",
+        "T-201"
+      ],
+      "status": "accepted",
+      "phase": "P2",
+      "requirements": [
+        "R-01",
+        "R-03",
+        "R-04",
+        "R-05",
+        "R-12",
+        "R-14"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-202.md",
+      "resources": [
+        "vendor/voice-core-web",
+        "vendor/voice-core-snapshot.json",
+        "apps/electron/src/renderer/hooks/useArtistManagerVoice.ts",
+        "apps/electron/src/renderer/lib/voice-task-delivery",
+        "upstream/voice-core-web-wrapper"
+      ],
+      "verification": [
+        {
+          "method": "Follow tasks/T-202.md and roadmap.md acceptance procedures",
+          "expected": "All linked requirement outcomes pass; report failed and not-run separately",
+          "environment": "Candidate build; real providers required for live scenarios"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/T-202.md",
+          "revision": "r2",
+          "environment": "compiled Artist OS candidate; actual SDK with fixture devices/providers",
+          "result": "pass",
+          "kind": "automated",
+          "reviewer": "/root/host_map"
+        },
+        {
+          "path": "evidence/pre-live-sequencing.md",
+          "revision": "r3",
+          "environment": "r3 impact re-attestation of dated r2 evidence; no repeated live or test claim",
+          "result": "pass",
+          "kind": "automated",
+          "reviewer": "/root/host_map"
+        },
+        {
+          "path": "evidence/T-204.md",
+          "revision": "r3",
+          "environment": "affected voice/call regressions after additive UI controls; live not run",
+          "result": "pass",
+          "kind": "automated",
+          "reviewer": "/root/host_map"
+        }
+      ]
+    },
+    {
+      "id": "T-203",
+      "kind": "task",
+      "title": "Prove real draft and concurrent call",
+      "owner": "implementer",
+      "depends_on": [
+        "G-P2",
+        "T-202",
+        "S-LIVE",
+        "S-APP",
+        "T-204"
+      ],
+      "status": "planned",
+      "phase": "P2",
+      "requirements": [
+        "R-01",
+        "R-02",
+        "R-03",
+        "R-04",
+        "R-05",
+        "R-13"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-203.md",
+      "resources": [
+        "environment/artist-os-candidate"
+      ],
+      "verification": [
+        {
+          "method": "Follow tasks/T-203.md and roadmap.md acceptance procedures",
+          "expected": "All linked requirement outcomes pass; report failed and not-run separately",
+          "environment": "Candidate build; real providers required for live scenarios"
+        }
+      ]
+    },
+    {
+      "id": "T-301",
+      "kind": "task",
+      "title": "Interactive questions revisions and permissions",
+      "owner": "implementer",
+      "depends_on": [
+        "G-P3"
+      ],
+      "status": "planned",
+      "phase": "P3",
+      "requirements": [
+        "R-06",
+        "R-07",
+        "R-08"
+      ],
+      "detail": "outlined",
+      "packet": "tasks/T-301.md",
+      "resources": [
+        "packages/server-core/src/voice-tasks",
+        "packages/server-core/src/sessions/SessionManager.ts",
+        "apps/electron/src/main/artist-manager-voice-focus.ts"
+      ],
+      "verification": [
+        {
+          "method": "Follow tasks/T-301.md and roadmap.md acceptance procedures",
+          "expected": "All linked requirement outcomes pass; report failed and not-run separately",
+          "environment": "Candidate build; real providers required for live scenarios"
+        }
+      ]
+    },
+    {
+      "id": "T-302",
+      "kind": "task",
+      "title": "Reconcile recovery and bounded delivery",
+      "owner": "implementer",
+      "depends_on": [
+        "G-P3",
+        "T-301"
+      ],
+      "status": "planned",
+      "phase": "P3",
+      "requirements": [
+        "R-05",
+        "R-08",
+        "R-09",
+        "R-11",
+        "R-12"
+      ],
+      "detail": "outlined",
+      "packet": "tasks/T-302.md",
+      "resources": [
+        "packages/server-core/src/voice-tasks",
+        "apps/electron/src/renderer/lib/voice-task-delivery"
+      ],
+      "verification": [
+        {
+          "method": "Follow tasks/T-302.md and roadmap.md acceptance procedures",
+          "expected": "All linked requirement outcomes pass; report failed and not-run separately",
+          "environment": "Candidate build; real providers required for live scenarios"
+        }
+      ]
+    },
+    {
+      "id": "T-303",
+      "kind": "task",
+      "title": "Task details and accessible controls",
+      "owner": "implementer",
+      "depends_on": [
+        "G-P3",
+        "T-302"
+      ],
+      "status": "planned",
+      "phase": "P3",
+      "requirements": [
+        "R-01",
+        "R-06",
+        "R-07",
+        "R-10",
+        "R-12"
+      ],
+      "detail": "outlined",
+      "packet": "tasks/T-303.md",
+      "resources": [
+        "apps/electron/src/renderer/components/app-shell/ArtistManagerVoiceDialog.tsx",
+        "apps/electron/src/renderer/hooks/useArtistManagerVoice.ts"
+      ],
+      "verification": [
+        {
+          "method": "Follow tasks/T-303.md and roadmap.md acceptance procedures",
+          "expected": "All linked requirement outcomes pass; report failed and not-run separately",
+          "environment": "Candidate build; real providers required for live scenarios"
+        }
+      ]
+    },
+    {
+      "id": "T-401",
+      "kind": "task",
+      "title": "Certify candidate performance and rollback",
+      "owner": "implementer",
+      "depends_on": [
+        "G-P4",
+        "S-LIVE",
+        "S-APP"
+      ],
+      "status": "planned",
+      "phase": "P4",
+      "requirements": [
+        "R-01",
+        "R-02",
+        "R-03",
+        "R-04",
+        "R-05",
+        "R-06",
+        "R-07",
+        "R-08",
+        "R-09",
+        "R-10",
+        "R-11",
+        "R-12",
+        "R-13",
+        "R-14"
+      ],
+      "detail": "outlined",
+      "packet": "tasks/T-401.md",
+      "resources": [
+        "environment/artist-os-candidate"
+      ],
+      "verification": [
+        {
+          "method": "Follow tasks/T-401.md and roadmap.md acceptance procedures",
+          "expected": "All linked requirement outcomes pass; report failed and not-run separately",
+          "environment": "Candidate build; real providers required for live scenarios"
+        }
+      ]
+    },
+    {
+      "id": "G-P1-EXIT",
+      "kind": "gate",
+      "title": "Phase 1 evidence and independent review",
+      "owner": "lead",
+      "depends_on": [
+        "T-101",
+        "T-102"
+      ],
+      "status": "accepted",
+      "gate_type": "review",
+      "evidence": [
+        {
+          "path": "evidence/P1-exit.md",
+          "revision": "r2",
+          "environment": "candidate d0b5bae3c actual SDK with fixture devices",
+          "result": "pass",
+          "kind": "automated",
+          "reviewer": "/root/host_map"
+        },
+        {
+          "path": "evidence/pre-live-sequencing.md",
+          "revision": "r3",
+          "environment": "r3 impact re-attestation of dated r2 evidence; no repeated live or test claim",
+          "result": "pass",
+          "kind": "automated",
+          "reviewer": "/root/host_map"
+        }
+      ]
+    },
+    {
+      "id": "G-P2-EXIT",
+      "kind": "gate",
+      "title": "Phase 2 evidence and independent review",
+      "owner": "lead",
+      "depends_on": [
+        "T-201",
+        "T-202",
+        "T-203",
+        "T-204"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G-P3-EXIT",
+      "kind": "gate",
+      "title": "Phase 3 evidence and independent review",
+      "owner": "lead",
+      "depends_on": [
+        "T-301",
+        "T-302",
+        "T-303"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G-P4-EXIT",
+      "kind": "gate",
+      "title": "Phase 4 evidence and independent review",
+      "owner": "lead",
+      "depends_on": [
+        "T-401"
+      ],
+      "status": "planned",
+      "gate_type": "review"
+    },
+    {
+      "id": "G-RELEASE",
+      "kind": "gate",
+      "title": "User accepts candidate and authorizes landing",
+      "owner": "lead",
+      "depends_on": [
+        "G-P4-EXIT"
+      ],
+      "status": "planned",
+      "gate_type": "human"
+    },
+    {
+      "id": "T-204",
+      "kind": "task",
+      "title": "Pre-live task details and cancellation controls",
+      "owner": "implementer",
+      "depends_on": [
+        "G-P2",
+        "T-201",
+        "T-202"
+      ],
+      "status": "accepted",
+      "phase": "P2",
+      "requirements": [
+        "R-08",
+        "R-10",
+        "R-12"
+      ],
+      "detail": "executable",
+      "packet": "tasks/T-204.md",
+      "resources": [
+        "apps/electron/src/renderer/lib/voice-task-delivery",
+        "apps/electron/src/renderer/hooks/useArtistManagerVoice.ts",
+        "apps/electron/src/renderer/components/app-shell/ArtistManagerVoiceDialog.tsx"
+      ],
+      "verification": [
+        {
+          "method": "Follow T-204 packet; independent review and affected voice regressions",
+          "expected": "Truthful targeted cancellation and preserved call lifecycle",
+          "environment": "Local candidate with deterministic fixture host; live remains T203"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "evidence/T-204.md",
+          "revision": "r3",
+          "environment": "local Artist OS candidate; deterministic host and actual SDK fixture audio",
+          "result": "pass",
+          "kind": "automated",
+          "reviewer": "/root/host_map"
+        }
+      ]
+    }
+  ]
+}

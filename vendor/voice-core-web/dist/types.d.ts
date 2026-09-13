@@ -27,7 +27,32 @@ export type BrowserCapabilities = {
     sharedArrayBuffer: boolean;
     crossOriginIsolated: boolean;
 };
+export type ExternalAssistantTurnInput = {
+    origin: "worker-result";
+    turnId: string;
+    text: string;
+};
+export type ExternalAssistantDeliveryOutcome = "delivered" | "interrupted" | "failed";
+export type ExternalAssistantDelivery = {
+    readonly turnId: string;
+    readonly generation: number;
+    readonly done: Promise<ExternalAssistantDeliveryOutcome>;
+    cancel(): void;
+};
+export type ExternalAssistantTurnResult = {
+    status: "deferred" | "unsupported";
+} | {
+    status: "accepted";
+    delivery: ExternalAssistantDelivery;
+};
+export type ExternalAssistantTurnStatus = {
+    supported: boolean;
+    idle: boolean;
+    idleForMs: number;
+};
 export type VoiceSdkCapabilities = {
+    /** Correlated, consumed-playback assistant event turns. App admission remains separately gated. */
+    externalAssistantTurns?: boolean;
     runtimeSetters: boolean;
     toolCalling: boolean;
     diagnostics: boolean;

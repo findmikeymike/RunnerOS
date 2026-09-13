@@ -1,3 +1,7 @@
+type OutputFlushAcknowledgement = {
+    requestId: number;
+    playbackEpoch: number;
+};
 import type { PlaybackFrame, VoiceRuntimeConfig } from "../types";
 export declare class AudioGraph {
     private static readonly OUTPUT_ACK_TIMEOUT_MS;
@@ -49,8 +53,9 @@ export declare class AudioGraph {
     } | null) => void) | null): void;
     private emitPlaybackFrame;
     setOutputPlaybackHandler(handler: ((active: boolean) => void) | null): void;
-    setOutputFlushedHandler(handler: (() => void) | null): void;
-    flushOutputQueue(): void;
+    setOutputFlushedHandler(handler: ((acknowledgement: OutputFlushAcknowledgement) => void) | null): void;
+    hasPendingOutputFlush(): boolean;
+    flushOutputQueue(onRequest?: (request: OutputFlushAcknowledgement) => void): void;
     setOutputQueuePressureHandler(handler: ((active: boolean, queuedSamples: number) => void) | null): void;
     setOutputDebugHandler(handler: ((message: string) => void) | null): void;
     setOutputErrorHandler(handler: ((error: Error) => void) | null): void;
@@ -63,4 +68,5 @@ export declare class AudioGraph {
     private awaitStartupStep;
     private withMediaStartTimeout;
 }
+export {};
 //# sourceMappingURL=AudioGraph.d.ts.map
