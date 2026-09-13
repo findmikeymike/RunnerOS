@@ -9,6 +9,7 @@ The latest user direction governs. These are faithful summaries of conversation 
 | U3 | Avoid overlap: existing Spotify browser/Pulse capture already serves analytics. Verify agent consumption and reuse it. Spotify URL remains useful without browser login. | Latest user correction |
 | U4 | Deep Research owns enrichment; browser supports it. Bounded pass, no extra plan approval. | Assistant proposal accepted by user continuing specification |
 | U5 | Thorough spec, phased build, commit completed work; no new blanket approvals or blockers. | Standing explicit user instructions |
+| U6 | An HQ normally represents one artist. Do not build automatic artist switching or identity migration. If someone intentionally repurposes the HQ, give them a clear manual action that removes the old research context, then let them enter the new artist information. | User clarification, September 13 |
 
 Derived proposals (not separately user-approved numbers): caps, stale thresholds, schema/RPC names, exact section label, and phase ownership below. They are concrete V1 defaults to review during implementation, not observed current behavior. Career & public context is the narrower label replacing the earlier brainstorm Career & audience research, because analytics ownership is now explicit.
 

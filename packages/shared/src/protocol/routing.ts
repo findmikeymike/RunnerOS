@@ -660,6 +660,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.artistProfileEnrichment.UPDATE_DELIVERY,
   RPC_CHANNELS.artistProfileEnrichment.START,
   RPC_CHANNELS.artistProfileEnrichment.CANCEL,
+  RPC_CHANNELS.artistProfileEnrichment.CLEAR,
   RPC_CHANNELS.artistProfileEnrichment.CORRECT,
   RPC_CHANNELS.artistProfileEnrichment.REMOVE,
   RPC_CHANNELS.artistProfileEnrichment.UNDO,

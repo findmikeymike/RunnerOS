@@ -57,6 +57,14 @@ describe('career research context', () => {
     });
     expect(() => normalizeSpotifyArtistProfile(`https://open.spotify.com/track/${spotifyId}`)).toThrow('Spotify artist URL');
     expect(() => normalizeCareerResearchSeeds({ officialUrl: 'http://127.0.0.1/private' })).toThrow('public internet');
+    expect(normalizeCareerResearchSeeds({ officialUrl: 'https://feature.fm/story?p=123&utm_source=test' }).officialUrl).toBe('https://feature.fm/story?p=123');
+    expect(normalizeCareerResearchSeeds({ officialUrl: 'https://press.example/story?p=456' }).officialUrl).toBe('https://press.example/story?p=456');
+    expect(() => normalizeCareerResearchSeeds({ officialUrl: 'https://[fd00::1]/private' })).toThrow('public internet');
+    expect(() => normalizeCareerResearchSeeds({ officialUrl: 'https://[::ffff:7f00:1]/private' })).toThrow('public internet');
+    expect(() => normalizeCareerResearchSeeds({ officialUrl: 'https://100.64.0.1/private' })).toThrow('public internet');
+    expect(() => normalizeCareerResearchSeeds({ officialUrl: 'https://240.0.0.1/private' })).toThrow('public internet');
+    expect(normalizeCareerResearchSeeds({ officialUrl: 'https://[2606:4700:4700::1111]/story' }).officialUrl).toBe('https://[2606:4700:4700::1111]/story');
+    expect(normalizeCareerResearchSeeds({ officialUrl: 'https://press.example/story?p=123&token=secret&X-Amz-Signature=sig' }).officialUrl).toBe('https://press.example/story?p=123');
   });
 
   test('applies correction/removal overlays and rebuilds the managed projection', () => {

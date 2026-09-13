@@ -14,18 +14,25 @@ const mockShellOpenExternal = mock(async () => {})
 const mockIpcMainHandle = mock(() => {})
 const mockClearStorageData = mock(async () => {})
 const mockClearCache = mock(async () => {})
+const beforeRequestCallbacks: Function[] = []
+const permissionCheckHandlers: Function[] = []
+const permissionRequestHandlers: Function[] = []
+const mockResolveHost = mock(async (host: string) => ({
+  endpoints: [{ address: host === 'internal.example' ? '10.0.0.7' : '93.184.216.34' }],
+}))
 const mockSessionFromPartition = mock((_partition: string) => ({
   protocol: { handle: () => {} },
-  setPermissionCheckHandler: mock(() => {}),
-  setPermissionRequestHandler: mock(() => {}),
+  setPermissionCheckHandler: mock((cb: any) => { permissionCheckHandlers.push(cb) }),
+  setPermissionRequestHandler: mock((cb: any) => { permissionRequestHandlers.push(cb) }),
   webRequest: {
-    onBeforeRequest: mock((_cb: any) => {}),
+    onBeforeRequest: mock((cb: any) => { beforeRequestCallbacks.push(cb) }),
     onCompleted: mock((_cb: any) => {}),
     onErrorOccurred: mock((_cb: any) => {}),
   },
   on: mock((_event: string, _cb: any) => {}),
   clearStorageData: mockClearStorageData,
   clearCache: mockClearCache,
+  resolveHost: mockResolveHost,
 }))
 
 function createMockWebContents() {
@@ -281,6 +288,10 @@ describe('BrowserPaneManager', () => {
     mockSessionFromPartition.mockClear()
     mockClearStorageData.mockClear()
     mockClearCache.mockClear()
+    mockResolveHost.mockClear()
+    beforeRequestCallbacks.length = 0
+    permissionCheckHandlers.length = 0
+    permissionRequestHandlers.length = 0
     manager = new BrowserPaneManager()
   })
 
@@ -516,6 +527,21 @@ describe('BrowserPaneManager', () => {
     expect(mockShellOpenExternal).toHaveBeenCalledWith('craftagents://settings')
   })
 
+  it('denies app deep links from public-only research without dispatching them', async () => {
+    manager.setPublicNetworkOnlyForSession('restricted-links', true)
+    const id = manager.createForSession('restricted-links')
+    const instance = (manager as any).instances.get(id)
+    const openHandler = instance.pageView.webContents.setWindowOpenHandler.mock.calls[0][0]
+    const result = openHandler({ url: 'craftagents://settings', disposition: 'new-popup', frameName: '' })
+    const event = { preventDefault: mock(() => {}) }
+    instance.pageView.webContents._emitRaw('will-navigate', event, 'craftagents://settings')
+
+    expect(result).toEqual({ action: 'deny' })
+    expect(event.preventDefault).toHaveBeenCalledTimes(1)
+    await Bun.sleep(0)
+    expect(mockShellOpenExternal).not.toHaveBeenCalled()
+  })
+
   it('destroys child popups when parent instance is destroyed', () => {
     manager.createInstance('popup-parent')
     const instance = (manager as any).instances.get('popup-parent')
@@ -635,6 +661,47 @@ describe('BrowserPaneManager', () => {
     expect(id).not.toBe('social-window')
     expect(manager.listInstances()).toHaveLength(2)
     expect(manager.listInstances().find((info) => info.id === 'social-window')?.ownerType).toBe('manual')
+  })
+
+  it('isolates public-only sessions and rejects private destinations on navigation and request hops', async () => {
+    manager.createInstance('manual-reusable')
+    manager.setPublicNetworkOnlyForSession('research-session', true)
+    const id = manager.createForSession('research-session')
+    const instance = (manager as any).instances.get(id)
+    expect(id).not.toBe('manual-reusable')
+    expect(instance.partition).toMatch(/^public-research-[a-f0-9]{24}$/)
+    expect(() => manager.bindSession('manual-reusable', 'research-session')).toThrow('Restricted research sessions')
+    expect(() => manager.useSocialProfileForSession('research-session', 'instagram', 'artist')).toThrow('Restricted research sessions')
+    expect(() => manager.useAdProfileForSession('research-session', 'meta', 'artist')).toThrow('Restricted research sessions')
+
+    const permissionCheck = permissionCheckHandlers.at(-1)!
+    expect(permissionCheck(null, 'geolocation', 'https://public.example', {})).toBe(false)
+    expect(permissionCheck(null, 'clipboard-read', 'https://public.example', {})).toBe(false)
+    const permissionDecisions: boolean[] = []
+    permissionRequestHandlers.at(-1)!(
+      null,
+      'media',
+      (allowed: boolean) => permissionDecisions.push(allowed),
+      { requestingOrigin: 'https://public.example' },
+    )
+    expect(permissionDecisions).toEqual([false])
+
+    await expect(manager.navigate(id, 'https://public.example/story')).resolves.toBeDefined()
+    expect(instance.pageView.webContents.loadURL).toHaveBeenCalledWith('https://public.example/story')
+    await expect(manager.navigate(id, 'http://127.0.0.1/private')).rejects.toThrow('private or reserved')
+
+    const observer = beforeRequestCallbacks.at(-1)!
+    const decisions: Array<Record<string, unknown>> = []
+    observer({ url: 'https://internal.example/redirect', webContentsId: instance.pageView.webContents.id }, (decision: Record<string, unknown>) => decisions.push(decision))
+    while (decisions.length === 0) await Promise.resolve()
+    expect(decisions).toEqual([{ cancel: true }])
+
+    observer({ url: 'file:///etc/passwd', webContentsId: instance.pageView.webContents.id }, (decision: Record<string, unknown>) => decisions.push(decision))
+    while (decisions.length === 1) await Promise.resolve()
+    expect(decisions.at(-1)).toEqual({ cancel: true })
+
+    observer({ url: 'file:///artist-os/browser-toolbar.html', webContentsId: instance.toolbarView.webContents.id }, (decision: Record<string, unknown>) => decisions.push(decision))
+    expect(decisions.at(-1)).toEqual({})
   })
 
   it('switches a session from the generic browser to the exact saved social profile partition', () => {

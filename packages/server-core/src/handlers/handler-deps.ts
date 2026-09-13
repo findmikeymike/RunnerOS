@@ -47,6 +47,12 @@ export interface HandlerDeps<
   /** Authenticated journal projections used by normal run history. */
   getDurableWorkflowRuns?: () => Pick<import('../workflows/durable-workflow-runs').DurableWorkflowRuns, 'get' | 'list'>
   getDeepResearchRunner?: () => import('../deep-research/DeepResearchRunner').DeepResearchRunner
+  /**
+   * Resolve the artist enrichment adapter after SessionManager initialization.
+   * RPC registration happens before initialization, so handlers must not call
+   * this getter until a request is admitted.
+   */
+  getArtistProfileEnrichmentService?: () => import('../artist-profile-enrichment/ArtistProfileEnrichmentService').ArtistProfileEnrichmentService
   validateSocialProfile?: (input: { platform: string; profileId: string }) => Promise<{ ready: boolean; reason?: string }>
   /**
    * Resolve the host's `NotificationService`. Lazy-resolved via a getter so

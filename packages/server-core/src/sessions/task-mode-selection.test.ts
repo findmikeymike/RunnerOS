@@ -34,7 +34,7 @@ function focusedOptions(): Partial<CreateSessionOptions> {
     customSystemPrompt: 'Focused branding prompt',
     agentSkillSlugs: ['artist-narrative-universe'],
     enabledSourceSlugs: ['artist-profile'],
-    launchReceipt: focusedReceipt,
+    launchReceipt: structuredClone(focusedReceipt),
   }
 }
 
@@ -248,7 +248,12 @@ describe('task-mode selection', () => {
     managed.name = 'Branding'
     const internals = manager as unknown as {
       getOrCreateAgent: (session: typeof managed, context: AgentContextUpdate) => Promise<AgentBackend>
+      resolveAgentSessionOptions: () => Promise<Partial<CreateSessionOptions>>
     }
+    let refreshCount = 0
+    internals.resolveAgentSessionOptions = async () => refreshCount++ === 0
+      ? { ...focusedOptions(), customSystemPrompt: 'Original admitted focus' }
+      : focusedOptions()
     let captured: AgentContextUpdate | undefined
     internals.getOrCreateAgent = async (_session, context) => {
       await manager.selectSessionTaskMode(managed.id, 'narrative-universe')
@@ -266,6 +271,31 @@ describe('task-mode selection', () => {
     managed.isProcessing = false
     await expect(manager.sendMessage(managed.id, 'Now change focus')).rejects.toThrow('Stop before provider execution')
     expect(captured?.customSystemPrompt).toBe('Focused branding prompt')
+  })
+
+  test('an existing unfocused worker receives refreshed context at next-turn admission', async () => {
+    managed.launchReceipt = { ...focusedReceipt, taskMode: undefined, taskModeSelectionPending: false }
+    managed.messages = [{ id: 'real', role: 'user', content: 'Prior request', timestamp: 1 }]
+    managed.customSystemPrompt = 'Stale career context'
+    managed.name = 'Branding'
+    const applied: AgentContextUpdate[] = []
+    const agent = {
+      setAgentContext: (context: AgentContextUpdate) => { applied.push(context) },
+      setAllSources: () => { throw new Error('Stop after context refresh') },
+    } as unknown as AgentBackend
+    const internals = manager as unknown as {
+      getOrCreateAgent: () => Promise<AgentBackend>
+      resolveAgentSessionOptions: () => Promise<Partial<CreateSessionOptions>>
+    }
+    internals.getOrCreateAgent = async () => agent
+    internals.resolveAgentSessionOptions = async () => ({
+      customSystemPrompt: 'Fresh career context',
+      agentSkillSlugs: ['artist-narrative-universe'],
+      enabledSourceSlugs: [],
+      launchReceipt: managed.launchReceipt,
+    })
+    await manager.sendMessage(managed.id, 'Use the current facts')
+    expect(applied).toEqual([{ customSystemPrompt: 'Fresh career context', agentSkillSlugs: ['artist-narrative-universe'] }])
   })
 
   test('source retry keeps admitted focus, activated source and input identity without another user bubble', async () => {
@@ -302,7 +332,7 @@ describe('task-mode selection', () => {
     expect(captured?.enabledSourceSlugs).toEqual(['activated-source'])
     managed.isProcessing = false
     await expect(manager.sendMessage(managed.id, 'Next real ask')).rejects.toThrow('Stop before provider')
-    expect(captured?.customSystemPrompt).toBe('Pending next focus')
+    expect(captured?.customSystemPrompt).toBe('Focused branding prompt')
     expect(managed.lastSentInputMessageId).not.toBe('original')
   })
 
@@ -372,7 +402,10 @@ describe('task-mode selection', () => {
     internals.getOrCreateAgent = async () => managed.agent!
     internals.processEvent = () => {}
     internals.onProcessingStopped = async () => { managed.isProcessing = false }
-    internals.resolveAgentSessionOptions = async () => ({ ...focusedOptions(), enabledSourceSlugs: [] })
+    let refreshCount = 0
+    internals.resolveAgentSessionOptions = async () => refreshCount++ === 0
+      ? { ...focusedOptions(), customSystemPrompt: original.customSystemPrompt, agentSkillSlugs: original.agentSkillSlugs, enabledSourceSlugs: [] }
+      : { ...focusedOptions(), enabledSourceSlugs: [] }
     const response = manager.sendMessage(managed.id, 'Start visual work')
     await started
     try {

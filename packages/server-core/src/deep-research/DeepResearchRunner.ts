@@ -87,9 +87,32 @@ export interface DeepResearchHostRunOptions {
   runId?: string
   purpose?: string
   owner?: import('@craft-agent/shared/deep-research').DeepResearchOwnerBinding
+  publicWebSourcesOnly?: boolean
   executionContract?: Partial<Omit<DeepResearchExecutionContract, 'startedAt' | 'deadlineAt'>>
   outputSchema?: Record<string, unknown>
 }
+
+const READ_ONLY_BROWSER_COMMANDS = new Set([
+  'back',
+  'close',
+  'console',
+  'find',
+  'focus',
+  'forward',
+  'hide',
+  'navigate',
+  'network',
+  'open',
+  'release',
+  'reload',
+  'screenshot',
+  'screenshot-region',
+  'scroll',
+  'snapshot',
+  'stop',
+  'wait',
+  'window-resize',
+])
 
 const DEEP_RESEARCH_SYSTEM_PROMPT = [
   `You are ${RUNTIME_IDENTITY.productName} Deep Research.`,
@@ -191,7 +214,14 @@ function sanitizePublicUrl(value: unknown): string | undefined {
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
     url.username = ''
     url.password = ''
-    url.search = ''
+    for (const key of [...url.searchParams.keys()]) {
+      const normalizedKey = key.toLowerCase().replace(/[-.]/g, '_')
+      if (/^(?:utm_.+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|igshid|vero_id|_hsenc|_hsmi)$/.test(normalizedKey) ||
+          /(?:^|_)(?:api_?key|key|access_?token|refresh_?token|token|auth|authorization|secret|password|signature|sig|credential)(?:_|$)/.test(normalizedKey)) {
+        url.searchParams.delete(key)
+      }
+    }
+    url.searchParams.sort()
     url.hash = ''
     return url.toString()
   } catch {
@@ -238,14 +268,72 @@ function findUrlInValue(value: unknown, depth = 0): string | undefined {
   return undefined
 }
 
-function urlFromToolResult(result: string | undefined): string | undefined {
+function isBrowserCommandTool(toolName: string): boolean {
+  const normalized = toolName.toLowerCase()
+  return (normalized.split('__').at(-1) ?? normalized) === 'browser_tool'
+}
+
+function isHostNativeBrowserTool(toolName: string): boolean {
+  const normalized = toolName.toLowerCase()
+  return normalized === 'browser_tool' || normalized === 'mcp__session__browser_tool'
+}
+
+function isUnpinnedLocalWebFetchTool(toolName: string): boolean {
+  const normalized = toolName.toLowerCase()
+  return normalized === 'webfetch' || normalized === 'web_fetch'
+}
+
+function hasUnquotedBrowserBatchSeparator(value: unknown): boolean {
+  if (typeof value !== 'string') return false
+  let inSingle = false
+  let inDouble = false
+  let escaped = false
+  for (const character of value) {
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (character === '\\') {
+      escaped = true
+      continue
+    }
+    if (character === '"' && !inSingle) inDouble = !inDouble
+    else if (character === "'" && !inDouble) inSingle = !inSingle
+    else if (character === ';' && !inSingle && !inDouble) return true
+  }
+  return false
+}
+
+function nativeBrowserCommand(input: Record<string, unknown>): { name: string; argument?: string } | undefined {
+  if (Array.isArray(input.command)) {
+    if (input.command.length === 0 || !input.command.every((item) => typeof item === 'string')) return undefined
+    const [rawName, ...rawArguments] = input.command as string[]
+    const name = rawName?.trim().toLowerCase()
+    if (!name || !/^[a-z_-]+$/.test(name)) return undefined
+    return { name, argument: rawArguments.length === 1 ? rawArguments[0] : undefined }
+  }
+  if (typeof input.command !== 'string') return undefined
+  const match = /^\s*([a-z_-]+)(?:\s+(.+?))?\s*$/i.exec(input.command)
+  if (!match) return undefined
+  return { name: match[1]!.toLowerCase(), argument: match[2] }
+}
+
+function requestUrlFromTool(toolName: string, input: Record<string, unknown>): string | undefined {
+  if (!isBrowserCommandTool(toolName)) return findUrlInValue(input)
+  const command = nativeBrowserCommand(input)
+  return command?.name === 'navigate' ? sanitizePublicUrl(command.argument) : undefined
+}
+
+function urlFromToolResult(toolName: string, input: Record<string, unknown>, result: string | undefined): string | undefined {
   if (!result) return undefined
-  try {
-    const parsed = JSON.parse(result)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
-    const record = parsed as Record<string, unknown>
-    return sanitizePublicUrl(record.responseUrl ?? record.response_url ?? record.finalUrl ?? record.final_url)
-  } catch { return undefined }
+  // Tool output is untrusted page/provider content. Only the host-owned native
+  // browser envelope may attest to the page that was actually observed.
+  if (!isHostNativeBrowserTool(toolName)) return undefined
+  const command = nativeBrowserCommand(input)
+  if (command?.name !== 'navigate' && command?.name !== 'snapshot') return undefined
+  const firstLine = result.split(/\r?\n/, 1)[0]?.trim() ?? ''
+  const envelope = /^(?:Navigated to|URL):\s*(https?:\/\/\S+)\s*$/i.exec(firstLine)
+  return sanitizePublicUrl(envelope?.[1]?.replace(/[\])},.;]+$/, ''))
 }
 
 function supportExcerpt(result: string | undefined): string | undefined {
@@ -267,26 +355,48 @@ function sourceSlugFromToolName(toolName: string): string | undefined {
     : undefined
 }
 
+function classifyCertifiedPublicApiRead(
+  toolName: string,
+  sourceProfiles: DeepResearchSourceProfile[],
+  input: Record<string, unknown>,
+): 'search' | 'page-read' | undefined {
+  const sourceSlug = sourceSlugFromToolName(toolName)
+  const source = sourceProfiles.find((candidate) => candidate.slug.toLowerCase() === sourceSlug?.toLowerCase())
+  if (!source?.publicWebCertified || source.type !== 'api' || source.provider.toLowerCase() !== 'exa') return undefined
+  const method = typeof input.method === 'string' ? input.method.toUpperCase() : ''
+  const path = typeof input.path === 'string' ? input.path.trim().toLowerCase() : ''
+  if (method !== 'POST') return undefined
+  if (path === '/search') return 'search'
+  if (path === '/contents') return 'page-read'
+  return undefined
+}
+
 function classifyResearchTool(
   toolName: string,
   sourceProfiles: DeepResearchSourceProfile[],
   input: Record<string, unknown> = {},
+  publicWebSourcesOnly = false,
 ): DeepResearchToolKind | null {
   if (!isRelevantResearchToolName(toolName, sourceProfiles)) return null
   const normalized = toolName.toLowerCase()
   const leaf = normalized.split('__').at(-1) ?? normalized
   const apiPath = typeof input.path === 'string' ? input.path.toLowerCase() : ''
+  if (leaf.startsWith('api_')) {
+    if (publicWebSourcesOnly) return classifyCertifiedPublicApiRead(toolName, sourceProfiles, input) ?? 'source-read'
+    const method = typeof input.method === 'string' ? input.method.toUpperCase() : ''
+    if (method === 'PUT' || method === 'DELETE' || method === 'PATCH') return 'source-read'
+  }
   if (leaf.startsWith('api_') && /(?:^|\/)(?:search|query|discover|lookup)(?:\/|$)/.test(apiPath)) {
     return 'search'
   }
   if (leaf.startsWith('api_') && /(?:^|\/)(?:contents?|pages?|fetch|open|read|inspect|visit|browse)(?:\/|$)/.test(apiPath)) {
     return 'page-read'
   }
-  if (normalized === 'web_search' || ['search', 'query', 'discover', 'lookup'].includes(leaf)) {
+  if (normalized === 'web_search' || normalized === 'websearch' || ['search', 'query', 'discover', 'lookup'].includes(leaf)) {
     return 'search'
   }
   if (
-    normalized === 'web_fetch' ||
+    normalized === 'web_fetch' || normalized === 'webfetch' || leaf === 'browser_tool' ||
     ['fetch', 'open', 'read', 'inspect', 'visit', 'browse', 'page', 'content', 'contents'].includes(leaf)
   ) {
     return 'page-read'
@@ -407,7 +517,11 @@ function isRelevantResearchToolName(toolName: string, sourceProfiles: DeepResear
   const normalized = toolName.toLowerCase()
   if (
     normalized === 'web_search' ||
-    normalized === 'web_fetch'
+    normalized === 'websearch' ||
+    normalized === 'web_fetch' ||
+    normalized === 'webfetch' ||
+    normalized === 'browser_tool' ||
+    normalized === 'mcp__session__browser_tool'
   ) {
     return true
   }
@@ -470,13 +584,27 @@ export class DeepResearchRunner {
     }
 
     const policy = input.planPolicy ?? 'approve'
-    const sourceSlugs = uniqueStrings(input.sourceSlugs)
-    const sourceReadiness = this.deps.resolveSourceReadiness(workspaceId, sourceSlugs)
+    const requestedSourceSlugs = uniqueStrings(input.sourceSlugs)
+    let sourceReadiness = this.deps.resolveSourceReadiness(workspaceId, requestedSourceSlugs)
+    if (hostOptions.publicWebSourcesOnly) {
+      const allReadiness = requestedSourceSlugs.length === 0
+        ? sourceReadiness
+        : this.deps.resolveSourceReadiness(workspaceId, [])
+      const publicSlugs = this.deps.resolveSourceProfiles(workspaceId, allReadiness.usable)
+        .filter((source) => (
+          source.publicWebCertified === true &&
+          (source.capabilities.includes('search') || source.capabilities.includes('browser'))
+        ))
+        .map((source) => source.slug)
+      sourceReadiness = { requested: publicSlugs, usable: publicSlugs, missing: [], unusable: [] }
+    }
     const unavailable = [...sourceReadiness.missing, ...sourceReadiness.unusable]
     if (unavailable.length > 0) {
       throw new Error(`Deep research cannot start; unavailable source(s): ${unavailable.join(', ')}`)
     }
-    const effectiveSourceSlugs = sourceSlugs.length > 0 ? sourceSlugs : sourceReadiness.usable
+    const effectiveSourceSlugs = hostOptions.publicWebSourcesOnly
+      ? sourceReadiness.usable
+      : requestedSourceSlugs.length > 0 ? requestedSourceSlugs : sourceReadiness.usable
     if (effectiveSourceSlugs.length === 0) {
       throw new Error('Deep research requires at least one usable source. Activate or authenticate a source first.')
     }
@@ -513,6 +641,7 @@ export class DeepResearchRunner {
       state: policy === 'auto' ? 'created' : 'awaiting_plan_approval',
       planPolicy: policy,
       purpose,
+      publicWebSourcesOnly: hostOptions.publicWebSourcesOnly === true || undefined,
       owner: hostOptions.owner ? {
         type: ownerType!,
         id: ownerId!,
@@ -605,21 +734,70 @@ export class DeepResearchRunner {
     if (run.workspaceId !== workspaceId) throw new Error(`Deep research run "${runId}" does not belong to workspace "${workspaceId}".`)
     if (isTerminalRunState(run.state)) return this.clone(run)
 
-    // Fence publication first. Child abort is cleanup and may resolve late.
+    // Fence publication in memory before persistence. Even if the durable write
+    // fails, child work cannot continue and publish success in this process.
     const ts = nowIso()
     run.state = 'cancelled'
     run.updatedAt = ts
     run.completedAt = ts
     run.events.push({ ts, type: 'cancelled', message: 'Deep research run cancelled.' })
-    this.persist(run)
     this.activeRuns.delete(runId)
-    this.emit({ type: 'run.completed', run })
-
     if (active) active.abort.abort()
+    let persistenceError: unknown
+    try {
+      this.persist(run)
+      this.emit({ type: 'run.completed', run })
+    } catch (cause) {
+      persistenceError = cause
+    }
     if (active?.currentSessionId) {
       await this.abortSessionBestEffort(active.currentSessionId)
     }
+    if (persistenceError) throw persistenceError
     return this.clone(run)
+  }
+
+  async interruptActiveRunsForShutdown(reason = 'Deep research was interrupted because Artist OS is shutting down.'): Promise<DeepResearchRunSnapshot[]> {
+    const interrupted: DeepResearchRunSnapshot[] = []
+    const sessionsToAbort: string[] = []
+    const persistenceErrors: unknown[] = []
+    const activeRuns = [...this.activeRuns.values()].filter((active) => !isTerminalRunState(active.snapshot.state))
+
+    // Fence every run in memory first. A failure writing one workspace must not
+    // leave later runs alive and able to publish during shutdown.
+    for (const active of activeRuns) {
+      const run = active.snapshot
+      const ts = nowIso()
+      run.state = 'interrupted'
+      run.error = reason
+      run.updatedAt = ts
+      run.completedAt = ts
+      const runningStep = run.steps.find((step) => step.state === 'running')
+      if (runningStep) {
+        runningStep.state = 'failed'
+        runningStep.error = reason
+        runningStep.completedAt = ts
+      }
+      run.events.push({ ts, type: 'failed', message: reason })
+      this.activeRuns.delete(run.id)
+      active.abort.abort()
+      if (active.currentSessionId) sessionsToAbort.push(active.currentSessionId)
+      interrupted.push(this.clone(run))
+    }
+
+    for (const active of activeRuns) {
+      try {
+        this.persist(active.snapshot)
+        this.emit({ type: 'run.completed', run: active.snapshot })
+      } catch (cause) {
+        persistenceErrors.push(new Error(`Could not persist interrupted deep research run "${active.snapshot.id}".`, { cause }))
+      }
+    }
+    await Promise.all(sessionsToAbort.map((sessionId) => this.abortSessionBestEffort(sessionId)))
+    if (persistenceErrors.length > 0) {
+      throw new AggregateError(persistenceErrors, `${persistenceErrors.length} deep research run(s) could not be persisted during shutdown.`)
+    }
+    return interrupted
   }
 
   private executeSoon(run: DeepResearchRunSnapshot): void {
@@ -650,11 +828,35 @@ export class DeepResearchRunner {
         if (this.isDeadlineExceeded(active.snapshot)) {
           return { allowed: false, reason: 'Deep research deadline exceeded.' }
         }
+        if (isUnpinnedLocalWebFetchTool(toolName)) {
+          return { allowed: false, reason: 'Deep research must use its restricted browser or an approved source connector for page reads.' }
+        }
+        if (isBrowserCommandTool(toolName)) {
+          if (hasUnquotedBrowserBatchSeparator(input.command)) {
+            return { allowed: false, reason: 'Deep research browser actions must run one command at a time so each source receipt stays auditable.' }
+          }
+          const command = nativeBrowserCommand(input)
+          if (!command || !READ_ONLY_BROWSER_COMMANDS.has(command.name)) {
+            return { allowed: false, reason: 'Deep research browser access is read-only.' }
+          }
+        }
         const admissionKey = `${sessionId}\0${toolUseId}`
         if (active.toolBudget.admittedToolUseIds.has(admissionKey)) return { allowed: true }
 
-        const kind = classifyResearchTool(toolName, active.snapshot.plan.sourceProfiles ?? [], input)
-        if (!kind) return { allowed: true }
+        const kind = classifyResearchTool(
+          toolName,
+          active.snapshot.plan.sourceProfiles ?? [],
+          input,
+          active.snapshot.publicWebSourcesOnly === true,
+        )
+        if (!kind) {
+          return active.snapshot.publicWebSourcesOnly
+            ? { allowed: false, reason: 'Public-web research permits only certified public read tools.' }
+            : { allowed: true }
+        }
+        if (kind === 'source-read') {
+          return { allowed: false, reason: 'Deep research permits only recognized read-only source actions.' }
+        }
         const contract = this.executionContract(active.snapshot)
         if (active.toolBudget.totalCalls >= contract.maxTotalResearchToolCalls) {
           return { allowed: false, reason: 'Deep research tool-call limit reached.' }
@@ -687,7 +889,9 @@ export class DeepResearchRunner {
         return { allowed: true }
       },
       onToolUseCompleted: ({ sessionId, toolUseId, toolName, toolInput, toolResult, isError }) => {
-        active.toolBudget.activePageReads.delete(`${sessionId}\0${toolUseId}`)
+        const admissionKey = `${sessionId}\0${toolUseId}`
+        active.toolBudget.activePageReads.delete(admissionKey)
+        if (!active.toolBudget.admittedToolUseIds.has(admissionKey)) return
         const step = active.snapshot.steps.find((item) => item.sessionId === sessionId)
         if (!step) return
         this.captureToolReceipt(active.snapshot, step, {
@@ -943,7 +1147,8 @@ export class DeepResearchRunner {
     record: DeepResearchToolUseRecord,
     existing: Map<string, DeepResearchToolReceipt>,
   ): DeepResearchToolReceipt | null {
-    const kind = classifyResearchTool(record.toolName, run.plan.sourceProfiles ?? [], record.toolInput)
+    const toolInput = record.toolInput ?? {}
+    const kind = classifyResearchTool(record.toolName, run.plan.sourceProfiles ?? [], toolInput)
     if (!kind) return null
     const result = record.toolResult ?? ''
     const id = createHash('sha256')
@@ -957,8 +1162,8 @@ export class DeepResearchRunner {
       kind,
       sourceSlug: sourceSlugFromToolName(record.toolName),
       status: record.isError ? 'failed' : 'succeeded',
-      requestUrl: findUrlInValue(record.toolInput),
-      responseUrl: urlFromToolResult(record.toolResult),
+      requestUrl: requestUrlFromTool(record.toolName, toolInput),
+      responseUrl: urlFromToolResult(record.toolName, toolInput, record.toolResult),
       resultSha256: result ? createHash('sha256').update(result).digest('hex') : undefined,
       resultChars: result.length,
       supportExcerpt: !record.isError && kind !== 'search' ? supportExcerpt(result) : undefined,

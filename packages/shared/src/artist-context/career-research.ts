@@ -1,5 +1,6 @@
+import { BlockList, isIP } from 'node:net';
 import type { SharedRecord, SharedRecordBaseline } from '../records/types.ts';
-import { readSharedRecord, readSharedRecordBaseline, writeSharedRecord } from '../records/storage.ts';
+import { readSharedRecord, readSharedRecordBaseline, readSharedRecordFileSha, writeSharedRecord } from '../records/storage.ts';
 import { buildContextDocBody, extractJsonBlock } from './json-block.ts';
 import type { ContextDocDelivery, ContextDocMetadata, ContextDocRouting } from '../workspace-context/types.ts';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
@@ -120,6 +121,7 @@ export interface CareerResearchRecordData extends Record<string, unknown> {
   identity: CareerResearchIdentity;
   run?: CareerResearchRun;
   lastSuccessfulResearchAt?: string;
+  contextInvalidatedAt?: string;
   findings: CareerResearchFinding[];
   archivedIdentities?: Array<{
     identity: CareerResearchIdentity;
@@ -135,6 +137,8 @@ export type CareerResearchRecord = SharedRecord<CareerResearchRecordData>;
 
 export interface CareerResearchView {
   revision: number;
+  recoveryError?: string;
+  recoveryToken?: string;
   identity: CareerResearchIdentity | null;
   run: CareerResearchRun | null;
   findings: Array<CareerResearchFinding & { correctedByUser?: boolean }>;
@@ -186,6 +190,28 @@ function clean(value: unknown, max: number): string | undefined {
   return normalized || undefined;
 }
 
+const NON_PUBLIC_IPS = new BlockList();
+for (const [network, prefix] of [
+  ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16],
+  ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15],
+  ['198.51.100.0', 24], ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4],
+] as const) NON_PUBLIC_IPS.addSubnet(network, prefix, 'ipv4');
+for (const [network, prefix] of [
+  ['::', 128], ['::1', 128], ['::ffff:0:0', 96], ['100::', 64], ['2001:db8::', 32], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8],
+] as const) NON_PUBLIC_IPS.addSubnet(network, prefix, 'ipv6');
+
+function isNonPublicIp(host: string): boolean {
+  const ipVersion = isIP(host);
+  if (ipVersion === 0) return false;
+  return NON_PUBLIC_IPS.check(host, ipVersion === 4 ? 'ipv4' : 'ipv6');
+}
+
+function isTrackingOrSecretParameter(name: string): boolean {
+  const normalizedName = name.toLowerCase().replace(/[-.]/g, '_');
+  return /^(?:utm_.+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|igshid|vero_id|_hsenc|_hsmi)$/.test(normalizedName) ||
+    /(?:^|_)(?:api_?key|key|access_?token|refresh_?token|token|auth|authorization|secret|password|signature|sig|credential)(?:_|$)/.test(normalizedName);
+}
+
 export function normalizeCareerResearchUrl(value: string): string {
   const raw = value.trim();
   if (!raw) throw new Error('URL is required.');
@@ -194,15 +220,14 @@ export function normalizeCareerResearchUrl(value: string): string {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('Use a public http or https URL.');
   if (parsed.username || parsed.password) throw new Error('URLs cannot contain credentials.');
   const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (!host || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
-      /^0\./.test(host) || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) ||
-      /^169\.254\./.test(host) || /^172\.(?:1[6-9]|2\d|3[01])\./.test(host) ||
-      /^(?:22[4-9]|23\d)\./.test(host) || host === '::1' || /^(?:fc|fd|fe8|fe9|fea|feb)/.test(host) ||
-      /^::ffff:(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(host)) {
+  if (!host || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || isNonPublicIp(host)) {
     throw new Error('Use a public internet URL.');
   }
   parsed.protocol = 'https:';
-  parsed.search = '';
+  for (const key of [...parsed.searchParams.keys()]) {
+    if (isTrackingOrSecretParameter(key)) parsed.searchParams.delete(key);
+  }
+  parsed.searchParams.sort();
   parsed.hash = '';
   return parsed.toString();
 }
@@ -265,6 +290,7 @@ function isCareerResearchRecord(value: unknown): value is CareerResearchRecord {
   try { normalizeCareerResearchDelivery(record.deliveryPolicy as CareerResearchDeliveryInput); validDelivery = true; } catch { validDelivery = false; }
   return record.version === 1 && typeof record.hqWorkspaceId === 'string' &&
     typeof record.revision === 'number' && !!record.identity && typeof record.identity === 'object' &&
+    (record.contextInvalidatedAt === undefined || typeof record.contextInvalidatedAt === 'string') &&
     validIdentity && Array.isArray(record.findings) && record.findings.length <= CAREER_RESEARCH_LIMITS.findings && record.findings.every(validFinding) &&
     Array.isArray(record.overrides) && record.overrides.every(validOverride) && validDelivery;
 }
@@ -275,20 +301,26 @@ export function readCareerResearchRecord(workspaceRootPath: string): CareerResea
 }
 
 export function readCareerResearchBaseline(workspaceRootPath: string): SharedRecordBaseline<CareerResearchRecord> | null {
-  return readSharedRecordBaseline<CareerResearchRecord>(workspaceRootPath, ARTIST_CAREER_RESEARCH_COLLECTION, ARTIST_CAREER_RESEARCH_ID);
+  const baseline = readSharedRecordBaseline<CareerResearchRecord>(workspaceRootPath, ARTIST_CAREER_RESEARCH_COLLECTION, ARTIST_CAREER_RESEARCH_ID);
+  return baseline && isCareerResearchRecord(baseline.entity) ? baseline : null;
+}
+
+/** Includes a privacy-scrubbed deletion tombstone so the fixed record slot can be safely reused. */
+export function readCareerResearchSlotBaseline(workspaceRootPath: string): SharedRecordBaseline<SharedRecord> | null {
+  return readSharedRecordBaseline(workspaceRootPath, ARTIST_CAREER_RESEARCH_COLLECTION, ARTIST_CAREER_RESEARCH_ID);
 }
 
 export function writeCareerResearchRecord(
   workspaceRootPath: string,
   data: CareerResearchRecordData,
-  options: { machineId: string; baseline?: SharedRecordBaseline<CareerResearchRecord>; now?: string },
+  options: { machineId: string; baseline?: SharedRecordBaseline; now?: string },
 ) {
   return writeSharedRecord(workspaceRootPath, ARTIST_CAREER_RESEARCH_COLLECTION, ARTIST_CAREER_RESEARCH_ID, data, options);
 }
 
-export function buildCareerResearchView(record: CareerResearchRecord | null): CareerResearchView {
+export function buildCareerResearchView(record: CareerResearchRecord | null, emptyRevision = 0): CareerResearchView {
   if (!record) return {
-    revision: 0, identity: null, run: null, findings: [], removedClaimKeys: [], gaps: [],
+    revision: emptyRevision, identity: null, run: null, findings: [], removedClaimKeys: [], gaps: [],
     deliveryPolicy: null, archivedIdentities: [],
   };
   const latest = new Map(record.overrides.map((entry) => [entry.claimKey, entry]));
@@ -326,6 +358,15 @@ export function buildCareerResearchView(record: CareerResearchRecord | null): Ca
 }
 
 export function careerResearchMetadata(record: CareerResearchRecord): ContextDocMetadata {
+  if (record.contextInvalidatedAt) {
+    return {
+      name: 'Career research reset pending',
+      description: 'Fact-free invalidation remains active until supported replacement research is published.',
+      enabled: true,
+      routing: { mode: 'broadcast' },
+      delivery: 'always',
+    };
+  }
   return {
     name: 'Career & public context',
     description: 'Sourced public career facts for authorized artist agents. Artist-written direction remains authoritative.',
@@ -350,6 +391,10 @@ export function compileCareerResearchBody(record: CareerResearchRecord): string 
   const summary = summaryLines.join('\n');
   const includedKeys = new Set(ordered.slice(0, summaryLines.length).map((finding) => finding.claimKey));
   return buildContextDocBody([
+    ...(record.contextInvalidatedAt ? [
+      'Earlier career research was explicitly cleared by the user.',
+      'Do not rely on career findings from earlier turns, reports, or transcripts. Only findings listed below from new supported research are authorized.',
+    ] : []),
     'Sourced public career context. Artist-written Profile, Branding, and Voice govern goals and identity.',
     'Public opinions are attributed. Current performance metrics come from the existing Growth/Pulse context, not this document.',
     `Career research revision ${record.revision}; identity ${record.identity.key}; last successful research ${record.lastSuccessfulResearchAt ?? 'none'}.`,
@@ -360,6 +405,7 @@ export function compileCareerResearchBody(record: CareerResearchRecord): string 
     revision: record.revision,
     identityKey: record.identity.key,
     lastSuccessfulResearchAt: record.lastSuccessfulResearchAt,
+    contextInvalidatedAt: record.contextInvalidatedAt,
     gaps: record.gaps ?? [],
     removedClaimKeys: view.removedClaimKeys,
     findings: ordered.filter((finding) => includedKeys.has(finding.claimKey)).map((finding) => ({
@@ -378,6 +424,56 @@ export function compileCareerResearchBody(record: CareerResearchRecord): string 
 export function rebuildCareerResearchProjection(workspaceRootPath: string): LoadedContextDoc | null {
   const record = readCareerResearchRecord(workspaceRootPath);
   if (!record) {
+    const slot = readCareerResearchSlotBaseline(workspaceRootPath);
+    if (slot?.entity.deletedAt) {
+      return upsertContextDoc(workspaceRootPath, {
+        slug: ARTIST_CAREER_RESEARCH_CONTEXT_SLUG,
+        metadata: {
+          name: 'Career research cleared',
+          description: 'Fact-free invalidation marker for research removed by the user.',
+          enabled: true,
+          routing: { mode: 'broadcast' },
+          delivery: 'always',
+        },
+        body: buildContextDocBody([
+          'Career research was explicitly cleared by the user.',
+          'Do not rely on career findings from earlier turns, reports, or transcripts.',
+          'No prior career finding is authorized as current artist context. Use artist-written Profile, Branding, and Voice until new research is completed.',
+        ], {
+          version: 1,
+          revision: slot.revision,
+          identityKey: 'cleared',
+          cleared: true,
+          clearedAt: slot.entity.deletedAt,
+          gaps: [],
+          findings: [],
+        }),
+      });
+    }
+    if (slot || readSharedRecordFileSha(workspaceRootPath, ARTIST_CAREER_RESEARCH_COLLECTION, ARTIST_CAREER_RESEARCH_ID)) {
+      return upsertContextDoc(workspaceRootPath, {
+        slug: ARTIST_CAREER_RESEARCH_CONTEXT_SLUG,
+        metadata: {
+          name: 'Career research unavailable',
+          description: 'Fact-free safety marker for career research that needs recovery.',
+          enabled: true,
+          routing: { mode: 'broadcast' },
+          delivery: 'always',
+        },
+        body: buildContextDocBody([
+          'Saved career research could not be read safely.',
+          'Do not rely on career findings from earlier turns, reports, or transcripts.',
+          'No saved career finding is authorized as current artist context until the user clears this record and runs new research.',
+        ], {
+          version: 1,
+          revision: slot?.revision ?? 0,
+          identityKey: 'unavailable',
+          recoveryRequired: true,
+          gaps: [],
+          findings: [],
+        }),
+      });
+    }
     deleteContextDoc(workspaceRootPath, ARTIST_CAREER_RESEARCH_CONTEXT_SLUG);
     return null;
   }

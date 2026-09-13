@@ -620,6 +620,7 @@ export const CHANNEL_MAP = {
   updateArtistProfileEnrichmentDelivery: invoke(RPC_CHANNELS.artistProfileEnrichment.UPDATE_DELIVERY),
   startArtistProfileEnrichment: invoke(RPC_CHANNELS.artistProfileEnrichment.START),
   cancelArtistProfileEnrichment: invoke(RPC_CHANNELS.artistProfileEnrichment.CANCEL),
+  clearArtistProfileEnrichment: invoke(RPC_CHANNELS.artistProfileEnrichment.CLEAR),
   correctArtistProfileEnrichment: invoke(RPC_CHANNELS.artistProfileEnrichment.CORRECT),
   removeArtistProfileEnrichment: invoke(RPC_CHANNELS.artistProfileEnrichment.REMOVE),
   undoArtistProfileEnrichment: invoke(RPC_CHANNELS.artistProfileEnrichment.UNDO),

@@ -378,6 +378,15 @@ function currentFileSha(file: string): string | null {
   return sha256Text(readFileSync(file, 'utf-8'));
 }
 
+/** Returns the exact on-disk checksum even when the record cannot be parsed. */
+export function readSharedRecordFileSha(
+  workspaceRootPath: string,
+  collection: string,
+  entityId: string,
+): string | null {
+  return currentFileSha(getRecordFile(workspaceRootPath, collection, entityId));
+}
+
 function persistRecordOp(
   workspaceRootPath: string,
   input: Omit<SharedRecordOpV2, 'version' | 'opId' | 'nonce' | 'contentSha256' | 'payloadSha256'>,
@@ -603,6 +612,75 @@ export function deleteSharedRecord(
     prevSha256: currentSha ?? undefined,
   });
   atomicWriteJson(getRecordFile(workspaceRootPath, collection, entityId), tombstone);
+  return { status: 'written', entity: tombstone, baseline: baselineForRecord(tombstone) } satisfies SharedRecordWriteSuccess;
+}
+
+/**
+ * Privacy-scrub an explicitly selected record whose raw file exists but cannot
+ * be parsed as a SharedRecord. The checksum prevents replacing bytes that
+ * changed between recovery inspection and deletion.
+ */
+export function deleteUnreadableSharedRecord(
+  workspaceRootPath: string,
+  collection: string,
+  entityId: string,
+  input: { machineId: string; expectedSha256: string; now?: string },
+): SharedRecordWriteResult<SharedRecord> {
+  const file = getRecordFile(workspaceRootPath, collection, entityId);
+  const current = readSharedRecord(workspaceRootPath, collection, entityId);
+  const currentSha = currentFileSha(file);
+  if (current || !currentSha || currentSha !== input.expectedSha256) {
+    return {
+      status: 'conflict',
+      conflict: createConflictRecord(workspaceRootPath, {
+        entityPath: recordEntityPath(collection, entityId),
+        detectedByMachineId: input.machineId,
+        currentRevision: current?.revision,
+        current,
+        incoming: { deletedAt: input.now ?? nowIso() },
+        reason: 'stale-baseline',
+      }),
+    };
+  }
+
+  const timestamp = input.now ?? nowIso();
+  let tombstone: SharedRecord = {
+    id: entityId,
+    schemaVersion: 1,
+    revision: 1,
+    createdAt: timestamp,
+    createdByMachineId: input.machineId,
+    updatedAt: timestamp,
+    updatedByMachineId: input.machineId,
+    deletedAt: timestamp,
+    deletedByMachineId: input.machineId,
+    purgeUndoFor: [entityId],
+    lastWriteSha256: currentSha,
+  };
+  const entityPath = recordEntityPath(collection, entityId);
+  const op = persistRecordOp(workspaceRootPath, {
+    at: timestamp,
+    machineId: input.machineId,
+    entityPath,
+    kind: 'delete',
+    parentOpIds: [],
+    baseSha256: currentSha,
+  }, tombstone);
+  tombstone = { ...tombstone, headOpId: op.opId };
+  const writtenSha = sha256Json(tombstone);
+  purgeUndo(workspaceRootPath, entityId);
+  purgeRecordPayloads(workspaceRootPath, entityPath, op.opId);
+  purgeOplogPayloads(workspaceRootPath, entityPath);
+  purgeConflictArtifacts(workspaceRootPath, entityPath);
+  appendOplog(workspaceRootPath, {
+    machineId: input.machineId,
+    at: timestamp,
+    entityPath,
+    revision: tombstone.revision,
+    contentSha256: writtenSha,
+    prevSha256: currentSha,
+  });
+  atomicWriteJson(file, tombstone);
   return { status: 'written', entity: tombstone, baseline: baselineForRecord(tombstone) } satisfies SharedRecordWriteSuccess;
 }
 

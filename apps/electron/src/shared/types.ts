@@ -1437,6 +1437,7 @@ export interface ElectronAPI {
   updateArtistProfileEnrichmentDelivery(workspaceId: string, expectedRevision: number, input: CareerResearchDeliveryInput): Promise<CareerResearchView>
   startArtistProfileEnrichment(workspaceId: string, input: { requestId: string; expectedIdentityKey?: string }): Promise<CareerResearchView>
   cancelArtistProfileEnrichment(workspaceId: string, runId: string, attempt: number): Promise<CareerResearchView>
+  clearArtistProfileEnrichment(workspaceId: string, expectedRevision: number, expectedRecoveryToken?: string): Promise<CareerResearchView>
   correctArtistProfileEnrichment(workspaceId: string, input: { claimKey: string; expectedRevision: number; text?: string }): Promise<CareerResearchView>
   removeArtistProfileEnrichment(workspaceId: string, input: { claimKey: string; expectedRevision: number }): Promise<CareerResearchView>
   undoArtistProfileEnrichment(workspaceId: string, input: { claimKey: string; expectedRevision: number }): Promise<CareerResearchView>

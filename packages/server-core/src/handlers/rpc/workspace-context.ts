@@ -19,7 +19,6 @@ import { prepareAgentLaunchContext } from '../../agent-launch/context'
 export { selectContextDocsForAgentLaunch } from '../../agent-launch/context'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 import { ARTIST_CAREER_RESEARCH_CONTEXT_SLUG, rebuildCareerResearchProjection } from '@craft-agent/shared/artist-context'
-import { getArtistProfileEnrichmentService } from './artist-profile-enrichment'
 import {
   refreshArtistManagerStateForWorkspaceBestEffort,
   shouldRefreshHqStateForContextSlug,
@@ -115,7 +114,8 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
       if (!Object.prototype.hasOwnProperty.call(payload, 'expectedBody')) throw new Error('MANAGED_CONTEXT: Expected body is required for career context settings.');
       assertExpectedContextBody(payload.slug, current?.body ?? null, payload.expectedBody ?? null)
       if (!current || payload.body !== current.body) throw new Error('MANAGED_CONTEXT: Career findings must be edited from Profile.');
-      const service = getArtistProfileEnrichmentService()
+      await deps.sessionManager.waitForInit()
+      const service = deps.getArtistProfileEnrichmentService?.()
       if (!service) throw new Error('Artist profile enrichment is unavailable on this host.')
       const view = service.get(workspaceId)
       await service.updateDelivery(workspaceId, view.revision, {

@@ -73,6 +73,29 @@ describe('deep research run storage', () => {
     expect(readDeepResearchRun(root, run.id)).toEqual(run)
   })
 
+  test('accepts functional receipt query parameters but rejects secrets and tracking', () => {
+    const root = tempRoot()
+    const run = sampleRun()
+    run.steps[0]!.toolReceipts = [{
+      id: '0123456789abcdef0123456789abcdef',
+      toolUseId: 'browser-1',
+      toolName: 'mcp__session__browser_tool',
+      kind: 'page-read',
+      status: 'succeeded',
+      requestUrl: 'https://example.com/story?p=123',
+      responseUrl: 'https://example.com/story?p=123',
+      resultChars: 42,
+      observedAt: run.createdAt,
+    }]
+    writeDeepResearchRun(root, run)
+    expect(readDeepResearchRun(root, run.id)?.steps[0]?.toolReceipts?.[0]?.requestUrl).toBe('https://example.com/story?p=123')
+
+    for (const unsafeUrl of ['https://example.com/story?token=secret', 'https://example.com/story?utm_source=test']) {
+      run.steps[0]!.toolReceipts![0]!.requestUrl = unsafeUrl
+      expect(() => writeDeepResearchRun(root, run)).toThrow('Invalid deep research run snapshot')
+    }
+  })
+
   test('hydrates compact message_agent child receipts by step session', () => {
     const root = tempRoot()
     const run = sampleRun()

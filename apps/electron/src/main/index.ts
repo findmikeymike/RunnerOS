@@ -1019,6 +1019,7 @@ app.whenReady().then(async () => {
             }),
             getWorkflowRunner: () => sm.getWorkflowRunner(),
             getDeepResearchRunner: () => sm.getDeepResearchRunner(),
+            getArtistProfileEnrichmentService: () => sm.getArtistProfileEnrichmentService(),
             validateSocialProfile: async ({ platform, profileId }) => {
               const { runSocialJson } = await import('./social-cli')
               const doctor = await runSocialJson(['doctor', '--json']) as {
@@ -1701,6 +1702,11 @@ async function runQuitCleanup(): Promise<void> {
       mainLog.info('Flushed all pending session writes')
     } catch (error) {
       mainLog.error('Failed to flush sessions:', error)
+    }
+    try {
+      await sessionManager.shutdownArtistProfileEnrichment()
+    } catch (error) {
+      mainLog.error('Failed to drain artist profile enrichment:', error)
     }
     sessionManager.cleanup()
   }

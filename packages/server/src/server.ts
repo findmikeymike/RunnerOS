@@ -262,6 +262,7 @@ const instance = await (async () => {
           messagingRegistry: messagingHandle.registry,
           getWorkflowRunner: () => sessionManager.getWorkflowRunner(),
           getDeepResearchRunner: () => sessionManager.getDeepResearchRunner(),
+          getArtistProfileEnrichmentService: () => sessionManager.getArtistProfileEnrichmentService(),
           // Closure: trigger server starts after bootstrapServer resolves.
           getTriggerServerInfo: () => ({
             enabled: triggerServer != null,
@@ -286,7 +287,11 @@ const instance = await (async () => {
         try {
           await sessionManager.flushAllSessions()
         } finally {
-          sessionManager.cleanup()
+          try {
+            await sessionManager.shutdownArtistProfileEnrichment()
+          } finally {
+            sessionManager.cleanup()
+          }
         }
       },
       cleanupClientResources: cleanupSessionFileWatchForClient,

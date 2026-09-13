@@ -68,11 +68,17 @@ function isSanitizedPublicUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false;
   try {
     const parsed = new URL(value);
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:')
-      && !parsed.username
-      && !parsed.password
-      && !parsed.search
-      && !parsed.hash;
+    if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || parsed.username || parsed.password || parsed.hash) {
+      return false;
+    }
+    for (const key of parsed.searchParams.keys()) {
+      const normalizedKey = key.toLowerCase().replace(/[-.]/g, '_');
+      if (/^(?:utm_.+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|igshid|vero_id|_hsenc|_hsmi)$/.test(normalizedKey)
+        || /(?:^|_)(?:api_?key|key|access_?token|refresh_?token|token|auth|authorization|secret|password|signature|sig|credential)(?:_|$)/.test(normalizedKey)) {
+        return false;
+      }
+    }
+    return true;
   } catch {
     return false;
   }
@@ -146,6 +152,7 @@ function isDeepResearchRunSnapshot(value: unknown, expectedRunId: string): value
   if (typeof value.state !== 'string' || !RUN_STATES.has(value.state as DeepResearchRunState)) return false;
   if (typeof value.planPolicy !== 'string' || !PLAN_POLICIES.has(value.planPolicy as DeepResearchPlanPolicy)) return false;
   if (value.purpose !== undefined && (typeof value.purpose !== 'string' || value.purpose.length > 240)) return false;
+  if (value.publicWebSourcesOnly !== undefined && typeof value.publicWebSourcesOnly !== 'boolean') return false;
   if (value.owner !== undefined) {
     if (!isRecord(value.owner)) return false;
     if (typeof value.owner.type !== 'string' || !value.owner.type || value.owner.type.length > 120) return false;

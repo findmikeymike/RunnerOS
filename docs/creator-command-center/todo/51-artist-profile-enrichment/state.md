@@ -2,14 +2,10 @@
 
 ## Implementation update — September 13, 2026
 
-The V1 implementation is complete on `codex/artist-profile-enrichment-v1`; see [implementation evidence](evidence/implementation.md). Automated integration checks pass. Live source/UI acceptance is intentionally still pending because this work did not restart the canonical app or execute paid research without separate authorization.
+The V1 implementation is complete and review-hardened from base `95a6a7fab`; see [implementation evidence](evidence/implementation.md). Review hardening adds strict evidence support, isolated public-only native browsing, lifecycle/startup/shutdown durability, fresh next-turn context, malformed-record recovery, and the explicit **Clear context** flow.
 
-Plan revision r1; compiled September 13, 2026. Scope: specification only. No feature code, provider calls, app restart, or live artist enrichment has been performed.
+Latest binding clarification: HQ normally represents one artist. There is no automatic artist switch/archive workflow. An intentional identity replacement requires the user to clear the existing career context and then reseed from the saved Profile or new public links.
 
-Baseline/main: f25bbf48c. Worktree: .worktrees/active/profile-enrichment-spec, branch codex/profile-enrichment-spec. Other agents' unfinished release changes in canonical main must remain untouched.
+Automated integration checks pass. No provider calls, paid research, app restart, or live artist enrichment were performed. Canonical UI and real-source acceptance remain pending separate restart approval and a configured compatible source. Other agents' unfinished canonical-main changes must remain untouched.
 
-Latest binding clarification: reuse Spotify Pulse analytics; enrichment supplies missing career/public context. Existing Deep Research owns execution. Artist input remains authoritative for direction.
-
-Next action after plan completion: a build instruction, then the P1 review/setup nodes and executable T01/T02 packets. Graph eligibility remains conservative until implementation/source setup evidence exists. Read start-here.md, architecture.md, tasks/T01.md and plan.json. P2/P3 require expansion against the completed P1 implementation before execution.
-
-Planning review is complete with no unresolved important findings; evidence lives in [plan review](evidence/plan-review.md). Plan structure, relative links, source hashes and diff formatting passed. No implementation nodes are accepted from planning evidence. No secret values are stored here.
+The older plan/tasks remain as historical build records; current status comes from this file and [implementation evidence](evidence/implementation.md). No secret values are stored here.

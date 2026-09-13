@@ -3,6 +3,32 @@ import type { DeepResearchSourceCapability, DeepResearchSourceProfile } from './
 
 type SourceLike = Pick<LoadedSource, 'config' | 'guide'>;
 
+const CERTIFIED_PUBLIC_WEB_ENDPOINTS: Record<string, Set<string>> = {
+  exa: new Set(['https://api.exa.ai/']),
+};
+
+export function isCertifiedPublicWebResearchSource(source: SourceLike): boolean {
+  const cfg = source.config;
+  const allowedEndpoints = CERTIFIED_PUBLIC_WEB_ENDPOINTS[cfg.provider.toLowerCase()];
+  if (!allowedEndpoints || cfg.type !== 'api') return false;
+  const endpoint = cfg.api?.baseUrl;
+  if (!endpoint) return false;
+  try {
+    const url = new URL(endpoint);
+    return (
+      url.protocol === 'https:' &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      !url.search &&
+      !url.hash &&
+      allowedEndpoints.has(url.href)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function inferDeepResearchSourceCapabilities(source: SourceLike): DeepResearchSourceCapability[] {
   const cfg = source.config;
   const text = [
@@ -41,6 +67,7 @@ export function profileDeepResearchSource(source: SourceLike): DeepResearchSourc
     provider: cfg.provider,
     type: cfg.type,
     capabilities: inferDeepResearchSourceCapabilities(source),
+    publicWebCertified: isCertifiedPublicWebResearchSource(source),
     tagline: cfg.tagline || source.guide?.scope,
   };
 }

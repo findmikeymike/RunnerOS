@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
 import {
+  ARTIST_CAREER_RESEARCH_COLLECTION,
+  ARTIST_CAREER_RESEARCH_ID,
   CAREER_RESEARCH_LIMITS,
   artistProfileDoc,
   buildCareerResearchView,
@@ -10,6 +12,7 @@ import {
   normalizeSpotifyArtistProfile,
   readCareerResearchBaseline,
   readCareerResearchRecord,
+  readCareerResearchSlotBaseline,
   rebuildCareerResearchProjection,
   writeCareerResearchRecord,
   type CareerResearchCategory,
@@ -22,7 +25,7 @@ import {
   type CareerResearchSeedInput,
   type CareerResearchView,
 } from '@craft-agent/shared/artist-context';
-import type { SharedRecordBaseline } from '@craft-agent/shared/records';
+import { deleteSharedRecord, deleteUnreadableSharedRecord, readSharedRecordFileSha, type SharedRecord, type SharedRecordBaseline } from '@craft-agent/shared/records';
 import { loadContextDoc } from '@craft-agent/shared/workspace-context';
 import { assertTeamPermission, getTeamModeStatus } from '@craft-agent/shared/workspaces';
 import type { DeepResearchRunSnapshot, DeepResearchToolReceipt } from '@craft-agent/shared/deep-research';
@@ -73,11 +76,26 @@ function nowIso(): string { return new Date().toISOString(); }
 function normalized(value: string): string { return value.trim().replace(/\s+/g, ' ').toLowerCase(); }
 function digest(value: string): string { return createHash('sha256').update(value).digest('hex'); }
 
+function isDeletedCareerResearchSlot(slot: SharedRecordBaseline<SharedRecord> | null): boolean {
+  return typeof slot?.entity.deletedAt === 'string';
+}
+
+function assertReadableCareerResearchSlot(
+  slot: SharedRecordBaseline<SharedRecord> | null,
+  record: CareerResearchRecord | null,
+  rawSha256: string | null,
+): void {
+  if (rawSha256 && !record && !isDeletedCareerResearchSlot(slot)) {
+    error('CAREER_RESEARCH_INVALID', 'Saved career context is damaged and was preserved. Clear context to safely start over.');
+  }
+}
+
 function recordData(record: CareerResearchRecord): CareerResearchRecordData {
   return {
     version: 1, hqWorkspaceId: record.hqWorkspaceId, deliveryPolicy: structuredClone(record.deliveryPolicy),
     identity: structuredClone(record.identity), run: record.run ? structuredClone(record.run) : undefined,
-    lastSuccessfulResearchAt: record.lastSuccessfulResearchAt, findings: structuredClone(record.findings),
+    lastSuccessfulResearchAt: record.lastSuccessfulResearchAt, contextInvalidatedAt: record.contextInvalidatedAt,
+    findings: structuredClone(record.findings),
     archivedIdentities: record.archivedIdentities ? structuredClone(record.archivedIdentities) : undefined,
     overrides: structuredClone(record.overrides), gaps: record.gaps ? [...record.gaps] : undefined,
   };
@@ -107,22 +125,96 @@ function cleanDate(value: unknown): string | undefined {
   return Number.isFinite(Date.parse(text)) ? text : undefined;
 }
 
+const EVIDENCE_STOP_WORDS = new Set([
+  'a', 'an', 'and', 'artist', 'as', 'at', 'by', 'for', 'from', 'in', 'is', 'of', 'on', 'the', 'to', 'was', 'were', 'with',
+  'achievement', 'album', 'award', 'collaboration', 'concert', 'ep', 'performance', 'press', 'release', 'single', 'song', 'tour',
+]);
+const PREDICATE_SUPPORT_ROOTS: Record<CareerResearchPredicate, string[]> = {
+  achieved: ['achiev', 'award', 'certif', 'honor', 'milestone', 'nominat', 'recipient', 'recogn', 'winner', 'won'],
+  released: ['album', 'debut', 'ep', 'issued', 'mixtape', 'record', 'release', 'single'],
+  'collaborated-with': ['co-wr', 'collaborat', 'credit', 'feat', 'produ', 'together', 'with'],
+  'performed-at': ['concert', 'festival', 'live', 'perform', 'show', 'stage', 'tour'],
+  'covered-by': ['cover', 'feature', 'interview', 'press', 'profile', 'report', 'review'],
+  'professionally-associated-with': ['agency', 'associat', 'label', 'manage', 'member', 'publish', 'represent', 'sign'],
+  'described-as': [],
+};
+
+function evidenceTokens(value: string): string[] {
+  return normalized(value).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((token) => token.length > 1 && !EVIDENCE_STOP_WORDS.has(token));
+}
+
+function evidenceSupportsFinding(identity: CareerResearchIdentity, candidate: CandidateFinding, evidence: CandidateEvidence): boolean {
+  const corpus = normalized([evidence.support, evidence.title, evidence.publisher].filter(Boolean).join(' '));
+  const identityTokens = new Set(evidenceTokens(identity.artistName));
+  const claimTokens = [...new Set(evidenceTokens(candidate.text).filter((token) => !identityTokens.has(token)))];
+  const subjectTokens = [...new Set(evidenceTokens(candidate.subjectKey).filter((token) => !identityTokens.has(token)))];
+  const distinctiveTokens = [...new Set([...claimTokens, ...subjectTokens])];
+  if (distinctiveTokens.length === 0 || distinctiveTokens.some((token) => !corpus.includes(token))) return false;
+  const predicateRoots = PREDICATE_SUPPORT_ROOTS[candidate.predicate];
+  return predicateRoots.length === 0 || predicateRoots.some((root) => corpus.includes(root));
+}
+
 export class ArtistProfileEnrichmentService {
   private unsubscribe: (() => void) | null = null;
+  private readonly pendingEvents = new Set<Promise<void>>();
+  private readonly pendingEventErrors: unknown[] = [];
 
   constructor(
     private readonly runner: DeepResearchRunner,
     private readonly onChanged?: (workspaceId: string) => void,
+    private readonly onEventError?: (cause: unknown) => void,
   ) {
-    this.unsubscribe = runner.subscribe((event) => { void this.handleRunnerEvent(event).catch(() => undefined); });
+    this.unsubscribe = runner.subscribe((event) => {
+      const pending = this.handleRunnerEvent(event);
+      this.pendingEvents.add(pending);
+      void pending.catch((cause) => {
+        this.pendingEventErrors.push(cause);
+        this.onEventError?.(cause);
+      }).finally(() => this.pendingEvents.delete(pending));
+    });
   }
 
   dispose(): void { this.unsubscribe?.(); this.unsubscribe = null; }
 
+  async shutdown(): Promise<void> {
+    let interruptionError: unknown;
+    try {
+      await this.runner.interruptActiveRunsForShutdown();
+    } catch (cause) {
+      interruptionError = cause;
+    }
+    this.dispose();
+    try {
+      await this.waitForPendingEvents();
+    } catch (cause) {
+      if (interruptionError) throw new AggregateError([interruptionError, cause], 'Artist research shutdown failed.');
+      throw cause;
+    }
+    if (interruptionError) throw interruptionError;
+  }
+
+  async waitForPendingEvents(): Promise<void> {
+    while (this.pendingEvents.size > 0) await Promise.allSettled([...this.pendingEvents]);
+    if (this.pendingEventErrors.length > 0) {
+      const failures = this.pendingEventErrors.splice(0);
+      throw new AggregateError(failures, `${failures.length} artist research event(s) failed to persist.`);
+    }
+  }
+
   get(workspaceId: string): CareerResearchView {
     const workspace = this.workspace(workspaceId);
+    const slot = readCareerResearchSlotBaseline(workspace.rootPath);
+    const record = readCareerResearchRecord(workspace.rootPath);
+    const rawSha256 = readSharedRecordFileSha(workspace.rootPath, ARTIST_CAREER_RESEARCH_COLLECTION, ARTIST_CAREER_RESEARCH_ID);
     rebuildCareerResearchProjection(workspace.rootPath);
-    return buildCareerResearchView(readCareerResearchRecord(workspace.rootPath));
+    if (rawSha256 && !record && !isDeletedCareerResearchSlot(slot)) {
+      return {
+        ...buildCareerResearchView(null, slot?.revision ?? 0),
+        recoveryError: 'Saved career context is damaged. Clear it to safely start over; Artist OS preserved the original record.',
+        recoveryToken: rawSha256,
+      };
+    }
+    return buildCareerResearchView(record, slot?.revision ?? 0);
   }
 
   async updateSeeds(workspaceId: string, expectedRevision: number, input: CareerResearchSeedInput): Promise<CareerResearchView> {
@@ -130,13 +222,14 @@ export class ArtistProfileEnrichmentService {
     assertTeamPermission(workspace.rootPath, 'files.write');
     const seeds = normalizeCareerResearchSeeds(input);
     return withWorkspaceContextLock(workspace.rootPath, async () => {
-      const baseline = readCareerResearchBaseline(workspace.rootPath);
+      const baseline = readCareerResearchSlotBaseline(workspace.rootPath);
       if ((baseline?.revision ?? 0) !== expectedRevision) error('CAREER_RESEARCH_CONFLICT', 'Career context changed before these links were saved.');
       const profile = readSavedProfile(workspace.rootPath);
       const artistName = seeds.artistName ?? profile.artistName?.trim();
       if (!artistName) error('IDENTITY_REQUIRED', 'Add an artist name before saving research links.');
       const spotify = normalizeSpotifyArtistProfile(seeds.spotifyProfile ?? profile.spotifyProfile);
-      const prior = baseline?.entity;
+      const prior = readCareerResearchRecord(workspace.rootPath);
+      assertReadableCareerResearchSlot(baseline, prior, readSharedRecordFileSha(workspace.rootPath, ARTIST_CAREER_RESEARCH_COLLECTION, ARTIST_CAREER_RESEARCH_ID));
       const nextIdentity: CareerResearchIdentity = {
         key: identityKey({ artistName, spotifyArtistId: spotify.artistId, officialUrl: seeds.officialUrl }),
         generation: prior?.identity.generation ?? 1,
@@ -145,18 +238,70 @@ export class ArtistProfileEnrichmentService {
       };
       let data: CareerResearchRecordData;
       if (!prior) {
-        data = { version: 1, hqWorkspaceId: workspace.id, deliveryPolicy: { enabled: true, routing: { mode: 'broadcast' }, delivery: 'on-demand' }, identity: nextIdentity, findings: [], overrides: [] };
-      } else if (prior.identity.key !== nextIdentity.key) {
-        nextIdentity.generation = prior.identity.generation + 1;
-        const archived = prior.archivedIdentities ?? [];
-        const restored = archived.find((entry) => entry.identity.key === nextIdentity.key);
         data = {
-          ...recordData(prior), identity: nextIdentity, run: undefined,
-          findings: restored?.findings ?? [], overrides: restored?.overrides ?? [], gaps: undefined,
-          archivedIdentities: [...archived.filter((entry) => entry.identity.key !== nextIdentity.key), { identity: prior.identity, findings: prior.findings, overrides: prior.overrides }].slice(-10),
+          version: 1,
+          hqWorkspaceId: workspace.id,
+          deliveryPolicy: { enabled: true, routing: { mode: 'broadcast' }, delivery: 'on-demand' },
+          identity: nextIdentity,
+          contextInvalidatedAt: typeof baseline?.entity.deletedAt === 'string' ? baseline.entity.deletedAt : undefined,
+          findings: [],
+          overrides: [],
         };
+      } else if (prior.identity.key !== nextIdentity.key) {
+        const hasResearchContext = Boolean(prior.run || prior.lastSuccessfulResearchAt || prior.findings.length || prior.overrides.length);
+        if (hasResearchContext) error('CLEAR_RESEARCH_REQUIRED', 'Clear the existing career research before changing the artist identity.');
+        nextIdentity.generation = prior.identity.generation + 1;
+        data = { ...recordData(prior), identity: nextIdentity, findings: [], overrides: [], gaps: undefined, archivedIdentities: undefined };
       } else data = { ...recordData(prior), identity: { ...prior.identity, ...nextIdentity, generation: prior.identity.generation } };
       return this.write(workspace.id, workspace.rootPath, data, baseline ?? undefined);
+    });
+  }
+
+  async clear(workspaceId: string, expectedRevision: number, expectedRecoveryToken?: string): Promise<CareerResearchView> {
+    const workspace = this.workspace(workspaceId);
+    assertTeamPermission(workspace.rootPath, 'files.write');
+    return withWorkspaceContextLock(workspace.rootPath, async () => {
+      const baseline = readCareerResearchSlotBaseline(workspace.rootPath);
+      const rawSha256 = readSharedRecordFileSha(workspace.rootPath, ARTIST_CAREER_RESEARCH_COLLECTION, ARTIST_CAREER_RESEARCH_ID);
+      const record = readCareerResearchRecord(workspace.rootPath);
+      if (!record && isDeletedCareerResearchSlot(baseline)) {
+        if (baseline!.revision !== expectedRevision) error('CAREER_RESEARCH_CONFLICT', 'Career context changed before it could be cleared.');
+        return buildCareerResearchView(null, baseline!.revision);
+      }
+      if (!record) {
+        if (!rawSha256 || (baseline?.revision ?? 0) !== expectedRevision || expectedRecoveryToken !== rawSha256) {
+          error('CAREER_RESEARCH_CONFLICT', 'Career context changed before it could be cleared.');
+        }
+      } else if (!baseline || baseline.revision !== expectedRevision) {
+        error('CAREER_RESEARCH_CONFLICT', 'Career context changed before it could be cleared.');
+      }
+      const deepRunId = record?.run && ['researching', 'validating', 'publishing'].includes(record.run.state)
+        ? record.run.deepResearchRunId
+        : undefined;
+      if (deepRunId) {
+        try {
+          await this.runner.cancel(workspace.id, deepRunId);
+        } catch (cause) {
+          error('CLEAR_STOP_FAILED', `Research could not be stopped, so its context was not cleared. ${cause instanceof Error ? cause.message : String(cause)}`);
+        }
+      }
+      const result = baseline
+        ? deleteSharedRecord(
+            workspace.rootPath,
+            ARTIST_CAREER_RESEARCH_COLLECTION,
+            ARTIST_CAREER_RESEARCH_ID,
+            { machineId: this.machineId(workspace.rootPath), baseline, piiScrub: true, eraseUndo: true },
+          )
+        : deleteUnreadableSharedRecord(
+            workspace.rootPath,
+            ARTIST_CAREER_RESEARCH_COLLECTION,
+            ARTIST_CAREER_RESEARCH_ID,
+            { machineId: this.machineId(workspace.rootPath), expectedSha256: expectedRecoveryToken! },
+          );
+      if (result.status !== 'written') error('CAREER_RESEARCH_CONFLICT', 'Career context has a Team conflict that needs resolution.');
+      rebuildCareerResearchProjection(workspace.rootPath);
+      this.onChanged?.(workspace.id);
+      return buildCareerResearchView(null, result.entity.revision);
     });
   }
 
@@ -175,6 +320,11 @@ export class ArtistProfileEnrichmentService {
 
     let record = readCareerResearchRecord(workspace.rootPath);
     if (!record) {
+      assertReadableCareerResearchSlot(
+        readCareerResearchSlotBaseline(workspace.rootPath),
+        record,
+        readSharedRecordFileSha(workspace.rootPath, ARTIST_CAREER_RESEARCH_COLLECTION, ARTIST_CAREER_RESEARCH_ID),
+      );
       const profile = readSavedProfile(workspace.rootPath);
       await this.updateSeeds(workspaceId, 0, { artistName: profile.artistName, spotifyProfile: profile.spotifyProfile });
       record = readCareerResearchRecord(workspace.rootPath);
@@ -199,6 +349,7 @@ export class ArtistProfileEnrichmentService {
     try {
       prepared = this.runner.prepare(workspace.id, { topic, title: `${record.identity.artistName} career context`, planPolicy: 'auto', depth: 'standard', reportFormat: 'brief' }, {
         runId: deepRunId, purpose: PURPOSE, owner: { type: OWNER_TYPE, id: record.identity.key, generation: record.identity.generation },
+        publicWebSourcesOnly: true,
         executionContract: { overallTimeoutMs: 15 * 60 * 1000, maxSearchCalls: 3, maxPageReads: 10, maxConcurrentPageReads: 2, maxRetriesPerPage: 1, maxTotalResearchToolCalls: 16, maxStructuredOutputRepairs: 1 },
         outputSchema: OUTPUT_SCHEMA as unknown as Record<string, unknown>,
       });
@@ -274,6 +425,7 @@ export class ArtistProfileEnrichmentService {
       await this.publish(workspace.id, workspace.rootPath, event.run).catch(async (cause) => {
         const message = cause instanceof Error ? cause.message : String(cause);
         const code = /^([A-Z_]+):/.exec(message)?.[1] ?? 'PERSISTENCE_FAILED';
+        if (code === 'STALE_RUN') return;
         await this.markTerminal(workspace.id, workspace.rootPath, event.run.id, code === 'IDENTITY_MISMATCH' ? 'needs-identity' : 'failed', code, message);
       });
       return;
@@ -286,9 +438,13 @@ export class ArtistProfileEnrichmentService {
     assertTeamPermission(rootPath, 'files.write');
     const output = run.structuredOutput as CandidateOutput | undefined;
     if (!output || !Array.isArray(output.findings) || !output.identityMatch) error('INVALID_RESULT', 'Research returned no valid structured result.');
-    await this.mutate(workspaceId, rootPath, readCareerResearchRecord(rootPath)?.revision ?? -1, (data, record) => ({ ...data, run: { ...record.run!, state: 'validating' } }));
+    await this.mutateLatest(workspaceId, rootPath, (data, record) => {
+      this.assertPublishRun(record, run, 'researching');
+      return { ...data, run: { ...record.run!, state: 'validating' } };
+    });
     const current = readCareerResearchRecord(rootPath);
-    if (!current?.run || current.run.deepResearchRunId !== run.id || current.run.identityKey !== current.identity.key || current.run.state === 'cancelled') error('STALE_RUN', 'Research result no longer matches the active artist.');
+    if (!current) error('STALE_RUN', 'Research result no longer matches the active artist.');
+    this.assertPublishRun(current, run, 'validating');
     const anchors = [current.identity.spotifyUrl, current.identity.officialUrl, ...current.identity.supportingUrls].filter((value): value is string => Boolean(value)).map(normalizeCareerResearchUrl);
     const matched = normalizeCareerResearchUrl(output.identityMatch.matchedAnchor);
     const receipts = run.steps.flatMap((step) => step.toolReceipts ?? []);
@@ -326,16 +482,19 @@ export class ArtistProfileEnrichmentService {
       ...(output.findings.length > accepted.length ? [`${output.findings.length - accepted.length} unsupported or mismatched finding(s) were withheld.`] : []),
       ...(accepted.length === 0 ? ['No supported findings found.'] : []),
     ])].slice(0, 20);
-    const latest = readCareerResearchRecord(rootPath);
-    if (!latest?.run || latest.run.deepResearchRunId !== run.id || latest.run.identityKey !== latest.identity.key || latest.run.state === 'cancelled') error('STALE_RUN', 'Research result was replaced before publication.');
     assertTeamPermission(rootPath, 'files.write');
-    const publishing = await this.mutate(workspaceId, rootPath, latest.revision, (data) => ({
-      ...data, run: { ...data.run!, state: 'publishing' },
-    }));
-    await this.mutate(workspaceId, rootPath, publishing.revision, (data) => ({
-      ...data, findings: merged, gaps, lastSuccessfulResearchAt: now,
-      run: { ...data.run!, state: accepted.length > 0 && gaps.length === 0 ? 'succeeded' : 'partial', lastError: undefined },
-    }));
+    await this.mutateLatest(workspaceId, rootPath, (data, record) => {
+      this.assertPublishRun(record, run, 'validating');
+      return { ...data, run: { ...record.run!, state: 'publishing' } };
+    });
+    await this.mutateLatest(workspaceId, rootPath, (data, record) => {
+      this.assertPublishRun(record, run, 'publishing');
+      return {
+        ...data, findings: merged, gaps, lastSuccessfulResearchAt: now,
+        contextInvalidatedAt: accepted.length > 0 ? undefined : data.contextInvalidatedAt,
+        run: { ...record.run!, state: accepted.length > 0 && gaps.length === 0 ? 'succeeded' : 'partial', lastError: undefined },
+      };
+    });
   }
 
   private validateFinding(identity: CareerResearchIdentity, candidate: CandidateFinding, receipts: DeepResearchToolReceipt[], now: string): CareerResearchFinding | null {
@@ -356,6 +515,7 @@ export class ArtistProfileEnrichmentService {
       if (!support || !normalized(receipt.supportExcerpt).includes(normalized(support))) return [];
       const numbers = text.match(/\b\d[\d,.%]*\b/g) ?? [];
       if (numbers.some((number) => !support.includes(number))) return [];
+      if (!evidenceSupportsFinding(identity, candidate, { ...item, support })) return [];
       return [{ receiptId: receipt.id, url, title: cleanText(item.title, 240)!, publisher: cleanText(item.publisher, 160), publishedAt: cleanText(item.publishedAt, 40), retrievedAt: receipt.observedAt, locator: cleanText(item.locator, 160), support }];
     });
     if (evidence.length === 0) return null;
@@ -371,9 +531,32 @@ export class ArtistProfileEnrichmentService {
   }
 
   private async markTerminal(workspaceId: string, rootPath: string, deepRunId: string, state: 'failed' | 'cancelled' | 'interrupted' | 'needs-identity', code: string, message: string): Promise<void> {
-    const record = readCareerResearchRecord(rootPath);
-    if (!record?.run || record.run.deepResearchRunId !== deepRunId) return;
-    await this.mutate(workspaceId, rootPath, record.revision, (data) => ({ ...data, run: { ...data.run!, state, lastError: { code, message: message.slice(0, 500) } } }));
+    await withWorkspaceContextLock(rootPath, async () => {
+      const baseline = readCareerResearchBaseline(rootPath);
+      if (!baseline) return;
+      const record = baseline.entity;
+      if (!record?.run || record.run.deepResearchRunId !== deepRunId) return;
+      if (!['researching', 'validating', 'publishing'].includes(record.run.state)) return;
+      this.write(workspaceId, rootPath, {
+        ...recordData(record),
+        run: { ...record.run, state, lastError: { code, message: message.slice(0, 500) } },
+      }, baseline);
+    });
+  }
+
+  private assertPublishRun(record: CareerResearchRecord, run: DeepResearchRunSnapshot, expectedState: 'researching' | 'validating' | 'publishing'): void {
+    if (!record.run || record.run.deepResearchRunId !== run.id || record.run.identityKey !== record.identity.key ||
+        record.run.state !== expectedState || run.owner?.id !== record.identity.key || run.owner.generation !== record.identity.generation) {
+      error('STALE_RUN', 'Research result no longer matches the active artist.');
+    }
+  }
+
+  private async mutateLatest(workspaceId: string, rootPath: string, update: (data: CareerResearchRecordData, record: CareerResearchRecord) => CareerResearchRecordData): Promise<CareerResearchView> {
+    return withWorkspaceContextLock(rootPath, async () => {
+      const baseline = readCareerResearchBaseline(rootPath);
+      if (!baseline) error('STALE_RUN', 'Career context no longer exists.');
+      return this.write(workspaceId, rootPath, update(recordData(baseline.entity), baseline.entity), baseline);
+    });
   }
 
   private async mutate(workspaceId: string, rootPath: string, expectedRevision: number, update: (data: CareerResearchRecordData, record: CareerResearchRecord) => CareerResearchRecordData): Promise<CareerResearchView> {
@@ -384,7 +567,7 @@ export class ArtistProfileEnrichmentService {
     });
   }
 
-  private write(workspaceId: string, rootPath: string, data: CareerResearchRecordData, baseline?: SharedRecordBaseline<CareerResearchRecord>): CareerResearchView {
+  private write(workspaceId: string, rootPath: string, data: CareerResearchRecordData, baseline?: SharedRecordBaseline<CareerResearchRecord | SharedRecord>): CareerResearchView {
     const result = writeCareerResearchRecord(rootPath, data, { machineId: this.machineId(rootPath), baseline });
     if (result.status !== 'written') error('CAREER_RESEARCH_CONFLICT', 'Career context has a Team conflict that needs resolution.');
     rebuildCareerResearchProjection(rootPath);

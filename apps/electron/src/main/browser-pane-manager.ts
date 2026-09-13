@@ -8,6 +8,7 @@
  */
 
 import { join, parse as parsePath } from 'path'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync } from 'fs'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import { BrowserView, BrowserWindow, app, ipcMain, nativeTheme, session, shell, type Event as ElectronEvent, type Session as ElectronSession } from 'electron'
@@ -24,6 +25,7 @@ import { DEFAULT_THEME, loadAppTheme } from '@craft-agent/shared/config'
 import { getBrowserLiveFxCornerRadii } from '../shared/browser-live-fx'
 import type { IBrowserPaneManager } from '@craft-agent/server-core/handlers'
 import { BROWSER_PANE_SESSION_PARTITION } from './browser-pane-constants'
+import { assertPublicNetworkUrl } from './public-network-url'
 
 export type { BrowserInstanceInfo }
 
@@ -47,6 +49,15 @@ const THEME_OBSERVER_MIN_INTERVAL_MS = 120
 const EARLY_THEME_EXTRACTION_DELAY_MS = 100
 const BROWSER_EMPTY_STATE_PAGE = 'browser-empty-state.html'
 const CRAFT_DEEPLINK_SCHEME_PREFIX = `${process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'}://`
+
+function urlForLog(value: string): string {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.origin : parsed.protocol
+  } catch {
+    return 'invalid-url'
+  }
+}
 
 const THEME_COLOR_EXTRACTOR_FN = String.raw`
 () => {
@@ -325,8 +336,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   private stateChangeCallback: ((info: BrowserInstanceInfo) => void) | null = null
   private removedCallback: ((id: string) => void) | null = null
   private interactedCallback: ((id: string) => void) | null = null
-  private partitionPermissionsInitialized = false
-  private partitionObserversInitialized = false
+  private permissionSessions = new WeakSet<ElectronSession>()
+  private observedSessions = new WeakSet<ElectronSession>()
+  private publicNetworkOnlySessionIds = new Set<string>()
   private inFlightRequestsByWebContentsId = new Map<number, number>()
   private lastNetworkActivityByWebContentsId = new Map<number, number>()
   private popupWindowsByParentInstanceId = new Map<string, Set<BrowserWindow>>()
@@ -352,6 +364,28 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     this.sessionPathResolver = fn
   }
 
+  setPublicNetworkOnlyForSession(sessionId: string, enabled: boolean): void {
+    if (!enabled) {
+      this.publicNetworkOnlySessionIds.delete(sessionId)
+      return
+    }
+    this.publicNetworkOnlySessionIds.add(sessionId)
+    const expectedPartition = this.publicResearchPartition(sessionId)
+    for (const [id, instance] of this.instances) {
+      if ((instance.boundSessionId === sessionId || instance.ownerSessionId === sessionId) && instance.partition !== expectedPartition) {
+        this.destroyInstance(id)
+      }
+    }
+  }
+
+  private publicResearchPartition(sessionId: string): string {
+    return `public-research-${createHash('sha256').update(sessionId).digest('hex').slice(0, 24)}`
+  }
+
+  private isPublicNetworkOnlyInstance(instance: BrowserInstance): boolean {
+    const sessionId = instance.boundSessionId ?? instance.ownerSessionId
+    return Boolean(sessionId && this.publicNetworkOnlySessionIds.has(sessionId))
+  }
   onStateChange(callback: (info: BrowserInstanceInfo) => void): void {
     this.stateChangeCallback = callback
   }
@@ -377,8 +411,11 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     const partition = options?.partition ?? SESSION_PARTITION
     const ses = session.fromPartition(partition)
-    this.setupSessionPermissions(ses)
-    this.setupSessionObservers(ses)
+    const publicNetworkOnlySessionId = ownerSessionId && this.publicNetworkOnlySessionIds.has(ownerSessionId)
+      ? ownerSessionId
+      : undefined
+    this.setupSessionPermissions(ses, publicNetworkOnlySessionId)
+    this.setupSessionObservers(ses, publicNetworkOnlySessionId)
 
     // Match background to current OS theme to prevent black/white flash on open
     const bgColor = nativeTheme.shouldUseDarkColors ? '#2b292e' : '#fafafb'
@@ -724,6 +761,10 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       } else {
         normalizedUrl = `https://duckduckgo.com/?q=${encodeURIComponent(normalizedUrl)}`
       }
+    }
+    const policySessionId = instance.boundSessionId ?? instance.ownerSessionId
+    if (policySessionId && this.publicNetworkOnlySessionIds.has(policySessionId) && normalizedUrl !== 'about:blank') {
+      await assertPublicNetworkUrl(normalizedUrl, session.fromPartition(instance.partition))
     }
 
     const timeoutMs = 30_000
@@ -1866,6 +1907,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   bindSession(id: string, sessionId: string): void {
     const instance = this.instances.get(id)
     if (instance) {
+      if (this.publicNetworkOnlySessionIds.has(sessionId) && instance.partition !== this.publicResearchPartition(sessionId)) {
+        throw new Error('Restricted research sessions cannot use a shared or saved-account browser window')
+      }
       instance.boundSessionId = sessionId
       instance.ownerType = 'session'
       instance.ownerSessionId = sessionId
@@ -1931,6 +1975,15 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       return existing
     }
 
+    if (this.publicNetworkOnlySessionIds.has(sessionId)) {
+      return this.createInstance(undefined, {
+        show: options?.show ?? false,
+        ownerType: 'session',
+        ownerSessionId: sessionId,
+        partition: this.publicResearchPartition(sessionId),
+      })
+    }
+
     // Reuse an unbound/manual window before creating a new one.
     // This helps agents avoid unnecessary browser window sprawl.
     const reusable = this.findReusableUnboundInstance()
@@ -1956,6 +2009,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     profile: string,
     options?: { show?: boolean },
   ): string {
+    if (this.publicNetworkOnlySessionIds.has(sessionId)) {
+      throw new Error('Restricted research sessions cannot use saved social-account browser profiles')
+    }
     const normalizedPlatform = platform.trim().toLowerCase()
     const normalizedProfile = profile.trim()
     if (!SOCIAL_BROWSER_PLATFORMS.has(normalizedPlatform)) {
@@ -2002,6 +2058,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     profile: string,
     options?: { show?: boolean },
   ): string {
+    if (this.publicNetworkOnlySessionIds.has(sessionId)) {
+      throw new Error('Restricted research sessions cannot use saved paid-ad browser profiles')
+    }
     const normalizedProvider = provider.trim().toLowerCase()
     const normalizedProfile = profile.trim()
     if (!AD_BROWSER_PROVIDERS.has(normalizedProvider)) {
@@ -2412,7 +2471,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       const resolver = (wcId: number) => this.windowManager?.getClientIdForWindow(wcId)
       const result = await handleDeepLink(url, this.windowManager, sink, resolver)
       if (!result.success) {
-        mainLog.warn(`[browser-pane] deep-link handling failed: ${result.error ?? 'unknown error'} url=${url}`)
+        mainLog.warn(`[browser-pane] deep-link handling failed: ${result.error ?? 'unknown error'} url=${urlForLog(url)}`)
       }
     } catch (error) {
       mainLog.warn(`[browser-pane] deep-link handling threw, falling back to shell.openExternal: ${error instanceof Error ? error.message : String(error)}`)
@@ -2892,6 +2951,14 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     return undefined
   }
 
+  private isBrowserChromeWebContentsId(webContentsId: number | undefined): boolean {
+    if (typeof webContentsId !== 'number' || webContentsId <= 0) return false
+    for (const instance of this.instances.values()) {
+      if (instance.toolbarView.webContents.id === webContentsId || instance.nativeOverlayView.webContents.id === webContentsId) return true
+    }
+    return false
+  }
+
   private registerPopupWindow(parentInstance: BrowserInstance, popupWindow: BrowserWindow, sourceUrl?: string): void {
     const popupWcId = popupWindow.webContents.id
     const existingParent = this.popupParentByWebContentsId.get(popupWcId)
@@ -2909,25 +2976,25 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     this.popupParentByWebContentsId.set(popupWcId, parentInstance.id)
 
     const initialUrl = sourceUrl || popupWindow.webContents.getURL?.() || 'about:blank'
-    mainLog.info(`[browser-pane] popup created parent=${parentInstance.id} popupWebContentsId=${popupWcId} url=${initialUrl}`)
+    mainLog.info(`[browser-pane] popup created parent=${parentInstance.id} popupWebContentsId=${popupWcId} url=${urlForLog(initialUrl)}`)
 
     popupWindow.webContents.on('did-navigate', (_event, urlFromEvent) => {
       const popupUrl = typeof popupWindow.webContents.getURL === 'function'
         ? popupWindow.webContents.getURL()
         : (urlFromEvent || initialUrl)
-      mainLog.info(`[browser-pane] popup did-navigate parent=${parentInstance.id} popupWebContentsId=${popupWcId} url=${popupUrl}`)
+      mainLog.info(`[browser-pane] popup did-navigate parent=${parentInstance.id} popupWebContentsId=${popupWcId} url=${urlForLog(popupUrl)}`)
     })
 
     popupWindow.webContents.on('did-redirect-navigation', (_event, popupUrl, isInPlace, isMainFrame) => {
       mainLog.info(
-        `[browser-pane] popup redirect parent=${parentInstance.id} popupWebContentsId=${popupWcId} url=${popupUrl} inPlace=${isInPlace} mainFrame=${isMainFrame}`,
+        `[browser-pane] popup redirect parent=${parentInstance.id} popupWebContentsId=${popupWcId} url=${urlForLog(popupUrl)} inPlace=${isInPlace} mainFrame=${isMainFrame}`,
       )
     })
 
     popupWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       if (!isMainFrame) return
       mainLog.warn(
-        `[browser-pane] popup did-fail-load parent=${parentInstance.id} popupWebContentsId=${popupWcId} code=${errorCode} url=${validatedURL} error=${errorDescription}`,
+        `[browser-pane] popup did-fail-load parent=${parentInstance.id} popupWebContentsId=${popupWcId} code=${errorCode} url=${urlForLog(validatedURL)} error=${errorDescription}`,
       )
     })
 
@@ -3011,18 +3078,38 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     return `${name}_${counter}${ext}`
   }
 
-  private setupSessionObservers(ses: ElectronSession): void {
-    if (this.partitionObserversInitialized) return
-    this.partitionObserversInitialized = true
+  private setupSessionObservers(ses: ElectronSession, publicNetworkOnlySessionId?: string): void {
+    if (this.observedSessions.has(ses)) return
+    this.observedSessions.add(ses)
 
     ses.webRequest.onBeforeRequest((details, callback) => {
-      const wcId = details.webContentsId
-      if (typeof wcId === 'number' && wcId > 0) {
-        const current = this.inFlightRequestsByWebContentsId.get(wcId) ?? 0
-        this.inFlightRequestsByWebContentsId.set(wcId, current + 1)
-        this.lastNetworkActivityByWebContentsId.set(wcId, Date.now())
+      const allow = () => {
+        const wcId = details.webContentsId
+        if (typeof wcId === 'number' && wcId > 0) {
+          const current = this.inFlightRequestsByWebContentsId.get(wcId) ?? 0
+          this.inFlightRequestsByWebContentsId.set(wcId, current + 1)
+          this.lastNetworkActivityByWebContentsId.set(wcId, Date.now())
+        }
+        callback({})
       }
-      callback({})
+      if (!publicNetworkOnlySessionId) {
+        allow()
+        return
+      }
+      let protocol = ''
+      try { protocol = new URL(details.url).protocol } catch {}
+      if (protocol === 'about:' || protocol === 'data:' || protocol === 'blob:') {
+        allow()
+        return
+      }
+      if (protocol === 'file:' && this.isBrowserChromeWebContentsId(details.webContentsId)) {
+        allow()
+        return
+      }
+      void assertPublicNetworkUrl(details.url, ses).then(allow).catch(() => {
+        mainLog.warn(`[browser-pane] blocked non-public request for restricted session=${publicNetworkOnlySessionId}`)
+        callback({ cancel: true })
+      })
     })
 
     ses.webRequest.onCompleted((details) => {
@@ -3126,9 +3213,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     mainLog.warn(message)
   }
 
-  private setupSessionPermissions(ses: ElectronSession): void {
-    if (this.partitionPermissionsInitialized) return
-    this.partitionPermissionsInitialized = true
+  private setupSessionPermissions(ses: ElectronSession, publicNetworkOnlySessionId?: string): void {
+    if (this.permissionSessions.has(ses)) return
+    this.permissionSessions.add(ses)
 
     const allow = new Set([
       'fullscreen',
@@ -3144,7 +3231,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     if (typeof ses.setPermissionCheckHandler === 'function') {
       ses.setPermissionCheckHandler((_webContents, permission: string, requestingOrigin: string, _details: any) => {
-        const allowed = allow.has(permission)
+        const allowed = !publicNetworkOnlySessionId && allow.has(permission)
         if (!allowed) {
           this.logPermissionDecision('check', permission, requestingOrigin)
         }
@@ -3154,7 +3241,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     if (typeof ses.setPermissionRequestHandler === 'function') {
       ses.setPermissionRequestHandler((_webContents, permission: string, callback: (allow: boolean) => void, details: any) => {
-        const allowed = allow.has(permission)
+        const allowed = !publicNetworkOnlySessionId && allow.has(permission)
         if (!allowed) {
           this.logPermissionDecision('request', permission, details?.requestingOrigin ?? 'unknown')
         }
@@ -3198,7 +3285,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     toolbarWc.on('did-finish-load', () => {
       const loadedUrl = typeof toolbarWc.getURL === 'function' ? toolbarWc.getURL() : ''
       if (!this.isToolbarUiDocumentUrl(loadedUrl)) {
-        mainLog.info(`[browser-pane] toolbar did-finish-load ignored id=${instance.id} url=${loadedUrl || 'unknown'}`)
+        mainLog.info(`[browser-pane] toolbar did-finish-load ignored id=${instance.id} url=${loadedUrl ? urlForLog(loadedUrl) : 'unknown'}`)
         this.pushToolbarState(instance)
         return
       }
@@ -3209,7 +3296,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     toolbarWc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       if (!isMainFrame) return
-      mainLog.warn(`[browser-pane] toolbar did-fail-load id=${instance.id} code=${errorCode} url=${validatedURL} error=${errorDescription}`)
+      mainLog.warn(`[browser-pane] toolbar did-fail-load id=${instance.id} code=${errorCode} url=${urlForLog(validatedURL)} error=${errorDescription}`)
     })
 
     pageWc.on('did-start-loading', () => {
@@ -3270,7 +3357,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       const normalized = this.normalizePageState(url, pageWc.getTitle())
       instance.currentUrl = normalized.url
       instance.title = normalized.title
-      mainLog.info(`[browser-pane] did-navigate id=${instance.id} from=${previousUrl} to=${instance.currentUrl}`)
+      mainLog.info(`[browser-pane] did-navigate id=${instance.id} from=${urlForLog(previousUrl)} to=${urlForLog(instance.currentUrl)}`)
       instance.canGoBack = pageWc.canGoBack()
       instance.canGoForward = pageWc.canGoForward()
       // Drain in-flight count — prior page's requests are cancelled on navigation
@@ -3284,7 +3371,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     pageWc.on('did-redirect-navigation', (_event, url, isInPlace, isMainFrame) => {
       if (!isMainFrame) return
-      mainLog.info(`[browser-pane] did-redirect-navigation id=${instance.id} url=${url} inPlace=${isInPlace}`)
+      mainLog.info(`[browser-pane] did-redirect-navigation id=${instance.id} url=${urlForLog(url)} inPlace=${isInPlace}`)
     })
 
     pageWc.on('did-navigate-in-page', (_event, urlFromEvent) => {
@@ -3333,7 +3420,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     })
 
     pageWc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
-      mainLog.warn(`[browser-pane] did-fail-load id=${instance.id} code=${errorCode} url=${validatedURL} error=${errorDescription}`)
+      mainLog.warn(`[browser-pane] did-fail-load id=${instance.id} code=${errorCode} url=${urlForLog(validatedURL)} error=${errorDescription}`)
     })
 
     pageWc.on('console-message', (_event, level, message) => {
@@ -3372,7 +3459,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     pageWc.on('will-navigate', (event, url) => {
       if (url.startsWith(CRAFT_DEEPLINK_SCHEME_PREFIX)) {
         event.preventDefault()
-        void this.handleDeepLinkUrl(url)
+        if (!this.isPublicNetworkOnlyInstance(instance)) void this.handleDeepLinkUrl(url)
       }
     })
 
@@ -3383,11 +3470,11 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     pageWc.setWindowOpenHandler((details) => {
       mainLog.info(
-        `[browser-pane] window-open requested id=${instance.id} url=${details.url} disposition=${details.disposition ?? 'unknown'} frameName=${details.frameName || 'none'}`,
+        `[browser-pane] window-open requested id=${instance.id} url=${urlForLog(details.url)} disposition=${details.disposition ?? 'unknown'} frameName=${details.frameName || 'none'}`,
       )
 
       if (details.url.startsWith(CRAFT_DEEPLINK_SCHEME_PREFIX)) {
-        void this.handleDeepLinkUrl(details.url)
+        if (!this.isPublicNetworkOnlyInstance(instance)) void this.handleDeepLinkUrl(details.url)
         return { action: 'deny' }
       }
 
@@ -3395,12 +3482,12 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       try {
         parsed = new URL(details.url)
       } catch {
-        mainLog.warn(`[browser-pane] window-open denied id=${instance.id} reason=invalid_url url=${details.url}`)
+        mainLog.warn(`[browser-pane] window-open denied id=${instance.id} reason=invalid_url url=${urlForLog(details.url)}`)
         return { action: 'deny' }
       }
 
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        mainLog.warn(`[browser-pane] window-open denied id=${instance.id} reason=unsupported_protocol protocol=${parsed.protocol} url=${details.url}`)
+        mainLog.warn(`[browser-pane] window-open denied id=${instance.id} reason=unsupported_protocol protocol=${parsed.protocol} url=${urlForLog(details.url)}`)
         return { action: 'deny' }
       }
 

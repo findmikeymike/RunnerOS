@@ -1,6 +1,6 @@
 # Architecture and implementation contracts
 
-All new names below are **proposed**, not symbols already present. File paths are repository-relative. Verified baseline is `f25bbf48c`.
+The names and contracts below describe the implemented V1 unless a paragraph explicitly says otherwise. File paths are repository-relative. The original verified planning baseline was `f25bbf48c`.
 
 ## Existing integration map
 
@@ -10,7 +10,7 @@ All new names below are **proposed**, not symbols already present. File paths ar
 | `apps/electron/src/renderer/components/app-shell/ArtistHQHome.tsx` | Profile draft/save, ArtistProfileForm, Spotify URL/ID field; add a separate child panel below the form. |
 | `apps/electron/src/renderer/hooks/useWorkspaceContext.ts` | Context reads/writes and expectedBody support; verify exact hook path before implementation if relocated. |
 | `packages/server-core/src/handlers/rpc/workspace-context.ts` | Existing write permissions, expected-body comparison under workspace lock, change events. Preserve these semantics. |
-| `packages/server-core/src/deep-research/DeepResearchRunner.ts` | Auto plan policy, source readiness, persisted runs, safe-mode step sessions, reports, cancellation; restarts interrupt rather than resume. Loop budgets are currently prompt instructions, not a demonstrated host-enforced spend cap. |
+| `packages/server-core/src/deep-research/DeepResearchRunner.ts` | Auto plan policy, source readiness, persisted runs, safe-mode step sessions, reports, cancellation, startup interruption, host-enforced tool/deadline budgets, and auditable tool receipts. |
 | `packages/shared/src/deep-research/{types,storage}.ts` | Existing research run model and persistence. Extend with optional purpose/owner binding only as needed; preserve generic research compatibility. |
 | `packages/server-core/src/pulses/spotify-snapshot-publisher.ts` | Publishes latest captured file into artist-spotify-snapshot; SessionManager invokes after spotify-analyst automatic work. No second publisher in enrichment. |
 | `packages/shared/src/hq-state/manager-brief.ts` | Reads Spotify snapshot into growth summary with source/freshness. Add separate career summary, not duplicate growth. |
@@ -21,7 +21,7 @@ All new names below are **proposed**, not symbols already present. File paths ar
 
 ## C1 Ownership and storage
 
-Create a typed career research record and expose a derived `artist-career-research` context view with a shared compiler under proposed `packages/shared/src/artist-context/career-research.ts`. Canonical storage is `records/artist-career-research/current.json`, using existing `readSharedRecordBaseline` / `writeSharedRecord` in `packages/shared/src/records/storage.ts` in both solo and Team mode. The context view is a rebuildable projection, never a second writable authority. It is separate from artist-profile/branding/voice and artist-spotify-snapshot. Reuse existing record persistence, context permissions and events; no new database/vector store. Raw generic research reports stay in existing Deep Research/Outputs storage. Research setup (official website, supporting URLs) belongs to this record and is editable independently of Profile Save.
+Create a typed career research record and expose a derived `artist-career-research` context view with a shared compiler under `packages/shared/src/artist-context/career-research.ts`. Canonical storage is `records/artist-career-research/current.json`, using existing `readSharedRecordBaseline` / `writeSharedRecord` in `packages/shared/src/records/storage.ts` in both solo and Team mode. The context view is a rebuildable projection, never a second writable authority. It is separate from artist-profile/branding/voice and artist-spotify-snapshot. Reuse existing record persistence, context permissions and events; no new database/vector store. Raw generic research reports stay in existing Deep Research/Outputs storage. Research setup (official website, supporting URLs) belongs to this record and is editable independently of Profile Save.
 
 Proposed logical schema (version 1):
 
@@ -37,7 +37,7 @@ CareerResearch {
     lastError?: {code: string; message: string}; deepResearchRunId: string };
   lastSuccessfulResearchAt?: ISO;
   findings: Finding[];
-  archivedIdentities?: {identity: Identity; findings: Finding[]; overrides: Override[]; reportRef?: string}[];
+  archivedIdentities?: LegacyArchivedIdentity[];
   overrides: {claimKey: string; kind: 'corrected'|'removed';
     text?: string; revision: number; actorId: string; at: ISO}[];
 }
@@ -58,15 +58,15 @@ Host generates IDs, receipt IDs, observed timestamps, revision/generation, permi
 
 Limits proposed for V1: 10 seed URLs; 2,048 characters/URL; 50 current findings; 600 characters/finding; 4 evidence references/finding; 300 characters/support excerpt; 3,500-character agent summary. Reject oversized writes instead of silently truncating critical identity/claim fields. Bounded report retention follows existing output retention; no new unlimited raw-page archive. Tombstones/overrides are not pruned with report history.
 
-claimKey is host-normalized from artist identity + category + structured subject + allowed predicate, not prose hash. Metrics as current performance are not a predicate in this schema. One recurring event can include event date in its subject key. Removal/correction applies across new IDs, new citations and rewordings. If extraction cannot resolve a stable key, retain it in report only. Resetting identity moves the previous identity/findings/overrides plus its report reference into archivedIdentities in the same guarded canonical record write, then clears the active projection. Archived findings are not agent context. This preserves corrections without a new cross-file transaction. No carry-over across artists; restoring the previous identity reuses its retained overrides.
+claimKey is host-normalized from artist identity + category + structured subject + allowed predicate, not prose hash. Metrics as current performance are not a predicate in this schema. One recurring event can include event date in its subject key. Removal/correction applies across new IDs, new citations and rewordings. If extraction cannot resolve a stable key, retain it in report only. HQ does not expose routine artist switching. Once research context exists, changing the stable artist identity is rejected until the user explicitly chooses **Clear context**. Clear durably stops an active run, privacy-scrubs the canonical record into a Team-compatible tombstone, removes all old findings/corrections from delivery, and publishes a fact-free invalidation marker so existing chats do not trust earlier career facts. The reseeded record carries that marker through failed, cancelled, or unsupported replacement attempts; only publication of at least one supported replacement finding relaxes it back to the configured delivery policy. Profile, Branding, Voice, growth data, and standalone reports already in Outputs are untouched. The fixed record slot can then be reseeded from the saved Profile or new public links without restoring old-artist facts. `archivedIdentities` remains readable only for backward compatibility; new identity changes do not create or restore automatic archives.
 
 Use record baseline revision/hash under the existing workspace lock, re-read before every mutation, and preserve corrections made while the run was active. Require `writeSharedRecord` status `written` before reporting a new canonical revision; `conflict` follows existing Team resolution and preserves both candidates. A local lock alone is insufficient across replicas. P1 must verify this collection is included in current conflict scanning. Reject generic body replacement/deletion of this managed projection; route fact edits through typed operations. Delivery/routing/enabled policy is canonical in deliveryPolicy, not in a disposable projection. The existing context settings UI continues to work: for this managed slug, a metadata-only edit (unchanged expected body) is translated by the host into UPDATE_DELIVERY with the current record baseline. Validate existing routing/delivery types and permissions, preserve all fact/run fields, and rebuild the projection. A request changing body and metadata together is rejected without losing the submitted UI draft. No new user gate or second policy store. Rebuild the context view from the canonical record before serving it at launch, turn admission and explicit retrieval; failed projection generation excludes an older persisted view. Context routing/disabled metadata still controls access. The canonical record is sufficient to reconstruct the view after a crash.
 
-## C2 Host service / proposed RPC
+## C2 Host service / RPC
 
-Add a small proposed `packages/server-core/src/artist-profile-enrichment/` service and RPC handler. Reuse DeepResearchRunner as the executor; the adapter owns profile binding, structured evidence extraction, publication, and UI projection. Do not create another scheduler/agent catalog or hard-wire Industry Hunter/Signals tracks. Existing researcher capability is sufficient.
+Use the implemented `packages/server-core/src/artist-profile-enrichment/` service and RPC handler. DeepResearchRunner remains the executor; the adapter owns profile binding, structured evidence extraction, publication, and UI projection. It does not create another scheduler/agent catalog or hard-wire Industry Hunter/Signals tracks.
 
-Suggested RPC namespace `artistProfileEnrichment` (register in existing protocol channels and RPC registration):
+Implemented RPC namespace `artistProfileEnrichment`:
 
 | Operation | Input | Result / behavior |
 | --- | --- | --- |
@@ -75,6 +75,7 @@ Suggested RPC namespace `artistProfileEnrichment` (register in existing protocol
 | UPDATE_DELIVERY | workspaceId, expectedRevision, enabled/routing/delivery | existing context controls update canonical policy; preserves findings and survives rebuild/restart |
 | START | workspaceId, requestId, expectedIdentityKey | server reads saved Profile and setup, validates identity/permissions/source readiness; returns existing matching active run or new run view |
 | CANCEL | workspaceId, runId, attempt | durable invalidation then abort; stale request does not affect replacement run |
+| CLEAR | workspaceId, expectedRevision | stop active research, privacy-scrub the canonical context record, publish a fact-free invalidation marker, and return an empty reseedable view; standalone Outputs remain |
 | CORRECT / REMOVE / UNDO | workspaceId, claimKey, expectedRevision, correction text where needed | guarded overlay update, refreshed read model; conflict returns latest version without losing typed edit |
 | REFRESH | same as START | same service route; no parallel refresh for same identity |
 
@@ -86,7 +87,7 @@ Check both existing `agent.chat` (execution) and `files.write` (publication/edit
 
 Capture server-owned tuple `(hqWorkspaceId, resolvedRootIdentity, identityKey, identityGeneration, runId, attempt)` before async work. Never recapture active renderer workspace. START is idempotent for `(workspace, identity, requestId)`; repeated clicks return the same active run. Different request IDs during a run also return that run. Refresh after a terminal run creates a new attempt. Keep existing request/run receipts through retries.
 
-Select existing usable public search/read sources with `planPolicy: auto`, standard depth initially. Send only artist name, public anchors, allowed career categories and prior exclusions; do not dump full Profile, budgets, rules, private files or account sessions into queries. Browser is a reading tool. Existing safe permission mode remains; don't grant general unrestricted browser write tools to remove friction. If the selected safe tool route cannot read public pages without an additional per-step prompt, P1 must solve that narrow read capability rather than switch the whole session to unrestricted mode.
+Select existing usable public search/read sources with `planPolicy: auto`, standard depth initially. Send only artist name, public anchors, allowed career categories and prior exclusions; do not dump full Profile, budgets, rules, private files or account sessions into queries. Browser is a reading tool. Existing safe permission mode remains; don't grant general unrestricted browser write tools to remove friction. Deep Research native browsing uses a dedicated ephemeral partition with no saved social/ad login, denies sensitive browser permissions and app deep links, and validates every HTTP(S) request against fresh public-only DNS resolution. The unpinned built-in WebFetch route is unavailable because it cannot inherit that Electron request policy. If the selected safe tool route cannot read public pages without an additional per-step prompt, P1 must solve that narrow read capability rather than switch the whole session to unrestricted mode.
 
 Standard default: up to three search rounds and ten page inspections, one follow-up within that total. Proposed host deadline 15 minutes across the full run, two concurrent page reads maximum, one network retry per page within budget, no automatic whole-run retry. Existing model/source budget settings remain authoritative; these counts are not a dollar-price promise. The adapter must enforce page/deadline counters at the invocation boundary for its selected tools; prompt instructions alone do not satisfy A04. P1 proves availability of interception and source receipts; if the chosen source cannot expose reliable page counts/receipts, choose a compatible existing tool or mark that source unavailable for this feature. Do not fake enforcement.
 

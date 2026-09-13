@@ -694,6 +694,7 @@ export const RPC_CHANNELS = {
     UPDATE_DELIVERY: 'artist-profile-enrichment:update-delivery',
     START: 'artist-profile-enrichment:start',
     CANCEL: 'artist-profile-enrichment:cancel',
+    CLEAR: 'artist-profile-enrichment:clear',
     CORRECT: 'artist-profile-enrichment:correct',
     REMOVE: 'artist-profile-enrichment:remove',
     UNDO: 'artist-profile-enrichment:undo',

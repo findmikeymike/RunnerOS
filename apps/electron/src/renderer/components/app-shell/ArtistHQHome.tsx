@@ -4429,6 +4429,7 @@ function CareerResearchPanel({ workspaceId, savedProfile, profileDirty, onSavePr
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set())
   const [correcting, setCorrecting] = React.useState<{ claimKey: string; text: string } | null>(null)
   const [lastRemoved, setLastRemoved] = React.useState<string | null>(null)
+  const [confirmingClear, setConfirmingClear] = React.useState(false)
 
   const load = React.useCallback(async () => {
     try { setView(await window.electronAPI.getArtistProfileEnrichment(workspaceId)); setError(null) }
@@ -4475,6 +4476,25 @@ function CareerResearchPanel({ workspaceId, savedProfile, profileDirty, onSavePr
     setBusy(true); setError(null)
     try { setView(await work()) } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) } finally { setBusy(false) }
   }
+  const clearResearch = async () => {
+    if (!view) return
+    setBusy(true); setError(null)
+    try {
+      const cleared = await window.electronAPI.clearArtistProfileEnrichment(workspaceId, view.revision, view.recoveryToken)
+      setView(cleared)
+      setConfirmingClear(false)
+      setEditingSeeds(true)
+      setDirtyChoice(false)
+      setArtistName(savedProfile.artistName ?? '')
+      setSpotifyProfile(savedProfile.spotifyProfile ?? '')
+      setOfficialUrl('')
+      setSupportingUrls('')
+      setExpanded(new Set())
+      setCorrecting(null)
+      setLastRemoved(null)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { setBusy(false) }
+  }
 
   return (
     <section className="mt-6 border-t border-white/[0.08] pt-5" aria-labelledby="career-context-title">
@@ -4483,9 +4503,16 @@ function CareerResearchPanel({ workspaceId, savedProfile, profileDirty, onSavePr
           <p className="mt-1 max-w-2xl text-xs leading-5 text-white/45">Public career context researched for your agents. Your own profile and branding stay yours.</p></div>
         <div className="flex gap-2">
           <button type="button" onClick={() => setEditingSeeds((value) => !value)} className="h-8 rounded-full border border-white/10 px-3 text-xs text-white/65 hover:bg-white/5">Research links</button>
+          {view && (view.identity || view.recoveryError) ? <button type="button" onClick={() => setConfirmingClear(true)} disabled={busy} className="flex h-8 items-center gap-1.5 rounded-full border border-red-400/20 px-3 text-xs text-red-200/70 hover:border-red-300/35 hover:bg-red-500/10 hover:text-red-100 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" />Clear context</button> : null}
           <button type="button" onClick={() => void start()} disabled={busy || Boolean(active)} className="h-8 rounded-full bg-orange-400 px-4 text-xs font-semibold text-black hover:bg-orange-300 disabled:opacity-40">{view?.lastSuccessfulResearchAt ? 'Refresh research' : 'Enrich my profile'}</button>
         </div>
       </div>
+      {confirmingClear && view && (view.identity || view.recoveryError) ? <div className="mt-3 rounded-xl border border-red-400/20 bg-red-500/[0.08] p-3 text-xs text-red-50/80">
+        <p>Remove these career findings, sources, corrections, and run status from the context your agents receive?</p>
+        <p className="mt-1 text-white/45">Your Profile, Branding, Voice, growth data, and any standalone reports already in Outputs stay untouched.</p>
+        <div className="mt-3 flex gap-2"><button type="button" className="rounded-full border border-white/15 px-3 py-1.5 text-white/70 hover:bg-white/5" onClick={() => setConfirmingClear(false)}>Keep context</button><button type="button" className="rounded-full bg-red-400 px-3 py-1.5 font-semibold text-black hover:bg-red-300 disabled:opacity-40" disabled={busy} onClick={() => void clearResearch()}>Clear context</button></div>
+      </div> : null}
+      {view?.recoveryError ? <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs text-amber-50/85">{view.recoveryError}</div> : null}
       {dirtyChoice ? <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs text-amber-50/85">You have unsaved Profile edits. <div className="mt-2 flex gap-2"><button className="rounded-full bg-white px-3 py-1.5 font-semibold text-black" onClick={() => void onSaveProfile().then((ok) => { setDirtyChoice(false); if (ok) void start(true) })}>Save and enrich</button><button className="rounded-full border border-white/15 px-3 py-1.5" onClick={() => { setDirtyChoice(false); if (view?.identity) void start(true); else void saveSeedsAndStart() }}>Use saved profile</button></div></div> : null}
       {editingSeeds ? <div className="mt-4 grid gap-3 rounded-2xl border border-white/[0.08] bg-black/20 p-4 md:grid-cols-2">
         <ProfileField label="Artist name"><Input value={artistName} onChange={setArtistName} placeholder="Artist name" /></ProfileField>

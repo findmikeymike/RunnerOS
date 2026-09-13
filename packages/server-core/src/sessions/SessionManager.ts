@@ -197,6 +197,7 @@ import {
 } from './ChatGoalDriver'
 import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
+import { ArtistProfileEnrichmentService } from '../artist-profile-enrichment/ArtistProfileEnrichmentService'
 import { listAgentMessageReceipts } from '@craft-agent/shared/agent-messaging'
 import { shouldExposeSessionInLists, assertCanSendAgentMessageToSession, type SessionVisibilityOptions } from './hidden-session-boundaries'
 import { AgentMessageService } from '../agent-messaging/AgentMessageService'
@@ -1520,6 +1521,8 @@ interface ManagedSession {
   processingGeneration: number
   /** Runtime-only host policy for bounded internal tool execution. */
   hostToolExecutionGuard?: HostToolExecutionGuard
+  /** Runtime-only browser policy for bounded Deep Research sessions. */
+  publicNetworkOnly?: boolean
   /** Exact human message whose turn is currently executing; never model supplied. */
   activeHumanMessageId?: string
   // NOTE: Parent-child tracking state (pendingTools, parentToolStack, toolToParentMap,
@@ -2272,6 +2275,8 @@ export class SessionManager implements ISessionManager {
   private paidExecutionAuthorizer: () => boolean = () => RUNTIME_IDENTITY.variant !== 'artist-os'
   /** Deep Research runner — bootstrapped during `initialize()`. */
   private deepResearchRunner!: DeepResearchRunner
+  /** Artist career adapter subscribes before Deep Research recovery emits events. */
+  private artistProfileEnrichmentService?: ArtistProfileEnrichmentService
 
   /**
    * Centralized setter for session processing state.
@@ -2324,6 +2329,9 @@ export class SessionManager implements ISessionManager {
   setBrowserPaneManager(bpm: IBrowserPaneManager): void {
     this.browserPaneManager = bpm
     bpm.setSessionPathResolver((sessionId) => this.getSessionPath(sessionId))
+    for (const managed of this.sessions.values()) {
+      if (managed.publicNetworkOnly) bpm.setPublicNetworkOnlyForSession(managed.id, true)
+    }
   }
 
   /** Returns a strictly increasing timestamp (ms). When Date.now() collides with
@@ -2543,6 +2551,7 @@ export class SessionManager implements ISessionManager {
       this.clearPendingPermissionRequestsForSession(managed.id)
       sessionPersistenceQueue.cancel(managed.id)
       unregisterSessionScopedToolCallbacks(managed.id)
+      this.browserPaneManager?.setPublicNetworkOnlyForSession(managed.id, false)
       this.browserPaneManager?.destroyForSession(managed.id)
       managed.agent?.dispose()
       managed.agent = null
@@ -4121,6 +4130,15 @@ export class SessionManager implements ISessionManager {
 
   getDeepResearchRunner(): DeepResearchRunner {
     return this.deepResearchRunner
+  }
+
+  getArtistProfileEnrichmentService(): ArtistProfileEnrichmentService {
+    if (!this.artistProfileEnrichmentService) throw new Error('Artist profile enrichment is not initialized.')
+    return this.artistProfileEnrichmentService
+  }
+
+  async shutdownArtistProfileEnrichment(): Promise<void> {
+    await this.artistProfileEnrichmentService?.shutdown()
   }
 
   private notificationServiceInstance?: import('../notifications/NotificationService').NotificationService
@@ -6604,7 +6622,11 @@ user a clickable link to where the thing now lives.`
         createSession: async (wsId, opts, hostToolExecutionGuard) => {
           const session = await this.createSession(wsId, opts)
           const managed = this.sessions.get(session.id)
-          if (managed && hostToolExecutionGuard) managed.hostToolExecutionGuard = hostToolExecutionGuard
+          if (managed && hostToolExecutionGuard) {
+            managed.hostToolExecutionGuard = hostToolExecutionGuard
+            managed.publicNetworkOnly = true
+            this.browserPaneManager?.setPublicNetworkOnlyForSession(session.id, true)
+          }
           return { id: session.id }
         },
         sendMessage: (sessionId, prompt) => this.sendMessage(sessionId, prompt),
@@ -6687,9 +6709,26 @@ user a clickable link to where the thing now lives.`
         },
         emit: (event) => this.broadcastDeepResearchRunUpdated(event),
       })
+      const artistProfileEnrichmentService = new ArtistProfileEnrichmentService(this.deepResearchRunner, (workspaceId) => {
+        try {
+          const workspace = getWorkspaceByNameOrId(workspaceId)
+          if (!workspace) return
+          const view = artistProfileEnrichmentService.get(workspaceId)
+          this.eventSink?.(RPC_CHANNELS.artistProfileEnrichment.CHANGED, { to: 'all' }, workspaceId, view)
+          this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, loadAllContextDocs(workspace.rootPath))
+        } catch {
+          // The canonical write already succeeded. A deleted workspace or event sink cannot roll it back.
+        }
+      }, (error) => sessionLog.error('Artist profile enrichment event failed to persist:', error))
+      this.artistProfileEnrichmentService = artistProfileEnrichmentService
       const recoveredDeepResearchRuns = this.deepResearchRunner.recoverInterruptedRuns(
         workspaces.map((workspace) => ({ id: workspace.id, rootPath: workspace.rootPath })),
       )
+      try {
+        await artistProfileEnrichmentService.waitForPendingEvents()
+      } catch (error) {
+        sessionLog.error('Artist profile enrichment startup recovery did not fully persist:', error)
+      }
       if (recoveredDeepResearchRuns.length > 0) {
         sessionLog.info(`Recovered ${recoveredDeepResearchRuns.length} interrupted deep research run(s)`)
       }
@@ -12774,6 +12813,7 @@ user a clickable link to where the thing now lives.`
 
     // Destroy browser instances bound to this session
     if (this.browserPaneManager) {
+      this.browserPaneManager.setPublicNetworkOnlyForSession(sessionId, false)
       this.browserPaneManager.destroyForSession(sessionId)
     }
 
@@ -13575,12 +13615,10 @@ user a clickable link to where the thing now lives.`
         return
       }
       agent = await this.getOrCreateAgent(managed, turnContext)
-      if (turnContext.launchReceipt?.taskMode) {
-        agent.setAgentContext({
-          customSystemPrompt: turnContext.customSystemPrompt,
-          agentSkillSlugs: turnContext.agentSkillSlugs,
-        })
-      }
+      agent.setAgentContext({
+        customSystemPrompt: turnContext.customSystemPrompt,
+        agentSkillSlugs: turnContext.agentSkillSlugs,
+      })
     } catch (error) {
       sendSpan.mark('agent.init_failed')
       sendSpan.setMetadata('error', error instanceof Error ? error.message : String(error))
@@ -16578,6 +16616,8 @@ user a clickable link to where the thing now lives.`
    */
   cleanup(): void {
     sessionLog.info('Cleaning up resources...')
+
+    this.artistProfileEnrichmentService?.dispose()
 
     // Stop all ConfigWatchers (file system watchers)
     for (const [path, watcher] of this.configWatchers) {

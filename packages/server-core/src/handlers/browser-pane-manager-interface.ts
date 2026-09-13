@@ -143,6 +143,9 @@ export interface IBrowserPaneManager {
   /** Register a callback that resolves session IDs to file paths */
   setSessionPathResolver(fn: (sessionId: string) => string | null): void
 
+  /** Restrict a session browser to DNS-verified public network destinations. */
+  setPublicNetworkOnlyForSession(sessionId: string, enabled: boolean): void
+
   /** Destroy all browser instances bound to a session */
   destroyForSession(sessionId: string): void
 

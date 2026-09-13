@@ -69,6 +69,7 @@ export interface DeepResearchSourceProfile {
   provider: string;
   type: string;
   capabilities: DeepResearchSourceCapability[];
+  publicWebCertified?: boolean;
   tagline?: string;
 }
 
@@ -156,6 +157,7 @@ export interface DeepResearchRunSnapshot {
   state: DeepResearchRunState;
   planPolicy: DeepResearchPlanPolicy;
   purpose?: string;
+  publicWebSourcesOnly?: boolean;
   owner?: DeepResearchOwnerBinding;
   executionContract?: DeepResearchExecutionContract;
   sourceReadiness: DeepResearchSourceReadiness;

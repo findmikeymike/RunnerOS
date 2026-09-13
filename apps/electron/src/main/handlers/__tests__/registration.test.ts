@@ -63,7 +63,7 @@ function createMockServer(): RpcServer {
 
 function createMockDeps(): HandlerDeps {
   return {
-    sessionManager: {} as HandlerDeps['sessionManager'],
+    sessionManager: { waitForInit: async () => {} } as HandlerDeps['sessionManager'],
     platform: {
       appRootPath: '',
       resourcesPath: '',
@@ -90,6 +90,9 @@ function createMockDeps(): HandlerDeps {
       dispose: () => {},
       size: 0,
     } as unknown as HandlerDeps['oauthFlowStore'],
+    getArtistProfileEnrichmentService: () => {
+      throw new Error('service getter must stay lazy during RPC registration')
+    },
   }
 }
 
@@ -132,6 +135,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     missionAssets,
     releaseKit,
     deepResearch,
+    artistProfileEnrichment,
     videoStudio,
     scheduledWork,
   ] = await Promise.all([
@@ -171,6 +175,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     import('@craft-agent/server-core/handlers/rpc/mission-assets'),
     import('@craft-agent/server-core/handlers/rpc/release-kit'),
     import('@craft-agent/server-core/handlers/rpc/deep-research'),
+    import('@craft-agent/server-core/handlers/rpc/artist-profile-enrichment'),
     import('@craft-agent/server-core/handlers/rpc/video-studio'),
     import('@craft-agent/server-core/handlers/rpc/scheduled-work'),
   ])
@@ -220,6 +225,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     ...missionAssets.HANDLED_CHANNELS,
     ...releaseKit.HANDLED_CHANNELS,
     ...deepResearch.HANDLED_CHANNELS,
+    ...artistProfileEnrichment.HANDLED_CHANNELS,
     ...videoStudio.HANDLED_CHANNELS,
     ...scheduledWork.HANDLED_CHANNELS,
     ...browser.HANDLED_CHANNELS,

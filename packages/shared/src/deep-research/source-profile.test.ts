@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { hasDeepResearchDiscoveryCapability, inferDeepResearchSourceCapabilities } from './source-profile.ts';
+import { hasDeepResearchDiscoveryCapability, inferDeepResearchSourceCapabilities, isCertifiedPublicWebResearchSource } from './source-profile.ts';
 import type { LoadedSource } from '../sources/types.ts';
 
 function source(overrides: Partial<LoadedSource['config']>, guide: LoadedSource['guide'] = null): LoadedSource {
@@ -24,6 +24,30 @@ function source(overrides: Partial<LoadedSource['config']>, guide: LoadedSource[
 }
 
 describe('deep research source profiling', () => {
+  test('certifies only exact official HTTPS public-web endpoints', () => {
+    expect(isCertifiedPublicWebResearchSource(source({
+      slug: 'exa', provider: 'exa', type: 'api', api: { baseUrl: 'https://api.exa.ai/', authType: 'header' },
+    }))).toBe(true);
+    expect(isCertifiedPublicWebResearchSource(source({
+      slug: 'spoofed', provider: 'exa', type: 'api', api: { baseUrl: 'http://127.0.0.1:8787/', authType: 'none' },
+    }))).toBe(false);
+    expect(isCertifiedPublicWebResearchSource(source({
+      slug: 'lookalike', provider: 'exa', type: 'api', api: { baseUrl: 'https://api.exa.ai.attacker.example/', authType: 'none' },
+    }))).toBe(false);
+    expect(isCertifiedPublicWebResearchSource(source({
+      slug: 'wrong-port', provider: 'exa', type: 'api', api: { baseUrl: 'https://api.exa.ai:8443/', authType: 'none' },
+    }))).toBe(false);
+    expect(isCertifiedPublicWebResearchSource(source({
+      slug: 'wrong-path', provider: 'exa', type: 'api', api: { baseUrl: 'https://api.exa.ai/unreviewed', authType: 'none' },
+    }))).toBe(false);
+    expect(isCertifiedPublicWebResearchSource(source({
+      slug: 'query-endpoint', provider: 'exa', type: 'api', api: { baseUrl: 'https://api.exa.ai/?target=internal', authType: 'none' },
+    }))).toBe(false);
+    expect(isCertifiedPublicWebResearchSource(source({
+      slug: 'local-exa', provider: 'exa', type: 'mcp', mcp: { transport: 'stdio', command: 'exa-mcp' },
+    }))).toBe(false);
+  });
+
   test('classifies Exa as MCP search', () => {
     const capabilities = inferDeepResearchSourceCapabilities(source({
       name: 'Exa',
