@@ -162,6 +162,11 @@ export interface BackendHostRuntimeContext {
 export interface CoreBackendConfig {
   /** Trusted host-only journal bridge; never derived from renderer options. */
   durableExecution?: import('../../protocol/durable-execution.ts').DurableExecutionBridge;
+  /**
+   * Optional host-owned gate evaluated immediately before a tool executes.
+   * This is runtime-only policy, not model guidance or renderer authority.
+   */
+  hostToolExecutionGuard?: HostToolExecutionGuard;
   /** Workspace configuration */
   workspace: Workspace;
 
@@ -309,6 +314,27 @@ export interface CoreBackendConfig {
 
   /** Internal: this backend borrows the owning session's pools and registries. */
   temporaryFallbackAttempt?: boolean;
+}
+
+export interface HostToolExecutionGuardInput {
+  sessionId: string;
+  toolUseId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+}
+
+export type HostToolExecutionGuardDecision =
+  | { allowed: true }
+  | { allowed: false; reason: string };
+
+export interface HostToolExecutionGuard {
+  beforeToolUse(input: HostToolExecutionGuardInput): HostToolExecutionGuardDecision;
+  onToolUseCompleted?(input: {
+    sessionId: string;
+    toolUseId: string;
+    toolName: string;
+    isError: boolean;
+  }): void;
 }
 
 // ============================================================

@@ -1,7 +1,9 @@
 export type {
   DeepResearchPlan,
   DeepResearchDepth,
+  DeepResearchExecutionContract,
   DeepResearchLoopBudget,
+  DeepResearchOwnerBinding,
   DeepResearchPlanPolicy,
   DeepResearchPlanStep,
   DeepResearchReportFormat,
@@ -16,6 +18,8 @@ export type {
   DeepResearchStepKind,
   DeepResearchStepRun,
   DeepResearchStepState,
+  DeepResearchToolKind,
+  DeepResearchToolReceipt,
   ReviseDeepResearchPlanInput,
   StartDeepResearchRunInput,
 } from './types.ts';
