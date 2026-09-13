@@ -64,6 +64,15 @@ describe('shared launch context preparation', () => {
     }).map(d => d.slug)).toEqual(['artist-os-workspace', 'artist-vault'])
   })
 
+  test('does not inject parked V2 research but keeps simple public context', () => {
+    const ws = workspace('hq')
+    expect(prepareAgentLaunchContext(ws, 'writer', undefined, {
+      ...quiet,
+      refreshTracks: () => ({ ok: true }),
+      loadDocs: () => [doc('artist-career-research'), doc('artist-public-context')],
+    }).map(item => item.slug)).toEqual(['artist-os-workspace', 'artist-public-context'])
+  })
+
   test('HQ failure filters its own unsafe slug without refreshing a campaign kit', () => {
     const ws = workspace('hq')
     let kitCalls = 0

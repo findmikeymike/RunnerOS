@@ -6,8 +6,9 @@ describe('Artist HQ public context', () => {
   const source = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
 
   test('keeps durable profile enrichment off for V1 and shows the simple context panel', () => {
-    expect(source).toContain('const ENABLE_DURABLE_ARTIST_PROFILE_ENRICHMENT_V2 = false')
-    expect(source).toContain('ENABLE_DURABLE_ARTIST_PROFILE_ENRICHMENT_V2 ? (')
+    const flags = readFileSync(join(import.meta.dir, '../../../../../../../packages/shared/src/feature-flags.ts'), 'utf8')
+    expect(flags).toContain('artistProfileEnrichmentV2: false')
+    expect(source).toContain('FEATURE_FLAGS.artistProfileEnrichmentV2 ? (')
     expect(source).toContain('<ArtistPublicContextPanel')
     expect(source).toContain('Public articles & context')
   })

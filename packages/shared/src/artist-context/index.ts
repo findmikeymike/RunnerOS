@@ -7,6 +7,8 @@
  * of truth for that format so the renderer, the HQ state composer, and
  * server-side session tools all read and write the same shape.
  */
+export const ARTIST_PUBLIC_CONTEXT_SLUG = 'artist-public-context';
+
 export * from './text.ts';
 export * from './json-block.ts';
 export * from './define-text-doc.ts';

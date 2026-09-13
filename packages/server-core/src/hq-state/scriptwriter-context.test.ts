@@ -43,4 +43,12 @@ describe('Scriptwriter HQ identity', () => {
     expect(withScriptwriterArtistContext(f.campaign, 'scriptwriter', local, [f.workspaces[1]!])).toEqual([]);
     expect(withScriptwriterArtistContext(f.campaign, 'scriptwriter', local, [...f.workspaces, { rootPath: '/another', artistWorkspaceScope: 'hq' }])).toEqual([]);
   });
+  test('inherits public artist context from HQ for every campaign agent', () => {
+    const f = setup();
+    f.write(f.campaign, 'artist-public-context', 'stale campaign copy');
+    f.write(f.hq, 'artist-public-context', 'current links and notes', { delivery: 'always' });
+    expect(f.read('writer').map(d => [d.slug, d.body, d.workspaceRootPath])).toEqual([
+      ['artist-public-context', 'current links and notes', f.hq],
+    ]);
+  });
 });

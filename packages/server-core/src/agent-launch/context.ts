@@ -4,7 +4,8 @@ import { refreshCampaignStateContextDocBestEffort, refreshHqStateContextDocBestE
 import { withScriptwriterArtistContext } from '../hq-state/scriptwriter-context'
 import { refreshVerifiedTrackContextForAgents } from '../track-intelligence/agent-visibility'
 import { ReleaseKitService } from '../release-kit/ReleaseKitService'
-import { rebuildCareerResearchProjection } from '@craft-agent/shared/artist-context'
+import { ARTIST_CAREER_RESEARCH_CONTEXT_SLUG, rebuildCareerResearchProjection } from '@craft-agent/shared/artist-context'
+import { FEATURE_FLAGS } from '@craft-agent/shared/feature-flags'
 
 /** A focus changes delivery, never authorization or the artist's disabled rules. */
 export function selectContextDocsForAgentLaunch(
@@ -47,7 +48,7 @@ export function prepareAgentLaunchContext(
     ...overrides,
   }
   const scope = workspace.artistWorkspaceScope
-  if (scope === 'hq') {
+  if (FEATURE_FLAGS.artistProfileEnrichmentV2 && scope === 'hq') {
     try { rebuildCareerResearchProjection(workspace.rootPath) }
     catch (error) {
       deps.warn('[career-research] Could not rebuild verified launch context', { workspaceId: workspace.id, error: error instanceof Error ? error.message : String(error) })
@@ -73,8 +74,12 @@ export function prepareAgentLaunchContext(
       deps.warn('[release-kit] Could not refresh verified launch context', { workspaceId: workspace.id, error: error instanceof Error ? error.message : String(error) })
     }
   }
+  const loadedDocs = deps.loadDocs(workspace.rootPath)
+  const visibleDocs = FEATURE_FLAGS.artistProfileEnrichmentV2
+    ? loadedDocs
+    : loadedDocs.filter(doc => doc.slug !== ARTIST_CAREER_RESEARCH_CONTEXT_SLUG)
   const docs = selectContextDocsForAgentLaunch(
-    deps.withScriptwriterContext(workspace.rootPath, agentSlug, deps.loadDocs(workspace.rootPath))
+    deps.withScriptwriterContext(workspace.rootPath, agentSlug, visibleDocs)
       .filter(doc => !unsafe.has(doc.slug)),
     agentSlug, taskMode,
   )
