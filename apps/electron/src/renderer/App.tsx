@@ -1,3 +1,4 @@
+import { isGeneralAgentTaskMode } from '@craft-agent/shared/agent-definitions/task-modes'
 import * as navigationStorage from '@/lib/local-storage'
 import { isArtistHQWorkspace, isLabWorkspace, isArtistCampaignWorkspace } from '@/lib/artist-workspace'
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
@@ -1177,7 +1178,7 @@ export default function App() {
       const effectiveSkillSlugs = [
         ...new Set([
           ...(skillSlugs ?? []),
-          ...(sessionAtSend?.agentSkillSlugs ?? []),
+          ...(isGeneralAgentTaskMode(sessionAtSend?.launchReceipt?.taskMode) ? [] : sessionAtSend?.agentSkillSlugs ?? []),
         ]),
       ]
 

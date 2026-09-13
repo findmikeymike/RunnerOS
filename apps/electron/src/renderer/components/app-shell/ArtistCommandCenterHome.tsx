@@ -611,7 +611,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
           skills,
           sources: enabledSources,
           draftInput: campaignBrief,
-          autoSendDraft: true,
+          autoSendDraft: false,
         })
         linkReleaseItemSession(category.id, item.id, session.id)
       }

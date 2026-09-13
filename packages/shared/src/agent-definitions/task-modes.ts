@@ -1,5 +1,11 @@
 import type { AgentTaskModeDefinition, LoadedAgent } from './types.ts';
 
+export const GENERAL_AGENT_TASK_MODE_ID = 'general';
+
+export function isGeneralAgentTaskMode(mode: Pick<ResolvedAgentTaskMode, 'id' | 'definitionRevision'> | undefined): boolean {
+  return mode?.id === GENERAL_AGENT_TASK_MODE_ID && mode.definitionRevision.startsWith('task-mode-general-v1-');
+}
+
 /**
  * Older built-in agent installs may retain qualified `legacy:<slug>` skill
  * assignments so migrations do not overwrite user state. Focus recipes use
@@ -27,13 +33,35 @@ export interface ResolvedAgentTaskMode {
   fullMode: boolean;
 }
 
-/** Resolve against the Agent's declared inventory. The model never self-selects capabilities. */
+/** Resolve host-approved recipes against the worker inventory, including on-demand General. */
 export function resolveAgentTaskMode(
   agent: Pick<LoadedAgent, 'slug' | 'metadata'>,
   taskModeId: string | undefined,
 ): ResolvedAgentTaskMode | undefined {
   if (!taskModeId) return undefined;
-  const mode = agent.metadata.taskModes?.find((candidate) => candidate.id === taskModeId);
+  const declaredMode = agent.metadata.taskModes?.find((candidate) => candidate.id === taskModeId);
+  const virtualGeneral = !declaredMode && taskModeId === GENERAL_AGENT_TASK_MODE_ID;
+  const mode: AgentTaskModeDefinition | undefined = declaredMode ?? (virtualGeneral ? {
+    id: GENERAL_AGENT_TASK_MODE_ID,
+    label: 'General',
+    kind: 'focus',
+    description: 'Talk naturally; use the skills needed for the artist’s message and context.',
+    primarySkillSlugs: [],
+    adjacentSkills: [...new Set(agent.metadata.skills ?? [])].map(slug => ({
+      slug,
+      when: agent.metadata.taskModes?.find(recipe => !recipe.fullMode && recipe.primarySkillSlugs.includes(slug.replace(/^legacy:/, '')))?.description
+        ?? agent.metadata.taskModes?.flatMap(recipe => recipe.adjacentSkills ?? []).find(skill => skill.slug === slug.replace(/^legacy:/, ''))?.when
+        ?? 'When the current request needs this skill.',
+      expansion: 'same-session' as const,
+    })),
+    requiredSourceSlugs: [],
+    optionalSourceSlugs: [...new Set([...(agent.metadata.sources ?? []), ...(agent.metadata.optionalSources ?? [])])],
+    fullMode: false,
+    context: {
+      preloadTopics: ['artist-profile', 'artist-voice', 'artist-branding', 'artist-release-horizon', 'mission-brief'],
+      retrieveOnDemandTopics: ['relevant campaign details', 'approved outputs and Vault references', 'audience evidence', 'specialist domain context'],
+    },
+  } : undefined);
   if (!mode) throw new Error(`Task mode "${taskModeId}" is not available for ${agent.metadata.name}.`);
 
   const skillInventory = buildTaskModeSkillInventory(agent.metadata.skills ?? []);
@@ -60,7 +88,7 @@ export function resolveAgentTaskMode(
     id: mode.id,
     label: mode.label,
     description: mode.description,
-    definitionRevision: taskModeRevision(mode),
+    definitionRevision: virtualGeneral ? taskModeRevision(mode).replace('task-mode-v1-', 'task-mode-general-v1-') : taskModeRevision(mode),
     primarySkillSlugs: [...mode.primarySkillSlugs],
     adjacentSkills: [...(mode.adjacentSkills ?? [])],
     requiredSourceSlugs: [...(mode.requiredSourceSlugs ?? [])],
@@ -68,6 +96,25 @@ export function resolveAgentTaskMode(
     context: mode.context,
     fullMode: mode.fullMode === true,
   };
+}
+
+/** Interactive workers default to General; unattended launches retain explicit-focus policy. */
+export function resolveAgentSessionTaskMode(
+  agent: Pick<LoadedAgent, 'slug' | 'metadata'>,
+  taskModeId?: string,
+  selectionSource?: 'user' | 'manager' | 'workflow' | 'automation' | 'handoff',
+): ResolvedAgentTaskMode | undefined {
+  if (taskModeId) return resolveAgentTaskMode(agent, taskModeId);
+  if (agent.slug === 'concierge' && agent.metadata.taskModes?.some(mode => mode.id === 'just-talk')) {
+    return resolveAgentTaskMode(agent, 'just-talk');
+  }
+  if (selectionSource === 'workflow' || selectionSource === 'automation') {
+    if (agent.slug !== 'concierge' && (agent.metadata.taskModes?.length ?? 0) > 1) {
+      throw new Error(`Choose a focus for ${agent.metadata.name} before starting this work: ${agent.metadata.taskModes!.map(mode => `${mode.label} (${mode.id})`).join(', ')}.`);
+    }
+    return undefined;
+  }
+  return resolveAgentTaskMode(agent, GENERAL_AGENT_TASK_MODE_ID);
 }
 
 /** Select only adapters justified by the recipe at launch; optional candidates remain on demand. */
@@ -99,7 +146,11 @@ export function filterContextDocsForTaskMode<T extends { slug: string; body?: st
 
 export function buildAgentTaskModePromptSection(mode: ResolvedAgentTaskMode | undefined): string {
   if (!mode) return '';
-  const lines = [
+  const general = isGeneralAgentTaskMode(mode);
+  const lines = general ? [
+    'General mode (host-selected):',
+    'Respond naturally to the artist’s message using their saved context. No topic selection is required. Ordinary conversation and small edits need no skill ceremony. For substantive specialist work, choose only the relevant capabilities below and call load_agent_capability with the skillSlug and concrete reason, then read its returned instructions. Do not load the whole inventory, force a questionnaire, or make the artist choose a focus to continue. Ask a brief clarification only when needed.',
+  ] : [
     'Task mode (host-selected):',
     'This selected recipe governs initial scope. General persona instructions describing other disciplines do not require loading or executing them. Read the selected primary skills before substantive work, and retrieve only context needed for this outcome.',
     `- Focus: ${mode.label}`,
@@ -119,7 +170,7 @@ export function buildAgentTaskModePromptSection(mode: ResolvedAgentTaskMode | un
     }
     lines.push(
       '',
-      'Stay focused on the selected outcome. If the conversation materially crosses a same-session boundary, call load_agent_capability with its skillSlug and the concrete reason, then read the returned instructions before using it. If the host refuses, offer a linked focused session rather than bypassing the refusal. For new-session or delegate boundaries, name the better handoff and offer it as the next focused step. Never preload adjacent skills just in case.',
+      general ? 'Use only skills that help the current request. Their instructions are loaded on demand, not permanently selected. If the host refuses a prerequisite, explain the missing capability or offer the appropriate focused handoff; never bypass it.' : 'Stay focused on the selected outcome. If the conversation materially crosses a same-session boundary, call load_agent_capability with its skillSlug and the concrete reason, then read the returned instructions before using it. If the host refuses, offer a linked focused session rather than bypassing the refusal. For new-session or delegate boundaries, name the better handoff and offer it as the next focused step. Never preload adjacent skills just in case.',
     );
   }
   if (mode.optionalSourceSlugs.length > 0) {

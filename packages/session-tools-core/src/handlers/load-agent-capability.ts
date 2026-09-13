@@ -23,7 +23,7 @@ export async function handleLoadAgentCapability(
   }
   const skillSlug = input.skillSlug?.trim();
   const reason = input.reason?.trim();
-  if (!skillSlug || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(skillSlug)) {
+  if (!skillSlug || !/^(?:legacy:)?[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(skillSlug)) {
     return errorResponse('skillSlug must be a valid skill slug.');
   }
   if (!reason || reason.length > 1000) {

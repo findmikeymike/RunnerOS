@@ -356,7 +356,7 @@ export const ListAgentsSchema = z.object({
 });
 
 export const LoadAgentCapabilitySchema = z.object({
-  skillSlug: z.string().trim().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/).describe('Exact adjacent skill slug declared by the selected task mode.'),
+  skillSlug: z.string().trim().regex(/^(?:legacy:)?[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/).describe('Exact capability skill reference declared by the selected mode, including a legacy: prefix when listed.'),
   reason: z.string().trim().min(1).max(1000).describe('Why the current conversation now needs this adjacent capability.'),
 });
 
@@ -1689,7 +1689,7 @@ Prefer this over filesystem searches for AGENT.md files. For normal routing ques
 
   load_agent_capability: `Load instructions for one declared same-session adjacent capability when the conversation materially needs it.
 
-Only the host can validate the selected mode, available skill, limits, and receipt. At most one new capability per assistant turn and two per session; repeated loads are idempotent. This tool never installs skills or grants sources, tools, accounts, permissions, approvals, or spending authority. For a different mode or specialist, use a focused handoff instead. Use the returned instructions before applying the capability.`,
+Only the host can validate the selected mode, worker inventory, available skill, limits, and receipt. General mode loads only skills needed for the current request; it does not preload the inventory or impose a lifetime skill limit. Focused recipes allow one new adjacent capability per response and two per recipe revision; repeated loads in the same response are idempotent. Already installed, declared global skills may be registered on demand in General after host validation. This tool never installs missing skills or grants sources, tools, accounts, permissions, approvals, or spending authority. Use the returned instructions before applying the capability.`,
 
   list_skills: `List skills available in this workspace.
 

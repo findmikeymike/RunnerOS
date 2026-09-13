@@ -29,7 +29,7 @@ describe('load_agent_capability', () => {
   test('rejects invalid request before calling the host', async () => {
     let calls = 0;
     const ctx = context(async input => { calls++; return { skillSlug: input.skillSlug, instructions: 'Unexpected' }; });
-    for (const input of [{ skillSlug: '../skill', reason: 'Read it' }, { skillSlug: 'narrative', reason: ' ' }]) {
+    for (const input of [...['../skill', 'legacy:../skill', 'other:skill', 'legacy:legacy:skill', 'legacy:', 'legacy:skill/path', ':skill'].map(skillSlug => ({ skillSlug, reason: 'Read it' })), { skillSlug: 'narrative', reason: ' ' }]) {
       expect((await handleLoadAgentCapability(ctx, input)).isError).toBe(true);
       expect(LoadAgentCapabilitySchema.safeParse(input).success).toBe(false);
     }
@@ -49,4 +49,18 @@ describe('load_agent_capability', () => {
     expect(tool?.readOnly).toBe(false);
     expect(getToolDefsAsJsonSchema().some(tool => tool.name === 'load_agent_capability')).toBe(true);
   });
+});
+
+
+test('qualified legacy capability references reach the host unchanged and return its instructions', async () => {
+  const input = { skillSlug: 'legacy:artist-narrative-universe', reason: 'Develop the artist story' };
+  expect(LoadAgentCapabilitySchema.safeParse(input).success).toBe(true);
+  let received: unknown;
+  const result = await handleLoadAgentCapability(context(async value => {
+    received = value;
+    return { skillSlug: value.skillSlug, instructions: 'Retained artist-specific instructions' };
+  }), input);
+  expect(received).toEqual(input);
+  expect(result.isError).toBe(false);
+  expect(result.content[0]?.text).toContain('Retained artist-specific instructions');
 });

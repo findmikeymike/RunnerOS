@@ -74,6 +74,55 @@ describe('task-mode selection', () => {
     internals.persistSession = () => {}
   })
 
+
+  test('General selection configures the session without starting a hidden turn', async () => {
+    const internals = manager as unknown as { resolveAgentSessionOptions: () => Promise<Partial<CreateSessionOptions>> }
+    internals.resolveAgentSessionOptions = async () => ({ ...focusedOptions(), agentSkillSlugs: [], launchReceipt: { ...focusedReceipt, taskMode: { ...focusedReceipt.taskMode, id: 'general', label: 'General', primarySkills: [], definitionRevision: 'task-mode-general-v1-test' } } })
+    let sends = 0
+    manager.sendMessage = async () => { sends++ }
+    await manager.selectSessionTaskMode(managed.id, 'general', { startConversation: true })
+    expect(sends).toBe(0)
+    expect(managed.agentSkillSlugs).toEqual([])
+    expect(managed.launchReceipt?.taskModeSelectionPending).toBe(false)
+  })
+
+  test('pending shell sends the original brief after General preparation and emits selection before ack', async () => {
+    const order: string[] = []
+    const internals = manager as unknown as {
+      resolveAgentSessionOptions: (workspaceId: string, slug: string, options: { taskModeId: string }) => Promise<Partial<CreateSessionOptions>>
+      getOrCreateAgent: () => Promise<AgentBackend>
+      flushSession: () => Promise<void>
+      sendEvent: (event: { type: string }) => void
+    }
+    internals.resolveAgentSessionOptions = async (_ws, slug, options) => {
+      expect(slug).toBe('branding-agent')
+      expect(options.taskModeId).toBe('general')
+      return { ...focusedOptions(), agentSkillSlugs: [], launchReceipt: { ...focusedReceipt, taskMode: { ...focusedReceipt.taskMode, id: 'general', label: 'General', primarySkills: [], definitionRevision: 'task-mode-general-v1-test' } } }
+    }
+    internals.getOrCreateAgent = async () => { throw new Error('Stop before provider') }
+    internals.flushSession = async () => {}
+    internals.sendEvent = event => { if (event.type === 'task_mode_selected') order.push('selected') }
+    managed.name = 'My campaign brief'
+    managed.model = 'my-selected-model'
+    managed.launchReceipt!.summary = 'Keep my receipt summary'
+    await expect(manager.sendMessage(managed.id, 'Original Essentials brief', undefined, undefined, { inputOrigin: 'human' }, undefined, undefined, () => { order.push('ack') })).rejects.toThrow('Stop before provider')
+    expect(order).toEqual(['selected', 'ack'])
+    expect(managed.messages.filter(message => message.role === 'user').map(message => message.content)).toEqual(['Original Essentials brief'])
+    expect(managed.launchReceipt?.taskModeSelectionPending).toBe(false)
+    expect(managed.launchReceipt?.summary).toBe('Keep my receipt summary')
+    expect(managed.model).toBe('my-selected-model')
+  })
+
+  test('failed General preparation preserves pending state and releases admission for retry', async () => {
+    const original = structuredClone(managed.launchReceipt)
+    const internals = manager as unknown as { resolveAgentSessionOptions: () => Promise<Partial<CreateSessionOptions>> }
+    internals.resolveAgentSessionOptions = async () => { throw new Error('Saved worker unavailable') }
+    await expect(manager.sendMessage(managed.id, 'Keep this draft')).rejects.toThrow('Saved worker unavailable')
+    expect(managed.launchReceipt).toEqual(original)
+    expect(managed.messages).toEqual([])
+    await expect(manager.sendMessage(managed.id, 'Keep this draft')).rejects.toThrow('Saved worker unavailable')
+  })
+
   test('the first deliberate focus click starts one hidden model turn', async () => {
     let sendArgs: Parameters<SessionManager['sendMessage']> | undefined
     manager.sendMessage = async (...args) => {
@@ -249,6 +298,10 @@ describe('task-mode selection', () => {
     const internals = manager as unknown as {
       getOrCreateAgent: (session: typeof managed, context: AgentContextUpdate) => Promise<AgentBackend>
     }
+    let resolutionCount = 0
+    ;(manager as unknown as { resolveAgentSessionOptions: () => Promise<Partial<CreateSessionOptions>> }).resolveAgentSessionOptions = async () => ({
+      ...focusedOptions(), customSystemPrompt: resolutionCount++ === 0 ? 'Original admitted focus' : 'Focused branding prompt',
+    })
     let captured: AgentContextUpdate | undefined
     internals.getOrCreateAgent = async (_session, context) => {
       await manager.selectSessionTaskMode(managed.id, 'narrative-universe')
@@ -277,6 +330,7 @@ describe('task-mode selection', () => {
     managed.lastSentOptions = { inputOrigin: 'human' }
     managed.lastSentTurnContext = { customSystemPrompt: 'Admitted focus', agentSkillSlugs: ['original-skill'], enabledSourceSlugs: ['activated-source'], launchReceipt: managed.launchReceipt }
     managed.customSystemPrompt = 'Pending next focus'
+    ;(manager as unknown as { resolveAgentSessionOptions: () => Promise<Partial<CreateSessionOptions>> }).resolveAgentSessionOptions = async () => ({ ...focusedOptions(), customSystemPrompt: 'Pending next focus' })
     const internals = manager as unknown as {
       processEvent: (session: typeof managed, event: AgentEvent) => Promise<void>
       getOrCreateAgent: (session: typeof managed, context: NonNullable<typeof managed.lastSentTurnContext>) => Promise<AgentBackend>
@@ -372,7 +426,8 @@ describe('task-mode selection', () => {
     internals.getOrCreateAgent = async () => managed.agent!
     internals.processEvent = () => {}
     internals.onProcessingStopped = async () => { managed.isProcessing = false }
-    internals.resolveAgentSessionOptions = async () => ({ ...focusedOptions(), enabledSourceSlugs: [] })
+    let resolutions = 0
+    internals.resolveAgentSessionOptions = async () => ({ ...focusedOptions(), ...(resolutions++ === 0 ? original : {}), enabledSourceSlugs: [] })
     const response = manager.sendMessage(managed.id, 'Start visual work')
     await started
     try {

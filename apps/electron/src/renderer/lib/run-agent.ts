@@ -2,7 +2,7 @@ import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import { assertAgentReferences, selectDeclaredSkillsToEnable } from '@craft-agent/shared/agent-definitions/references'
-import { buildAgentTaskModePromptSection, filterContextDocsForTaskMode, resolveAgentTaskMode, selectTaskModeSourceSlugs } from '@craft-agent/shared/agent-definitions/task-modes'
+import { GENERAL_AGENT_TASK_MODE_ID, isGeneralAgentTaskMode, buildAgentTaskModePromptSection, filterContextDocsForTaskMode, resolveAgentTaskMode, selectTaskModeSourceSlugs } from '@craft-agent/shared/agent-definitions/task-modes'
 import type { MemoryEntry, LoadedMemoryFile } from '@craft-agent/shared/memory/types'
 import type { SessionLogEntry } from '@craft-agent/shared/sessions-log'
 import { selectActiveMemoryEntries } from '@craft-agent/shared/memory/render'
@@ -147,7 +147,7 @@ export function buildAgentCreateSessionOptions(
         context.skills,
         promptSources,
         contextDocs,
-        (taskMode && agent.slug !== CONCIERGE_SLUG ? [] : context.agentCatalog ?? []).map((a) => ({
+        (taskMode && !isGeneralAgentTaskMode(taskMode) && agent.slug !== CONCIERGE_SLUG ? [] : context.agentCatalog ?? []).map((a) => ({
           slug: a.slug,
           name: a.metadata.name,
           description: a.metadata.description,
@@ -168,7 +168,7 @@ export function buildAgentCreateSessionOptions(
       )
     : [agent.systemPrompt, buildAgentTaskModePromptSection(taskMode)].filter(Boolean).join("\n\n")
   const isConcierge = agent.slug === CONCIERGE_SLUG
-  const agentCatalog = taskMode && agent.slug !== CONCIERGE_SLUG ? [] : context?.agentCatalog ?? []
+  const agentCatalog = taskMode && !isGeneralAgentTaskMode(taskMode) && agent.slug !== CONCIERGE_SLUG ? [] : context?.agentCatalog ?? []
   const managerBriefReceipt = managerBriefReceiptFromDocs(contextDocs)
 
   const options: CreateSessionOptions = {
@@ -263,54 +263,6 @@ export function buildAgentCreateSessionOptions(
   ) as CreateSessionOptions
 }
 
-export function shouldDeferAgentTaskModeSelection(
-  agent: AgentDefinitionDTO,
-  taskModeId?: string,
-): boolean {
-  return agent.slug !== CONCIERGE_SLUG && !taskModeId && (agent.metadata.taskModes?.length ?? 0) > 1
-}
-
-/** Create only the chat shell; the selected mode is composed server-side before first send. */
-export function buildPendingAgentTaskModeSessionOptions(agent: AgentDefinitionDTO): CreateSessionOptions {
-  const isConcierge = agent.slug === CONCIERGE_SLUG
-  return {
-    llmConnection: agent.metadata.llmConnection,
-    model: agent.metadata.model,
-    permissionMode: agent.metadata.permissionMode,
-    thinkingLevel: agent.metadata.thinkingLevel,
-    spawnedFromAgent: {
-      agentSlug: agent.slug,
-      agentName: agent.metadata.name,
-      timestamp: Date.now(),
-    },
-    launchReceipt: {
-      createdAt: Date.now(),
-      origin: isConcierge ? 'concierge' : 'agent',
-      summary: `Waiting for ${agent.metadata.name} focus selection.`,
-      agent: {
-        slug: agent.slug,
-        name: agent.metadata.name,
-        description: agent.metadata.description,
-        inputs: agent.metadata.inputs,
-        outputs: agent.metadata.outputs,
-        tags: agent.metadata.tags,
-      },
-      taskModeSelectionPending: true,
-      config: {
-        llmConnection: agent.metadata.llmConnection,
-        model: agent.metadata.model,
-        permissionMode: agent.metadata.permissionMode,
-        thinkingLevel: agent.metadata.thinkingLevel,
-      },
-      injected: {
-        skills: [],
-        sources: [],
-        contextDocs: [],
-      },
-    },
-  }
-}
-
 export async function openAgentSessionComposer(params: {
   agent: AgentDefinitionDTO
   workspaceId: string
@@ -356,23 +308,13 @@ export async function openAgentSessionComposer(params: {
 }): Promise<Session> {
   const assertCurrent = () => { if (params.shouldContinue && !params.shouldContinue()) throw new Error('Command handoff was cancelled.') }
   assertCurrent()
-  if (shouldDeferAgentTaskModeSelection(params.agent, params.taskModeId)) {
-    const session = await params.onCreateSession(
-      params.workspaceId,
-      buildPendingAgentTaskModeSessionOptions(params.agent),
-    )
-    assertCurrent()
-    const draft = params.draftInput?.trim()
-    if (draft) params.onInputChange(session.id, draft)
-    if (params.navigateOnCreate !== false) {
-      if (window.location.hash.startsWith('#artist-hq/')) {
-        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
-      }
-      navigate(routes.view.allSessions(session.id))
-    }
-    return session
-  }
-  const taskMode = resolveAgentTaskMode(params.agent, params.taskModeId ?? (params.agent.slug === CONCIERGE_SLUG && params.agent.metadata.taskModes?.some(mode => mode.id === 'just-talk') ? 'just-talk' : undefined))
+  // Chat always has a usable default. Explicit presets remain optional shortcuts.
+  const taskModeId = params.taskModeId ?? (
+    params.agent.slug === CONCIERGE_SLUG && params.agent.metadata.taskModes?.some(mode => mode.id === 'just-talk')
+      ? 'just-talk'
+      : GENERAL_AGENT_TASK_MODE_ID
+  )
+  const taskMode = resolveAgentTaskMode(params.agent, taskModeId)
   const launchAgent = taskMode
     ? {
         ...params.agent,
@@ -440,14 +382,13 @@ export async function openAgentSessionComposer(params: {
   assertCurrent()
   const session = await params.onCreateSession(
     params.workspaceId,
-    buildAgentCreateSessionOptions(params.agent, context, params.taskModeId),
+    buildAgentCreateSessionOptions(params.agent, context, taskModeId),
   )
   assertCurrent()
-  // Seed a guarded handoff before navigation unmounts its voice owner. The shell
-  // stores this synchronously, so the new ChatPage reads it on its first render.
+  // Persist reviewable briefs before navigation so the new chat reads the
+  // exact draft immediately, without racing a delayed prefill callback.
   const draft = params.draftInput?.trim()
-  const seededHandoffDraft = Boolean(params.shouldContinue && draft && !params.autoSendDraft)
-  if (seededHandoffDraft) params.onInputChange(session.id, draft!)
+  if (draft && (!params.autoSendDraft || !params.onSendMessage)) params.onInputChange(session.id, draft)
   if (params.navigateOnCreate !== false) {
     if (window.location.hash.startsWith('#artist-hq/')) {
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
@@ -455,12 +396,8 @@ export async function openAgentSessionComposer(params: {
     navigate(routes.view.allSessions(session.id))
   }
 
-  if (draft && !seededHandoffDraft) {
-    if (params.autoSendDraft && params.onSendMessage) {
-      await sendAgentDraft(params.onSendMessage, session.id, draft, params.agent.metadata.name)
-    } else {
-      setTimeout(() => params.onInputChange(session.id, draft), 100)
-    }
+  if (draft && params.autoSendDraft && params.onSendMessage) {
+    await sendAgentDraft(params.onSendMessage, session.id, draft, params.agent.metadata.name)
   }
 
   return session

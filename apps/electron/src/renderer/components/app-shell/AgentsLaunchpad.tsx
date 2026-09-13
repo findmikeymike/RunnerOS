@@ -32,7 +32,7 @@ import { MemoryEditDialog } from '@/components/agents/MemoryEditDialog'
 import { skillsAtom } from '@/atoms/skills'
 import { sourcesAtom } from '@/atoms/sources'
 import { useAppShellContext } from '@/context/AppShellContext'
-import { openAgentSessionComposer, shouldDeferAgentTaskModeSelection } from '@/lib/run-agent'
+import { openAgentSessionComposer } from '@/lib/run-agent'
 import { cn } from '@/lib/utils'
 import { defaultWorkerSlugs, excludedWorkerSlugs, LAB_DEFAULT_WORKER_SLUGS } from '@/lib/worker-defaults'
 import { CompactPageHeader } from './CompactPageHeader'
@@ -99,22 +99,6 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
     if (!workspaceId || launchingSlug) return
     setLaunchingSlug(agent.slug)
     try {
-      if (shouldDeferAgentTaskModeSelection(agent)) {
-        await openAgentSessionComposer({
-          agent,
-          workspaceId,
-          onCreateSession,
-          onInputChange,
-          skills,
-          sources,
-        })
-        setRecentSlugs((current) => {
-          const next = [agent.slug, ...current.filter((slug) => slug !== agent.slug)].slice(0, 12)
-          writeWorkerPreference(workspaceId, 'recent', next)
-          return next
-        })
-        return
-      }
       const sourceWorkspace = workspaces.find((workspace) => workspace.id === workspaceId)
       const hqWorkspace = findArtistHQWorkspace(workspaces)
       const campaignLaunch = agent.slug === 'x-editorial'

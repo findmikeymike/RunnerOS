@@ -1,6 +1,6 @@
 import { STARTER_AGENTS } from '@craft-agent/shared/agent-definitions/starter-templates'
 import { describe, expect, test } from 'bun:test'
-import { buildAgentCreateSessionOptions, buildPendingAgentTaskModeSessionOptions, ensureAgentDeclaredSkillsEnabled, openAgentSessionComposer, resolveArtistWorkspaceScope, sendAgentDraft, shouldDeferAgentTaskModeSelection } from './run-agent'
+import { buildAgentCreateSessionOptions, ensureAgentDeclaredSkillsEnabled, openAgentSessionComposer, resolveArtistWorkspaceScope, sendAgentDraft } from './run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import { buildArtistSpecialistGuidance } from '@craft-agent/shared/agent-prompt'
 import type { AgentDefinitionDTO, LoadedSource, SkillDescriptor, Session, CreateSessionOptions } from '../../shared/types'
@@ -119,31 +119,39 @@ describe('focused launch dependency enforcement', () => {
   })
 })
 
-describe('pending in-chat task-mode selection', () => {
-  const agent = {
-    ...makeAgent(),
-    slug: 'branding-agent',
-    metadata: {
-      ...makeAgent().metadata,
-      name: 'Branding Agent',
-      skills: ['brand-audit', 'visual-world'],
-      taskModes: [
-        { id: 'brand-audit', label: 'Brand Audit', description: 'Audit it.', kind: 'focus', primarySkillSlugs: ['brand-audit'] },
-        { id: 'visual-world', label: 'Visual World', description: 'Shape it.', kind: 'focus', primarySkillSlugs: ['visual-world'] },
-      ],
-    },
-  } as AgentDefinitionDTO
-
-  test('opens a prompt-free shell until the user chooses a mode', () => {
-    expect(shouldDeferAgentTaskModeSelection(agent)).toBe(true)
-    expect(shouldDeferAgentTaskModeSelection(agent, 'brand-audit')).toBe(false)
-
-    const options = buildPendingAgentTaskModeSessionOptions(agent)
-    expect(options.customSystemPrompt).toBeUndefined()
-    expect(options.agentSkillSlugs).toBeUndefined()
-    expect(options.enabledSourceSlugs).toBeUndefined()
-    expect(options.launchReceipt?.taskModeSelectionPending).toBe(true)
-    expect(options.launchReceipt?.injected).toMatchObject({ skills: [], sources: [], contextDocs: [] })
+describe('optional in-chat focus', () => {
+  test.each([false, true])('opens World Builder in General and preserves the Essentials brief (autoSend=%s)', async (autoSendDraft) => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+    const requests: unknown[][] = []
+    const definition = STARTER_AGENTS.find(agent => agent.slug === 'world-builder')!
+    const agent = { ...makeAgent(), ...definition } as AgentDefinitionDTO
+    const draft = 'Help shape Homebody from the saved campaign context. Talk with me before creating anything.'
+    const events: string[] = []
+    let created: CreateSessionOptions | undefined
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: { electronAPI: {
+      listWorkspaceContextDocsForAgent: async (...args: unknown[]) => { requests.push(args); return [] },
+      listUserMemory: async () => [], listAgentMemory: async () => [], listAgentSessions: async () => [],
+      getWorkspaces: async () => [{ id: 'ws-1', artistWorkspaceScope: 'campaign' }],
+    } } })
+    try {
+      await openAgentSessionComposer({
+        agent, workspaceId: 'ws-1', skills: [], sources: [], navigateOnCreate: false,
+        draftInput: draft, autoSendDraft,
+        onCreateSession: async (_workspace, options) => { created = options; return { id: 'world-session' } as Session },
+        onInputChange: (_sessionId, value) => { events.push(`draft:${value}`) },
+        onSendMessage: (_sessionId, value) => { events.push(`send:${value}`); return true },
+      })
+      expect(created?.launchReceipt?.taskMode?.id).toBe('general')
+      expect(created?.launchReceipt?.taskModeSelectionPending).not.toBe(true)
+      expect(created?.agentSkillSlugs).toEqual([])
+      expect(created?.enabledSourceSlugs).toEqual([])
+      expect(requests).toEqual([['ws-1', 'world-builder', 'general']])
+      expect(created?.customSystemPrompt).toContain('load_agent_capability')
+      expect(events).toEqual(autoSendDraft ? [`send:${draft}`] : [`draft:${draft}`])
+    } finally {
+      if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow)
+      else Reflect.deleteProperty(globalThis, 'window')
+    }
   })
 })
 
@@ -503,7 +511,7 @@ describe('focused optional adapters', () => {
 test('unfocused launch replaces caller cached canon with freshly prepared server context', async () => {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
   let refreshes = 0
-  const doc = (body: string) => ({ slug: 'release-kit', metadata: { name: 'Release Kit', enabled: true, routing: { mode: 'broadcast' as const } }, body, path: '/tmp/context', workspaceRootPath: '/tmp/ws' })
+  const doc = (body: string) => ({ slug: 'mission-brief', metadata: { name: 'Mission Brief', enabled: true, routing: { mode: 'broadcast' as const } }, body, path: '/tmp/context', workspaceRootPath: '/tmp/ws' })
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { electronAPI: {
     listWorkspaceContextDocsForAgent: async () => { refreshes++; return [doc('Fresh approved canon')] },
     listUserMemory: async () => [], listAgentMemory: async () => [], listAgentSessions: async () => [], getWorkspaces: async () => [],

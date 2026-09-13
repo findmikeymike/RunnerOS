@@ -1,3 +1,4 @@
+import { isGeneralAgentTaskMode } from '@craft-agent/shared/agent-definitions/task-modes';
 import { createHash } from 'node:crypto';
 import type { AgentMetadata } from '@craft-agent/shared/agent-definitions/types';
 import type { LoadedSkill } from '@craft-agent/shared/skills/types';
@@ -11,7 +12,7 @@ export interface AgentCapabilityExpansionInput {
   taskMode: SessionLaunchReceipt['taskMode'];
   agentMetadata: Pick<AgentMetadata, 'skills'>;
   /** Only an installed, already available skill; caller must not install or activate it. */
-  skill: Pick<LoadedSkill, 'slug' | 'content' | 'metadata'> | null | undefined;
+  skill: Pick<LoadedSkill, 'slug' | 'content' | 'metadata' | 'aliases'> | null | undefined;
   expansions: readonly AgentCapabilityExpansionReceipt[];
   /** Stable user-input identity, shared by fallback/auth retry attempts. */
   inputMessageId: string;
@@ -37,7 +38,7 @@ export function resolveAgentCapabilityExpansion(input: AgentCapabilityExpansionI
   if (!adjacent || adjacent.expansion !== 'same-session') {
     throw new Error('This capability is not a declared same-session expansion. Use a focused handoff.');
   }
-  if (!skill || skill.slug !== skillSlug || !skill.content.trim()) throw new Error('The capability instructions are not installed and available.');
+  if (!skill || (skill.slug !== skillSlug && !skill.aliases?.includes(skillSlug)) || !skill.content.trim()) throw new Error('The capability instructions are not installed and available.');
   const missingSources = (skill.metadata.requiredSources ?? []).filter(slug => !input.enabledSourceSlugs.includes(slug));
   if (missingSources.length) throw new Error(`This capability requires new sources: ${missingSources.join(', ')}. Use a focused handoff.`);
   const newTools = (skill.metadata.alwaysAllow ?? []).filter(name => !(input.authorizedToolNames ?? []).includes(name));
@@ -49,12 +50,17 @@ export function resolveAgentCapabilityExpansion(input: AgentCapabilityExpansionI
     requiredSources: skill.metadata.requiredSources ?? [],
     alwaysAllow: skill.metadata.alwaysAllow ?? [],
   })).digest('hex');
-  const previous = input.expansions.find(entry => entry.skillSlug === skillSlug);
+  const general = isGeneralAgentTaskMode(taskMode);
+  // General selects skills afresh each response; historical receipts remain audit evidence.
+  const relevantExpansions = input.expansions.filter(entry => entry.taskModeId === taskMode.id
+    && entry.taskModeRevision === taskMode.definitionRevision
+    && (!general || entry.inputMessageId === input.inputMessageId));
+  const previous = relevantExpansions.find(entry => entry.skillSlug === skillSlug);
   if (previous && previous.contentRevision !== contentRevision) throw new Error('The capability changed since it was loaded. Start a new focused session.');
-  if (!previous && input.expansions.some(entry => entry.inputMessageId === input.inputMessageId)) {
+  if (!general && !previous && relevantExpansions.some(entry => entry.inputMessageId === input.inputMessageId)) {
     throw new Error('Only one new capability may be loaded per response. Continue on the next user turn.');
   }
-  if (!previous && input.expansions.length >= 2) throw new Error('This session already loaded two adjacent capabilities. Start a linked focused or Full session.');
+  if (!general && !previous && relevantExpansions.length >= 2) throw new Error('This session already loaded two adjacent capabilities. Start a linked focused or Full session.');
   const receipt: AgentCapabilityExpansionReceipt = previous ?? {
     skillSlug,
     contentRevision,
@@ -70,4 +76,18 @@ export function resolveAgentCapabilityExpansion(input: AgentCapabilityExpansionI
     expansions: previous ? [...input.expansions] : [...input.expansions, receipt],
     nextSkillSlugs: [...new Set([...input.currentSkillSlugs, skillSlug])],
   };
+}
+
+
+/** Register an existing global instruction package only after every authority check passes. */
+export async function prepareAgentCapabilityExpansion(
+  input: AgentCapabilityExpansionInput,
+  registerInstalledGlobalSkill?: () => void | Promise<void>,
+): Promise<ReturnType<typeof resolveAgentCapabilityExpansion>> {
+  const result = resolveAgentCapabilityExpansion(input);
+  if (registerInstalledGlobalSkill) {
+    if (!isGeneralAgentTaskMode(input.taskMode)) throw new Error('On-demand registration requires General mode.');
+    await registerInstalledGlobalSkill();
+  }
+  return result;
 }

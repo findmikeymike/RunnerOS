@@ -25,6 +25,7 @@ import { useAppShellContext, usePendingPermission, usePendingCredential, useSess
 import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
 import { coerceInputText } from '@/lib/input-text'
+import { GENERAL_AGENT_TASK_MODE_ID } from '@craft-agent/shared/agent-definitions/task-modes'
 import { syncTaskModeSelection, finishTaskModeSelection } from '@/lib/task-mode-selection-state'
 import { productDeepLink, RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
 import { normalizeArtistPermissionMode } from '@/components/app-shell/input/artist-permission-modes'
@@ -442,23 +443,20 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   // The launch receipt can lag one event behind a successful mid-conversation
   // focus change, so prefer the local RPC acknowledgement until it catches up.
-  const selectedTaskModeId = confirmedTaskModeId ?? receiptTaskModeId
-  const taskModeSelectionRequired = session?.launchReceipt?.taskModeSelectionPending === true
-    && !selectedTaskModeId
+  const selectedTaskModeId = confirmedTaskModeId ?? receiptTaskModeId ?? GENERAL_AGENT_TASK_MODE_ID
   const openingTaskModeConversation = Boolean(session?.isProcessing && selectedTaskModeId && !conversationStarted)
   const showTaskModeBar = !isCompactMode
-    && taskModes.length > 1
+    && Boolean(currentAgent)
 
   const handleTaskModeSelect = React.useCallback(async (taskModeId: string) => {
     if (!session || applyingTaskModeId || openingTaskModeConversation || selectedTaskModeId === taskModeId) return
-    const shouldStartConversation = taskModeSelectionRequired && !conversationStarted
     const request = { modeId: taskModeId }
     setTaskModeState((state) => ({ ...state, request }))
     try {
       await window.electronAPI.sessionCommand(session.id, {
         type: 'selectTaskMode',
         taskModeId,
-        startConversation: shouldStartConversation,
+        startConversation: false,
       })
       setTaskModeState((state) => finishTaskModeSelection(state, session.id, request, true))
     } catch (error) {
@@ -470,7 +468,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
         })
       }
     }
-  }, [applyingTaskModeId, conversationStarted, openingTaskModeConversation, selectedTaskModeId, session, taskModeSelectionRequired])
+  }, [applyingTaskModeId, openingTaskModeConversation, selectedTaskModeId, session])
   const hasUnreadMessages = sessionMeta
     ? !!(sessionMeta.lastFinalMessageId && sessionMeta.lastFinalMessageId !== sessionMeta.lastReadMessageId)
     : false
@@ -817,9 +815,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
           <ChatDisplay
             ref={chatDisplayRef}
             session={session}
-            preserveDraftUntilAccepted={signalDraftGuarded}
+            preserveDraftUntilAccepted={signalDraftGuarded || Boolean(session.spawnedFromAgent)}
             onSendMessage={(message, attachments, skillSlugs) => {
-              if (taskModeSelectionRequired || applyingTaskModeId) return false
+              if (applyingTaskModeId) return false
               if (session) {
                 return onSendMessage(session.id, message, attachments, skillSlugs)
               }
@@ -862,7 +860,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             onMatchInfoChange={onChatMatchInfoChange}
             connectionUnavailable={connectionUnavailable}
             compactMode={!!isCompactMode}
-            disableSend={taskModeSelectionRequired || Boolean(applyingTaskModeId)}
+            disableSend={Boolean(applyingTaskModeId)}
           />
         </div>
       </div>

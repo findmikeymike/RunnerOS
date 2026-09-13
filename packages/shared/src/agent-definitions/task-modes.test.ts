@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { parseAgentFile, serializeAgent } from './storage.ts';
 import { STARTER_AGENTS } from './starter-templates.ts';
-import { buildAgentTaskModePromptSection, buildAgentTaskModeStarterPrompt, filterContextDocsForTaskMode, resolveAgentTaskMode, selectTaskModeSourceSlugs } from './task-modes.ts';
+import { buildAgentTaskModePromptSection, buildAgentTaskModeStarterPrompt, filterContextDocsForTaskMode, resolveAgentSessionTaskMode, resolveAgentTaskMode, selectTaskModeSourceSlugs } from './task-modes.ts';
 import type { AgentMetadata, LoadedAgent } from './types.ts';
 
 function testAgent(metadata: AgentMetadata): LoadedAgent {
@@ -142,4 +142,41 @@ describe('focused adapter selection', () => {
     const mode = { id: 'canvas', primarySkillSlugs: ['spotify-canvas-video'], requiredSourceSlugs: ['video-studio'], optionalSourceSlugs: ['media-generation', 'hypermotion'] };
     expect(selectTaskModeSourceSlugs(mode, ['video-studio', 'media-generation', 'hypermotion'])).toEqual(['video-studio']);
   });
+});
+
+
+describe('virtual General mode', () => {
+  test('all starter workers expose only declared capabilities on demand', () => {
+    for (const agent of STARTER_AGENTS) {
+      if (agent.metadata.taskModes?.some(mode => mode.id === 'general')) continue;
+      const mode = resolveAgentTaskMode(agent as LoadedAgent, 'general')!;
+      expect(mode.primarySkillSlugs).toEqual([]);
+      expect(mode.adjacentSkills.map(skill => skill.slug)).toEqual([...new Set(agent.metadata.skills ?? [])]);
+      expect(mode.requiredSourceSlugs).toEqual([]);
+      expect(selectTaskModeSourceSlugs(mode, mode.optionalSourceSlugs)).toEqual([]);
+      expect(mode.fullMode).toBe(false);
+      expect(buildAgentTaskModePromptSection(mode)).toContain('No topic selection is required');
+      expect(filterContextDocsForTaskMode([{ slug: 'artist-profile' }, { slug: 'unrelated-domain' }], mode)).toEqual([{ slug: 'artist-profile' }]);
+    }
+  });
+  test('preserves an explicit custom General recipe', () => {
+    const agent = testAgent({ name: 'Custom', description: 'Test', skills: ['custom'], taskModes: [{ id: 'general', kind: 'focus', label: 'My General', description: 'Custom focus', primarySkillSlugs: ['custom'] }] });
+    const mode = resolveAgentTaskMode(agent, 'general')!;
+    expect(mode.primarySkillSlugs).toEqual(['custom']);
+    expect(mode.definitionRevision).toStartWith('task-mode-v1-');
+  });
+});
+
+
+test('session resolution defaults interactive workers to General but preserves unattended focus and Manager conversation', () => {
+  const worker = STARTER_AGENTS.find(agent => agent.slug === 'world-builder')! as LoadedAgent;
+  expect(resolveAgentSessionTaskMode(worker)?.id).toBe('general');
+  expect(resolveAgentSessionTaskMode(worker, undefined, 'user')?.id).toBe('general');
+  expect(resolveAgentSessionTaskMode(worker, undefined, 'handoff')?.id).toBe('general');
+  expect(() => resolveAgentSessionTaskMode(worker, undefined, 'workflow')).toThrow('Choose a focus');
+  expect(() => resolveAgentSessionTaskMode(worker, undefined, 'automation')).toThrow('Choose a focus');
+  const chosen = worker.metadata.taskModes![0]!.id;
+  expect(resolveAgentSessionTaskMode(worker, chosen, 'workflow')?.id).toBe(chosen);
+  const manager = STARTER_AGENTS.find(agent => agent.slug === 'concierge')! as LoadedAgent;
+  expect(resolveAgentSessionTaskMode(manager)?.id).toBe('just-talk');
 });

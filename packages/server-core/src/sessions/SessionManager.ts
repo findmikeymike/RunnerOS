@@ -7,7 +7,7 @@ import { resolveAgentReferences, assertAgentReferences, selectDeclaredSkillsToEn
 import { resolveRuntimeIdentity } from '@craft-agent/shared/config/runtime-identity'
 import { sanitizePrivateSkillActivityInput, sanitizePrivateSkillResultPaths, isPrivateSkillLoaderTool } from '@craft-agent/shared/agent/core/private-skill-activity'
 import { inheritHostAgentFocus, createPendingAgentFocusState, createAgentFocusTransferIntent, validateTransferredAgentFocus, parseAgentFocusTransferIntent } from '@craft-agent/shared/sessions'
-import { resolveAgentCapabilityExpansion } from './agent-capability-expansion'
+import { prepareAgentCapabilityExpansion } from './agent-capability-expansion'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput, WorkspaceMigrationRuntimeLease } from '@craft-agent/server-core/handlers'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
@@ -295,7 +295,7 @@ import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, isAgentAllowedInArtistWorkspace, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@craft-agent/shared/agent-prompt'
-import { buildAgentTaskModeStarterPrompt, resolveAgentTaskMode, selectTaskModeSourceSlugs } from '@craft-agent/shared/agent-definitions/task-modes'
+import { GENERAL_AGENT_TASK_MODE_ID, isGeneralAgentTaskMode, buildAgentTaskModeStarterPrompt, resolveAgentSessionTaskMode, selectTaskModeSourceSlugs } from '@craft-agent/shared/agent-definitions/task-modes'
 import { filterAttachmentsForModelInput } from './runtime-config'
 import { inferScheduledWorkScope, persistHnicScheduleWork } from '../scheduled-work/HnicScheduledWork'
 import { supplyScheduledWorkInputs } from '../scheduled-work/ScheduledWorkInputSupply'
@@ -3120,10 +3120,7 @@ export class SessionManager implements ISessionManager {
     }
     const agent = loadGlobalAgent(agentSlug)
     if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
-    if (!options.taskModeId && agent.slug !== CONCIERGE_SLUG && (agent.metadata.taskModes?.length ?? 0) > 1) {
-      throw new Error(`Choose a focus for ${agent.metadata.name} before starting this work: ${agent.metadata.taskModes!.map(mode => `${mode.label} (${mode.id})`).join(', ')}.`)
-    }
-    const taskMode = resolveAgentTaskMode(agent, options.taskModeId ?? (agent.slug === CONCIERGE_SLUG && agent.metadata.taskModes?.some(mode => mode.id === 'just-talk') ? 'just-talk' : undefined))
+    const taskMode = resolveAgentSessionTaskMode(agent, options.taskModeId, options.taskModeSelectionSource)
     const launchAgent = taskMode
       ? {
           ...agent,
@@ -3164,7 +3161,7 @@ export class SessionManager implements ISessionManager {
     // from it. Server-spawned sessions (workflow steps, pulses, delegated
     // children) need it too, or an agent can be delegated to but cannot delegate
     // onward. Recursion stays bounded by the agent-message depth limit.
-    const agentCatalog = taskMode && agent.slug !== CONCIERGE_SLUG
+    const agentCatalog = taskMode && !isGeneralAgentTaskMode(taskMode) && agent.slug !== CONCIERGE_SLUG
       ? []
       : loadActiveAgentsForWorkspace(ws)
         .map((entry) => ({
@@ -3194,7 +3191,7 @@ export class SessionManager implements ISessionManager {
     const managerBriefReceipt = managerBriefReceiptFromDocs(contextDocs)
     return {
       customSystemPrompt,
-      agentSkillSlugs: resolvedSkillSlugs.length > 0 ? resolvedSkillSlugs : undefined,
+      agentSkillSlugs: taskMode || resolvedSkillSlugs.length > 0 ? resolvedSkillSlugs : undefined,
       enabledSourceSlugs: taskMode || resolvedSourceSlugs.length > 0 ? resolvedSourceSlugs : undefined,
       trustedWorkerTools: agent.metadata.trustedWorkerTools?.length ? agent.metadata.trustedWorkerTools : undefined,
       llmConnection: agent.metadata.llmConnection,
@@ -10327,18 +10324,29 @@ user a clickable link to where the thing now lives.`
             const agentSlug = admitted.launchReceipt?.agent?.slug ?? managed.spawnedFromAgent?.agentSlug
             const definition = agentSlug ? loadGlobalAgent(agentSlug) : null
             if (!definition) throw new Error('The saved worker is unavailable.')
-            const expansion = resolveAgentCapabilityExpansion({
+            const availableSkill = loadAllSkills(managed.workspace.rootPath).find(skill => skill.slug === input.skillSlug || skill.aliases?.includes(input.skillSlug))
+            // Registration is limited to installed, worker-declared global instructions.
+            // The policy helper validates inventory, source and tool authority first.
+            const installedGlobalSkill = !availableSkill && isGeneralAgentTaskMode(admitted.launchReceipt?.taskMode)
+              && definition.metadata.skills?.includes(input.skillSlug)
+              ? loadGlobalSkillBySlug(input.skillSlug) : null
+            const expansion = await prepareAgentCapabilityExpansion({
               ...input,
               taskMode: admitted.launchReceipt?.taskMode,
               agentMetadata: definition.metadata,
-              skill: loadAllSkills(managed.workspace.rootPath).find(skill => skill.slug === input.skillSlug),
+              skill: availableSkill ?? (installedGlobalSkill ? {
+                ...installedGlobalSkill,
+                // This alias came from the trusted qualified-reference resolver,
+                // never model-supplied metadata or a guessed canonical slug.
+                aliases: [...(installedGlobalSkill.aliases ?? []), input.skillSlug],
+              } : null),
               expansions: managed.launchReceipt?.capabilityExpansions ?? [],
               inputMessageId,
               enabledSourceSlugs: admitted.enabledSourceSlugs ?? [],
               authorizedToolNames: managed.trustedWorkerTools ?? [],
               currentSkillSlugs: admitted.agentSkillSlugs ?? [],
               now: Date.now(),
-            })
+            }, installedGlobalSkill ? () => { setGlobalSkillEnabled(managed.workspace.rootPath, installedGlobalSkill.slug, true) } : undefined)
             const previousReceipt = managed.launchReceipt
             const previousSkills = managed.agentSkillSlugs
             managed.launchReceipt = { ...managed.launchReceipt!, capabilityExpansions: expansion.expansions }
@@ -11886,7 +11894,7 @@ user a clickable link to where the thing now lives.`
       previousFocus = inheritHostAgentFocus(managed)
       const isInitialSelection = managed.launchReceipt?.taskModeSelectionPending === true
         && !hasVisibleConversation
-      shouldStartConversation = options.startConversation === true && isInitialSelection
+      shouldStartConversation = options.startConversation === true && isInitialSelection && taskModeId !== GENERAL_AGENT_TASK_MODE_ID
       if (shouldStartConversation) this.assertPaidExecutionAuthorized()
 
       const agentSlug = managed.spawnedFromAgent?.agentSlug ?? managed.launchReceipt?.agent?.slug
@@ -11919,7 +11927,9 @@ user a clickable link to where the thing now lives.`
         })
       }
       managed.launchReceipt = completeLaunchReceipt({
+        ...managed.launchReceipt,
         ...resolvedReceipt,
+        origin: managed.launchReceipt?.origin ?? resolvedReceipt.origin,
         createdAt: managed.launchReceipt?.createdAt ?? resolvedReceipt.createdAt,
         summary: managed.launchReceipt?.summary ?? resolvedReceipt.summary,
         taskModeSelectionPending: false,
@@ -13063,18 +13073,54 @@ user a clickable link to where the thing now lives.`
       isRetry: Boolean(_isAuthRetry || sourceRetry),
     })
     const resumeSkillRun = Boolean(_isAuthRetry || sourceRetry || (existingMessageId && existingMessageId === managed.managedSkillRunId))
-    if (!sourceRetry && !_isAuthRetry && managed.spawnedFromAgent?.agentSlug) {
+    const refreshAgentSlug = managed.spawnedFromAgent?.agentSlug ?? managed.launchReceipt?.agent?.slug
+    if (!sourceRetry && !_isAuthRetry && refreshAgentSlug) {
       try {
         const selectionSource = managed.launchReceipt?.taskMode?.selectionSource
-        const refreshed = await this.resolveAgentSessionOptions(managed.workspace.id, managed.spawnedFromAgent.agentSlug, {
-          taskModeId: managed.launchReceipt?.taskMode?.id,
+          ?? (managed.launchReceipt?.workflow ? 'workflow' : managed.launchReceipt?.automation || managed.launchReceipt?.origin === 'automation' ? 'automation' : undefined)
+        const refreshed = await this.resolveAgentSessionOptions(managed.workspace.id, refreshAgentSlug, {
+          taskModeId: managed.launchReceipt?.taskModeSelectionPending ? GENERAL_AGENT_TASK_MODE_ID : managed.launchReceipt?.taskMode?.id,
           taskModeSelectionSource: selectionSource === 'legacy' ? 'handoff' : selectionSource,
         })
+        const previousReceipt = managed.launchReceipt
+        const wasPending = previousReceipt?.taskModeSelectionPending === true
         managed.customSystemPrompt = refreshed.customSystemPrompt ?? managed.customSystemPrompt
-        managed.agentSkillSlugs = refreshed.agentSkillSlugs ?? managed.agentSkillSlugs
-        managed.enabledSourceSlugs = refreshed.enabledSourceSlugs ?? managed.enabledSourceSlugs
-        managed.launchReceipt = refreshed.launchReceipt ?? managed.launchReceipt
+        managed.agentSkillSlugs = refreshed.agentSkillSlugs
+        const previousRecipeSources = new Set(previousReceipt?.injected.sources ?? [])
+        const explicitSources = (managed.enabledSourceSlugs ?? []).filter(slug => !previousRecipeSources.has(slug))
+        managed.enabledSourceSlugs = mergeUniqueStrings(explicitSources, refreshed.enabledSourceSlugs) ?? []
+        managed.launchReceipt = refreshed.launchReceipt ? completeLaunchReceipt({
+          ...previousReceipt,
+          ...refreshed.launchReceipt,
+          origin: previousReceipt?.origin ?? refreshed.launchReceipt.origin,
+          createdAt: previousReceipt?.createdAt ?? refreshed.launchReceipt.createdAt,
+          summary: previousReceipt?.summary ?? refreshed.launchReceipt.summary,
+          taskModeSelectionPending: false,
+          capabilityExpansions: previousReceipt?.capabilityExpansions,
+          config: { ...refreshed.launchReceipt.config, ...previousReceipt?.config },
+        }, {
+          origin: refreshed.launchReceipt.origin,
+          model: managed.model, llmConnection: managed.llmConnection,
+          permissionMode: managed.permissionMode, thinkingLevel: managed.thinkingLevel,
+          workingDirectory: managed.workingDirectory,
+          customSystemPrompt: managed.customSystemPrompt,
+          agentSkillSlugs: managed.agentSkillSlugs,
+          enabledSourceSlugs: managed.enabledSourceSlugs,
+          spawnedFromAgent: managed.spawnedFromAgent,
+        }) : previousReceipt
+        if (wasPending && managed.launchReceipt?.taskMode) {
+          this.persistSession(managed)
+          this.sendEvent({ type: 'task_mode_selected', sessionId,
+            taskMode: managed.launchReceipt.taskMode,
+            agentSkillSlugs: managed.agentSkillSlugs,
+            enabledSourceSlugs: managed.enabledSourceSlugs,
+            launchReceipt: managed.launchReceipt }, managed.workspace.id)
+        }
       } catch (error) {
+        if (managed.launchReceipt?.taskModeSelectionPending) {
+          releaseAdmissionLockOnce()
+          throw error
+        }
         sessionLog.warn('[context] Could not refresh current agent context before turn; preserving the last valid prompt.', error)
       }
     }
