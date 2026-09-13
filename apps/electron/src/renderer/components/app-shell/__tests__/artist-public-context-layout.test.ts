@@ -13,10 +13,10 @@ describe('Artist HQ public context', () => {
     expect(source).toContain('Public articles & context')
   })
 
-  test('saves artist-supplied context for every agent with conflict protection', () => {
+  test('saves artist-supplied context for on-demand retrieval with conflict protection', () => {
     expect(source).toContain("slug: ARTIST_PUBLIC_CONTEXT_SLUG")
     expect(source).toContain("routing: { mode: 'broadcast' }")
-    expect(source).toContain("delivery: 'always'")
+    expect(source).toContain("delivery: 'on-demand'")
     expect(source).toContain('expectedBody,')
     expect(source).toContain("window.confirm('Clear the saved public articles and context?')")
   })

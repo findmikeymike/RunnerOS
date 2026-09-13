@@ -474,10 +474,8 @@ export function getAuthorizedWorkspaceContext(
   agentSlug: string | null,
   input: GetWorkspaceContextInput,
 ): ManagerContextToolResult {
-  const doc = agentSlug === 'scriptwriter'
-    ? withScriptwriterArtistContext(workspaceRootPath, agentSlug,
-      loadAuthorizedContextDocsForAgent(workspaceRootPath, agentSlug)).find(candidate => candidate.slug === input.slug)
-    : loadContextDoc(workspaceRootPath, input.slug);
+  const doc = withScriptwriterArtistContext(workspaceRootPath, agentSlug,
+    loadAuthorizedContextDocsForAgent(workspaceRootPath, agentSlug)).find(candidate => candidate.slug === input.slug);
   if (!doc || !canAgentAccessContextDoc(doc, agentSlug)) return { ok: false, error: `Context document is unavailable or unauthorized: ${input.slug}` };
   const maxChars = clamp(input.maxChars, 8_000, 1, 12_000);
   let liveBody: string;

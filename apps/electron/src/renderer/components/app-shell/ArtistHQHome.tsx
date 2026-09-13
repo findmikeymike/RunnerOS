@@ -1100,7 +1100,7 @@ export function ArtistHQHome({
         description: 'Artist-supplied articles, interviews, facts, and background for every agent.',
         routing: { mode: 'broadcast' },
         enabled: true,
-        delivery: 'always',
+        delivery: 'on-demand',
       },
       body: body.trim(),
       expectedBody,
@@ -4506,7 +4506,7 @@ function ArtistPublicContextPanel({ savedBody, onSave, onClear }: {
         <div>
           <h3 id="artist-public-context-title" className="text-sm font-semibold text-white/90">Public articles & context</h3>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-white/45">
-            Paste useful article links, interview excerpts, bios, or facts. Saved context is immediately available to every agent.
+            Paste useful article links, interview excerpts, bios, or facts. Agents can retrieve this only when their work needs it.
           </p>
         </div>
         {savedBody ? <span className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-200/70">Saved</span> : null}
