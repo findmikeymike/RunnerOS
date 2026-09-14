@@ -147,7 +147,7 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
         '--json',
       ]) as SocialAccountStatusResult
       if (ref.platform === 'spotify') {
-        const checked = await verifySpotifyBrowserCapabilities(deps.browserPaneManager, ref, current)
+        const checked = await verifySpotifyBrowserCapabilities(deps.browserPaneManager, ref, current, input.spotifySurface)
         if (checked) {
           let accountUrl = typeof current.accountUrl === 'string' ? current.accountUrl : null
           if (!accountUrl && checked.discoveredAccountUrl) {
@@ -488,6 +488,7 @@ async function verifySpotifyBrowserCapabilities(
   browserPaneManager: NonNullable<HandlerDeps['browserPaneManager']>,
   ref: { platform: string; profile: string },
   status: SocialAccountStatusResult,
+  surface?: SpotifyLoginSurface,
 ): Promise<{
   capabilities: SpotifyCapabilities
   discoveredAccountUrl: string | null
@@ -504,22 +505,22 @@ async function verifySpotifyBrowserCapabilities(
   }
   if (!instance) return null
 
-  const artistsPage = await navigateAndReadBrowserPage(
-    browserPaneManager,
-    instanceId,
-    socialLoginUrl('spotify', 'artists'),
-  )
+  const artistsPage = surface
+    ? surface === 'artists' ? await readSpotifyBrowserPage(browserPaneManager, instanceId) : null
+    : await navigateAndReadBrowserPage(browserPaneManager, instanceId, socialLoginUrl('spotify', 'artists'))
   const artistsLoggedIn = hasLoggedInSignal(
     'spotify',
     String(artistsPage?.text || ''),
     String(artistsPage?.url || ''),
   )
 
-  const webPlayerPage = await navigateAndReadBrowserPage(
-    browserPaneManager,
-    instanceId,
-    socialLoginUrl('spotify', 'web-player'),
-  )
+  // A roster proves login, but must not silently pick the first artist.
+  const selectedArtistId = String(artistsPage?.url || '').match(/^https:\/\/artists\.spotify\.com\/c\/artist\/([A-Za-z0-9]{22})(?:[/?#]|$)/)?.[1] || null
+  const artistsReady = artistsLoggedIn && (!surface || Boolean(selectedArtistId))
+
+  const webPlayerPage = surface
+    ? surface === 'web-player' ? await readSpotifyBrowserPage(browserPaneManager, instanceId) : null
+    : await navigateAndReadBrowserPage(browserPaneManager, instanceId, socialLoginUrl('spotify', 'web-player'))
   const webPlayerLoggedIn = hasLoggedInSignal(
     'spotify',
     String(webPlayerPage?.text || ''),
@@ -543,11 +544,9 @@ async function verifySpotifyBrowserCapabilities(
     && !wrongAccount,
   )
 
-  const adsManagerPage = await navigateAndReadBrowserPage(
-    browserPaneManager,
-    instanceId,
-    socialLoginUrl('spotify', 'ads-manager'),
-  )
+  const adsManagerPage = surface
+    ? surface === 'ads-manager' ? await readSpotifyBrowserPage(browserPaneManager, instanceId) : null
+    : await navigateAndReadBrowserPage(browserPaneManager, instanceId, socialLoginUrl('spotify', 'ads-manager'))
   const adsManagerLoggedIn = hasLoggedInSignal(
     'spotify',
     String(adsManagerPage?.text || ''),
@@ -569,12 +568,16 @@ async function verifySpotifyBrowserCapabilities(
 
   const capabilities: SpotifyCapabilities = {
     artists: {
-      ready: artistsLoggedIn,
-      status: artistsLoggedIn ? 'ready' : 'login_needed',
+      ready: artistsReady,
+      status: artistsReady ? 'ready' : artistsLoggedIn ? 'identity_unverified' : 'login_needed',
+      accountId: selectedArtistId,
+      accountUrl: selectedArtistId ? `https://open.spotify.com/artist/${selectedArtistId}` : null,
       label: 'Spotify for Artists',
-      message: artistsLoggedIn
-        ? 'Analytics access is ready.'
-        : 'Log in to Spotify for Artists to enable analytics.',
+      message: artistsReady
+        ? 'Artist analytics access verified for the selected artist.'
+        : artistsLoggedIn
+          ? 'Signed in. Open the intended artist from your roster, then click Verify artist.'
+          : 'Open Spotify for Artists, sign in, and select your artist, then verify again.',
     },
     webPlayer: {
       ready: webPlayerReady,
@@ -644,6 +647,13 @@ async function navigateAndReadBrowserPage(
 ): Promise<BrowserIdentityPage | null> {
   await browserPaneManager.navigate(instanceId, url)
   await wait(1500)
+  return readSpotifyBrowserPage(browserPaneManager, instanceId)
+}
+
+async function readSpotifyBrowserPage(
+  browserPaneManager: NonNullable<HandlerDeps['browserPaneManager']>,
+  instanceId: string,
+): Promise<BrowserIdentityPage | null> {
   return browserPaneManager.evaluate(instanceId, `(() => {
     const links = Array.from(document.querySelectorAll('a[href]')).slice(0, 500).map((a) => a.href)
     return {

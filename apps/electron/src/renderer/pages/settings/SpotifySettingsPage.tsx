@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { socialVerificationMemory } from '@/lib/social-verification-memory'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type {
   SocialAccountProfileStatus,
@@ -41,6 +42,7 @@ export const meta: DetailsPageMeta = {
 }
 
 const DEFAULT_PROFILE = 'spotify-main'
+const capabilityKey = (surface: SpotifyLoginSurface) => surface === 'artists' ? 'artists' : surface === 'web-player' ? 'webPlayer' : 'adsManager'
 
 export default function SpotifySettingsPage() {
   const openBrowserSidecar = useSetAtom(openBrowserSidecarAtom)
@@ -61,7 +63,7 @@ export default function SpotifySettingsPage() {
   const load = React.useCallback(async () => {
     setBusy('load')
     try {
-      setDoctor(await window.electronAPI.listSocialAccounts())
+      setDoctor(socialVerificationMemory.merge(await window.electronAPI.listSocialAccounts()))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not load Spotify accounts')
     } finally {
@@ -117,7 +119,9 @@ export default function SpotifySettingsPage() {
       }
       await load()
       toast.success(result.browserInstanceId
-        ? 'Spotify opened. Sign in if needed, then click Verify Account.'
+        ? profile.spotifyCapabilities?.[capabilityKey(surface)]?.ready
+          ? 'Saved Spotify session opened. Verify again if you switch artists or accounts.'
+          : 'Spotify opened. Sign in and select the intended artist or account, then click Verify beside that service.'
         : 'Spotify login handoff prepared')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not open Spotify')
@@ -126,22 +130,32 @@ export default function SpotifySettingsPage() {
     }
   }
 
-  const verify = async (profile: SocialAccountProfileStatus) => {
+  const verify = async (profile: SocialAccountProfileStatus, surface: SpotifyLoginSurface) => {
     setBusy(`${profile.profile}:verify`)
+    const revision = socialVerificationMemory.begin(profile)
     try {
       const result = await window.electronAPI.getSocialAccountStatus({
         platform: 'spotify',
         profile: profile.profile,
         live: true,
+        spotifySurface: surface,
       }) as SocialAccountProfileStatus
+      const key = capabilityKey(surface)
+      const checked = result.spotifyCapabilities?.[key]
+      if (result.spotifyCapabilities && profile.spotifyCapabilities) {
+        result.spotifyCapabilities = { ...profile.spotifyCapabilities, [key]: checked! }
+      }
+      result.liveChecked = true
+      result.lastCheckedAt = new Date().toISOString()
+      if (!socialVerificationMemory.remember(result, revision)) return
       setDoctor((previous) => replaceSpotifyProfile(previous, result))
       if (result.browserInstanceId) {
         const instances = await window.electronAPI.browserPane.list()
         setBrowserInstances(instances)
         openBrowserSidecar(result.browserInstanceId)
       }
-      if (result.ready) toast.success('Spotify account verified')
-      else toast.warning(result.message || 'Spotify still needs verification')
+      if (checked?.ready) toast.success(checked.message)
+      else toast.warning(checked?.message || 'Spotify still needs verification')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not verify Spotify')
     } finally {
@@ -155,6 +169,7 @@ export default function SpotifySettingsPage() {
     setBusy(`${profile.profile}:delete`)
     try {
       await window.electronAPI.deleteSocialAccount({ platform: 'spotify', profile: profile.profile })
+      socialVerificationMemory.invalidate(profile)
       setPendingDelete(null)
       await load()
       toast.success('Spotify account removed')
@@ -195,7 +210,7 @@ export default function SpotifySettingsPage() {
                   profile={profile}
                   busy={busy}
                   onLogin={(surface) => login(profile, surface)}
-                  onVerify={() => verify(profile)}
+                  onVerify={(surface) => verify(profile, surface)}
                   onDelete={() => setPendingDelete(profile)}
                 />
               ))}
@@ -270,7 +285,7 @@ function SpotifyAccountCard({
   profile: SocialAccountProfileStatus
   busy: string | null
   onLogin: (surface: SpotifyLoginSurface) => void
-  onVerify: () => void
+  onVerify: (surface: SpotifyLoginSurface) => void
   onDelete: () => void
 }) {
   const capabilities = profile.spotifyCapabilities
@@ -304,17 +319,6 @@ function SpotifyAccountCard({
               type="button"
               size="sm"
               variant="ghost"
-              className="h-8 gap-1.5 px-2.5 text-xs text-white/50 hover:bg-white/[0.055] hover:text-white/78"
-              onClick={onVerify}
-              disabled={accountBusy}
-            >
-              {busy === `${profile.profile}:verify` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-              Verify
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
               aria-label="Copy account reference"
               title="Copy account reference"
               className="h-8 w-8 p-0 text-white/34 hover:bg-white/[0.055] hover:text-white/70"
@@ -337,14 +341,16 @@ function SpotifyAccountCard({
           </div>
         </div>
 
+        {profile.lastCheckedAt ? <p className="px-4 pb-2 text-xs text-white/40">Last checked {new Date(profile.lastCheckedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}. Verify again after switching accounts.</p> : null}
         <div className="divide-y divide-white/[0.055] border-t border-white/[0.055]">
           <SpotifyCapabilityRow
             label="Spotify for Artists"
-            purpose="Artist analytics"
+            purpose="Open your artist from the roster, then Verify artist."
             capability={capabilities?.artists}
             busy={busy === `${profile.profile}:login:artists`}
             disabled={accountBusy}
             onOpen={() => onLogin('artists')}
+            onVerify={() => onVerify('artists')}
           />
           <SpotifyCapabilityRow
             label="Spotify Web Player"
@@ -353,6 +359,7 @@ function SpotifyAccountCard({
             busy={busy === `${profile.profile}:login:web-player`}
             disabled={accountBusy}
             onOpen={() => onLogin('web-player')}
+            onVerify={() => onVerify('web-player')}
           />
           <SpotifyCapabilityRow
             label="Spotify Ads Manager"
@@ -361,6 +368,7 @@ function SpotifyAccountCard({
             busy={busy === `${profile.profile}:login:ads-manager`}
             disabled={accountBusy}
             onOpen={() => onLogin('ads-manager')}
+            onVerify={() => onVerify('ads-manager')}
           />
         </div>
       </div>
@@ -375,6 +383,7 @@ function SpotifyCapabilityRow({
   busy,
   disabled,
   onOpen,
+  onVerify,
 }: {
   label: string
   purpose: string
@@ -382,6 +391,7 @@ function SpotifyCapabilityRow({
   busy: boolean
   disabled: boolean
   onOpen: () => void
+  onVerify: () => void
 }) {
   const ready = capability?.ready === true
   const checked = capability != null
@@ -389,7 +399,7 @@ function SpotifyCapabilityRow({
     <div className="flex min-h-[58px] flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center">
       <div className="min-w-0 flex-1 sm:flex sm:items-baseline sm:gap-3">
         <p className="truncate text-sm font-medium text-white/78">{label}</p>
-        <p className="mt-0.5 truncate text-xs text-white/34 sm:mt-0">{purpose}</p>
+        <p className="mt-0.5 text-xs text-white/34 sm:mt-0">{capability?.message || purpose}</p>
       </div>
       <div className="flex items-center justify-between gap-3 sm:justify-end">
         <span
@@ -418,7 +428,11 @@ function SpotifyCapabilityRow({
           disabled={disabled}
         >
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
-          {ready ? 'Open' : 'Connect'}
+          {ready ? 'Open' : '1. Connect'}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onVerify} disabled={disabled}>
+          <ShieldCheck className="h-3.5 w-3.5" />
+          {ready ? 'Recheck' : label === 'Spotify for Artists' ? '2. Verify artist' : '2. Verify'}
         </Button>
       </div>
     </div>
@@ -429,15 +443,11 @@ function SpotifyStatusPill({ profile }: { profile: SocialAccountProfileStatus })
   const artistsReady = profile.spotifyCapabilities?.artists.ready === true
   const webPlayerReady = profile.spotifyCapabilities?.webPlayer.ready === true
   const adsManagerReady = profile.spotifyCapabilities?.adsManager.ready === true
-  const allReady = artistsReady && webPlayerReady
-  const partlyReady = artistsReady || webPlayerReady
+  const count = [artistsReady, webPlayerReady, adsManagerReady].filter(Boolean).length
   return (
-    <span className={allReady
-      ? 'inline-flex items-center gap-1 rounded-full bg-emerald-400/12 px-2 py-1 text-[11px] font-medium text-emerald-200'
-      : 'inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-2 py-1 text-[11px] font-medium text-amber-200'}
-    >
-      {allReady ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-      {allReady ? (adsManagerReady ? 'All ready' : 'Core ready') : partlyReady ? 'Partial setup' : statusLabel(profile.profileStatus)}
+    <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 text-[11px] font-medium text-white/60">
+      {count ? <CheckCircle2 className="h-3 w-3 text-emerald-200" /> : <CircleDashed className="h-3 w-3" />}
+      {count ? `${count} service${count === 1 ? '' : 's'} verified` : 'Not verified'}
     </span>
   )
 }

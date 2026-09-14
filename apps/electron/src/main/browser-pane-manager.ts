@@ -110,6 +110,7 @@ const TOOLBAR_CHANNELS = {
   GO_FORWARD: 'browser-toolbar:go-forward',
   RELOAD: 'browser-toolbar:reload',
   STOP: 'browser-toolbar:stop',
+  ZOOM: 'browser-toolbar:zoom',
   MENU_GEOMETRY: 'browser-toolbar:menu-geometry',
   FORCE_CLOSE_MENU: 'browser-toolbar:force-close-menu',
   HIDE: 'browser-toolbar:hide',
@@ -2546,6 +2547,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       canGoBack: instance.canGoBack,
       canGoForward: instance.canGoForward,
       themeColor: instance.themeColor,
+      zoomFactor: instance.pageView.webContents.getZoomFactor(),
     }
     instance.toolbarView.webContents.send(TOOLBAR_CHANNELS.STATE_UPDATE, state)
   }
@@ -2583,6 +2585,16 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     ipcMain.handle(TOOLBAR_CHANNELS.STOP, async (_event, instanceId: string) => {
       const inst = findInstance(instanceId)
       if (inst) this.stop(inst.id)
+    })
+
+    ipcMain.handle(TOOLBAR_CHANNELS.ZOOM, (event, instanceId: string, action: string) => {
+      const inst = findInstance(instanceId)
+      if (!inst || event.sender !== inst.toolbarView.webContents || inst.lockState.active) return
+      if (action !== 'in' && action !== 'out' && action !== 'reset') return
+      const page = inst.pageView.webContents
+      const factor = action === 'reset' ? 1 : page.getZoomFactor() + (action === 'in' ? 0.1 : -0.1)
+      page.setZoomFactor(Math.min(2, Math.max(0.5, Math.round(factor * 100) / 100)))
+      this.pushToolbarState(inst)
     })
 
     ipcMain.handle(TOOLBAR_CHANNELS.MENU_GEOMETRY, async (_event, instanceId: string, open: boolean, height?: number) => {

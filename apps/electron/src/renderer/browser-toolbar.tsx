@@ -29,6 +29,7 @@ interface ToolbarState {
   isLoading: boolean
   canGoBack: boolean
   canGoForward: boolean
+  zoomFactor?: number
   themeColor?: string | null
 }
 
@@ -41,6 +42,7 @@ declare global {
       goForward: () => Promise<void>
       reload: () => Promise<void>
       stop: () => Promise<void>
+      zoom: (action: 'in' | 'out' | 'reset') => Promise<void>
       setMenuGeometry: (open: boolean, height?: number) => Promise<void>
       hideWindow: () => Promise<void>
       closeWindowEntirely: () => Promise<void>
@@ -182,7 +184,12 @@ function BrowserToolbarApp() {
         onReload={handleReload}
         onStop={handleStop}
         trailingContent={(
-          <div className="ml-2 flex items-center gap-1.5 titlebar-no-drag">
+          <div className="ml-2 flex shrink-0 items-center gap-1.5 titlebar-no-drag">
+            <div className="flex shrink-0 items-center rounded-md border border-current/20 px-0.5 text-xs text-foreground" style={themeColor ? { color: 'var(--tb-fg)' } : undefined} role="group" aria-label="Page zoom">
+              <button className="h-7 w-6 rounded hover:bg-foreground/10 disabled:opacity-30" aria-label="Zoom page out" title="Zoom page out" disabled={(state.zoomFactor ?? 1) <= 0.5} onClick={() => void api?.zoom('out')}>−</button>
+              <button className="h-7 min-w-10 rounded px-1 tabular-nums hover:bg-foreground/10" aria-label="Reset page zoom to 100%" title="Reset page zoom to 100%" onClick={() => void api?.zoom('reset')}>{Math.round((state.zoomFactor ?? 1) * 100)}%</button>
+              <button className="h-7 w-6 rounded hover:bg-foreground/10 disabled:opacity-30" aria-label="Zoom page in" title="Zoom page in" disabled={(state.zoomFactor ?? 1) >= 2} onClick={() => void api?.zoom('in')}>+</button>
+            </div>
             <DropdownMenu open={windowMenuOpen} onOpenChange={setWindowMenuOpen}>
               <DropdownMenuTrigger asChild>
                 <HeaderIconButton

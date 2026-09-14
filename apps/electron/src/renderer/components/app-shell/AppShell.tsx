@@ -1704,36 +1704,6 @@ function AppShellContent({
     if (pendingWorkspaceNavigationTimeoutRef.current) clearTimeout(pendingWorkspaceNavigationTimeoutRef.current)
   }, [])
 
-  // Extend context value with local overrides (wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveSessionStatuses)
-  const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
-    ...contextValue,
-    onDeleteSession: handleDeleteSession,
-    onSelectWorkspaceAndNavigate: handleSelectWorkspaceAndNavigate,
-    enabledSources: sources,
-    skills,
-    activeAgents,
-    activeSessionWorkingDirectory,
-    labels: displayLabelConfigs,
-    onSessionLabelsChange: handleSessionLabelsChange,
-    enabledModes: RENDERER_PRODUCT_VARIANT === 'artist-os' ? ARTIST_OS_PERMISSION_MODES : enabledModes,
-    sessionStatuses: effectiveSessionStatuses,
-    onSessionSourcesChange: handleSessionSourcesChange,
-    rightSidebarButton: null,
-    isCompactMode: isAutoCompact,
-    // Search state for ChatDisplay highlighting
-    sessionListSearchQuery: searchActive ? searchQuery : undefined,
-    isSearchModeActive: searchActive,
-    chatDisplayRef,
-    onChatMatchInfoChange: handleChatMatchInfoChange,
-    onTestAutomation: handleTestAutomation,
-    onToggleAutomation: handleToggleAutomation,
-    onDuplicateAutomation: handleDuplicateAutomation,
-    onDeleteAutomation: handleDeleteAutomation,
-    automationTestResults,
-    getAutomationHistory,
-    onReplayAutomation: handleReplayAutomation,
-  }), [contextValue, handleDeleteSession, handleSelectWorkspaceAndNavigate, sources, skills, activeAgents, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
-
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {
     if (!activeWorkspaceId) return
@@ -2021,6 +1991,37 @@ function AppShellContent({
   const handleWorkChatClick = useCallback(async () => {
     await openWorkCommand(true)
   }, [openWorkCommand])
+
+  // Extend context value with local overrides (wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveSessionStatuses)
+  const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
+    ...contextValue,
+    onOpenCommand: handleWorkChatClick,
+    onDeleteSession: handleDeleteSession,
+    onSelectWorkspaceAndNavigate: handleSelectWorkspaceAndNavigate,
+    enabledSources: sources,
+    skills,
+    activeAgents,
+    activeSessionWorkingDirectory,
+    labels: displayLabelConfigs,
+    onSessionLabelsChange: handleSessionLabelsChange,
+    enabledModes: RENDERER_PRODUCT_VARIANT === 'artist-os' ? ARTIST_OS_PERMISSION_MODES : enabledModes,
+    sessionStatuses: effectiveSessionStatuses,
+    onSessionSourcesChange: handleSessionSourcesChange,
+    rightSidebarButton: null,
+    isCompactMode: isAutoCompact,
+    // Search state for ChatDisplay highlighting
+    sessionListSearchQuery: searchActive ? searchQuery : undefined,
+    isSearchModeActive: searchActive,
+    chatDisplayRef,
+    onChatMatchInfoChange: handleChatMatchInfoChange,
+    onTestAutomation: handleTestAutomation,
+    onToggleAutomation: handleToggleAutomation,
+    onDuplicateAutomation: handleDuplicateAutomation,
+    onDeleteAutomation: handleDeleteAutomation,
+    automationTestResults,
+    getAutomationHistory,
+    onReplayAutomation: handleReplayAutomation,
+  }), [handleWorkChatClick, contextValue, handleDeleteSession, handleSelectWorkspaceAndNavigate, sources, skills, activeAgents, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
 
   const handleSidebarSessionClick = useCallback((sessionId: string) => {
     setSessionsNavExpanded(true)

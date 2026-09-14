@@ -1,3 +1,4 @@
+import { saveSourceCredential } from './save-source-credential'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { SourceCredentialScopeResult } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId, getWorkspaces } from '@craft-agent/shared/config'
@@ -296,16 +297,8 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
 
   // Save credentials for a source (bearer token or API key)
   server.handle(RPC_CHANNELS.sources.SAVE_CREDENTIALS, async (_ctx, workspaceId: string, sourceSlug: string, credential: string) => {
-    const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
-    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
     const { workspace, source } = resolveWorkspaceSource(workspaceId, sourceSlug)
-    assertTeamPermission(workspace.rootPath, 'secrets.update')
-
-    // SourceCredentialManager handles credential type resolution
-    const credManager = getSourceCredentialManager()
-    await credManager.save(source, { value: credential })
-    await syncGoogleAdsCredentialCache(source)
-    await syncYouTubeResearchCredentialCache(source)
+    await saveSourceCredential(workspace.rootPath, source, credential)
     await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'SAVE_CREDENTIALS')
     broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)
 

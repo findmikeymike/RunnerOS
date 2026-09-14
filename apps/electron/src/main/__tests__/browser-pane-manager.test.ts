@@ -31,6 +31,7 @@ const mockSessionFromPartition = mock((_partition: string) => ({
 function createMockWebContents() {
   const listeners: Record<string, Function[]> = {}
   let currentUrl = 'about:blank'
+  let zoomFactor = 1
   return {
     id: nextWebContentsId++,
     userAgent: 'Mock Chrome Electron/99.0.0',
@@ -57,6 +58,8 @@ function createMockWebContents() {
         throw new Error('mock toolbar load failure')
       }
     }),
+    getZoomFactor: () => zoomFactor,
+    setZoomFactor: mock((factor: number) => { zoomFactor = factor }),
     getTitle: mock(() => 'Test Page'),
     getURL: mock(() => currentUrl),
     isDestroyed: mock(() => false),
@@ -551,6 +554,29 @@ describe('BrowserPaneManager', () => {
     expect(manager.listInstances()).toHaveLength(0)
   })
 
+  it('zooms only the page from its own toolbar, with bounds and reset', async () => {
+    manager.createInstance('zoom-test')
+    manager.registerToolbarIpc()
+    const inst = (manager as any).instances.get('zoom-test')
+    const [, zoom] = (mockIpcMainHandle.mock.calls as any[]).find(([channel]) => channel === 'browser-toolbar:zoom')!
+    zoom({ sender: inst.pageView.webContents }, 'zoom-test', 'out')
+    expect(inst.pageView.webContents.getZoomFactor()).toBe(1)
+    zoom({ sender: inst.toolbarView.webContents }, 'zoom-test', 'out')
+    expect(inst.pageView.webContents.getZoomFactor()).toBe(0.9)
+    expect(inst.toolbarView.webContents.getZoomFactor()).toBe(1)
+    for (let i = 0; i < 30; i++) zoom({ sender: inst.toolbarView.webContents }, 'zoom-test', 'out')
+    expect(inst.pageView.webContents.getZoomFactor()).toBe(0.5)
+    for (let i = 0; i < 30; i++) zoom({ sender: inst.toolbarView.webContents }, 'zoom-test', 'in')
+    expect(inst.pageView.webContents.getZoomFactor()).toBe(2)
+    zoom({ sender: inst.toolbarView.webContents }, 'zoom-test', 'invalid')
+    expect(inst.pageView.webContents.getZoomFactor()).toBe(2)
+    zoom({ sender: inst.toolbarView.webContents }, 'zoom-test', 'reset')
+    expect(inst.pageView.webContents.getZoomFactor()).toBe(1)
+    inst.lockState.active = true
+    zoom({ sender: inst.toolbarView.webContents }, 'zoom-test', 'out')
+    expect(inst.pageView.webContents.getZoomFactor()).toBe(1)
+  })
+
   it('destroys instance via toolbar destroy IPC handler', async () => {
     manager.createInstance('d-ipc-destroy')
     manager.registerToolbarIpc()
@@ -973,6 +999,7 @@ describe('BrowserPaneManager', () => {
         canGoBack: true,
         canGoForward: false,
         themeColor: '#123456',
+        zoomFactor: 1,
       },
     ])
   })
@@ -1004,6 +1031,7 @@ describe('BrowserPaneManager', () => {
         canGoBack: true,
         canGoForward: true,
         themeColor: '#654321',
+        zoomFactor: 1,
       },
     ])
   })

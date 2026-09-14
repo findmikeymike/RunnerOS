@@ -423,6 +423,7 @@ export const BROWSER_TOOLBAR_CHANNELS = {
   GO_FORWARD: 'browser-toolbar:go-forward',
   RELOAD: 'browser-toolbar:reload',
   STOP: 'browser-toolbar:stop',
+  ZOOM: 'browser-toolbar:zoom',
   OPEN_MENU: 'browser-toolbar:open-menu',
   HIDE: 'browser-toolbar:hide',
   DESTROY: 'browser-toolbar:destroy',
@@ -1628,6 +1629,7 @@ export interface SocialAccountInput extends SocialAccountProfileRef {
 export interface SocialAccountDeleteInput extends SocialAccountProfileRef {}
 
 export interface SocialAccountStatusInput extends SocialAccountProfileRef {
+  spotifySurface?: SpotifyLoginSurface
   live?: boolean
 }
 

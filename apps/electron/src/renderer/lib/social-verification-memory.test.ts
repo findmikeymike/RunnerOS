@@ -12,6 +12,40 @@ const remember = (memory: SocialVerificationMemory, profile: SocialAccountProfil
   memory.remember({ ...profile, ready: true, liveChecked: true, lastCheckedAt: '2026-09-13T12:00:00Z', profileStatus: 'verified' }, revision)
 }
 describe('social verification display memory', () => {
+  test('restores Instagram and Spotify services after a fresh app instance without live authorization', () => {
+    const values = new Map<string, string>()
+    const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value) } }
+    const original = new SocialVerificationMemory(storage)
+    remember(original, { ...row(), evidence: { rawText: 'PRIVATE_PAGE_CONTENT' }, live: { secret: 'NEVER_SAVE' } })
+    const spotify = { ...row('spotify'), spotifyCapabilities: {
+      artists: { ready: true, status: 'ready', label: 'Artists', message: 'Verified', accountId: 'selected-artist' },
+      webPlayer: { ready: true, status: 'ready', label: 'Player', message: 'Verified' },
+      adsManager: { ready: false, status: 'login_needed', label: 'Ads', message: 'Optional' },
+    } } as SocialAccountProfileStatus
+    remember(original, spotify)
+    const restored = new SocialVerificationMemory(storage).merge(doctor(row(), row('spotify')))
+    expect(restored.platforms[0]!.profiles[0]!.ready).toBe(true)
+    expect(restored.platforms[0]!.profiles[0]!.liveChecked).toBe(false)
+    expect(restored.platforms[1]!.profiles[0]!.spotifyCapabilities).toEqual(spotify.spotifyCapabilities)
+    expect([...values.values()].join('')).not.toContain('PRIVATE_PAGE_CONTENT')
+    expect([...values.values()].join('')).not.toContain('NEVER_SAVE')
+    original.invalidate(row())
+    expect(new SocialVerificationMemory(storage).merge(doctor(row())).platforms[0]!.profiles[0]!.ready).toBe(false)
+  })
+  test('an interrupted recheck preserves the saved connection, but a failed check replaces it', () => {
+    const values = new Map<string, string>()
+    const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value) } }
+    const memory = new SocialVerificationMemory(storage)
+    remember(memory, row())
+    const revision = memory.begin(row())
+    expect(new SocialVerificationMemory(storage).merge(doctor(row())).platforms[0]!.profiles[0]!.ready).toBe(true)
+    memory.remember({ ...row(), liveChecked: true, lastCheckedAt: '2026-09-14T12:00:00Z', profileStatus: 'login_needed' }, revision)
+    expect(new SocialVerificationMemory(storage).merge(doctor(row())).platforms[0]!.profiles[0]!.ready).toBe(false)
+  })
+  test('corrupt storage does not block loading accounts', () => {
+    const memory = new SocialVerificationMemory({ getItem: () => '{broken', setItem: () => {} })
+    expect(memory.merge(doctor(row())).platforms[0]!.profiles[0]!.ready).toBe(false)
+  })
   test('adding and opening TikTok preserves the Instagram observation', () => {
     const memory = new SocialVerificationMemory()
     remember(memory, row())

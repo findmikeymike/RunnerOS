@@ -1,3 +1,4 @@
+import { saveSourceCredential } from '../handlers/rpc/save-source-credential'
 import { loadActiveAgentsForWorkspace, shouldBackfillLegacyAgentActivation } from './agent-registration'
 import { buildScheduledWorkRuntimeStatus } from '../scheduled-work/runtime-status'
 import { readAutomationSchedulerState } from '@craft-agent/shared/automations'
@@ -7095,8 +7096,9 @@ user a clickable link to where the thing now lives.`
   /**
    * Format auth result message to send back to agent
    */
-  private formatAuthResultMessage(result: AuthResult): string {
+  private formatAuthResultMessage(result: AuthResult, credentialEntry = false): string {
     if (result.success) {
+      if (credentialEntry) return `Credentials saved for ${result.sourceSlug}. Run source_test to check the provider connection before reporting it verified.`
       let msg = `Authentication completed for ${result.sourceSlug}.`
       if (result.email) msg += ` Signed in as ${result.email}.`
       if (result.workspace) msg += ` Connected to workspace: ${result.workspace}.`
@@ -7147,7 +7149,7 @@ user a clickable link to where the thing now lives.`
     }, managed.workspace.id)
 
     // Create faked user message with result
-    const resultContent = this.formatAuthResultMessage(result)
+    const resultContent = this.formatAuthResultMessage(result, managed.pendingAuthRequest?.type === 'credential')
 
     // Clear pending auth state
     managed.pendingAuthRequestId = undefined
@@ -7212,39 +7214,31 @@ user a clickable link to where the thing now lives.`
     }
 
     try {
-      // Store credentials using existing workspace ID extraction pattern
-      const credManager = getCredentialManager()
-      // Extract workspace ID from root path (last segment of path)
-      const wsId = basename(managed.workspace.rootPath) || managed.workspace.id
-
+      const [source] = getSourcesBySlugs(managed.workspace.rootPath, [request.sourceSlug])
+      if (!source) throw new Error(`Source not found: ${request.sourceSlug}`)
+      let value: string
       if (request.mode === 'basic') {
-        // Store value as JSON string {username, password} - credential-manager.ts parses it for basic auth
-        await credManager.set(
-          { type: 'source_basic', workspaceId: wsId, sourceId: request.sourceSlug },
-          { value: JSON.stringify({ username: response.username, password: response.password }) }
-        )
-      } else if (request.mode === 'bearer') {
-        await credManager.set(
-          { type: 'source_bearer', workspaceId: wsId, sourceId: request.sourceSlug },
-          { value: response.value! }
-        )
+        if (!response.username) throw new Error('Enter the requested username.')
+        value = JSON.stringify({ username: response.username, password: response.password ?? '' })
       } else if (request.mode === 'multi-header') {
-        // Store multi-header credentials as JSON { "DD-API-KEY": "...", "DD-APPLICATION-KEY": "..." }
-        await credManager.set(
-          { type: 'source_apikey', workspaceId: wsId, sourceId: request.sourceSlug },
-          { value: JSON.stringify(response.headers) }
-        )
+        if (!response.headers || !Object.keys(response.headers).length
+          || Object.values(response.headers).some(value => typeof value !== 'string' || !value.trim())) {
+          throw new Error('Enter the requested API key fields.')
+        }
+        value = JSON.stringify(response.headers)
       } else {
-        // header or query - both use API key storage
-        await credManager.set(
-          { type: 'source_apikey', workspaceId: wsId, sourceId: request.sourceSlug },
-          { value: response.value! }
-        )
+        value = response.value ?? ''
       }
+      await saveSourceCredential(managed.workspace.rootPath, source, value)
 
       // Update source config to mark as authenticated
       const { markSourceAuthenticated } = await import('@craft-agent/shared/sources')
       markSourceAuthenticated(managed.workspace.rootPath, request.sourceSlug)
+
+      // A save in chat must be reflected in Settings and other open sessions too.
+      await this.reloadSourcesForWorkspace(managed.workspace.rootPath)
+      this.broadcastSourcesChanged(managed.workspace.id, loadAllSources(managed.workspace.rootPath))
+      this.broadcastSecretsChanged()
 
       // Mark source as unseen so fresh guide is injected on next message
       if (managed.agent) {

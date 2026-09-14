@@ -101,6 +101,37 @@ describe('social account browser presentation', () => {
     registerSettingsGuiHandlers(server, deps)
   })
 
+  it('verifies the selected artist without navigating through unrelated Spotify services', async () => {
+    instances.set('social-spotify-artist-main', { id: 'social-spotify-artist-main' })
+    evaluate.mockImplementationOnce(async () => ({
+      url: 'https://artists.spotify.com/c/artist/1234567890123456789012/home',
+      title: 'Artist dashboard', text: 'Audience Music Songs', links: [],
+    }))
+    const result = await handlers.get(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS)!(
+      { clientId: 'client-1' },
+      { platform: 'spotify', profile: 'artist-main', live: true, spotifySurface: 'artists' },
+    )
+    expect(navigate).not.toHaveBeenCalled()
+    expect(evaluate).toHaveBeenCalledTimes(1)
+    expect(result.spotifyCapabilities.artists).toMatchObject({ ready: true, accountId: '1234567890123456789012' })
+    expect(savedAccountUrl).toBeNull()
+    expect(savedAdsAccountId).toBeNull()
+  })
+
+  it('asks for an artist selection when signed into the roster', async () => {
+    evaluate.mockImplementationOnce(async () => ({
+      url: 'https://artists.spotify.com/c/roster', title: 'Roster',
+      text: 'Welcome back Artists Releases', links: [],
+    }))
+    const result = await handlers.get(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS)!(
+      { clientId: 'client-1' },
+      { platform: 'spotify', profile: 'artist-main', live: true, spotifySurface: 'artists' },
+    )
+    expect(navigate).not.toHaveBeenCalled()
+    expect(result.spotifyCapabilities.artists).toMatchObject({ ready: false, status: 'identity_unverified', accountId: null })
+    expect(result.spotifyCapabilities.artists.message).toContain('Open the intended artist')
+  })
+
   it('returns the login browser immediately while navigation continues', async () => {
     let releaseNavigation!: () => void
     navigate.mockImplementationOnce(() => new Promise((resolve) => {

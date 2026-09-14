@@ -123,6 +123,8 @@ export interface AppShellContextType {
   onRefreshWorkspaces?: () => void
 
   // App actions
+  /** Open the canonical workspace Command conversation, reusing it when available. */
+  onOpenCommand?: () => Promise<void>
   onOpenSettings: () => void
   onOpenKeyboardShortcuts: () => void
   onOpenStoredUserPreferences: () => void

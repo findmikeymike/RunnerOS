@@ -298,7 +298,6 @@ export default function SocialAccountsSettingsPage() {
   }
 
   const login = async (profile: SocialAccountProfileStatus) => {
-    socialVerificationMemory.invalidate(profile)
     setBusy(`${profile.platform}:${profile.profile}:login`)
     try {
       const result = await window.electronAPI.loginSocialAccount({
@@ -313,7 +312,7 @@ export default function SocialAccountsSettingsPage() {
       }
       await load()
       toast.success(result.browserInstanceId
-        ? 'Login browser opened. Sign in, then click Verify Login.'
+        ? profile.ready ? 'Saved browser session opened. Verify again only if you switch accounts.' : 'Browser opened. Sign in if needed, then click Verify.'
         : 'Login handoff prepared')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not start login')
@@ -778,7 +777,7 @@ function ProfileRow({
           <p className="mt-0.5 truncate text-xs text-white/34" title={profile.accountUrl || agentRef}>
             {platformLabel(profile.platform)}{profile.accountHandle && profile.accountHandle !== profile.profile ? ` · ${profile.profile}` : ''}
           </p>
-          {profile.lastCheckedAt ? <p className="mt-1 text-xs text-white/34">Last checked {new Date(profile.lastCheckedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Verify again after switching accounts.</p> : null}
+          {profile.lastCheckedAt ? <p className="mt-1 text-xs text-white/34">Last checked {new Date(profile.lastCheckedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}. Verify again after switching accounts.</p> : null}
           {!profile.ready && profile.message ? <p className="mt-1 line-clamp-1 text-xs text-white/34">{profile.message}</p> : null}
         </div>
       </div>
@@ -792,7 +791,7 @@ function ProfileRow({
               className="h-8 min-w-[92px] border-0 bg-white text-black hover:bg-white/90 disabled:text-black/50"
             >
               {loginBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
-              {profile.ready ? 'Open' : 'Connect'}
+              {profile.ready ? 'Open' : '1. Connect'}
             </Button>
             <Button
               type="button"
@@ -803,7 +802,7 @@ function ProfileRow({
               disabled={statusBusy}
             >
               {verifyBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-              Verify
+              {profile.ready ? 'Recheck' : '2. Verify'}
             </Button>
             <Button
               type="button"

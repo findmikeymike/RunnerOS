@@ -71,7 +71,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
   const { getDisplayName } = useAgentDisplayNames()
   const skills = useAtomValue(skillsAtom)
   const sources = useAtomValue(sourcesAtom)
-  const { workspaces, onCreateSession, onInputChange, onSelectWorkspace } = useAppShellContext()
+  const { workspaces, onCreateSession, onInputChange, onSelectWorkspace, onOpenCommand } = useAppShellContext()
   const [libraryOpen, setLibraryOpen] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [selectedAgent, setSelectedAgent] = React.useState<AgentDefinitionDTO | null>(null)
@@ -99,6 +99,17 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
     if (!workspaceId || launchingSlug) return
     setLaunchingSlug(agent.slug)
     try {
+      // Use Command's existing session reuse and workspace context policy.
+      if (agent.slug === CONCIERGE_SLUG) {
+        if (!onOpenCommand) throw new Error('Command is unavailable')
+        await onOpenCommand()
+        setRecentSlugs((current) => {
+          const next = [agent.slug, ...current.filter((slug) => slug !== agent.slug)].slice(0, 12)
+          writeWorkerPreference(workspaceId, 'recent', next)
+          return next
+        })
+        return
+      }
       const sourceWorkspace = workspaces.find((workspace) => workspace.id === workspaceId)
       const hqWorkspace = findArtistHQWorkspace(workspaces)
       const campaignLaunch = agent.slug === 'x-editorial'
@@ -167,7 +178,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
     } finally {
       setLaunchingSlug(null)
     }
-  }, [launchingSlug, onCreateSession, onInputChange, onSelectWorkspace, skills, sources, workspaceId, workspaces])
+  }, [launchingSlug, onCreateSession, onInputChange, onSelectWorkspace, onOpenCommand, skills, sources, workspaceId, workspaces])
 
   const toggleFavorite = React.useCallback((slug: string) => {
     setFavoriteSlugs((current) => {
@@ -180,7 +191,13 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
   }, [workspaceId])
 
   const grouped = React.useMemo(() => {
-    const visibleAgents = dedupeLaunchpadAgents(activeAgents.filter((a) => (
+    // Artist Manager is the required Command entry, even if absent from the
+    // optional worker manifest. Lab keeps its existing Song Director boundary.
+    const directoryAgents = labOnly ? activeAgents : [
+      ...activeAgents,
+      ...allAgents.filter((agent) => agent.slug === CONCIERGE_SLUG),
+    ]
+    const visibleAgents = dedupeLaunchpadAgents(directoryAgents.filter((a) => (
       !isSystemAgent(a.slug)
       && !isHiddenFromWorkerHome(a.slug)
       && !excludedAgentSlugs.includes(a.slug)
@@ -209,7 +226,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
 
     return Array.from(groups.entries())
       .sort(([a], [b]) => agentDomainRank(a) - agentDomainRank(b) || a.localeCompare(b))
-  }, [activeAgents, allowedAgentSet, defaultVisibleSlugs, excludedAgentSlugs, getDisplayName, labOnly])
+  }, [activeAgents, allAgents, allowedAgentSet, defaultVisibleSlugs, excludedAgentSlugs, getDisplayName, labOnly])
 
   const domains = React.useMemo(() => grouped.map(([domain]) => domain), [grouped])
 
@@ -370,7 +387,9 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
               const collapsed = collapsedDomains.has(domain)
 
               return (
-                <section key={domain}>
+                <section key={domain} className={cn(
+                  !labOnly && domain === 'Command' && 'rounded-[14px] border border-orange-200/[0.10] bg-orange-300/[0.035] p-3',
+                )}>
                   <button
                     type="button"
                     onClick={() => toggleDomain(domain)}
@@ -386,6 +405,9 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                       <h2 className="text-[9px] font-semibold uppercase tracking-[0.14em] text-black/85">{domain}</h2>
                       <span className="text-[9px] font-medium text-black/45">{agents.length}</span>
                     </span>
+                    {!labOnly && domain === 'Command' && (
+                      <span className="text-[11px] font-medium text-orange-100/65">Start here</span>
+                    )}
                     <div className="h-px flex-1 bg-white/[0.07]" />
                   </button>
                   {!collapsed && (
@@ -395,7 +417,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                           key={agent.slug}
                           slug={agent.slug}
                           name={cleanDisplayText(getDisplayName(agent))}
-                          description={cleanDisplayText(agent.metadata.description)}
+                          description={getFoundationalWorkerDescription(agent.slug) ?? cleanDisplayText(agent.metadata.description)}
                           isOrchestrator={agent.slug === ORCHESTRATOR_SLUG}
                           isFavorite={favoriteSlugs.includes(agent.slug)}
                           isLaunching={launchingSlug === agent.slug}
@@ -1641,7 +1663,7 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     if (slug === 'record-doctor') return 'Song Development'
   }
 
-  if (slug === 'setup-concierge') {
+  if (slug === CONCIERGE_SLUG || slug === 'setup-concierge') {
     return 'Command'
   }
 
@@ -1721,6 +1743,7 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
 
 function agentDomainRank(domain: string) {
   const order = [
+    'Command',
     'Inspiration',
     'Writing',
     'Song Development',
@@ -1735,7 +1758,6 @@ function agentDomainRank(domain: string) {
     'Outreach',
     'Merch',
     'Research',
-    'Command',
     'Operators',
     'Other Workers',
   ]
@@ -1744,7 +1766,7 @@ function agentDomainRank(domain: string) {
 }
 
 function isSystemAgent(slug: string) {
-  return slug === CONCIERGE_SLUG || slug === ORCHESTRATOR_SLUG
+  return slug === ORCHESTRATOR_SLUG
 }
 
 function isHiddenFromWorkerHome(slug: string) {
@@ -1811,6 +1833,13 @@ function compareLaunchpadAgents(
   defaultOrder: Map<string, number>,
   getDisplayName: (agent: AgentDefinitionDTO) => string,
 ): number {
+  const foundationalOrder = ['setup-concierge', CONCIERGE_SLUG, 'anything-agent']
+  const aFoundation = foundationalOrder.indexOf(a.slug)
+  const bFoundation = foundationalOrder.indexOf(b.slug)
+  if (aFoundation >= 0 || bFoundation >= 0) {
+    return (aFoundation < 0 ? foundationalOrder.length : aFoundation)
+      - (bFoundation < 0 ? foundationalOrder.length : bFoundation)
+  }
   const aDefaultIndex = defaultOrder.get(a.slug)
   const bDefaultIndex = defaultOrder.get(b.slug)
   if (aDefaultIndex !== undefined && bDefaultIndex !== undefined) {
@@ -1833,4 +1862,11 @@ function summarizePrompt(prompt: string) {
   if (!cleaned) return 'No system prompt set.'
   if (cleaned.length <= 260) return cleaned
   return `${cleaned.slice(0, 260).trim()}...`
+}
+
+function getFoundationalWorkerDescription(slug: string): string | undefined {
+  if (slug === 'setup-concierge') return 'Get set up, connect your tools, and find your way around Artist OS.'
+  if (slug === CONCIERGE_SLUG) return 'Talk through your artist direction and coordinate the right next work with your team.'
+  if (slug === 'anything-agent') return 'Get help with broader tasks and the external tools you use.'
+  return undefined
 }

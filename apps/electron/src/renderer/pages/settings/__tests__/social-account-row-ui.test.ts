@@ -12,7 +12,7 @@ describe('connection account settings', () => {
   const pageRegistrySource = readFileSync(join(import.meta.dir, '..', 'settings-pages.ts'), 'utf8')
 
   it('keeps social login and verification actions visible for every saved profile state', () => {
-    expect(socialSource).toContain("{profile.ready ? 'Open' : 'Connect'}")
+    expect(socialSource).toContain("{profile.ready ? 'Open' : '1. Connect'}")
     expect(socialSource).toContain('Verify')
     expect(socialSource).not.toContain("const loginNeeded = profile.profileStatus === 'login_needed'")
     expect(socialSource).toContain('bg-white text-black hover:bg-white/90')
@@ -43,7 +43,7 @@ describe('connection account settings', () => {
     expect(spotifySource).toContain('function SpotifyCapabilityRow')
     expect(spotifySource).toContain('divide-y divide-white/[0.055]')
     expect(spotifySource).toContain('label="Spotify for Artists"')
-    expect(spotifySource).toContain('purpose="Artist analytics"')
+    expect(spotifySource).toContain('purpose="Open your artist from the roster, then Verify artist."')
     expect(spotifySource).toContain('label="Spotify Web Player"')
     expect(spotifySource).toContain('purpose="Playlist creation"')
     expect(spotifySource).toContain('label="Spotify Ads Manager"')
@@ -97,6 +97,6 @@ describe('connection account settings', () => {
 
   it('does not navigate away from an active login with background verification polling', () => {
     expect(spotifySource).not.toContain('pollVerification')
-    expect(spotifySource).toContain('Sign in if needed, then click Verify Account.')
+    expect(spotifySource).toContain('Sign in and select the intended artist or account, then click Verify beside that service.')
   })
 })

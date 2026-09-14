@@ -292,6 +292,25 @@ describe('Artist OS persistent shell chrome', () => {
     expect(compactHeader.split('border-orange-100/[0.12]').length - 1).toBe(5)
   })
 
+  test('puts foundational Command workers first and reuses the canonical manager entry', () => {
+    const workers = readFileSync(join(import.meta.dir, '..', 'AgentsLaunchpad.tsx'), 'utf8')
+    const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
+    const ranking = workers.slice(workers.indexOf('function agentDomainRank'), workers.indexOf('function isSystemAgent'))
+    expect(ranking.indexOf("'Command'")).toBeLessThan(ranking.indexOf("'Creative'"))
+    expect(workers).toContain('Start here')
+    expect(workers).toContain("!labOnly && domain === 'Command'")
+    expect(workers).toContain('const directoryAgents = labOnly ? activeAgents : [')
+    expect(workers).toContain('...allAgents.filter((agent) => agent.slug === CONCIERGE_SLUG)')
+    expect(workers).toContain("const foundationalOrder = ['setup-concierge', CONCIERGE_SLUG, 'anything-agent']")
+    const managerLaunch = workers.slice(workers.indexOf('if (agent.slug === CONCIERGE_SLUG)'), workers.indexOf('const sourceWorkspace = workspaces.find'))
+    expect(managerLaunch).toContain('await onOpenCommand()')
+    expect(managerLaunch).toContain('return')
+    expect(managerLaunch).not.toContain('openAgentSessionComposer')
+    expect(managerLaunch).not.toContain('onInputChange(')
+    expect(shell).toContain('onOpenCommand: handleWorkChatClick')
+    expect(shell).toContain('await openWorkCommand(true)')
+  })
+
   test('makes the Workers directory chat-first without hiding worker descriptions', () => {
     const workers = readFileSync(join(import.meta.dir, '..', 'AgentsLaunchpad.tsx'), 'utf8')
     const useAgents = readFileSync(join(import.meta.dir, '..', '..', '..', 'hooks', 'useAgents.ts'), 'utf8')

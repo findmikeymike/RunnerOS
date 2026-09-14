@@ -12,6 +12,10 @@
       "file": "setup-concierge-450bd45c.md",
       "bodySha256": "450bd45c238e2b26865289c3a6e875874e16761fdc7e145831eac17e8cea9564",
       "commit": "86f7340bc6f05ca118d0f31f35f63f70784340ec"
+    },
+    {
+      "file": "setup-concierge-5a6a3ebd.md",
+      "bodySha256": "5a6a3ebd15de4ca2d2bdd377570bc61dd543b207e87a2c032ca9af474260eece"
     }
   ],
   "skills": [
