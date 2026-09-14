@@ -46,6 +46,7 @@ import type {
   MissionAssetRecord,
 } from '../../../shared/types'
 import { isReleaseBoardItemIncluded, type ReleaseBoard } from '@/lib/release-board'
+import { shouldBlockCampaignDrawerDismiss } from '@/lib/campaign-onboarding'
 
 const missionTypes: MissionType[] = ['single', 'ep', 'album', 'other']
 const campaignChannelOptions = [
@@ -115,10 +116,14 @@ export function MissionBriefDrawer({
   const [showAssets, setShowAssets] = React.useState(false)
   const [briefPage, setBriefPage] = React.useState<BriefPage>('essentials')
   const [draft, setDraft] = React.useState<Partial<MissionBrief>>(mission)
+  const [sonicReferencesText, setSonicReferencesText] = React.useState(() => (mission.sonicReferences ?? []).join(', '))
+  const [creativeReferencesText, setCreativeReferencesText] = React.useState(() => (mission.references ?? []).map((ref) => ref.value).join(', '))
   const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
     setDraft(mission)
+    setSonicReferencesText((mission.sonicReferences ?? []).join(', '))
+    setCreativeReferencesText((mission.references ?? []).map((ref) => ref.value).join(', '))
   }, [mission])
 
   React.useEffect(() => {
@@ -132,6 +137,13 @@ export function MissionBriefDrawer({
   const campaignWindow = React.useMemo(() => missionCampaignWindow(editableBrief), [editableBrief])
   const campaignWindowError = React.useMemo(() => missionCampaignWindowError(editableBrief), [editableBrief])
   const canSave = hasSaveableMissionBrief(editableBrief) && !campaignWindowError
+  const handleOpenChange = React.useCallback((nextOpen: boolean) => {
+    if (shouldBlockCampaignDrawerDismiss(nextOpen, {
+      assetBusy,
+      trackReviewOpen: backgroundInteractionLocked,
+    })) return
+    onOpenChange(nextOpen)
+  }, [assetBusy, backgroundInteractionLocked, onOpenChange])
 
   const save = React.useCallback(async () => {
     const brief = buildMissionBrief(workspaceId, {
@@ -186,7 +198,7 @@ export function MissionBriefDrawer({
   )
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange} direction="right">
+    <Drawer open={open} onOpenChange={handleOpenChange} direction="right">
       <DrawerContent
         overlay={<div className="fixed inset-0 z-modal bg-black/20 backdrop-blur-[1px]" />}
         className="w-[min(560px,100vw)] !max-w-[min(560px,100vw)] border-l border-white/[0.08] bg-[#070707] text-white shadow-strong sm:!max-w-[560px]"
@@ -380,8 +392,12 @@ export function MissionBriefDrawer({
                 </div>
                 <Field label="Songs With Similar Sonics">
                   <input
-                    value={(draft.sonicReferences ?? []).join(', ')}
-                    onChange={(event) => setDraft((value) => ({ ...value, sonicReferences: parseList(event.target.value) }))}
+                    value={sonicReferencesText}
+                    onChange={(event) => {
+                      const nextValue = event.target.value
+                      setSonicReferencesText(nextValue)
+                      setDraft((value) => ({ ...value, sonicReferences: parseList(nextValue) }))
+                    }}
                     className={missionFieldClass}
                     placeholder="Song — Artist, Song — Artist"
                   />
@@ -428,8 +444,12 @@ export function MissionBriefDrawer({
                 </Field>
                 <Field label="Creative References">
                   <input
-                    value={(draft.references ?? []).map((ref) => ref.value).join(', ')}
-                    onChange={(event) => setDraft((value) => ({ ...value, references: parseReferences(event.target.value) }))}
+                    value={creativeReferencesText}
+                    onChange={(event) => {
+                      const nextValue = event.target.value
+                      setCreativeReferencesText(nextValue)
+                      setDraft((value) => ({ ...value, references: parseReferences(nextValue) }))
+                    }}
                     className={missionFieldClass}
                     placeholder="Artists, videos, films, visuals"
                   />

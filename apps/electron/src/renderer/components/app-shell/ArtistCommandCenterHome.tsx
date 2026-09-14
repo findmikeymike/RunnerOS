@@ -103,6 +103,7 @@ import {
 import { MissionBriefDrawer } from './MissionBriefDrawer'
 import { ReleaseCountdownDial } from './ReleaseCountdownDial'
 import { TrackIntelligenceReviewDialog, type TrackIntelligenceReviewValue } from './TrackIntelligenceReviewDialog'
+import { campaignTrackCharacterDefaults } from '@/lib/campaign-onboarding'
 
 interface ArtistCommandCenterHomeProps {
   workspaceId: string
@@ -405,6 +406,10 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
       },
     }
   }, [campaignLyricsAsset, campaignReviewAudio])
+  const campaignTrackDefaults = React.useMemo(
+    () => campaignTrackCharacterDefaults(mission),
+    [mission],
+  )
 
   const saveTrackReview = React.useCallback(async (value: TrackIntelligenceReviewValue) => {
     if (!campaignReviewAudio) return
@@ -890,6 +895,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
         open={Boolean(trackReviewAudioAssetId && campaignReviewIntelligence)}
         title={campaignReviewAudio?.label ?? mission.title ?? 'Campaign track'}
         intelligence={campaignReviewIntelligence}
+        characterDefaults={campaignTrackDefaults}
         busy={assetBusy}
         onClose={() => setTrackReviewAudioAssetId(null)}
         onSave={saveTrackReview}

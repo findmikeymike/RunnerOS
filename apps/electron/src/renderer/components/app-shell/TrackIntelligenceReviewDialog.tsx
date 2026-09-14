@@ -8,6 +8,7 @@ import type {
   TrackLyricSection,
 } from '@craft-agent/shared/artist-vault'
 import { cn } from '@/lib/utils'
+import { mergeTrackCharacterDefaults } from '@/lib/campaign-onboarding'
 
 export interface TrackIntelligenceReviewValue {
   revisionId: string
@@ -25,6 +26,7 @@ interface TrackIntelligenceReviewDialogProps {
   open: boolean
   title: string
   intelligence?: TrackIntelligence
+  characterDefaults?: TrackCharacterMetadata
   busy?: boolean
   onClose: () => void
   onSave: (value: TrackIntelligenceReviewValue) => Promise<void>
@@ -44,6 +46,7 @@ export function TrackIntelligenceReviewDialog({
   open,
   title,
   intelligence,
+  characterDefaults,
   busy = false,
   onClose,
   onSave,
@@ -63,18 +66,19 @@ export function TrackIntelligenceReviewDialog({
 
   React.useEffect(() => {
     if (!open || !revision) return
+    const character = mergeTrackCharacterDefaults(revision.character, characterDefaults)
     setStep('lyrics')
     setLines(revision.lyrics?.lines ?? [])
-    setGenre((revision.character?.genre ?? []).join(', '))
-    setSubgenre((revision.character?.subgenre ?? []).join(', '))
-    setMoods((revision.character?.moods ?? []).join(', '))
-    setThemes((revision.character?.themes ?? []).join(', '))
-    setTempo(revision.character?.tempoBpm ? String(revision.character.tempoBpm) : '')
-    setEnergy(revision.character?.energy ?? 5)
-    setNotes(revision.character?.notes ?? '')
+    setGenre((character?.genre ?? []).join(', '))
+    setSubgenre((character?.subgenre ?? []).join(', '))
+    setMoods((character?.moods ?? []).join(', '))
+    setThemes((character?.themes ?? []).join(', '))
+    setTempo(character?.tempoBpm ? String(character.tempoBpm) : '')
+    setEnergy(character?.energy ?? 5)
+    setNotes(character?.notes ?? '')
     setPasteOpen(false)
     setPastedLyrics('')
-  }, [open, revision])
+  }, [characterDefaults, open, revision])
 
   if (!open || !revision) return null
 
