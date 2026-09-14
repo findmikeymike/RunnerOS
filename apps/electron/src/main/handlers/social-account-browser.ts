@@ -105,3 +105,43 @@ function parseHttpUrl(value: string): URL | null {
     return null
   }
 }
+
+/** Inspect navigation controls, not feed authors, for Instagram's signed-in identity. */
+export const INSTAGRAM_BROWSER_IDENTITY_SCRIPT = `(() => {
+  const anchors = Array.from(document.querySelectorAll('a[href]'))
+  const label = (a) => [a.innerText, a.getAttribute('aria-label'),
+    ...Array.from(a.querySelectorAll('[aria-label], img[alt], title')).map(el =>
+      el.getAttribute('aria-label') || el.getAttribute('alt') || el.textContent)
+  ].filter(Boolean).join(' ')
+  const controls = anchors.filter(a => a.getClientRects().length > 0)
+    .map(a => ({ href: a.href, label: label(a), inContent: Boolean(a.closest('article, main')) }))
+  return {
+    url: location.href,
+    text: (document.body?.innerText || '').slice(0, 50000),
+    controls,
+    loginForm: Boolean(document.querySelector('input[name="password"], input[type="password"]')),
+  }
+})()`
+
+export function assessInstagramBrowserIdentity(page: {
+  url?: string
+  controls?: { href: string; label: string; inContent?: boolean }[]
+  loginForm?: boolean
+}): { loggedIn: boolean; handle: string | null; accountUrl: string | null } {
+  const empty = { loggedIn: false, handle: null, accountUrl: null }
+  const url = parseHttpUrl(page.url || '')
+  if (!url || !isSocialPlatformUrl('instagram', url.href) || page.loginForm
+    || /^\/(accounts\/(login|signup)|challenge|checkpoint)(?:\/|$)/i.test(url.pathname)) return empty
+  const controls = (page.controls || []).filter(control => isSocialPlatformUrl('instagram', control.href))
+  const privateNavigation = controls.some(control => /^\/direct(?:\/|$)/.test(new URL(control.href).pathname))
+  const profile = controls.find(control => {
+    const path = new URL(control.href).pathname
+    return !control.inContent && /^\/[a-z0-9._]+\/?$/i.test(path)
+      && /(?:\bprofile\b|profile picture)/i.test(control.label)
+      && !/^\/(explore|reels|direct|accounts|stories)\/?$/i.test(path)
+  })
+  const loggedIn = privateNavigation && Boolean(profile)
+  if (!loggedIn || !profile) return empty
+  const handle = new URL(profile.href).pathname.replace(/^\/|\/$/g, '')
+  return { loggedIn: true, handle: '@' + handle, accountUrl: 'https://www.instagram.com/' + handle + '/' }
+}

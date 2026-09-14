@@ -1590,11 +1590,13 @@ export default function SecretsSettingsPage() {
                                     </div>
                                     {preset.inputType === 'select' ? (
                                       <select
-                                        value={draftValues[preset.name] ?? ''}
+                                        value={draftValues[preset.name] ?? (saved ? '' : preset.placeholder ?? '')}
                                         onChange={(event) => setDraftValues((current) => ({ ...current, [preset.name]: event.target.value }))}
                                         className="h-8 w-full rounded-[9px] border border-white/[0.07] bg-white/[0.02] px-3 text-sm text-white/82 outline-none focus:border-[#fb923c]/45"
                                       >
-                                        <option value="">{saved ? 'Keep saved setting' : preset.placeholder ?? 'Choose'}</option>
+                                        {(saved || !preset.options?.some((option) => option.value === preset.placeholder)) && (
+                                          <option value="">{saved ? 'Keep saved setting' : 'Choose'}</option>
+                                        )}
                                         {preset.options?.map((option) => (
                                           <option key={option.value} value={option.value}>
                                             {option.label}

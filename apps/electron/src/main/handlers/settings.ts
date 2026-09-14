@@ -14,6 +14,8 @@ import type { HandlerDeps } from './handler-deps'
 import fs from 'node:fs'
 import { runSocialJson } from '../social-cli'
 import {
+  assessInstagramBrowserIdentity,
+  INSTAGRAM_BROWSER_IDENTITY_SCRIPT,
   findSpotifyUserAccountUrl,
   findSpotifyAdsManagerAccountId,
   hasLoggedInSignal,
@@ -675,6 +677,20 @@ async function verifySocialBrowserProfile(
   if (!isSocialPlatformUrl(ref.platform, instance.currentUrl)) {
     await browserPaneManager.navigate(instanceId, socialLoginUrl(ref.platform))
     await wait(1500)
+  }
+
+  if (ref.platform === 'instagram') {
+    const page = await browserPaneManager.evaluate(instanceId, INSTAGRAM_BROWSER_IDENTITY_SCRIPT) as Parameters<typeof assessInstagramBrowserIdentity>[0] | null
+    if (!page) return null
+    const identity = assessInstagramBrowserIdentity(page)
+    return {
+      platform: ref.platform,
+      profile: ref.profile,
+      source: 'runner-electron-browser',
+      loggedIn: identity.loggedIn,
+      visibleIdentity: { handle: identity.handle, accountUrl: identity.accountUrl, rawText: '', url: String(page.url || '') },
+      checkedAt: new Date().toISOString(),
+    }
   }
 
   const page = await browserPaneManager.evaluate(instanceId, `(() => {

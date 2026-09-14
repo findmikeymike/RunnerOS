@@ -242,7 +242,7 @@ interface SourceCredentialDialogProps {
   onComplete: () => void
 }
 
-function SourceCredentialDialog({
+export function SourceCredentialDialog({
   open,
   mode,
   source,

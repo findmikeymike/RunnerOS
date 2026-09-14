@@ -16,7 +16,8 @@ import {
 import { SettingsCard, SettingsSection } from '@/components/settings'
 import { openBrowserSidecarAtom, setBrowserInstancesAtom } from '@/atoms/browser-pane'
 import { useAppShellContext } from '@/context/AppShellContext'
-import { navigate, routes } from '@/lib/navigate'
+import { SourceCredentialDialog } from '../SourceInfoPage'
+import { preparePublishingConnection, type PublishingConnection } from '@/lib/publishing-connection'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type {
   LoadedSource,
@@ -73,6 +74,9 @@ export default function SocialAccountsSettingsPage() {
   const setBrowserInstances = useSetAtom(setBrowserInstancesAtom)
   const [doctor, setDoctor] = React.useState<SocialAccountsDoctorResult | null>(null)
   const [publishingSources, setPublishingSources] = React.useState<LoadedSource[]>([])
+  const [publishingCredentials, setPublishingCredentials] = React.useState<Record<string, boolean>>({})
+  const [publishingConnection, setPublishingConnection] = React.useState<PublishingConnection | null>(null)
+  const [openingProvider, setOpeningProvider] = React.useState<string | null>(null)
   const [draft, setDraft] = React.useState<Draft>(EMPTY_DRAFT)
   const [editingRef, setEditingRef] = React.useState<{ platform: SocialPlatform; profile: string } | null>(null)
   const [busy, setBusy] = React.useState<string | null>('load')
@@ -126,12 +130,29 @@ export default function SocialAccountsSettingsPage() {
       ])
       setDoctor(nextDoctor)
       setPublishingSources(nextSources)
+      const credentialEntries = await Promise.all(PUBLISHING_PROVIDERS.map(async ({ slug }) => {
+        if (!activeWorkspaceId || !nextSources.some((source) => source.config.slug === slug)) return [slug, false] as const
+        const scope = await window.electronAPI.getSourceCredentialScope(activeWorkspaceId, slug).catch(() => null)
+        return [slug, scope?.hasEffectiveCredential === true] as const
+      }))
+      setPublishingCredentials(Object.fromEntries(credentialEntries))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not load social accounts')
     } finally {
       setBusy(null)
     }
   }, [activeWorkspaceId])
+
+  const openPublishingConnection = async (slug: 'trypost' | 'postiz') => {
+    setOpeningProvider(slug)
+    try {
+      setPublishingConnection(await preparePublishingConnection(window.electronAPI, activeWorkspaceId, slug))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not open publishing connection')
+    } finally {
+      setOpeningProvider(null)
+    }
+  }
 
   const patchProfileStatus = React.useCallback((updated: SocialAccountProfileStatus) => {
     setDoctor((prev) => {
@@ -320,6 +341,14 @@ export default function SocialAccountsSettingsPage() {
   return (
     <div className="flex h-full flex-col">
       <PanelHeader />
+      {publishingConnection && publishingConnection.workspaceId === activeWorkspaceId && (
+        <SourceCredentialDialog
+          open
+          {...publishingConnection}
+          onOpenChange={(open) => { if (!open) setPublishingConnection(null) }}
+          onComplete={() => { void load() }}
+        />
+      )}
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-5 p-6">
           <SettingsSection
@@ -334,8 +363,9 @@ export default function SocialAccountsSettingsPage() {
                     key={provider.slug}
                     name={provider.name}
                     description={provider.description}
-                    connected={publishingSourceConnected(source)}
-                    onOpen={() => navigate(routes.view.sourcesMcp(provider.slug))}
+                    connected={publishingSourceConnected(source, publishingCredentials[provider.slug] === true)}
+                    disabled={openingProvider !== null}
+                    onOpen={() => void openPublishingConnection(provider.slug)}
                   />
                 )
               })}
@@ -475,11 +505,13 @@ function PublishingConnectionRow({
   name,
   description,
   connected,
+  disabled,
   onOpen,
 }: {
   name: string
   description: string
   connected: boolean
+  disabled: boolean
   onOpen: () => void
 }) {
   return (
@@ -494,6 +526,7 @@ function PublishingConnectionRow({
       <button
         type="button"
         onClick={onOpen}
+        disabled={disabled}
         className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] px-2.5 text-xs font-medium text-white/48 transition-colors hover:bg-white/[0.05] hover:text-white/76"
       >
         <ExternalLink className="h-3.5 w-3.5" />
@@ -537,11 +570,11 @@ function BrowserAccountSetForm({
   )
 }
 
-function publishingSourceConnected(source: LoadedSource | undefined): boolean {
+function publishingSourceConnected(source: LoadedSource | undefined, hasCredential: boolean): boolean {
   if (!source?.config.enabled) return false
   const authType = source.config.mcp?.authType || source.config.api?.authType
   if (!authType || authType === 'none') return true
-  return source.config.connectionStatus === 'connected' || source.config.connectionStatus === 'untested'
+  return hasCredential
 }
 
 function AccountEditor({
