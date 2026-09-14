@@ -9,6 +9,8 @@ source_of_truth: true
 
 Living, amendable queue for important RunnerOS work that does not yet have a completed implementation and verification trail.
 
+Current finishing pass: [TO DO — SEPTEMBER 14](./to-do-sept14.md). Tracks Outputs clarity, agent-role boundaries, breakthrough guidance, Campaign Assistant, HQ voice setup, live acceptance, and release work; preserves Michael's original request.
+
 ## How To Maintain This
 
 - Add new work as a checkbox with a short outcome, not a vague idea.

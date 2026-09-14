@@ -11,6 +11,8 @@ This folder contains only unfinished work, partial implementations, and release 
 
 Living priority queue: [TO DO](./TO-DO.md).
 
+Current finishing pass: [TO DO — SEPTEMBER 14](./to-do-sept14.md) — product polish, agent responsibilities, breakthrough guidance, assistant work, live acceptance, and release gates, with the original user request preserved.
+
 ## Release Gates
 
 - [Artist OS V1 Release Readiness](./artist-os-v1-release-readiness.md) - short, ordered checklist from remaining product edits through production commerce, signed Mac packaging, clean-machine proof, and release approval.
