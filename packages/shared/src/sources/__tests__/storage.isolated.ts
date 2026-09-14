@@ -203,6 +203,19 @@ describe('workspace local source paths', () => {
     expect(loadSourceConfig(ws, 'local-cli')?.local?.path).toBe(join(ws, 'tools/local-cli'));
   });
 
+  test('publishing sources listed in Settings also resolve for credential entry and saving', () => {
+    const ws = makeWorkspace();
+    const listed: LoadedSource[] = loadAllSources(ws);
+    for (const slug of ['trypost', 'postiz']) {
+      expect(listed.some(source => source.config.slug === slug)).toBe(true);
+      const [resolved] = getSourcesBySlugs(ws, [slug]);
+      expect(resolved).toBeDefined();
+      expect(resolved?.config.mcp?.authType).toBe('bearer');
+      expect(resolved?.workspaceRootPath).toBe(ws);
+      expect(resolved?.config).toEqual(listed.find(source => source.config.slug === slug)?.config);
+    }
+  });
+
   test('getSourcesBySlugs resolves the built-in Squad source', () => {
     const ws = makeWorkspace();
     const sources = getSourcesBySlugs(ws, ['squad']);

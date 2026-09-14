@@ -14,6 +14,8 @@ import type { HandlerDeps } from './handler-deps'
 import fs from 'node:fs'
 import { runSocialJson } from '../social-cli'
 import {
+  assessTikTokBrowserIdentity,
+  TIKTOK_BROWSER_IDENTITY_SCRIPT,
   assessInstagramBrowserIdentity,
   INSTAGRAM_BROWSER_IDENTITY_SCRIPT,
   findSpotifyUserAccountUrl,
@@ -210,8 +212,18 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
           '--verification-json', JSON.stringify(verification),
           '--json',
         ]) as SocialAccountProfileStatusResult
+        const observed = verification.visibleIdentity.handle || verification.visibleIdentity.accountUrl
+        const expected = current.accountHandle || current.accountUrl
         return {
           ...result,
+          ...((ref.platform === 'instagram' || ref.platform === 'tiktok') && !verification.loggedIn ? {
+            profileStatus: 'verification_failed',
+            message: 'Could not confirm the signed-in account. Open this browser, finish signing in or select the intended profile, then verify again.',
+            nextAction: 'retry_verify',
+          } : {}),
+          ...(result.profileStatus === 'wrong_account' && observed ? {
+            message: `This browser is signed in as ${observed}; this row expects ${expected}. Switch accounts in this browser, then verify again.`,
+          } : {}),
           browserInstanceId: socialBrowserInstanceId(ref),
         }
       }
@@ -679,10 +691,11 @@ async function verifySocialBrowserProfile(
     await wait(1500)
   }
 
-  if (ref.platform === 'instagram') {
-    const page = await browserPaneManager.evaluate(instanceId, INSTAGRAM_BROWSER_IDENTITY_SCRIPT) as Parameters<typeof assessInstagramBrowserIdentity>[0] | null
+  if (ref.platform === 'instagram' || ref.platform === 'tiktok') {
+    const script = ref.platform === 'instagram' ? INSTAGRAM_BROWSER_IDENTITY_SCRIPT : TIKTOK_BROWSER_IDENTITY_SCRIPT
+    const page = await browserPaneManager.evaluate(instanceId, script) as Parameters<typeof assessInstagramBrowserIdentity>[0] | null
     if (!page) return null
-    const identity = assessInstagramBrowserIdentity(page)
+    const identity = ref.platform === 'instagram' ? assessInstagramBrowserIdentity(page) : assessTikTokBrowserIdentity(page)
     return {
       platform: ref.platform,
       profile: ref.profile,

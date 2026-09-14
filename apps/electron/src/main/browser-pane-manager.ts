@@ -521,6 +521,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
         }
       })
     void this.loadEmptyStatePage(instance).catch((error) => {
+      // Navigating immediately after creation intentionally cancels the empty page.
+      // Its rejection must never replace the requested site with about:blank.
+      if (error?.code === 'ERR_ABORTED' || error?.errno === -3 || String(error?.message).includes('ERR_ABORTED')) return
       mainLog.warn(`[browser-pane] empty-state load failed id=${instance.id}: ${error instanceof Error ? error.message : String(error)}`)
       void pageView.webContents.loadURL('about:blank')
     })

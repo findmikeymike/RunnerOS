@@ -284,6 +284,20 @@ describe('BrowserPaneManager', () => {
     manager = new BrowserPaneManager()
   })
 
+  it('does not blank a requested site when navigation cancels the initial empty page', async () => {
+    let rejectInitial!: (error: Error) => void
+    ;(manager as any).loadEmptyStatePage = () => new Promise<void>((_, reject) => { rejectInitial = reject })
+    manager.createInstance('social-startup-race', { show: false })
+    await manager.navigate('social-startup-race', 'https://www.tiktok.com/')
+    rejectInitial(Object.assign(new Error('ERR_ABORTED (-3)'), { code: 'ERR_ABORTED', errno: -3 }))
+    await Promise.resolve()
+    await Promise.resolve()
+    const instance = (manager as any).instances.get('social-startup-race')
+    expect(instance.pageView.webContents.getURL()).toBe('https://www.tiktok.com/')
+    expect(instance.pageView.webContents.loadURL).not.toHaveBeenCalledWith('about:blank')
+    manager.destroyInstance('social-startup-race')
+  })
+
   it('creates and lists instances', () => {
     const id = manager.createInstance('test-1')
     const list = manager.listInstances()

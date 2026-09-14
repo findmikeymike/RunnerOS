@@ -17,9 +17,22 @@ import { modelCooldownRegistry } from '../agent/model-fallback.ts';
 export interface UserSecretSummary {
   name: string;
   maskedValue: string;
+  /** Public enum preference only; never a credential value. */
+  settingValue?: string;
   source?: 'native' | 'cli' | 'environment';
   createdAt?: number;
   updatedAt?: number;
+}
+
+const PUBLIC_MEDIA_SETTINGS: Record<string, readonly string[]> = {
+  MEDIA_IMAGE_PROVIDER: ['auto', 'fal', 'replicate', 'wavespeed'],
+  MEDIA_VIDEO_PROVIDER: ['auto', 'fal', 'replicate', 'wavespeed'],
+  MEDIA_PROVIDER_STRATEGY: ['balanced', 'speed', 'quality', 'cost'],
+};
+
+export function publicMediaSettingValue(name: string, value: string): string | undefined {
+  return Object.hasOwn(PUBLIC_MEDIA_SETTINGS, name) && PUBLIC_MEDIA_SETTINGS[name]!.includes(value)
+    ? value : undefined;
 }
 
 const USER_SECRET_NAME_RE = /^[A-Z_][A-Z0-9_]*$/;
@@ -410,6 +423,8 @@ export class CredentialManager {
         const summary: UserSecretSummary = {
           name: id.name,
           maskedValue: maskSecretValue(cred.value),
+          ...(publicMediaSettingValue(id.name, cred.value) !== undefined
+            ? { settingValue: publicMediaSettingValue(id.name, cred.value) } : {}),
           source: cred.source,
           createdAt: cred.createdAt,
           updatedAt: cred.updatedAt,

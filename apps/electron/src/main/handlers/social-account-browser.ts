@@ -145,3 +145,31 @@ export function assessInstagramBrowserIdentity(page: {
   const handle = new URL(profile.href).pathname.replace(/^\/|\/$/g, '')
   return { loggedIn: true, handle: '@' + handle, accountUrl: 'https://www.instagram.com/' + handle + '/' }
 }
+
+export const TIKTOK_BROWSER_IDENTITY_SCRIPT = `(() => {
+  const label = el => (el.getAttribute('aria-label')
+    || el.querySelector('[aria-label]')?.getAttribute('aria-label')
+    || el.innerText || '').trim()
+  const controls = Array.from(document.querySelectorAll('a[href], button, [role="button"], [role="checkbox"]'))
+    .filter(el => el.getClientRects().length > 0)
+    .map(el => ({ href: el.href || '', label: label(el) }))
+  return { url: location.href, controls,
+    loginForm: Boolean(document.querySelector('input[type="password"]')) }
+})()`
+
+export function assessTikTokBrowserIdentity(page: {
+  url?: string
+  controls?: { href: string; label: string }[]
+  loginForm?: boolean
+}): { loggedIn: boolean; handle: string | null; accountUrl: string | null } {
+  const empty = { loggedIn: false, handle: null, accountUrl: null }
+  if (!isSocialPlatformUrl('tiktok', page.url || '') || page.loginForm) return empty
+  const controls = page.controls || []
+  const profile = controls.find(control => isSocialPlatformUrl('tiktok', control.href)
+    && /^\/@[a-z0-9._]+\/?$/i.test(new URL(control.href).pathname)
+    && /^profile$/i.test(control.label.trim()))
+  const privateControl = controls.some(control => /^(messages|activity|edit profile)$/i.test(control.label.trim()))
+  if (!profile || !privateControl) return empty
+  const handle = new URL(profile.href).pathname.replace(/^\/@|\/$/g, '')
+  return { loggedIn: true, handle: '@' + handle, accountUrl: 'https://www.tiktok.com/@' + handle }
+}

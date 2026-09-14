@@ -21,7 +21,7 @@ import type {
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getRawVideoEditorSource, getSquadSource, getGenesisLyricSource, getLyricsTranscriberSource, getGoogleAdsSource, getAdsOperatorSource, getGoogleCalendarSource, getGmailSource, getGoogleDriveSource, getMetaAdsSource, getNotebookLmSource, getYouTubeResearchSource, getYouTubeIntelligenceSource, getOpenSlideSource, getMonidSource, getZeroSource, getMediaGenerationSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
+import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getTryPostSource, getPostizSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getRawVideoEditorSource, getSquadSource, getGenesisLyricSource, getLyricsTranscriberSource, getGoogleAdsSource, getAdsOperatorSource, getGoogleCalendarSource, getGmailSource, getGoogleDriveSource, getMetaAdsSource, getNotebookLmSource, getYouTubeResearchSource, getYouTubeIntelligenceSource, getOpenSlideSource, getMonidSource, getZeroSource, getMediaGenerationSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 import { resolveRuntimeIdentity } from '../config/runtime-identity.ts';
@@ -554,6 +554,10 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
         sources.push({ ...getFieldTheorySource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'printing-press-social') {
         sources.push({ ...getPrintingPressSocialSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'trypost') {
+        sources.push({ ...getTryPostSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'postiz') {
+        sources.push({ ...getPostizSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'hypermotion') {
         sources.push({ ...getHypermotionSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'lottie') {

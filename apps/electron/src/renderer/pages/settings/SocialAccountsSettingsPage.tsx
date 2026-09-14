@@ -16,8 +16,10 @@ import {
 import { SettingsCard, SettingsSection } from '@/components/settings'
 import { openBrowserSidecarAtom, setBrowserInstancesAtom } from '@/atoms/browser-pane'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { socialVerificationMemory } from '@/lib/social-verification-memory'
 import { SourceCredentialDialog } from '../SourceInfoPage'
 import { preparePublishingConnection, type PublishingConnection } from '@/lib/publishing-connection'
+import { socialAccountIdentityError, socialAccountReferenceError } from '@/lib/social-account-reference'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type {
   LoadedSource,
@@ -128,7 +130,7 @@ export default function SocialAccountsSettingsPage() {
           ? window.electronAPI.getSources(activeWorkspaceId).catch(() => [] as LoadedSource[])
           : Promise.resolve([] as LoadedSource[]),
       ])
-      setDoctor(nextDoctor)
+      setDoctor(socialVerificationMemory.merge(nextDoctor))
       setPublishingSources(nextSources)
       const credentialEntries = await Promise.all(PUBLISHING_PROVIDERS.map(async ({ slug }) => {
         if (!activeWorkspaceId || !nextSources.some((source) => source.config.slug === slug)) return [slug, false] as const
@@ -187,27 +189,34 @@ export default function SocialAccountsSettingsPage() {
       toast.error('Account set title is required')
       return
     }
-    if (!profile) {
-      toast.error('Agent Ref ID is required')
+    const referenceError = socialAccountReferenceError({ platform: draft.platform, profile }, profiles, editingRef)
+    if (referenceError) {
+      toast.error(referenceError)
       return
     }
+    const identityError = socialAccountIdentityError(draft)
+    if (identityError) {
+      toast.error(identityError)
+      return
+    }
+    socialVerificationMemory.invalidate({ platform: draft.platform, profile })
     setBusy('save')
     try {
-      const exists = profiles.some((item) => item.platform === draft.platform && item.profile === profile)
+      const isEditing = editingRef !== null
       const input = {
         platform: draft.platform,
         profile,
         accountGroup: normalizedGroup,
-        handle: exists ? draft.handle.trim() : draft.handle.trim() || undefined,
-        accountUrl: exists ? draft.accountUrl.trim() : draft.accountUrl.trim() || undefined,
+        handle: isEditing ? draft.handle.trim() : draft.handle.trim() || undefined,
+        accountUrl: isEditing ? draft.accountUrl.trim() : draft.accountUrl.trim() || undefined,
       }
-      if (exists) await window.electronAPI.updateSocialAccount(input)
+      if (isEditing) await window.electronAPI.updateSocialAccount(input)
       else await window.electronAPI.addSocialAccount(input)
       setDraft({ ...EMPTY_DRAFT, accountGroup: normalizedGroup })
       setEditingRef(null)
       setActiveGroup(null)
       await load()
-      toast.success(exists ? 'Social profile updated' : 'Social profile added')
+      toast.success(isEditing ? 'Social profile updated' : 'Social profile added')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not save social profile')
     } finally {
@@ -274,6 +283,7 @@ export default function SocialAccountsSettingsPage() {
   const remove = async () => {
     if (!pendingDelete) return
     const profile = pendingDelete
+    socialVerificationMemory.invalidate(profile)
     setBusy(`${profile.platform}:${profile.profile}:delete`)
     try {
       await window.electronAPI.deleteSocialAccount({ platform: profile.platform, profile: profile.profile })
@@ -288,6 +298,7 @@ export default function SocialAccountsSettingsPage() {
   }
 
   const login = async (profile: SocialAccountProfileStatus) => {
+    socialVerificationMemory.invalidate(profile)
     setBusy(`${profile.platform}:${profile.profile}:login`)
     try {
       const result = await window.electronAPI.loginSocialAccount({
@@ -312,6 +323,7 @@ export default function SocialAccountsSettingsPage() {
   }
 
   const verify = async (profile: SocialAccountProfileStatus, options: { quiet?: boolean } = {}) => {
+    const revision = socialVerificationMemory.begin(profile)
     setBusy(`${profile.platform}:${profile.profile}:verify`)
     try {
       const result = await window.electronAPI.getSocialAccountStatus({
@@ -319,6 +331,7 @@ export default function SocialAccountsSettingsPage() {
         profile: profile.profile,
         live: true,
       }) as SocialAccountProfileStatus
+      if (!socialVerificationMemory.remember(result, revision)) return null
       patchProfileStatus(result)
       if (!options.quiet && result.browserInstanceId) {
         const instances = await window.electronAPI.browserPane.list()
@@ -609,13 +622,14 @@ function AccountEditor({
           </select>
         </label>
         <Field
-          label="Agent Ref ID"
+          label="Account reference"
           value={draft.profile}
-          placeholder="theinstaban"
+          placeholder="artist-main or artist-fans"
+          hint="Stable name for agents. Unique per platform across sets. Letters, numbers, dashes, underscores; no spaces."
           disabled={editing}
           onChange={(profile) => onDraftChange({ profile })}
         />
-        <Field label="Handle" value={draft.handle} placeholder="@yourhandle" onChange={(handle) => onDraftChange({ handle })} />
+        <Field label="Posting handle" value={draft.handle} placeholder="@yourhandle" hint="Exact account to post as. Enter this or its profile URL." onChange={(handle) => onDraftChange({ handle })} />
         <Field label="Account URL" value={draft.accountUrl} placeholder="https://instagram.com/yourhandle" onChange={(accountUrl) => onDraftChange({ accountUrl })} />
         <div className="flex items-end gap-2">
           <Button
@@ -638,6 +652,10 @@ function AccountEditor({
           </Button>
         </div>
       </div>
+      <p className="mt-3 text-xs leading-5 text-white/45">
+        Each posting account needs its own row and browser session, even with a shared email or login.
+        For a fan or secondary account, open its row’s browser, sign in, switch to that account, then Verify Login.
+      </p>
     </div>
   )
 }
@@ -760,6 +778,7 @@ function ProfileRow({
           <p className="mt-0.5 truncate text-xs text-white/34" title={profile.accountUrl || agentRef}>
             {platformLabel(profile.platform)}{profile.accountHandle && profile.accountHandle !== profile.profile ? ` · ${profile.profile}` : ''}
           </p>
+          {profile.lastCheckedAt ? <p className="mt-1 text-xs text-white/34">Last checked {new Date(profile.lastCheckedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Verify again after switching accounts.</p> : null}
           {!profile.ready && profile.message ? <p className="mt-1 line-clamp-1 text-xs text-white/34">{profile.message}</p> : null}
         </div>
       </div>
@@ -833,7 +852,7 @@ function StatusPill({ profile }: { profile: SocialAccountProfileStatus }) {
       : 'inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-2 py-1 text-[11px] font-medium text-amber-200'}
     >
       {ready ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-      {ready ? 'Ready' : statusLabel(profile.profileStatus)}
+      {ready ? 'Verified' : statusLabel(profile.profileStatus)}
     </span>
   )
 }
