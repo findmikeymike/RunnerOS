@@ -47,6 +47,78 @@ function fixture(messages: Message[]) {
 }
 
 describe('real SessionManager steering host paths', () => {
+  test('queue-only sends never silently redirect the active response', async () => {
+    const { manager, managed, operations } = fixture([])
+    managed.isProcessing = true
+    managed.agent.redirect = () => { throw new Error('Must not steer') }
+    await manager.sendMessage(managed.id, 'Next task', undefined, undefined, { inputOrigin: 'human', queueOnly: true, optimisticMessageId: 'optimistic' })
+    expect(managed.messageQueue).toHaveLength(1)
+    expect(managed.messages[0].queuedOptions.queueOnly).toBe(true)
+    expect(operations).toContain('queued')
+  })
+
+  test('editing uses optimistic identity and preserves attachments and skills', async () => {
+    const update = { ...message('edit'), attachments: [{ id: 'file', type: 'text' as const, name: 'notes.txt', mimeType: 'text/plain', size: 2, storedPath: '/fixture/notes' }], queuedOptions: { skillSlugs: ['writer'], optimisticMessageId: 'ui-id' } }
+    const { manager, managed, events } = fixture([update])
+    managed.isProcessing = true
+    managed.messageQueue = [recoverQueuedMessage(update)]
+    await manager.changeQueuedMessage(managed.id, { messageId: 'ui-id', action: 'edit', content: 'TikTok only' })
+    expect(managed.messageQueue[0].message).toBe('TikTok only')
+    expect(managed.messageQueue[0].storedAttachments).toEqual(update.attachments)
+    expect(managed.messageQueue[0].options.skillSlugs).toEqual(['writer'])
+    expect(events[0].optimisticMessageId).toBe('ui-id')
+  })
+
+  test('remove deletes only the selected queued update', async () => {
+    const a = message('a'), b = message('b')
+    const { manager, managed } = fixture([a, b])
+    managed.isProcessing = true
+    managed.messageQueue = [recoverQueuedMessage(a), recoverQueuedMessage(b)]
+    await manager.changeQueuedMessage(managed.id, { messageId: 'a', action: 'remove' })
+    expect(managed.messages.map((m: Message) => m.id)).toEqual(['b'])
+    expect(managed.messageQueue.map((m: any) => m.messageId)).toEqual(['b'])
+  })
+
+  test('steer persists first, interrupts once, then dispatches the chosen update with its original id', async () => {
+    const a = message('a'), b = message('b')
+    const { manager, managed, operations } = fixture([a, b])
+    managed.isProcessing = true
+    managed.messageQueue = [recoverQueuedMessage(a), recoverQueuedMessage(b)]
+    await manager.changeQueuedMessage(managed.id, { messageId: 'b', action: 'steer' })
+    expect(operations.indexOf('abort')).toBeGreaterThan(operations.indexOf('flush'))
+    await expect(manager.changeQueuedMessage(managed.id, { messageId: 'b', action: 'steer' })).rejects.toThrow('interruption')
+    expect(operations.filter((op: string) => op === 'abort')).toHaveLength(1)
+    managed.isProcessing = false; managed.stopRequested = false
+    const calls: any[] = []
+    manager.sendMessage = async (...args: any[]) => { calls.push(args) }
+    manager.processNextQueuedMessage(managed.id)
+    await tick()
+    expect(calls[0][5]).toBe('b')
+    expect(managed.messageQueue).toHaveLength(2)
+  })
+
+  test('already-dispatched or approval-blocked updates cannot be steered', async () => {
+    const update = message('a')
+    const { manager, managed, operations } = fixture([update])
+    managed.messageQueue = [recoverQueuedMessage(update)]
+    managed.queuedDispatch = managed.messageQueue[0]
+    await expect(manager.changeQueuedMessage(managed.id, { messageId: 'a', action: 'remove' })).rejects.toThrow('already started')
+    managed.queuedDispatch = undefined; managed.steeringHandoff = 'auth'
+    await expect(manager.changeQueuedMessage(managed.id, { messageId: 'a', action: 'steer' })).rejects.toThrow('approval or connection')
+    expect(operations).not.toContain('abort')
+  })
+
+  test('failed persistence rolls back queue edits and never interrupts', async () => {
+    const update = message('a')
+    const { manager, managed, operations } = fixture([update])
+    managed.isProcessing = true
+    managed.messageQueue = [recoverQueuedMessage(update)]
+    manager.flushSession = async () => { throw new Error('disk unavailable') }
+    await expect(manager.changeQueuedMessage(managed.id, { messageId: 'a', action: 'steer' })).rejects.toThrow('disk unavailable')
+    expect(managed.messages[0].queuedOptions).toBeUndefined()
+    expect(operations).not.toContain('abort')
+  })
+
   test('recovery requeues distinct ids in transcript order once and ignores obsolete callbacks', () => {
     const first = message('first', 'same')
     const second = message('second', 'same')

@@ -199,6 +199,15 @@ export function processEvent(
     case 'plan_submitted':
       return handlePlanSubmitted(state, event)
 
+    case 'queued_message_changed': {
+      const messages = state.session.messages.flatMap(message => {
+        const matches = message.id === event.messageId || message.id === event.optimisticMessageId
+        if (!matches || message.isQueued === false) return [message]
+        return event.message ? [{ ...message, ...event.message, id: message.id, isPending: false }] : []
+      })
+      return { state: { ...state, session: { ...state.session, messages } }, effects: [] }
+    }
+
     case 'user_message':
       return handleUserMessage(state, event)
 

@@ -39,3 +39,19 @@ For the current saved workflow recovery data, also set CRAFT_DURABLE_READ_HOST=1
 alongside CRAFT_PRODUCT_VARIANT=artist-os, CRAFT_CONFIG_DIR=$HOME/.artist-os and
 the canonical bundled-assets root. Launch the canonical compiled Electron app;
 do not substitute a packaged release or the separate development profile.
+
+### Controlled restart observation
+
+After the user performed a normal Cmd+Q, the shutdown log confirmed normal cleanup.
+Before quit and after quit: Instagram 13 cookies, Spotify 84, TikTok 61; no cookie
+records removed. After reopening the same canonical profile, all cookie metadata
+matched the post-quit snapshot exactly. Saved verification observations also survived
+(Instagram/TikTok verified; Spotify Artists and Web Player verified, Ads unverified).
+Only cookie metadata was inspected; no cookie values were exported. This rules out
+wholesale storage clearing in this restart, but does not prove the sites accept the
+saved authentication. Live site acceptance remains to be checked without re-login.
+
+The user then opened Instagram and Spotify without signing in again and confirmed
+both were already signed in. This controlled restart passes login persistence.
+The earlier intermittent report is not explained conclusively; no speculative cookie
+storage fix was applied. Reproduce with the exact failing surface if it recurs.

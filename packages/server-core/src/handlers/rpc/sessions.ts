@@ -86,6 +86,7 @@ async function scanSessionDirectory(dirPath: string): Promise<import('@craft-age
 
 function permissionForSessionCommand(command: SessionCommand): TeamPermissionAction | null {
   switch (command.type) {
+    case 'queuedMessage':
     case 'setPermissionMode':
     case 'refreshTitle':
       return 'agent.chat'
@@ -366,6 +367,8 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     if (permission) await assertSessionPermission(sessionId, permission)
 
     switch (command.type) {
+      case 'queuedMessage':
+        return sessionManager.changeQueuedMessage(sessionId, command)
       case 'flag':
         return sessionManager.flagSession(sessionId)
       case 'unflag':

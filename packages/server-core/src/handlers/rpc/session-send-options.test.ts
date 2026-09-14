@@ -7,3 +7,7 @@ test('renderer sends cannot impersonate a migrated automation or revive old skil
   expect(options.legacySkillReferences).toEqual(['monid']);
   expect(humanSendMessageOptions()).toEqual({ inputOrigin: 'human', legacySkillReferences: [] });
 });
+
+test('queue-only choice passes through but steering priority must come from the host', () => {
+  expect(humanSendMessageOptions({ queueOnly: true, steerNext: true })).toEqual({ queueOnly: true, inputOrigin: 'human', legacySkillReferences: [] });
+});

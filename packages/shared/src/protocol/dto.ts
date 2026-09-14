@@ -306,6 +306,7 @@ export type SessionEvent =
   | { type: 'task_progress'; sessionId: string; toolUseId: string; elapsedSeconds: number; turnId?: string }
   | { type: 'task_completed'; sessionId: string; taskId: string; status: 'completed' | 'failed' | 'stopped'; outputFile?: string; summary?: string; turnId?: string }
   | { type: 'shell_killed'; sessionId: string; shellId: string }
+  | { type: 'queued_message_changed'; sessionId: string; messageId: string; optimisticMessageId?: string; message?: Message }
   | { type: 'user_message'; sessionId: string; message: Message; status: 'accepted' | 'queued' | 'processing'; optimisticMessageId?: string }
   | { type: 'session_flagged'; sessionId: string }
   | { type: 'session_unflagged'; sessionId: string }
@@ -330,6 +331,10 @@ export type SessionEvent =
   | { type: 'session_tasks_changed'; sessionId: string; sessionTasks?: SessionTaskList; degraded?: boolean; error?: string }
 
 export interface SendMessageOptions {
+  /** Leave mid-response input queued until completion or explicit steering. */
+  queueOnly?: boolean
+  /** Host-owned queued priority, retained during recovery. */
+  steerNext?: boolean
   /** Host-supplied frozen choices for an unchanged pre-migration automation template. */
   legacySkillReferences?: string[]
   /** Single-use host token for resuming an admitted response after source activation. */
@@ -349,6 +354,7 @@ export interface SendMessageOptions {
 // ---------------------------------------------------------------------------
 
 export type SessionCommand =
+  | { type: 'queuedMessage'; messageId: string; action: 'edit' | 'remove' | 'steer'; content?: string }
   | { type: 'flag' }
   | { type: 'unflag' }
   | { type: 'archive' }

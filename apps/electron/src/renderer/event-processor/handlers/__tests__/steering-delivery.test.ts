@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { processEvent } from '../../processor'
 import { handleComplete, handleInterrupted, handleUserMessage } from '../session'
 import type { SessionState, UserMessageEvent } from '../../types'
 
@@ -60,4 +61,31 @@ describe('steering delivery receipts', () => {
   test('ordinary accepted messages remain unqueued', () => {
     expect(handleUserMessage(state(), event('initial', 'accepted', false)).state.session.messages[0]?.isQueued).toBe(false)
   })
+})
+
+
+test('queue edit and remove reconcile canonical ids without duplicating optimistic messages', () => {
+  const initial = state([{ id: 'ui', role: 'user', content: 'YouTube', timestamp: 1, isQueued: true }])
+  const edited = processEvent(initial, { type: 'queued_message_changed', sessionId: 'session', messageId: 'host', optimisticMessageId: 'ui', message: { id: 'host', role: 'user', content: 'TikTok', timestamp: 1, isQueued: true } }).state
+  expect(edited.session.messages).toHaveLength(1)
+  expect(edited.session.messages[0]?.content).toBe('TikTok')
+  expect(edited.session.messages[0]?.id).toBe('ui')
+  const removed = processEvent(edited, { type: 'queued_message_changed', sessionId: 'session', messageId: 'host', optimisticMessageId: 'ui' }).state
+  expect(removed.session.messages).toHaveLength(0)
+})
+
+test('late queue changes cannot remove a message already processing', () => {
+  const initial = state([{ id: 'ui', role: 'user', content: 'TikTok', timestamp: 1, isQueued: false }])
+  const next = processEvent(initial, { type: 'queued_message_changed', sessionId: 'session', messageId: 'host', optimisticMessageId: 'ui' }).state
+  expect(next.session.messages).toEqual(initial.session.messages)
+})
+
+
+test('a queued message enters the transcript after the response it waited for', () => {
+  const initial = state([
+    { id: 'ui', role: 'user', content: 'TikTok', timestamp: 1, isQueued: true },
+    { id: 'reply', role: 'assistant', content: 'Original answer', timestamp: 2 },
+  ])
+  const next = handleUserMessage(initial, { type: 'user_message', sessionId: 'session', status: 'processing', optimisticMessageId: 'ui', message: { id: 'host', role: 'user', content: 'TikTok', timestamp: 1, isQueued: false } }).state
+  expect(next.session.messages.map(message => message.id)).toEqual(['reply', 'ui'])
 })

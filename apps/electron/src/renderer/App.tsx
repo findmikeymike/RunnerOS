@@ -1292,14 +1292,8 @@ export default function App() {
         })
       }
 
-      // Step 5: Create user message with StoredAttachments (for UI display)
-      // Mark as isPending for optimistic UI — will be confirmed by user_message
-      // event. Flag mid-stream sends as queued so the bubble renders with the
-      // dashed-draft treatment immediately. Applies to both backends:
-      // Pi steers (server emits status: 'accepted' but the renderer preserves
-      // isQueued through that update) and Claude queues (server emits 'queued'
-      // which confirms it). Cleared by 'processing' status or when the current
-      // turn ends.
+      // Persistable optimistic updates stay in the composer queue during a run.
+      // The host starts them after completion, or the user explicitly chooses Steer now.
       const userMessage: Message = {
         id: generateMessageId(),
         role: 'user',
@@ -1324,6 +1318,7 @@ export default function App() {
         skillSlugs: effectiveSkillSlugs.length > 0 ? effectiveSkillSlugs : undefined,
         badges: badges.length > 0 ? badges : undefined,
         optimisticMessageId: userMessage.id,
+        queueOnly: true,
       })
       return true
     } catch (error) {

@@ -2366,10 +2366,11 @@ export function FreeFormInput({
             <Button
               type="submit"
               size="icon"
-              aria-label={isProcessing ? 'Send update' : t('shortcuts.sendMessage')}
-              title={isProcessing ? 'Send an update while the agent works' : undefined}
+              aria-label={isProcessing ? 'Queue message' : t('shortcuts.sendMessage')}
+              title={isProcessing ? 'Queue for the next response. Use Steer now above to redirect the current response.' : undefined}
               className={cn(
-                'send-btn h-7 w-7 shrink-0 rounded-full ml-2',
+                'send-btn h-7 shrink-0 rounded-full ml-2',
+                isProcessing ? 'w-auto gap-1.5 px-2.5' : 'w-7',
                 RENDERER_PRODUCT_VARIANT === 'artist-os' &&
                   'bg-[#f4511e] text-white hover:bg-[#ff5a22] active:bg-[#dc3f18] disabled:bg-[#f4511e] disabled:text-white disabled:opacity-35',
               )}
@@ -2377,6 +2378,7 @@ export function FreeFormInput({
               data-tutorial="send-button"
             >
               <ArrowUp className="h-4 w-4" />
+              {isProcessing && <span className="text-xs">Queue</span>}
             </Button>
           </div>
           </div>

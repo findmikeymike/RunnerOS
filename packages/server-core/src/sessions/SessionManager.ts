@@ -13402,6 +13402,7 @@ user a clickable link to where the thing now lives.`
         userMessage.queuedOptions = {
           skillSlugs: options?.skillSlugs, legacySkillReferences: options?.legacySkillReferences,
           optimisticMessageId: options?.optimisticMessageId,
+          queueOnly: options?.queueOnly, steerNext: options?.steerNext,
         }
         if (!existingMessageId) {
           managed.messages.push(userMessage)
@@ -13421,7 +13422,7 @@ user a clickable link to where the thing now lives.`
         this.assertBackgroundExecutionFence(managed.workspace.rootPath, options?.backgroundFence)
         let steered = false
         // Rich inputs require a normal turn. Never strip attachments or skill choices to steer text.
-        if (managed.isProcessing && !managed.stopRequested && managed.processingGeneration === generation
+        if (!options?.queueOnly && managed.isProcessing && !managed.stopRequested && managed.processingGeneration === generation
           && agent === managed.agent && !attachments?.length && !storedAttachments?.length && !options?.skillSlugs?.length && !options?.legacySkillReferences?.length) {
           if (agent?.supportsSteerRecovery) (managed.pendingSteers ??= new Map()).set(userMessage.id, queued)
           steered = agent?.redirect(message, userMessage.id) ?? false
@@ -13553,6 +13554,8 @@ user a clickable link to where the thing now lives.`
       }
 
       if (existingMessageId) {
+        // Pending updates live outside the transcript until their turn starts.
+        managed.messages = [...managed.messages.filter(entry => entry.id !== existingMessageId), userMessage]
         managed.messageQueue = managed.messageQueue.filter(entry => entry.messageId !== existingMessageId)
         if (managed.queuedDispatch?.messageId === existingMessageId) managed.queuedDispatch = undefined
         userMessage.isQueued = false
@@ -14153,6 +14156,57 @@ user a clickable link to where the thing now lives.`
     this.persistSession(managed)
   }
 
+  async changeQueuedMessage(sessionId: string, command: { messageId: string; action: 'edit' | 'remove' | 'steer'; content?: string }): Promise<void> {
+    await this.withSessionAdmissionLock(sessionId, async () => {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) throw new Error('Session not found.')
+      await this.ensureMessagesLoaded(managed)
+      const queued = managed.messageQueue.find(entry => entry.messageId === command.messageId || entry.optimisticMessageId === command.messageId)
+      const message = managed.messages.find(entry => entry.id === queued?.messageId)
+      if (!queued || !message?.isQueued || managed.queuedDispatch === queued || managed.pendingSteers?.has(message.id)) {
+        throw new Error('This update has already started. Send a new update instead.')
+      }
+      if (message.inputOrigin !== 'human' || message.hidden) throw new Error('Only your own queued chat updates can be changed.')
+      if (managed.stopRequested) throw new Error('Wait for the current interruption to finish.')
+      if (command.action === 'steer' && this.hasQueuedHandoff(managed)) throw new Error('Resolve the pending approval or connection request before steering.')
+      if (command.action === 'edit' && !command.content?.trim()) throw new Error('The update cannot be empty.')
+      if (!['edit', 'remove', 'steer'].includes(command.action)) throw new Error('Unknown queue action.')
+      const previousQueue = managed.messageQueue
+      const previousMessages = managed.messages
+      const updated = command.action === 'edit'
+        ? { ...message, content: command.content!, badges: undefined }
+        : { ...message, queuedOptions: { ...message.queuedOptions, steerNext: true } }
+      if (command.action === 'remove') {
+        managed.messageQueue = managed.messageQueue.filter(entry => entry !== queued)
+        managed.messages = managed.messages.filter(entry => entry.id !== message.id)
+      } else {
+        managed.messages = managed.messages.map(entry => entry.id === message.id ? updated : entry)
+        managed.messageQueue = managed.messageQueue.map(entry => entry === queued
+          ? { ...entry, message: updated.content, options: { ...entry.options, ...(command.action === 'edit' ? { badges: undefined } : { steerNext: true }) } }
+          : entry)
+      }
+      try {
+        this.persistSession(managed)
+        await this.flushSession(sessionId)
+      } catch (error) {
+        managed.messageQueue = previousQueue
+        managed.messages = previousMessages
+        this.persistSession(managed)
+        throw error
+      }
+      this.sendEvent({ type: 'queued_message_changed', sessionId, messageId: message.id, optimisticMessageId: queued.optimisticMessageId,
+        ...(command.action !== 'remove' ? { message: updated } : {}) }, managed.workspace.id)
+      if (command.action === 'steer' && managed.isProcessing) {
+        managed.wasInterrupted = true
+        managed.stopRequested = true
+        this.sendEvent({ type: 'interrupted', sessionId }, managed.workspace.id)
+        managed.agent?.forceAbort(AbortReason.Redirect)
+      } else if (!managed.isProcessing) {
+        this.processNextQueuedMessage(sessionId)
+      }
+    })
+  }
+
   async cancelProcessing(sessionId: string, silent = false): Promise<void> {
     const release = await this.acquireSendMessageAdmissionLock(sessionId)
     try {
@@ -14522,7 +14576,7 @@ user a clickable link to where the thing now lives.`
     if (!managed || managed.messageQueue.length === 0) return
 
     if (managed.isProcessing || this.hasQueuedHandoff(managed) || managed.queuedDispatch) return
-    const queued = managed.messageQueue[0]!
+    const queued = managed.messageQueue.find(entry => entry.options?.steerNext || managed.messages.find(message => message.id === entry.messageId)?.queuedOptions?.steerNext) ?? managed.messageQueue[0]!
     if (managed.messages.find(message => message.id === queued.messageId)?.queuedHandoff) return
     const next = queued
     managed.queuedDispatch = next

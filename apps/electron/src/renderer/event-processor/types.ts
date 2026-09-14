@@ -408,6 +408,14 @@ export interface TaskCompletedEvent {
  * Used for optimistic UI: frontend shows message immediately,
  * backend confirms/updates status via this event
  */
+export interface QueuedMessageChangedEvent {
+  type: 'queued_message_changed'
+  sessionId: string
+  messageId: string
+  optimisticMessageId?: string
+  message?: Message
+}
+
 export interface UserMessageEvent {
   type: 'user_message'
   sessionId: string
@@ -561,6 +569,7 @@ export type AgentEvent =
   | TaskProgressEvent
   | TaskCompletedEvent
   | UserMessageEvent
+  | QueuedMessageChangedEvent
   | MessageAnnotationsUpdatedEvent
   | SessionSharedEvent
   | SessionUnsharedEvent

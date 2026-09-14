@@ -131,6 +131,7 @@ export interface ISessionManager {
     captureVersion: string
     reviewTriggerId: string
   }): Promise<{ accepted: boolean; reason?: string }>
+  changeQueuedMessage(sessionId: string, command: { messageId: string; action: 'edit' | 'remove' | 'steer'; content?: string }): Promise<void>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
   getTaskOutput(taskId: string): Promise<string | null>

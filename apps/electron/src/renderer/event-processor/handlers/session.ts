@@ -617,11 +617,16 @@ export function handleUserMessage(
         return {
           ...m,
           isPending: false,
+          queuedOptions: message.queuedOptions,
           isQueued: status === 'queued' || (status === 'accepted' && (message.isQueued ?? existingMessage.isQueued ?? false)),
         }
       }
       return m
     })
+    if (status === 'processing' && existingMessage.isQueued) {
+      const delivered = updatedMessages[existingIndex]!
+      updatedMessages = [...updatedMessages.filter((_, index) => index !== existingIndex), delivered]
+    }
   } else {
     // Message not found (e.g., queued message from backend) - add it
     const newMessage: Message = {

@@ -25,6 +25,7 @@ interface ChatInputZoneProps {
   sessionStatuses?: SessionStatus[]
   currentSessionStatus?: string
   onSessionStatusChange?: (stateId: string) => void
+  centerSlot?: React.ReactNode
   afterStateSlot?: React.ReactNode
   beforeInfoSlot?: React.ReactNode
   infoSlot?: React.ReactNode
@@ -49,6 +50,7 @@ export function ChatInputZone({
   sessionStatuses = [],
   currentSessionStatus = 'todo',
   onSessionStatusChange,
+  centerSlot,
   afterStateSlot,
   beforeInfoSlot,
   infoSlot,
@@ -105,12 +107,14 @@ export function ChatInputZone({
           sessionStatuses={sessionStatuses}
           currentSessionStatus={currentSessionStatus}
           onSessionStatusChange={onSessionStatusChange}
+          centerSlot={centerSlot}
           afterStateSlot={afterStateSlot}
           beforeInfoSlot={beforeInfoSlot}
           infoSlot={infoSlot}
         />
       )}
 
+      {!shouldShowOptionBadges && centerSlot}
       {beforeInputSlot}
 
       <InputErrorBoundary

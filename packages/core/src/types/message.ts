@@ -343,7 +343,7 @@ export interface Message {
   // Queued: user message that is waiting to be processed (sent during ongoing response)
   isQueued?: boolean;
   /** Replay-only choices retained until a queued update is admitted. */
-  queuedOptions?: { skillSlugs?: string[]; legacySkillReferences?: string[]; optimisticMessageId?: string };
+  queuedOptions?: { steerNext?: boolean; queueOnly?: boolean; skillSlugs?: string[]; legacySkillReferences?: string[]; optimisticMessageId?: string };
   /** Existing auth/plan boundary; pending updates resume with the next deliberate send. */
   queuedHandoff?: 'auth' | 'plan';
   // Intermediate text (commentary between tool calls, not final response)
@@ -496,7 +496,7 @@ export interface StoredMessage {
   // Queued: user message that is waiting to be processed (persisted for recovery)
   isQueued?: boolean;
   /** Replay-only choices retained until a queued update is admitted. */
-  queuedOptions?: { skillSlugs?: string[]; legacySkillReferences?: string[]; optimisticMessageId?: string };
+  queuedOptions?: { steerNext?: boolean; queueOnly?: boolean; skillSlugs?: string[]; legacySkillReferences?: string[]; optimisticMessageId?: string };
   /** Existing auth/plan boundary; pending updates resume with the next deliberate send. */
   queuedHandoff?: 'auth' | 'plan';
 }

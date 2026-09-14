@@ -72,6 +72,7 @@ import {
   type AuthRequestTurn,
 } from "@craft-agent/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
+import { PendingMessageQueue } from './PendingMessageQueue'
 import { ChatInputZone, type StructuredInputState, type StructuredResponse, type PermissionResponse, type AdminApprovalResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
@@ -1521,7 +1522,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Memoize turn grouping - avoids O(n) iteration on every render/keystroke
   const allTurns = React.useMemo(() => {
     if (!session) return []
-    return groupMessagesByTurn(session.messages, projectSessionTasks(session))
+    return groupMessagesByTurn(session.messages.filter(message => !message.isQueued), projectSessionTasks(session))
   }, [session?.messages, session?.sessionTasks])
 
   // Keep ref in sync for scroll handler
@@ -2120,6 +2121,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             onSessionStatusChange={onSessionStatusChange}
             afterStateSlot={RENDERER_PRODUCT_VARIANT === 'artist-os' ? (
               <ChatGoalBadge session={session} draft={inputValue} onDraftChange={onInputChange} />
+            ) : undefined}
+            centerSlot={session.messages.some(message => message.role === 'user' && message.isQueued && !message.hidden) ? (
+              <PendingMessageQueue key={session.id} sessionId={session.id} messages={session.messages.filter(message => message.role === 'user' && message.isQueued && !message.hidden)} />
             ) : undefined}
             infoSlot={
               <VisualSurfaceToggle

@@ -86,6 +86,7 @@ export interface ActiveOptionBadgesProps {
   /** Callback when state changes */
   onSessionStatusChange?: (stateId: string) => void
   /** Optional control shown directly after the session state badge. */
+  centerSlot?: React.ReactNode
   afterStateSlot?: React.ReactNode
   /** Optional control shown immediately before the session info button. */
   beforeInfoSlot?: React.ReactNode
@@ -119,6 +120,7 @@ export function ActiveOptionBadges({
   sessionStatuses = [],
   currentSessionStatus,
   onSessionStatusChange,
+  centerSlot,
   afterStateSlot,
   beforeInfoSlot,
   infoSlot,
@@ -163,14 +165,14 @@ export function ActiveOptionBadges({
   const stackRef = useDynamicStack({ gap: 8, minVisible: 20, reservedStart: 0 })
 
   // Only render if badges or tasks are active
-  if (!permissionMode && tasks.length === 0 && !hasState && !hasStackContent && !beforeInfoSlot && !infoSlot) {
+  if (!permissionMode && tasks.length === 0 && !hasState && !hasStackContent && !beforeInfoSlot && !infoSlot && !centerSlot) {
     return null
   }
 
   return (
-    <div className={cn("flex items-start gap-2 mb-2 px-px pt-px pb-0.5", className)}>
+    <div className={cn("flex gap-2 px-px pt-px", centerSlot ? "items-end mb-0" : "items-start mb-2 pb-0.5", className)}>
       {/* Left side: mode → state → labels stack */}
-      <div className="flex items-start gap-2 min-w-0 flex-1">
+      <div className={cn("flex items-start gap-2 min-w-0", centerSlot ? "shrink-0 max-w-[40%] pb-2" : "flex-1")}>
         {/* Permission Mode Badge */}
         {permissionMode && (
           <div className="shrink-0">
@@ -244,8 +246,10 @@ export function ActiveOptionBadges({
 
       </div>
 
+      {centerSlot ? <div className="relative z-10 -mb-px min-w-0 flex-1">{centerSlot}</div> : null}
+
       {/* Right side: contextual actions and session info */}
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className={cn("flex shrink-0 items-center gap-1.5", centerSlot && "pb-2")}>
         {beforeInfoSlot}
         {infoSlot ?? <FilesPopoverButton sessionId={sessionId} sessionFolderPath={sessionFolderPath} />}
       </div>
