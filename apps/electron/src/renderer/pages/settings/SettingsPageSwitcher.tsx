@@ -154,7 +154,7 @@ export function SettingsGroupTabs({ activeSubpage }: SettingsPageSwitcherProps) 
 
   return (
     <div className="relative z-[100] mt-8 -mb-12 pointer-events-auto">
-      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-[12px] border border-white/[0.075] bg-gradient-to-b from-white/[0.045] to-white/[0.015] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] font-sans normal-case tracking-normal">
+      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-[12px] border border-white/[0.075] bg-gradient-to-b from-white/[0.045] to-white/[0.015] p-1 shadow-hairline-top font-sans normal-case tracking-normal">
         {activeGroup.pages.map((page) => {
           const selected = page.id === activeSubpage
           return (
