@@ -538,6 +538,7 @@ export const CHANNEL_MAP = {
   importArtistVaultAssets: invoke(RPC_CHANNELS.artistVault.IMPORT),
   linkArtistVaultFolder: invoke(RPC_CHANNELS.artistVault.LINK_FOLDER),
   updateArtistVaultAsset: invoke(RPC_CHANNELS.artistVault.UPDATE_ASSET),
+  deleteArtistVaultAsset: invoke(RPC_CHANNELS.artistVault.DELETE_ASSET),
   transcribeArtistVaultTrack: invoke(RPC_CHANNELS.artistVault.TRANSCRIBE_TRACK),
   reviewArtistVaultTrack: invoke(RPC_CHANNELS.artistVault.REVIEW_TRACK),
   saveOutputAssetToVault: invoke(RPC_CHANNELS.artistVault.SAVE_OUTPUT_ASSET),

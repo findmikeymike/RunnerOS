@@ -1311,6 +1311,7 @@ export interface ElectronAPI {
   importArtistVaultAssets(workspaceId: string, filePaths: string[], options?: VaultAssetImportOptions): Promise<VaultAssetImportResult>
   linkArtistVaultFolder(workspaceId: string, folderPath: string): Promise<VaultFolderLinkResult>
   updateArtistVaultAsset(workspaceId: string, assetId: string, patch: VaultAssetUpdatePatch): Promise<VaultManifest>
+  deleteArtistVaultAsset(workspaceId: string, assetId: string): Promise<VaultManifest>
   transcribeArtistVaultTrack(workspaceId: string, options: VaultTrackTranscribeOptions): Promise<VaultTrackTranscribeResult>
   reviewArtistVaultTrack(workspaceId: string, input: TrackIntelligenceReviewInput): Promise<VaultManifest>
   saveOutputAssetToVault(workspaceId: string, outputId: string, assetId?: string, options?: VaultAssetImportOptions): Promise<VaultAssetImportResult>

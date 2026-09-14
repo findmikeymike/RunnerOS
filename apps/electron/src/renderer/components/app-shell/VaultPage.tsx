@@ -16,11 +16,13 @@ import {
   Scissors,
   ShieldCheck,
   Tags,
+  Trash2,
   Upload,
   Video,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { CompactPageHeader } from './CompactPageHeader'
 import { TrackIntelligenceReviewDialog, type TrackIntelligenceReviewValue } from './TrackIntelligenceReviewDialog'
@@ -125,6 +127,8 @@ const QUICK_TAGS: Record<VaultCategory, string[]> = {
 }
 
 export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
+  const [deleteTarget, setDeleteTarget] = React.useState<VaultAssetRecord | null>(null)
+  const deleting = React.useRef(false)
   const [manifest, setManifest] = React.useState<VaultManifest | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [busy, setBusy] = React.useState<string | null>(null)
@@ -147,7 +151,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
     try {
       const next = await window.electronAPI.getArtistVaultManifest(workspaceId)
       setManifest(next)
-      setSelectedAssetId((current) => current && next.assets.some((asset) => asset.id === current) ? current : next.assets[0]?.id ?? null)
+      setSelectedAssetId((current) => current && next.assets.some((asset) => asset.id === current && asset.status !== 'archived') ? current : next.assets.find((asset) => asset.status !== 'archived')?.id ?? null)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
@@ -160,7 +164,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   }, [refresh])
   useWorkspaceSyncRefresh(workspaceId, ['vault', 'context'], () => refresh(false))
 
-  const assets = React.useMemo(() => manifest?.assets ?? [], [manifest])
+  const assets = React.useMemo(() => manifest?.assets.filter((asset) => asset.status !== 'archived') ?? [], [manifest])
   const selectedAsset = React.useMemo(
     () => assets.find((asset) => asset.id === selectedAssetId) ?? null,
     [assets, selectedAssetId],
@@ -368,6 +372,25 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
     if (!opened) toast.error('Could not open Artist Vault folder')
   }, [workspaceId])
 
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleting.current || busy !== null || analysisInFlight.current) return
+    deleting.current = true
+    setBusy('delete')
+    try {
+      const next = await window.electronAPI.deleteArtistVaultAsset(workspaceId, deleteTarget.id)
+      setManifest(next)
+      setSelectedAssetId((current) => current === deleteTarget.id ? null : current)
+      setTrackReviewAssetId((current) => current === deleteTarget.id ? null : current)
+      setDeleteTarget(null)
+      toast.success('Removed from Vault')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      deleting.current = false
+      setBusy(null)
+    }
+  }
+
   const updateAsset = React.useCallback(async (assetId: string, patch: VaultAssetUpdatePatch) => {
     if (!workspaceId) return
     setBusy(`asset:${assetId}`)
@@ -570,6 +593,8 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
             asset={selectedAsset}
             busy={busy === `asset:${selectedAsset?.id}`}
             onUpdate={updateAsset}
+            onDelete={(asset) => { if (busy === null) setDeleteTarget(asset) }}
+            deleteDisabled={busy !== null}
             onAnalyze={analyzeTrack}
             analyzingTrackId={analyzingTrackId}
             onReviewTrack={(assetId) => setTrackReviewAssetId(assetId)}
@@ -578,6 +603,23 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
         </div>
       </div>
 
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !deleting.current) setDeleteTarget(null) }}>
+        <DialogContent>
+          <DialogTitle>Delete from Vault?</DialogTitle>
+          <DialogDescription>
+            {deleteTarget?.relativePath
+              ? `Permanently delete the Vault copy of “${deleteTarget.label}”? Your original import file and existing copies elsewhere are unaffected.`
+              : `Remove “${deleteTarget?.label}” from Vault? The linked original file will stay where it is.`}
+          </DialogDescription>
+          <div className="flex justify-end gap-2">
+            <button type="button" disabled={busy === 'delete'} onClick={() => setDeleteTarget(null)} className="rounded-lg px-4 py-2 text-sm">Cancel</button>
+            <button type="button" disabled={busy !== null} onClick={() => void confirmDelete()} className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-50">
+              {busy === 'delete' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {busy === 'delete' ? 'Deleting…' : 'Delete from Vault'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <ImportModal
         draft={importDraft}
         busy={busy === 'import'}
@@ -612,6 +654,8 @@ function AssetDetailPanel({
   asset,
   busy,
   onUpdate,
+  onDelete,
+  deleteDisabled,
   onAnalyze,
   analyzingTrackId,
   onReviewTrack,
@@ -620,6 +664,8 @@ function AssetDetailPanel({
   workspaceId: string
   asset: VaultAssetRecord | null
   busy: boolean
+  onDelete: (asset: VaultAssetRecord) => void
+  deleteDisabled: boolean
   onUpdate: (assetId: string, patch: VaultAssetUpdatePatch) => Promise<void>
   onAnalyze: (asset: VaultAssetRecord, force?: boolean) => Promise<boolean>
   analyzingTrackId: string | null
@@ -869,6 +915,9 @@ function AssetDetailPanel({
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
           Save Asset
+        </button>
+        <button type="button" disabled={deleteDisabled || analyzingTrackId !== null} onClick={() => onDelete(asset)} className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-40">
+          <Trash2 className="h-4 w-4" /> Delete from Vault
         </button>
       </div>
     </aside>

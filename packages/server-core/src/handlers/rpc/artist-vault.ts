@@ -20,6 +20,7 @@ import {
   scanArtistVaultAsync,
   serializeArtistVaultContext,
   updateArtistVaultAsset,
+  deleteArtistVaultAsset,
   type VaultAssetImportCandidate,
   type VaultAssetImportOptions,
   type VaultAssetImportResult,
@@ -56,6 +57,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.artistVault.IMPORT,
   RPC_CHANNELS.artistVault.LINK_FOLDER,
   RPC_CHANNELS.artistVault.UPDATE_ASSET,
+  RPC_CHANNELS.artistVault.DELETE_ASSET,
   RPC_CHANNELS.artistVault.TRANSCRIBE_TRACK,
   RPC_CHANNELS.artistVault.REVIEW_TRACK,
   RPC_CHANNELS.artistVault.SAVE_OUTPUT_ASSET,
@@ -191,6 +193,17 @@ export function registerArtistVaultHandlers(server: RpcServer, deps: HandlerDeps
       })
     },
   )
+
+  server.handle(RPC_CHANNELS.artistVault.DELETE_ASSET, async (_ctx, workspaceId: string, assetId: string): Promise<VaultManifest> => {
+    const rootPath = resolveRootPath(workspaceId)
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(rootPath, 'files.write')
+    return withWorkspaceMutex(rootPath, async () => {
+      const manifest = deleteArtistVaultAsset(rootPath, workspaceId, assetId)
+      mirrorManifestToContext(rootPath, workspaceId, manifest, deps)
+      return manifest
+    })
+  })
 
   server.handle(
     RPC_CHANNELS.artistVault.TRANSCRIBE_TRACK,

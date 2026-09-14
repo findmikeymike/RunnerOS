@@ -9,6 +9,9 @@ import {
   renameSync,
   rmSync,
   statSync,
+  lstatSync,
+  realpathSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import {
@@ -291,6 +294,48 @@ export function resolveArtistVaultAssetPath(
   return asset.absolutePath && !asset.absolutePath.includes('\0') ? asset.absolutePath : null;
 }
 
+/** Remove a Vault copy, or forget a linked file without touching its original.
+ * Retain an archived record so rescanning a linked folder cannot resurrect it.
+ * Call under the workspace Vault mutex.
+ */
+export function deleteArtistVaultAsset(workspaceRootPath: string, workspaceId: string, assetId: string): VaultManifest {
+  const manifest = loadArtistVaultManifestForImport(workspaceRootPath, workspaceId);
+  const asset = manifest.assets.find((entry) => entry.id === assetId);
+  if (!asset) throw new Error('Vault asset not found.');
+  if (asset.status === 'archived') return manifest;
+  let ownedPath: string | null = null;
+  if (asset.relativePath) {
+    if (!isSafeVaultRelativePath(asset.relativePath)) throw new Error('Invalid Vault file path.');
+    const path = resolve(workspaceRootPath, asset.relativePath);
+    if (existsSync(path)) {
+      const info = lstatSync(path);
+      const root = realpathSync(getArtistVaultRoot(workspaceRootPath));
+      const inside = relative(root, realpathSync(path));
+      if (!info.isFile() || info.isSymbolicLink() || !inside || inside.startsWith('..')) {
+        throw new Error('This file is not a regular file inside the Vault.');
+      }
+      if (manifest.assets.some((other) => other.id !== assetId && other.status !== 'archived' && other.relativePath === asset.relativePath)) {
+        throw new Error('Another Vault asset uses this file. Remove the duplicate reference first.');
+      }
+      ownedPath = path;
+    }
+  }
+  const previous = { ...asset };
+  asset.status = 'archived';
+  asset.usableByAgents = false;
+  asset.updatedAt = new Date().toISOString();
+  manifest.updatedAt = asset.updatedAt;
+  saveArtistVaultManifest(workspaceRootPath, manifest);
+  try {
+    if (ownedPath) unlinkSync(ownedPath);
+  } catch (error) {
+    Object.assign(asset, previous);
+    saveArtistVaultManifest(workspaceRootPath, manifest);
+    throw error;
+  }
+  return manifest;
+}
+
 export async function readArtistVaultAssetDataUrl(
   workspaceRootPath: string,
   workspaceId: string,
@@ -298,6 +343,7 @@ export async function readArtistVaultAssetDataUrl(
 ): Promise<string> {
   const asset = loadArtistVaultManifest(workspaceRootPath, workspaceId).assets.find((candidate) => candidate.id === assetId);
   if (!asset) throw new Error(`Vault asset not found: ${assetId}`);
+  if (asset.status === 'archived') throw new Error('This Vault asset was deleted.');
   const path = resolveArtistVaultAssetPath(workspaceRootPath, asset);
   if (!path) throw new Error('This Vault file has no usable path.');
   const info = await statAsync(path);

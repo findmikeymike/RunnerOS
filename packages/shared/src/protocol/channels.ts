@@ -585,6 +585,7 @@ export const RPC_CHANNELS = {
     IMPORT: 'artistVault:import',
     LINK_FOLDER: 'artistVault:linkFolder',
     UPDATE_ASSET: 'artistVault:updateAsset',
+    DELETE_ASSET: 'artistVault:deleteAsset',
     TRANSCRIBE_TRACK: 'artistVault:transcribeTrack',
     REVIEW_TRACK: 'artistVault:reviewTrack',
     SAVE_OUTPUT_ASSET: 'artistVault:saveOutputAsset',

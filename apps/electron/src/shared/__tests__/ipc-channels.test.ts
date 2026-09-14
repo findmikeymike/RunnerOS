@@ -48,6 +48,7 @@ const EXPECTED_CHANNELS: string[] = [
   "artist-profile-enrichment:update-delivery",
   "artist-profile-enrichment:update-seeds",
   "artistVault:chooseFiles",
+  "artistVault:deleteAsset",
   "artistVault:get",
   "artistVault:import",
   "artistVault:linkFolder",
