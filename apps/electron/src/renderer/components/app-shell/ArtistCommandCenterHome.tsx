@@ -657,8 +657,9 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
       slug: ARTIST_NETWORK_CONTEXT_SLUG,
       metadata: artistNetworkMetadata(),
       body: serializeArtistNetworkBody(nextNetwork),
+      expectedBody: artistProfileDocs.find(doc => doc.slug === ARTIST_NETWORK_CONTEXT_SLUG)?.body ?? null,
     })
-  }, [artistNetworkResult, inheritedArtistProfileWorkspaceId, upsertArtistProfileContext])
+  }, [artistNetworkResult, artistProfileDocs, inheritedArtistProfileWorkspaceId, upsertArtistProfileContext])
 
   const toggleCampaignTeamPerson = React.useCallback(async (person: ArtistNetworkPerson) => {
     const linked = person.workspaceLinks.some((link) => link.workspaceId === workspaceId)

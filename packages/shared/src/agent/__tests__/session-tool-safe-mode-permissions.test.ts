@@ -30,6 +30,11 @@ describe('session tool safe-mode classification', () => {
 
   it('blocks mutating/auth session tools in safe mode', () => {
     const blockedTools = [
+      'mcp__session__manage_artist_brain',
+      'mcp__session__import_artist_community',
+      'mcp__session__import_artist_network',
+      'mcp__session__setup_llm_connection',
+      'mcp__session__setup_social_account',
       'mcp__session__source_oauth_trigger',
       'mcp__session__source_credential_prompt',
       'mcp__session__spawn_session',

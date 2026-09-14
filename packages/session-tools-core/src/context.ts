@@ -584,6 +584,11 @@ export interface SessionToolContext {
    * Save an encrypted RunnerOS secret or source credential.
    * Backend owns credential storage, workspace scoping, process env refresh, and UI broadcasts.
    */
+  manageArtistBrain?(input: import('./handlers/manage-artist-brain.ts').ManageArtistBrainInput): Promise<unknown>;
+  importArtistCommunity?(input: import('./handlers/import-artist-community.ts').ImportArtistCommunityInput): Promise<unknown>;
+  importArtistNetwork?(input: import('./handlers/import-artist-network.ts').ImportArtistNetworkInput): Promise<unknown>;
+  setupLlmConnection?(input: import('./handlers/setup-llm-connection.ts').SetupLlmConnectionInput): Promise<unknown>;
+  setupSocialAccount?(input: import('./handlers/setup-social-account.ts').SetupSocialAccountInput): Promise<unknown>;
   saveSecret?(input: import('./handlers/save-secret.ts').SaveSecretToolInput): Promise<import('./handlers/save-secret.ts').SaveSecretResult>;
 
   // ============================================================

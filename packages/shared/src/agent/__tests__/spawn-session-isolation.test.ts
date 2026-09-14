@@ -31,6 +31,11 @@ describe('SPAWN_SESSION_BLOCKED_TOOLS', () => {
   // spawn-session-isolation.ts).
   const EXPECTED_BLOCKED = [
     'spawn_session',
+    'manage_artist_brain',
+    'import_artist_community',
+    'import_artist_network',
+    'setup_llm_connection',
+    'setup_social_account',
     'source_credential_prompt',
     'source_oauth_trigger',
     'source_google_oauth_trigger',

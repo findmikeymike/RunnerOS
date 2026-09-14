@@ -8,4 +8,6 @@ Exact source-controlled shipped content captured before the helper refresh. Runt
 - `artist-os-guide.md`: current inline `STARTER_SKILLS` guide captured before edits. Exact content verified in commit `3b357d68b7d32e0c1fe2c4a70cb54fd94d16cb36`; file hash `48b88db2…` matches installed `.artist-os` guide.
 - `artist-os-guide-7cfc3032.md`: exact inline guide extracted from commit `759c6fb185a2638aae4f96e6fbd908b53dbf8b79`; file hash matches installed `.artist-os-dev` guide.
 
-The hashes are in `baselines.json`. No profile files were changed. Skill reference files are not migration targets; normal missing-file seeding owns new references and preserves existing custom references.
+The hashes are in `baselines.json`. No profile files were changed. Exact shipped feature references are also migration targets; normal missing-file seeding owns new references, and custom or deleted references remain untouched.
+
+- `setup-concierge-35d35751.md`, `artist-os-guide-c2998ce0.md`, and `artist-os-guide-features-f9fa9024.md`: exact current shipped content captured before the 2026-09-13 guided setup refresh (3237f69ae). Migration checks serialized prompt body and full skill/reference SHA256 hashes.

@@ -35,7 +35,7 @@ describe('social account browser presentation', () => {
   const navigate = mock(async (..._args: any[]) => ({ url: 'https://artists.spotify.com/', title: 'Spotify for Artists' }))
   const focus = mock(() => {})
   let currentUrl = 'https://artists.spotify.com/c/artist/home'
-  const evaluate = mock(async () => currentUrl.includes('open.spotify.com')
+  const evaluate = mock(async (_id?: string) => currentUrl.includes('open.spotify.com')
     ? {
         url: 'https://open.spotify.com/collection/playlists',
         title: 'Spotify',
@@ -102,7 +102,7 @@ describe('social account browser presentation', () => {
   })
 
   it('verifies the selected artist without navigating through unrelated Spotify services', async () => {
-    instances.set('social-spotify-artist-main', { id: 'social-spotify-artist-main' })
+    instances.set('social-spotify-artist-main', { id: 'social-spotify-artist-main', currentUrl: 'https://artists.spotify.com/c/artist/1234567890123456789012/home' })
     evaluate.mockImplementationOnce(async () => ({
       url: 'https://artists.spotify.com/c/artist/1234567890123456789012/home',
       title: 'Artist dashboard', text: 'Audience Music Songs', links: [],
@@ -159,12 +159,12 @@ describe('social account browser presentation', () => {
     )
 
     expect(result).toMatchObject({
-      browserInstanceId: 'social-spotify-artist-main',
+      browserInstanceId: 'social-spotify-artist-main-web-player',
       browserPartition: 'persist:social-spotify-artist-main',
       spotifySurface: 'web-player',
     })
     expect(navigate).toHaveBeenCalledWith(
-      'social-spotify-artist-main',
+      'social-spotify-artist-main-web-player',
       'https://open.spotify.com/collection/playlists',
     )
   })
@@ -286,4 +286,35 @@ describe('social account browser presentation', () => {
       'profile', 'update', 'spotify', '--account-url',
     ]))
   })
+  it('keeps Artists and Web Player windows separate while sharing saved login storage', async () => {
+    const login = handlers.get(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LOGIN)!
+    const artists = await login({ clientId: 'c' }, { platform: 'spotify', profile: 'artist-main', spotifySurface: 'artists' })
+    const player = await login({ clientId: 'c' }, { platform: 'spotify', profile: 'artist-main', spotifySurface: 'web-player' })
+    expect(artists.browserInstanceId).not.toBe(player.browserInstanceId)
+    expect(artists.browserPartition).toBe(player.browserPartition)
+    evaluate.mockImplementationOnce(async (id?: string) => {
+      expect(id).toBe(player.browserInstanceId)
+      return { url: 'https://open.spotify.com/collection/tracks', title: 'Spotify', text: 'Your Library Create playlist', links: ['https://open.spotify.com/user/31artistmain'] }
+    })
+    navigate.mockClear()
+    const result = await handlers.get(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS)!({ clientId: 'c' }, { platform: 'spotify', profile: 'artist-main', live: true, spotifySurface: 'web-player' })
+    expect(result.browserInstanceId).toBe(player.browserInstanceId)
+    expect(result.spotifyCapabilities.webPlayer.ready).toBe(true)
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('does not save a public user link as a logged-in identity', async () => {
+    evaluate.mockImplementationOnce(async () => ({ url: 'https://open.spotify.com/playlist/public', title: 'Playlist', text: 'Log in Sign up', links: ['https://open.spotify.com/user/publicowner'] }))
+    const result = await handlers.get(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS)!({ clientId: 'c' }, { platform: 'spotify', profile: 'artist-main', live: true, spotifySurface: 'web-player' })
+    expect(result.spotifyCapabilities.webPlayer).toMatchObject({ ready: false, status: 'identity_unverified', accountUrl: null })
+    expect(result.spotifyCapabilities.webPlayer.message).toContain('could not be confirmed')
+    expect(savedAccountUrl).toBeNull()
+  })
+
+  it('rejects a different surface without recording a false login failure', async () => {
+    evaluate.mockImplementationOnce(async () => ({ url: 'https://artists.spotify.com/c/roster', title: 'Roster', text: 'Artists Releases', links: [] }))
+    await expect(handlers.get(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS)!({ clientId: 'c' }, { platform: 'spotify', profile: 'artist-main', live: true, spotifySurface: 'web-player' })).rejects.toThrow('different page')
+    expect(runSocialJsonMock.mock.calls.some(([args]) => args.includes('--verification-json'))).toBe(false)
+  })
+
 })

@@ -50,6 +50,12 @@ export function resolveAgentTaskMode(
   if (!taskModeId) return undefined;
   if (agent.slug === 'concierge' && taskModeId === 'just-talk') taskModeId = GENERAL_AGENT_TASK_MODE_ID;
   const modes = consolidateManagerGeneralModes(agent.metadata.taskModes ?? []);
+  // Preserve saved setup conversations after the shipped domain cards upgrade.
+  if (agent.slug === 'setup-concierge' && !modes.some(mode => mode.id === taskModeId)
+    && modes.some(mode => mode.id === 'models' && mode.primarySkillSlugs.includes('setup-models'))) {
+    if (taskModeId === 'connect') taskModeId = GENERAL_AGENT_TASK_MODE_ID;
+    if (taskModeId === 'choose-tools') taskModeId = 'tools';
+  }
   const declaredMode = modes.find((candidate) => candidate.id === taskModeId);
   const virtualGeneral = !declaredMode && taskModeId === GENERAL_AGENT_TASK_MODE_ID;
   const mode: AgentTaskModeDefinition | undefined = declaredMode ?? (virtualGeneral ? {
@@ -99,7 +105,7 @@ export function resolveAgentTaskMode(
     id: mode.id,
     label: mode.label,
     description: mode.description,
-    definitionRevision: virtualGeneral ? taskModeRevision(mode).replace('task-mode-v1-', 'task-mode-general-v1-') : taskModeRevision(mode),
+    definitionRevision: (virtualGeneral || (mode.id === GENERAL_AGENT_TASK_MODE_ID && mode.primarySkillSlugs.length === 0)) ? taskModeRevision(mode).replace('task-mode-v1-', 'task-mode-general-v1-') : taskModeRevision(mode),
     primarySkillSlugs: [...mode.primarySkillSlugs],
     adjacentSkills: [...(mode.adjacentSkills ?? [])],
     requiredSourceSlugs: [...(mode.requiredSourceSlugs ?? [])],

@@ -21,6 +21,12 @@ describe('connection account settings', () => {
     expect(socialSource).toContain('aria-label="Delete social profile"')
   })
 
+  it('refreshes Spotify after workspace-scoped concierge setup changes', () => {
+    expect(spotifySource).toContain('return window.electronAPI.onSourcesChanged((workspaceId) => {')
+    expect(spotifySource).toContain('if (workspaceId === activeWorkspaceId) void load()')
+    expect(spotifySource).toContain('}, [activeWorkspaceId, load])')
+  })
+
   it('keeps Spotify out of Social Accounts', () => {
     expect(socialSource).not.toContain("{ id: 'spotify', label: 'Spotify' }")
     expect(socialSource).toContain(".filter((profile) => profile.platform !== 'spotify')")

@@ -85,7 +85,7 @@ export class SocialVerificationMemory {
       ...platform,
       profiles: platform.profiles.map(row => {
         const check = this.checks.get(key(row))
-        if (!check || row.liveChecked) return row
+        if (!check || row.liveChecked || (row as SocialAccountProfileStatus & { savedVerification?: boolean }).savedVerification) return row
         // Fresh account metadata wins; only the previous check's observation survives.
         const observed = check.row
         return { ...row, ready: observed.ready, loggedIn: observed.loggedIn,

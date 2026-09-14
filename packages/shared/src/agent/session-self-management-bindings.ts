@@ -658,6 +658,20 @@ Object.defineProperty(context, 'communityListContacts', {
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'manageArtistBrain', { get() { return getSessionScopedToolCallbacks(sessionId)?.manageArtistBrainFn; }, configurable: true, enumerable: true });
+  Object.defineProperty(context, 'importArtistCommunity', { get() { return getSessionScopedToolCallbacks(sessionId)?.importArtistCommunityFn; }, configurable: true, enumerable: true });
+  Object.defineProperty(context, 'importArtistNetwork', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.importArtistNetworkFn; },
+    configurable: true, enumerable: true,
+  });
+  Object.defineProperty(context, 'setupLlmConnection', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.setupLlmConnectionFn; },
+    configurable: true, enumerable: true,
+  });
+  Object.defineProperty(context, 'setupSocialAccount', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.setupSocialAccountFn; },
+    configurable: true, enumerable: true,
+  });
   Object.defineProperty(context, 'saveSecret', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.saveSecretFn;

@@ -1,3 +1,4 @@
+import { onLlmSetupRequest, takeLlmSetupRequest } from '@/lib/llm-setup-request'
 /**
  * AiSettingsPage
  *
@@ -1091,6 +1092,38 @@ export default function AiSettingsPage() {
     const method = getApiKeyMethodForConnection(connection)
     apiSetupOnboarding.jumpToCredentials(method)
   }, [apiSetupOnboarding, openApiSetup])
+
+  // Queue survives navigation. Fetch authoritative saved connections before reauth, since
+  // the shared model list may still be loading when Settings first mounts.
+  useEffect(() => {
+    const consume = async () => {
+      const request = takeLlmSetupRequest()
+      if (!request) return
+      try {
+        if (request.slug) {
+          const connections = await window.electronAPI.listLlmConnectionsWithStatus()
+          const connection = connections.find(item => item.slug === request.slug)
+          if (!connection) {
+            toast.error('That model connection no longer exists. Refresh and try again.')
+            return
+          }
+          if (connection.authType === 'oauth') handleReauthenticateConnection(connection)
+          else await handleEditConnection(connection)
+          return
+        }
+        apiSetupOnboarding.reset()
+        setIsDirectEdit(false)
+        setEditInitialValues(undefined)
+        openApiSetup()
+        if (request.provider) apiSetupOnboarding.handleSelectProvider(request.provider)
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Could not open model setup.')
+      }
+    }
+    const unsubscribe = onLlmSetupRequest(() => { void consume() })
+    void consume()
+    return unsubscribe
+  }, [openApiSetup, apiSetupOnboarding, handleReauthenticateConnection, handleEditConnection])
 
   const handleDeleteConnection = useCallback(async (slug: string) => {
     if (!window.electronAPI) return

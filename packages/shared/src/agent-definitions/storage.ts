@@ -308,7 +308,8 @@ function coerceTaskModes(
     const primarySkillSlugs = cleanTaskModeStrings(raw.primarySkillSlugs);
     if (!AGENT_SLUG_REGEX.test(id) || seen.has(id) || !label || label.length > 80
       || !description || description.length > TASK_MODE_TEXT_MAX || !kind
-      || primarySkillSlugs.length === 0 || primarySkillSlugs.some((slug) => !skills.has(slug))) {
+      || (primarySkillSlugs.length === 0 && !(id === 'general' && kind === 'focus'))
+      || primarySkillSlugs.some((slug) => !skills.has(slug))) {
       dropped += 1;
       continue;
     }
@@ -760,7 +761,15 @@ export function migrateBuiltInAgentTaskModes(starter: CreateAgentInput, options?
       const currentStockFingerprint = migrationFingerprint({ metadata: stock.metadata, systemPrompt: stock.systemPrompt });
       if (installedFingerprint !== currentStockFingerprint && !baselines.withoutRecipesHashes.includes(installedFingerprint)) return { updated: false };
     }
-    const next = { ...installed.metadata, taskModes: starter.metadata.taskModes };
+    // The old stock helper inventory predates domain skills. Expand that exact
+    // inventory only after its recipes passed the shipped-hash gate above.
+    // User-edited inventories remain theirs and cannot acquire unusable recipes.
+    const stockSetupInventory = starter.slug === 'setup-concierge'
+      && agentMetadataValueEquals(installed.metadata.skills, ['artist-os-guide', 'source-recipe']);
+    const next = { ...installed.metadata,
+      ...(stockSetupInventory ? { skills: starter.metadata.skills } : {}),
+      taskModes: starter.metadata.taskModes,
+    };
     // A customized skill inventory must not receive recipes it cannot execute.
     const parsed = parseAgentFile(serializeAgent(next, installed.systemPrompt));
     if (!agentMetadataValueEquals(parsed?.metadata.taskModes, starter.metadata.taskModes)) return { updated: false };

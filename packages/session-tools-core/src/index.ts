@@ -544,3 +544,17 @@ export { handleFindSignalIdeas } from './handlers/find-signal-ideas.ts';
 export type { FindSignalIdeasInput, SignalLookupResult } from '@craft-agent/shared/shared-intel';
 
 export type { LoadAgentCapabilityInput, LoadAgentCapabilityResult } from './handlers/load-agent-capability.ts';
+
+export type { SetupLlmConnectionInput } from './handlers/setup-llm-connection.ts';
+export type { SetupSocialAccountInput } from './handlers/setup-social-account.ts';
+
+export { setupSocialAccountSchema, validatedSetupSocialAccountSchema } from './handlers/setup-social-account.ts';
+
+export { importArtistNetworkSchema } from './handlers/import-artist-network.ts';
+export type { ImportArtistNetworkInput } from './handlers/import-artist-network.ts';
+
+export { BRAIN_FIELDS, validatedManageArtistBrainSchema } from './handlers/manage-artist-brain.ts';
+export type { ManageArtistBrainInput } from './handlers/manage-artist-brain.ts';
+
+export { importArtistCommunitySchema } from './handlers/import-artist-community.ts';
+export type { ImportArtistCommunityInput } from './handlers/import-artist-community.ts';

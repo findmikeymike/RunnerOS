@@ -44,6 +44,16 @@ export function migrateHelperGuide(options?: AgentStorageOptions & { globalSkill
       }
     }
   }
+  for (const version of baselines.references) {
+    const replacement = STARTER_SKILLS.find(skill => skill.slug === 'artist-os-guide')
+      ?.files.find(file => file.path === version.path)?.content;
+    if (!replacement || digest(replacement) === version.sha256) continue;
+    if (replaceRequiredGlobalSkillFileIfHashMatches(
+      'artist-os-guide', version.path, version.sha256, replacement, options?.globalSkillsDir,
+    ).updated && !updatedSkills.includes('artist-os-guide')) {
+      updatedSkills.push('artist-os-guide');
+    }
+  }
   // New reference files belong to ensureRequiredGlobalSkills, which seeds missing files.
   // This migration must never restore a deleted helper/skill or replace a custom reference.
   return { updatedAgents, updatedSkills };

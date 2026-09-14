@@ -57,6 +57,11 @@ const ENFORCED_SPAWN_SESSION_BLOCKED_TOOLS = new Set<string>([
     'spawn_session',
 
     // User-prompting / interactive tools — subagents must not block on UI input.
+    'manage_artist_brain',
+    'import_artist_community',
+    'import_artist_network',
+    'setup_llm_connection',
+    'setup_social_account',
     'source_credential_prompt',         // tool-defs.ts:962
     'source_oauth_trigger',             // tool-defs.ts:958
     'source_google_oauth_trigger',      // tool-defs.ts:959

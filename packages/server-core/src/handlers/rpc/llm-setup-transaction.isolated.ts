@@ -6,6 +6,8 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 
 let connection: config.LlmConnection
 let updateFails = false
+let conciergeHandler: (input: any, workspaceId: string, sessionId: string) => Promise<any>
+const pushes: any[][] = []
 let beforeWrite: (id: CredentialId, value: StoredCredential) => Promise<void> = async () => {}
 const records = new Map<string, StoredCredential>()
 const manager = getCredentialManager()
@@ -18,7 +20,7 @@ const backend = {
 }
 Object.assign(manager, { initialized: true, backends: [backend], writeBackend: backend })
 mock.module('@craft-agent/shared/config', () => ({ ...config,
-  getLlmConnection: () => connection && { ...connection },
+  getLlmConnection: (slug: string) => connection?.slug === slug ? { ...connection } : null,
   getDefaultLlmConnection: () => 'other',
   updateLlmConnection: (_slug: string, updates: Partial<config.LlmConnection>) => {
     if (updateFails) return false
@@ -30,15 +32,16 @@ mock.module('@craft-agent/shared/config/storage', () => ({ ...storage, setSetupD
 const { registerLlmConnectionsHandlers } = await import('./llm-connections')
 function handlers() {
   const handlers = new Map<string, (...args: any[]) => Promise<any>>()
-  registerLlmConnectionsHandlers({ handle: (name: string, handler: any) => handlers.set(name, handler) } as any,
+  registerLlmConnectionsHandlers({ handle: (name: string, handler: any) => handlers.set(name, handler), push(...args: any[]) { pushes.push(args) } } as any,
     { platform: { logger: { info() {}, warn() {}, error() {} } }, sessionManager: {
+      setLlmConnectionSetupHandler(handler: typeof conciergeHandler) { conciergeHandler = handler },
       reinitializeAuth: async () => config.readStableLlmConnection('fixture', async () => connection),
     } } as any)
   return handlers
 }
 const id: CredentialId = { type: 'llm_api_key', connectionSlug: 'fixture' }
 beforeEach(async () => {
-  records.clear(); updateFails = false; beforeWrite = async () => {}
+  records.clear(); pushes.length = 0; updateFails = false; beforeWrite = async () => {}
   connection = { slug: 'fixture', name: 'Fixture', providerType: 'pi', piAuthProvider: 'openai', authType: 'api_key', baseUrl: 'https://old.invalid', models: ['pi/model'], defaultModel: 'pi/model', createdAt: 1, modelSelectionMode: 'userDefined3Tier' }
   await manager.set(id, { value: 'old-key' })
 })
@@ -110,5 +113,41 @@ test('failed config save removes newly staged credentials when none existed', as
   updateFails = true
   expect((await setup()).success).toBe(false)
   expect(await manager.get(id)).toBeNull()
+  expect(connection.baseUrl).toBe('https://old.invalid')
+})
+
+
+test('concierge opens existing secure wizard only in originating workspace without claiming success', async () => {
+  handlers()
+  const result = await conciergeHandler({ action: 'open', slug: 'fixture' }, 'artist-workspace', 'setup-chat')
+  expect(result.status).toBe('needs_user_input')
+  expect(pushes).toHaveLength(1)
+  expect(pushes[0][0]).toBe(RPC_CHANNELS.deeplink.NAVIGATE)
+  expect(pushes[0][1]).toEqual({ to: 'workspace', workspaceId: 'artist-workspace' })
+  expect(pushes[0][2]).toMatchObject({ view: 'settings/ai', llmSetup: { sessionId: 'setup-chat', slug: 'fixture' } })
+  expect(JSON.stringify(pushes)).not.toContain('old-key')
+  expect(connection.baseUrl).toBe('https://old.invalid')
+})
+
+test('secure setup broadcasts refresh only after committing configuration', async () => {
+  expect((await setup()).success).toBe(true)
+  expect(pushes.some(args => args[0] === RPC_CHANNELS.llmConnections.CHANGED)).toBe(true)
+  pushes.length = 0
+  updateFails = true
+  expect((await setup()).success).toBe(false)
+  expect(pushes.some(args => args[0] === RPC_CHANNELS.llmConnections.CHANGED)).toBe(false)
+})
+
+
+test('concierge reauthentication refuses missing connection instead of creating a duplicate', async () => {
+  handlers()
+  await expect(conciergeHandler({ action: 'open', slug: 'deleted' }, 'artist-workspace', 'setup-chat')).rejects.toThrow('Connection not found')
+  expect(pushes).toHaveLength(0)
+})
+
+test('concierge default changes require explicit scope before a provider test or mutation', async () => {
+  handlers()
+  await expect(conciergeHandler({ action: 'set-default', slug: 'fixture' }, 'artist-workspace', 'setup-chat')).rejects.toThrow('scope explicitly')
+  expect(pushes).toHaveLength(0)
   expect(connection.baseUrl).toBe('https://old.invalid')
 })

@@ -395,33 +395,48 @@ export const TIER_TWO_TASK_MODES: Record<string, AgentTaskModeDefinition[]> = {
   ],
   'setup-concierge': [
     mode({
-      id: 'connect', label: 'Connect an Account',
-      icon: 'plug',
-      description: 'Save the right connection securely and check that it works.',
-      primarySkillSlugs: ['artist-os-guide'],
-      context: context([], [
-        'Exact selected service, current connection status, missing setup fields and its source guide',
-        'Use encrypted save_secret and source_test when available; never place credentials in context or outputs',
-      ], 2_000),
+      id: 'general', label: 'General', icon: 'message-circle',
+      description: 'Tell me what you need; I will use the right setup skill.',
+      primarySkillSlugs: [],
+      adjacentSkills: [
+        adjacent('setup-models', 'Model connections and defaults.'),
+        adjacent('setup-tools', 'Tool connections and affordable capability choices.'),
+        adjacent('setup-socials', 'Social and Spotify login and identity verification.'),
+        adjacent('setup-brain', 'Artist profile, voice and branding intake.'),
+        adjacent('setup-people', 'Network and Community contact imports.'),
+        adjacent('artist-os-guide', 'Navigation and help using the app.'),
+      ],
+      context: context([], ['Only state relevant to the current request; load the matching domain skill on demand'], 1_500),
     }),
     mode({
-      id: 'choose-tools', label: 'Choose Tools',
-      icon: 'compass',
-      description: 'Find the smallest set of connections for a specific job.',
-      primarySkillSlugs: ['source-recipe'],
-      context: context([], [
-        'The exact capability goal and live active source catalog; curate a focused source bundle rather than claiming to create a new capability',
-        'Use Monid as the default marketplace route; Zero needs explicit choice or confirmed Monid capability absence, never merely a connection or balance problem',
-      ], 2_000),
+      id: 'models', label: 'LLM Setup', icon: 'plug',
+      description: 'Connect the models your workers use.', primarySkillSlugs: ['setup-models'],
+      context: context([], ['Current model connections and secure setup options only'], 2_000),
     }),
     mode({
-      id: 'app-help', label: 'App Help',
-      icon: 'circle-help',
-      description: 'Find the right place and the next useful step.',
-      primarySkillSlugs: ['artist-os-guide'],
-      context: context([], [
-        'Current feature question and minimal relevant app state; load no source catalog or artist campaign context unless needed',
-      ], 1_500),
+      id: 'tools', label: 'Tools', icon: 'compass',
+      description: 'Connect useful services for your work.', primarySkillSlugs: ['setup-tools'],
+      context: context([], ['Relevant saved sources and connection choices only'], 2_000),
+    }),
+    mode({
+      id: 'socials', label: 'Social & Spotify', icon: 'link',
+      description: 'Connect and verify the right accounts.', primarySkillSlugs: ['setup-socials'],
+      context: context([], ['Selected saved account and chosen Spotify service only'], 2_000),
+    }),
+    mode({
+      id: 'brain', label: 'Brain & Profile', icon: 'brain',
+      description: 'Talk through your profile, voice and branding.', primarySkillSlugs: ['setup-brain'],
+      context: context([], ['Read only the selected HQ profile, voice or branding topic through manage_artist_brain'], 2_000),
+    }),
+    mode({
+      id: 'people', label: 'People & Community', icon: 'users',
+      description: 'Add people to the right HQ list.', primarySkillSlugs: ['setup-people'],
+      context: context([], ['User supplied contact data and intended Network or Community destination'], 2_000),
+    }),
+    mode({
+      id: 'app-help', label: 'App Help', icon: 'circle-help',
+      description: 'Find the right place and next useful step.', primarySkillSlugs: ['artist-os-guide'],
+      context: context([], ['Current feature question and its relevant feature reference only'], 2_000),
     }),
   ],
 }

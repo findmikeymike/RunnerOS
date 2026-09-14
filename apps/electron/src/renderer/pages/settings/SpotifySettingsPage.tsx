@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useSetAtom } from 'jotai'
+import { useAppShellContext } from '@/context/AppShellContext'
 import {
   CheckCircle2,
   CircleDashed,
@@ -45,6 +46,7 @@ const DEFAULT_PROFILE = 'spotify-main'
 const capabilityKey = (surface: SpotifyLoginSurface) => surface === 'artists' ? 'artists' : surface === 'web-player' ? 'webPlayer' : 'adsManager'
 
 export default function SpotifySettingsPage() {
+  const { activeWorkspaceId } = useAppShellContext()
   const openBrowserSidecar = useSetAtom(openBrowserSidecarAtom)
   const setBrowserInstances = useSetAtom(setBrowserInstancesAtom)
   const [doctor, setDoctor] = React.useState<SocialAccountsDoctorResult | null>(null)
@@ -74,6 +76,13 @@ export default function SpotifySettingsPage() {
   React.useEffect(() => {
     void load()
   }, [load])
+
+  React.useEffect(() => {
+    if (!window.electronAPI?.onSourcesChanged) return
+    return window.electronAPI.onSourcesChanged((workspaceId) => {
+      if (workspaceId === activeWorkspaceId) void load()
+    })
+  }, [activeWorkspaceId, load])
 
   const addAccount = async () => {
     const profile = newProfile.trim() || (profiles.length === 0 ? DEFAULT_PROFILE : '')

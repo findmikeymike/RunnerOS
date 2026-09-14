@@ -184,3 +184,17 @@ test('session resolution defaults interactive workers to General but preserves u
   expect(resolveAgentSessionTaskMode(legacy)).toEqual(resolveAgentSessionTaskMode(manager));
   expect(resolveAgentTaskMode(legacy, 'just-talk')?.primarySkillSlugs).toEqual(['artist-manager-operating-system']);
 });
+
+test('HQ helper General stays lean and old saved setup focuses still resolve', () => {
+  const helper = STARTER_AGENTS.find(agent => agent.slug === 'setup-concierge')! as LoadedAgent;
+  const general = resolveAgentTaskMode(helper, 'general')!;
+  expect(general.definitionRevision).toStartWith('task-mode-general-v1-');
+  expect(general.primarySkillSlugs).toEqual([]);
+  expect(general.context?.preloadTopics).toEqual([]);
+  expect(general.adjacentSkills.map(skill => skill.slug)).toContain('setup-brain');
+  expect(buildAgentTaskModePromptSection(general)).toContain('No topic selection is required');
+  expect(resolveAgentTaskMode(helper, 'connect')?.id).toBe('general');
+  expect(resolveAgentTaskMode(helper, 'choose-tools')?.id).toBe('tools');
+  const custom = { ...helper, metadata: { ...helper.metadata, taskModes: [...helper.metadata.taskModes!, { id: 'connect', kind: 'focus' as const, label: 'Custom', description: 'Saved custom recipe', primarySkillSlugs: ['setup-tools'] }] } };
+  expect(resolveAgentTaskMode(custom, 'connect')?.label).toBe('Custom');
+});

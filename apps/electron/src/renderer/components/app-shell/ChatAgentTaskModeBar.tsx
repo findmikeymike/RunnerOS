@@ -1,6 +1,6 @@
 import {
   Activity, AudioLines, BookOpen, CalendarDays, Captions, ChartNoAxesCombined,
-  Check, CircleHelp, ClipboardList, Coins, Compass,
+  Brain, Check, CircleHelp, ClipboardList, Coins, Compass, Link,
   Download, FileCheck, Fingerprint, Globe, Image, Info, Layers3,
   Lightbulb, ListChecks, ListMusic, LoaderCircle, Map, Megaphone,
   MessageCircle, Mic, MousePointerClick, Orbit, Package, Palette,
@@ -27,6 +27,8 @@ const FOCUS_ICONS: Record<string, typeof Fingerprint> = {
   'activity': Activity,
   'audio-lines': AudioLines,
   'book-open': BookOpen,
+  'brain': Brain,
+  'link': Link,
   'calendar': CalendarDays,
   'captions': Captions,
   'chart-no-axes-combined': ChartNoAxesCombined,
@@ -92,7 +94,11 @@ export function ChatAgentTaskModeBar({
     ...consolidated.filter(mode => mode.id !== GENERAL_AGENT_TASK_MODE_ID),
   ]
   const legacyManagerSelection = selectedModeId === 'just-talk' && consolidated.some(mode => mode.id === GENERAL_AGENT_TASK_MODE_ID && mode.primarySkillSlugs.includes('artist-manager-operating-system'))
-  const activeModeId = legacyManagerSelection ? GENERAL_AGENT_TASK_MODE_ID : selectedModeId ?? GENERAL_AGENT_TASK_MODE_ID
+  const upgradedSetupModes = consolidated.some(mode => mode.id === 'models' && mode.primarySkillSlugs.includes('setup-models'))
+  const legacySetupSelection = upgradedSetupModes && !consolidated.some(mode => mode.id === selectedModeId)
+    ? selectedModeId === 'connect' ? GENERAL_AGENT_TASK_MODE_ID : selectedModeId === 'choose-tools' ? 'tools' : undefined
+    : undefined
+  const activeModeId = legacyManagerSelection ? GENERAL_AGENT_TASK_MODE_ID : legacySetupSelection ?? selectedModeId ?? GENERAL_AGENT_TASK_MODE_ID
   const busy = Boolean(applyingModeId) || openingConversation
   const helperText = busy
     ? 'Updating focus…'

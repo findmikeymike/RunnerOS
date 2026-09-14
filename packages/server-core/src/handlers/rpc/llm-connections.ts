@@ -350,6 +350,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       try { await afterSave() }
       catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Connection initialization failed' } }
     }
+    if (outcome.success) pushTyped(server, RPC_CHANNELS.llmConnections.CHANGED, { to: 'all' })
     return outcome
   })
 
@@ -473,7 +474,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   })
 
   // List all LLM connections with authentication status
-  server.handle(RPC_CHANNELS.llmConnections.LIST_WITH_STATUS, async (): Promise<LlmConnectionWithStatus[]> => {
+  const listConnections = async (): Promise<LlmConnectionWithStatus[]> => {
     const connections = getLlmConnections()
     const credentialManager = getCredentialManager()
     const defaultSlug = getDefaultLlmConnection()
@@ -491,7 +492,8 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         isDefault: conn.slug === defaultSlug,
       }
     }))
-  })
+  }
+  server.handle(RPC_CHANNELS.llmConnections.LIST_WITH_STATUS, (_ctx) => listConnections())
 
   // Get a specific LLM connection by slug
   server.handle(RPC_CHANNELS.llmConnections.GET, async (_ctx, slug: string): Promise<LlmConnection | null> => {
@@ -568,6 +570,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       if (defaultSlug === connection.slug) {
         await sessionManager.reinitializeAuth()
       }
+      pushTyped(server, RPC_CHANNELS.llmConnections.CHANGED, { to: 'all' })
       return { success: true }
     } catch (error) {
       deps.platform.logger?.error('Failed to save LLM connection:', error)
@@ -602,7 +605,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   })
 
   // Test an LLM connection (validate credentials and connectivity with actual API call)
-  server.handle(RPC_CHANNELS.llmConnections.TEST, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
+  const testConnection = async (slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const result = await validateStoredBackendConnection({
         slug,
@@ -623,6 +626,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       }
 
       deps.platform.logger?.info(`LLM connection validated: ${slug}`)
+      pushTyped(server, RPC_CHANNELS.llmConnections.CHANGED, { to: 'all' })
       return { success: true }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
@@ -630,26 +634,29 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       const { parseValidationError } = await import('@craft-agent/shared/config')
       return { success: false, error: parseValidationError(msg) }
     }
-  })
+  }
+  server.handle(RPC_CHANNELS.llmConnections.TEST, (_ctx, slug) => testConnection(slug))
 
   // Set global default LLM connection
-  server.handle(RPC_CHANNELS.llmConnections.SET_DEFAULT, async (_ctx, slug: string): Promise<{ success: boolean; error?: string }> => {
+  const setAppDefault = async (slug: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const success = setDefaultLlmConnection(slug)
       if (success) {
         deps.platform.logger?.info(`Global default LLM connection set to: ${slug}`)
         // Reinitialize auth so env vars and summarization model override match the new default
         await sessionManager.reinitializeAuth()
+        pushTyped(server, RPC_CHANNELS.llmConnections.CHANGED, { to: 'all' })
       }
       return { success, error: success ? undefined : 'Connection not found' }
     } catch (error) {
       deps.platform.logger?.error('Failed to set default LLM connection:', error)
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
     }
-  })
+  }
+  server.handle(RPC_CHANNELS.llmConnections.SET_DEFAULT, (_ctx, slug) => setAppDefault(slug))
 
   // Set workspace default LLM connection
-  server.handle(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT, async (_ctx, workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }> => {
+  const setWorkspaceDefault = async (workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }> => {
     try {
       const workspace = getWorkspaceOrThrow(workspaceId)
 
@@ -679,11 +686,48 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
 
       saveWorkspaceConfig(workspace.rootPath, config)
       deps.platform.logger?.info(`Workspace ${workspaceId} default LLM connection set to: ${slug}`)
+      pushTyped(server, RPC_CHANNELS.llmConnections.CHANGED, { to: 'workspace', workspaceId })
       return { success: true }
     } catch (error) {
       deps.platform.logger?.error('Failed to set workspace default LLM connection:', error)
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
     }
+  }
+  server.handle(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT, (_ctx, workspaceId, slug) => setWorkspaceDefault(workspaceId, slug))
+
+  sessionManager.setLlmConnectionSetupHandler(async (input, workspaceId, sessionId) => {
+    if (input.action === 'list') {
+      const connections = await listConnections()
+      const { loadWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      return {
+        connections: connections.map(connection => ({
+          slug: connection.slug, name: connection.name, providerType: connection.providerType,
+          authType: connection.authType, defaultModel: connection.defaultModel,
+          credentialPresent: connection.isAuthenticated, isAppDefault: connection.isDefault,
+        })),
+        workspaceDefault: loadWorkspaceConfig(workspace.rootPath)?.defaults?.defaultLlmConnection ?? null,
+        note: 'Credential presence is not a successful connection test. Use test to verify usability.',
+      }
+    }
+    if (input.slug && !getLlmConnection(input.slug)) throw new Error('Connection not found. List saved connections first.')
+    if (input.action === 'open') {
+      server.push(RPC_CHANNELS.deeplink.NAVIGATE, { to: 'workspace', workspaceId }, {
+        view: 'settings/ai',
+        llmSetup: { requestId: randomUUID(), sessionId, slug: input.slug, provider: input.provider },
+      })
+      return { status: 'needs_user_input', message: 'Opened the secure model setup wizard. Complete sign-in or key entry there; then use list and test to confirm the saved connection. No connection has been saved by this tool call.' }
+    }
+    if (!input.slug) throw new Error('A saved connection slug is required.')
+    if (input.action === 'test') return testConnection(input.slug)
+    if (input.action === 'set-default') {
+      if (input.scope !== 'app' && input.scope !== 'workspace') throw new Error('Choose app or workspace scope explicitly.')
+      const test = await testConnection(input.slug)
+      if (!test.success) return test
+      const result = input.scope === 'app' ? await setAppDefault(input.slug) : await setWorkspaceDefault(workspaceId, input.slug)
+      return { ...result, scope: input.scope, slug: input.slug }
+    }
+    throw new Error('Unsupported model setup action.')
   })
 
   // Refresh available models for a connection (dynamic model discovery)

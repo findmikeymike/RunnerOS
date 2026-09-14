@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { reconcileDocumentDraft } from '@/lib/document-draft-sync'
 import { SignalsTracksPanel, type SignalNuggetInput } from './SignalsTracksPanel'
 import { SignalIdeaHandoff } from './SignalIdeaHandoff'
 import type { SignalEntryReference } from '@craft-agent/shared/shared-intel'
@@ -399,7 +400,17 @@ export function ArtistHQHome({
   const profileBodyRef = React.useRef<string | null>(null)
   const [profileConflict, setProfileConflict] = React.useState(false)
   const [brandingDraft, setBrandingDraft] = React.useState<BrandingDraft>(emptyBrandingDraft)
+  const brandingDraftRef = React.useRef(brandingDraft)
+  brandingDraftRef.current = brandingDraft
+  const brandingBaselineRef = React.useRef<BrandingDraft>(emptyBrandingDraft)
+  const brandingBodyRef = React.useRef<string | null>(null)
+  const [brandingConflict, setBrandingConflict] = React.useState(false)
   const [voiceDraft, setVoiceDraft] = React.useState<VoiceDraft>(emptyVoiceDraft)
+  const voiceDraftRef = React.useRef(voiceDraft)
+  voiceDraftRef.current = voiceDraft
+  const voiceBaselineRef = React.useRef<VoiceDraft>(emptyVoiceDraft)
+  const voiceBodyRef = React.useRef<string | null>(null)
+  const [voiceConflict, setVoiceConflict] = React.useState(false)
   const [automations, setAutomations] = React.useState<AutomationListItem[]>([])
   const [spotifySyncBusy, setSpotifySyncBusy] = React.useState(false)
   const [spotifyHistory, setSpotifyHistory] = React.useState<ArtistSpotifyHistoryPoint[]>([])
@@ -977,13 +988,29 @@ export function ArtistHQHome({
     }
   }, [profile.bannerImagePath, workspaceRootPath])
 
+  const voiceBody = docs.find(doc => doc.slug === ARTIST_VOICE_CONTEXT_SLUG)?.body ?? null
   React.useEffect(() => {
-    setVoiceDraft(voiceToDraft(voice))
-  }, [voice])
+    const nextDraft = voiceToDraft(voice)
+    const decision = reconcileDocumentDraft(voiceBodyRef.current, voiceBody, voiceDraftRef.current, voiceBaselineRef.current, nextDraft)
+    if (decision === 'unchanged') return
+    if (decision === 'conflict') { setVoiceConflict(true); return }
+    voiceBodyRef.current = voiceBody
+    voiceBaselineRef.current = nextDraft
+    setVoiceDraft(nextDraft)
+    setVoiceConflict(false)
+  }, [voice, voiceBody])
 
+  const brandingBody = docs.find(doc => doc.slug === ARTIST_BRANDING_CONTEXT_SLUG)?.body ?? null
   React.useEffect(() => {
-    setBrandingDraft(brandingToDraft(branding))
-  }, [branding])
+    const nextDraft = brandingToDraft(branding)
+    const decision = reconcileDocumentDraft(brandingBodyRef.current, brandingBody, brandingDraftRef.current, brandingBaselineRef.current, nextDraft)
+    if (decision === 'unchanged') return
+    if (decision === 'conflict') { setBrandingConflict(true); return }
+    brandingBodyRef.current = brandingBody
+    brandingBaselineRef.current = nextDraft
+    setBrandingDraft(nextDraft)
+    setBrandingConflict(false)
+  }, [branding, brandingBody])
 
   React.useEffect(() => {
     if (intelReport.status !== 'queued' && !signalWorkActive) return
@@ -1041,9 +1068,10 @@ export function ArtistHQHome({
         slug: ARTIST_NETWORK_CONTEXT_SLUG,
         metadata: artistNetworkMetadata(),
         body: serializeArtistNetworkBody(nextNetwork),
+        expectedBody: docs.find(doc => doc.slug === ARTIST_NETWORK_CONTEXT_SLUG)?.body ?? null,
       })
     },
-    [networkResult, upsert],
+    [networkResult, docs, upsert],
   )
 
   const saveCalendar = React.useCallback(
@@ -1208,6 +1236,10 @@ export function ArtistHQHome({
   }, [saveBannerImagePath])
 
   const saveVoice = React.useCallback(async () => {
+    if (voiceConflict) {
+      toast.error('Voice changed elsewhere. Reload the saved version before saving.')
+      return
+    }
     if (!voiceResult.ok) {
       toast.error(`${voiceResult.error} Open Workspace Context to recover it before saving.`)
       return
@@ -1218,18 +1250,26 @@ export function ArtistHQHome({
       updatedAt: new Date().toISOString(),
     }
     try {
-      await upsert({
+      const saved = await upsert({
         slug: ARTIST_VOICE_CONTEXT_SLUG,
         metadata: artistVoiceMetadata(),
         body: serializeArtistVoiceBody(nextVoice),
+        expectedBody: voiceBodyRef.current,
       })
+      voiceBaselineRef.current = voiceToDraft(nextVoice)
+      voiceBodyRef.current = saved.body
+      setVoiceConflict(false)
       toast.success('Artist Voice saved')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
-  }, [upsert, voiceDraft, voiceResult])
+  }, [upsert, voiceDraft, voiceResult, voiceConflict])
 
   const saveBranding = React.useCallback(async () => {
+    if (brandingConflict) {
+      toast.error('Branding changed elsewhere. Reload the saved version before saving.')
+      return
+    }
     if (!brandingResult.ok) {
       toast.error(`${brandingResult.error} Open Workspace Context to recover it before saving.`)
       return
@@ -1240,16 +1280,20 @@ export function ArtistHQHome({
       updatedAt: new Date().toISOString(),
     }
     try {
-      await upsert({
+      const saved = await upsert({
         slug: ARTIST_BRANDING_CONTEXT_SLUG,
         metadata: artistBrandingMetadata(),
         body: serializeArtistBrandingBody(nextBranding),
+        expectedBody: brandingBodyRef.current,
       })
+      brandingBaselineRef.current = brandingToDraft(nextBranding)
+      brandingBodyRef.current = saved.body
+      setBrandingConflict(false)
       toast.success('Branding saved')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
-  }, [brandingDraft, brandingResult, upsert])
+  }, [brandingDraft, brandingResult, brandingConflict, upsert])
 
   const saveIntelConfig = React.useCallback(async (nextConfig: ArtistIntelConfig) => {
     const config = {
@@ -2193,7 +2237,7 @@ export function ArtistHQHome({
               <button
                 type="button"
                 onClick={saveVoice}
-                disabled={!voiceResult.ok}
+                disabled={!voiceResult.ok || voiceConflict}
                 className="h-9 rounded-full bg-white/90 px-5 text-xs font-semibold text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Save Voice
@@ -2203,6 +2247,19 @@ export function ArtistHQHome({
             {!voiceResult.ok ? (
               <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
                 {voiceResult.error} Saving is paused so existing voice context is not overwritten.
+              </div>
+            ) : null}
+
+            {voiceConflict ? (
+              <div role="alert" className="mb-4 rounded-[14px] border border-amber-400/20 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100/80">
+                Voice changed elsewhere. Your unsaved edits are still here. Copy anything you want to keep before reloading.
+                <button type="button" className="ml-2 font-semibold text-white underline" onClick={() => {
+                  const next = voiceToDraft(voice)
+                  voiceBaselineRef.current = next
+                  voiceBodyRef.current = voiceBody
+                  setVoiceDraft(next)
+                  setVoiceConflict(false)
+                }}>Discard my edits and reload</button>
               </div>
             ) : null}
 
@@ -2558,7 +2615,7 @@ export function ArtistHQHome({
               <button
                 type="button"
                 onClick={saveBranding}
-                disabled={!brandingResult.ok}
+                disabled={!brandingResult.ok || brandingConflict}
                 className="h-9 rounded-full bg-white/90 px-5 text-xs font-semibold text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Save Branding
@@ -2568,6 +2625,19 @@ export function ArtistHQHome({
             {!brandingResult.ok ? (
               <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
                 {brandingResult.error} Saving is paused so existing branding context is not overwritten.
+              </div>
+            ) : null}
+
+            {brandingConflict ? (
+              <div role="alert" className="mb-4 rounded-[14px] border border-amber-400/20 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100/80">
+                Branding changed elsewhere. Your unsaved edits are still here. Copy anything you want to keep before reloading.
+                <button type="button" className="ml-2 font-semibold text-white underline" onClick={() => {
+                  const next = brandingToDraft(branding)
+                  brandingBaselineRef.current = next
+                  brandingBodyRef.current = brandingBody
+                  setBrandingDraft(next)
+                  setBrandingConflict(false)
+                }}>Discard my edits and reload</button>
               </div>
             ) : null}
 

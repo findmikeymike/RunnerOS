@@ -1,3 +1,6 @@
+import { manageArtistBrain } from '../hq-state/brain-setup';
+import { importArtistCommunityContacts } from '../community/import-contacts';
+import { importArtistNetwork } from '../hq-state/network-import';
 import { saveSourceCredential } from '../handlers/rpc/save-source-credential'
 import { loadActiveAgentsForWorkspace, shouldBackfillLegacyAgentActivation } from './agent-registration'
 import { buildScheduledWorkRuntimeStatus } from '../scheduled-work/runtime-status'
@@ -586,6 +589,24 @@ export function canDirectlyMutateUserMemory(spawnedFromAgent?: SpawnedAgentRef):
 export function directUserMemoryPolicyError(spawnedFromAgent?: SpawnedAgentRef): string {
   const actor = spawnedFromAgent?.agentSlug ? `Agent "${spawnedFromAgent.agentSlug}"` : 'This session'
   return `${actor} cannot directly write USER.md. Save agent-scoped memory instead, or let the memory review queue propose the user-level change for approval.`
+}
+
+/** Setup tools are user-facing account operations, never background delegation. */
+export function canUseConnectionSetup(session: {
+  spawnedFromAgent?: { agentSlug: string }
+  triggeredBy?: unknown
+  launchReceipt?: Partial<SessionLaunchReceipt>
+}): boolean {
+  const receipt = session.launchReceipt
+  return Boolean(session.spawnedFromAgent?.agentSlug && SECRET_WRITE_AGENT_SLUGS.has(session.spawnedFromAgent.agentSlug))
+    && !session.triggeredBy
+    && !receipt?.delegation
+    && !receipt?.automatedAncestry
+    && !receipt?.workflow
+    && !receipt?.automation
+    && !receipt?.deepResearch
+    && !receipt?.scheduledWork
+    && !['automation', 'workflow', 'deep-research', 'spawned-session'].includes(receipt?.origin ?? '')
 }
 
 export function canSaveRunnerSecrets(spawnedFromAgent?: SpawnedAgentRef): boolean {
@@ -2293,6 +2314,24 @@ export class SessionManager implements ISessionManager {
    *  Resolves immediately if already initialized. */
   waitForInit(): Promise<void> {
     return this.initGate.wait()
+  }
+
+  private llmConnectionSetupHandler?: (input: import('@craft-agent/session-tools-core').SetupLlmConnectionInput, workspaceId: string, sessionId: string) => Promise<unknown>
+  private socialAccountSetupHandler?: (input: import('@craft-agent/session-tools-core').SetupSocialAccountInput, workspaceId: string, sessionId: string) => Promise<unknown>
+
+  setLlmConnectionSetupHandler(handler: NonNullable<SessionManager['llmConnectionSetupHandler']>): void {
+    this.llmConnectionSetupHandler = handler
+  }
+
+  setSocialAccountSetupHandler(handler: NonNullable<SessionManager['socialAccountSetupHandler']>): void {
+    this.socialAccountSetupHandler = handler
+  }
+
+  private assertInteractiveConnectionSetup(managed: ManagedSession): void {
+    if (!canUseConnectionSetup(managed)) {
+      throw new Error('Connection setup requires a direct conversation with Setup Concierge or Artist Manager. Background and delegated work cannot change connection setup.')
+    }
+    assertTeamPermission(managed.workspace.rootPath, 'secrets.update')
   }
 
   private browserPaneManager: IBrowserPaneManager | null = null
@@ -9289,6 +9328,42 @@ user a clickable link to where the thing now lives.`
         findSignalIdeasFn: async (input) => {
           return this.getSignalReader().findForWorker(managed.workspace.id, managed.spawnedFromAgent?.agentSlug, input)
         },
+        manageArtistBrainFn: async (input) => {
+          if (!canUseConnectionSetup(managed)) throw new Error('Brain setup requires a direct Setup Concierge or Artist Manager conversation.')
+          const hq = findArtistHqWorkspace()
+          if (!hq) throw new Error('Artist HQ workspace is not configured.')
+          if (input.action === 'update') assertTeamPermission(managed.workspace.rootPath, 'files.write')
+          const result = await manageArtistBrain(hq.rootPath, input, managed.spawnedFromAgent!.agentSlug)
+          if (input.action === 'update') {
+            scheduleHqStateContextRefresh(hq.rootPath)
+            this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, hq.id, loadAllContextDocs(hq.rootPath))
+          }
+          return result
+        },
+        importArtistCommunityFn: async (input) => {
+          if (!canUseConnectionSetup(managed)) throw new Error('Community import requires a direct Setup Concierge or Artist Manager conversation.')
+          assertTeamPermission(managed.workspace.rootPath, 'records.write')
+          const hq = findArtistHqWorkspace()
+          if (!hq) throw new Error('Artist HQ workspace is not configured.')
+          const { canAgentAccessContextDoc } = await import('@craft-agent/shared/workspace-context')
+          const summary = loadContextDoc(hq.rootPath, 'artist-community')
+          if (summary && !canAgentAccessContextDoc(summary, managed.spawnedFromAgent!.agentSlug)) throw new Error('Community is disabled or unavailable to this agent.')
+          const result = importArtistCommunityContacts(hq.rootPath, input)
+          if (result.added > 0) this.refreshManagerStateAndBroadcast(hq.rootPath)
+          return result
+        },
+        importArtistNetworkFn: async (input) => {
+          if (!canUseConnectionSetup(managed)) throw new Error('Network import requires a direct Setup Concierge or Artist Manager conversation.')
+          assertTeamPermission(managed.workspace.rootPath, 'files.write')
+          const hq = findArtistHqWorkspace()
+          if (!hq) throw new Error('Artist HQ workspace is not configured.')
+          const result = await importArtistNetwork(hq.rootPath, input, managed.spawnedFromAgent!.agentSlug)
+          if (result.counts.added > 0) {
+            scheduleHqStateContextRefresh(hq.rootPath)
+            this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, hq.id, loadAllContextDocs(hq.rootPath))
+          }
+          return result
+        },
         searchArtistNetworkFn: async (input) => {
           const hq = findArtistHqWorkspace()
           return hq
@@ -9907,6 +9982,18 @@ user a clickable link to where the thing now lives.`
             },
           })
           return outputService.getVisualSurfaceState(managed.workspace.id, managed.id)
+        },
+        setupLlmConnectionFn: async (input) => {
+          this.assertInteractiveConnectionSetup(managed)
+          if (!this.llmConnectionSetupHandler) throw new Error('Model connection setup is unavailable on this host.')
+          return this.llmConnectionSetupHandler(input, managed.workspace.id, managed.id)
+        },
+        setupSocialAccountFn: async (input) => {
+          this.assertInteractiveConnectionSetup(managed)
+          if (!this.socialAccountSetupHandler) throw new Error('Social account setup is unavailable on this host.')
+          const result = await this.socialAccountSetupHandler(input, managed.workspace.id, managed.id)
+          if (input.action !== 'list') this.broadcastSourcesChanged(managed.workspace.id, loadAllSources(managed.workspace.rootPath))
+          return result
         },
         saveSecretFn: async (input) => {
           if (!canSaveRunnerSecrets(managed.spawnedFromAgent)) {

@@ -16,6 +16,15 @@
     {
       "file": "setup-concierge-5a6a3ebd.md",
       "bodySha256": "5a6a3ebd15de4ca2d2bdd377570bc61dd543b207e87a2c032ca9af474260eece"
+    },
+    {
+      "file": "setup-concierge-35d35751.md",
+      "bodySha256": "35d35751bd07ea47da33c6671de9ea2aa59ecef8cf215ab1e8820bde7f5bd209",
+      "commit": "3237f69ae"
+    },
+    {
+      "file": "setup-concierge-4000a2a8.md",
+      "bodySha256": "4000a2a8e913352922892cb20ed2f8d9ecd78b29d93c3ae4f5fe1c932505e842"
     }
   ],
   "skills": [
@@ -26,6 +35,28 @@
     {
       "file": "artist-os-guide-7cfc3032.md",
       "sha256": "7cfc30321e82a8e877a4513fa37570271df413718345d469d64c0cf5cc19cc62"
+    },
+    {
+      "file": "artist-os-guide-c2998ce0.md",
+      "sha256": "c2998ce05ebc2ad381353faa26fb1f0967119ab8a22ecf9d70a217319ce089ca",
+      "commit": "3237f69ae"
+    },
+    {
+      "file": "artist-os-guide-df76b17e.md",
+      "sha256": "df76b17ef5a6cae86a0e454c823855b38ada898e53a03d9440424b14552a261d"
+    }
+  ],
+  "references": [
+    {
+      "file": "artist-os-guide-features-f9fa9024.md",
+      "sha256": "f9fa90242c8ae916b75c6da973ba488ed651651141050795ad059dbbd5e82280",
+      "path": "references/features.md",
+      "commit": "3237f69ae"
+    },
+    {
+      "file": "artist-os-guide-features-563ddc2e.md",
+      "sha256": "563ddc2eaf3e1a59928bf3d221e04fb14662fbeaf61a430e88abf81d0833a23c",
+      "path": "references/features.md"
     }
   ]
 }

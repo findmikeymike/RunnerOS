@@ -792,6 +792,8 @@ export interface BrowserPaneBounds {
 }
 
 export interface DeepLinkNavigation {
+  /** Secure LLM setup intent; no credentials are transported through navigation. */
+  llmSetup?: { requestId: string; sessionId: string; slug?: string; provider?: 'claude' | 'chatgpt' | 'copilot' | 'api_key' | 'local' }
   view?: string
   tabType?: string
   tabParams?: Record<string, string>

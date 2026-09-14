@@ -9,9 +9,13 @@ import {
   type AdBrowserAccount,
   type AdBrowserProvider,
 } from '@craft-agent/shared/config'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import type { HandlerFn, RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
 import fs from 'node:fs'
+import path from 'node:path'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
+import { validatedSetupSocialAccountSchema } from '@craft-agent/session-tools-core'
+import { SocialConnectionObservations, socialConnectionObservation } from './social-connection-observations'
 import { runSocialJson } from '../social-cli'
 import {
   assessTikTokBrowserIdentity,
@@ -50,6 +54,83 @@ const SOCIAL_PLATFORMS = new Set(['instagram', 'tiktok', 'x', 'youtube', 'spotif
 // ============================================================
 
 export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps): void {
+  const observations = new SocialConnectionObservations(path.join(RUNTIME_IDENTITY.integrationCacheRoot, 'social-verification.json'))
+  const socialHandlers = new Map<string, HandlerFn>()
+  const accountOperations = new Map<string, Promise<unknown>>()
+  const registerSocial = (channel: string, handler: HandlerFn) => {
+    const execute: HandlerFn = async (ctx, input) => {
+      if (channel === RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_ADD) {
+        const ref = assertSocialRef(input)
+        const doctor = await runSocialJson(['doctor', '--json']) as { platforms?: Array<{ profiles?: Array<Record<string, unknown>> }> }
+        if (doctor.platforms?.flatMap(item => item.profiles ?? []).some(row => row.platform === ref.platform && String(row.profile).toLowerCase() === ref.profile.toLowerCase())) {
+          throw new Error('That account reference already exists for this platform. Use its saved reference or choose a different one.')
+        }
+      }
+      const checking = channel === RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS && input?.live
+      const revision = checking ? observations.begin(assertSocialRef(input)) : 0
+      const result = await handler(ctx, input)
+      if (channel === RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LIST && result?.platforms) {
+        return { ...result, platforms: result.platforms.map((item: any) => ({ ...item, profiles: item.profiles.map((row: any) => observations.merge(row)) })) }
+      }
+      if (channel === RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_UPDATE || channel === RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_DELETE) observations.invalidate(assertSocialRef(input))
+      if (checking && result) {
+        const remembered = observations.remember({ ...result, ...assertSocialRef(input) }, revision, input.spotifySurface)
+        if (input.spotifySurface && result.spotifyCapabilities) {
+          const surface = input.spotifySurface === 'artists' ? 'artists' : input.spotifySurface === 'web-player' ? 'webPlayer' : 'adsManager'
+          return { ...remembered, checkedSpotifySurface: input.spotifySurface, checkedSpotifyCapability: socialConnectionObservation({ spotifyCapabilities: { [surface]: result.spotifyCapabilities[surface] } }).spotifyCapabilities[surface] }
+        }
+        return remembered
+      }
+      return result
+    }
+    const wrapped: HandlerFn = (ctx, input) => {
+      if (channel === RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LIST) return execute(ctx, input)
+      const ref = assertSocialRef(input)
+      const key = `${ref.platform}/${ref.profile.toLowerCase()}`
+      const previous = accountOperations.get(key) ?? Promise.resolve()
+      const pending = previous.catch(() => {}).then(() => execute(ctx, input))
+      accountOperations.set(key, pending)
+      void pending.finally(() => { if (accountOperations.get(key) === pending) accountOperations.delete(key) }).catch(() => {})
+      return pending
+    }
+    socialHandlers.set(channel, wrapped)
+    server.handle(channel, wrapped)
+  }
+  deps.sessionManager.setSocialAccountSetupHandler?.(async (rawInput, workspaceId, _sessionId) => {
+    const input = validatedSetupSocialAccountSchema.parse(rawInput)
+    const channel = {
+      list: RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LIST,
+      add: RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_ADD,
+      open: RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LOGIN,
+      verify: RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS,
+    }[input.action]
+    if ((input.action === 'open' || input.action === 'verify') && !deps.browserPaneManager) throw new Error('Browser account setup is unavailable in this host.')
+    let result: any
+    try {
+      result = await socialHandlers.get(channel)!({ clientId: '', workspaceId, webContentsId: null }, { ...input, live: input.action === 'verify' })
+    } catch (error) {
+      // CLI errors can include command arguments containing private browser evidence.
+      const duplicate = error instanceof Error && error.message.startsWith('That account reference already exists')
+      throw new Error(duplicate ? error.message : 'Account setup could not complete. Check the saved account in Settings, open its browser and finish sign-in, then retry. Existing credentials were not changed.')
+    }
+    if (input.action === 'open') {
+      if (result.browserInstanceId) deps.browserPaneManager!.focus(result.browserInstanceId)
+      return { platform: input.platform, profile: input.profile, spotifySurface: input.spotifySurface, opened: Boolean(result.browserInstanceId), message: 'The saved account browser is open. The artist must sign in and select the intended profile, then ask to verify. Opening is not verification.' }
+    }
+    if (input.action === 'list') {
+      return { accounts: (result.platforms ?? []).flatMap((item: any) => item.profiles ?? []).filter((row: any) => (!input.platform || row.platform === input.platform) && (!input.profile || row.profile === input.profile)).map((row: any) => ({ ...socialConnectionObservation(row), sessionPath: undefined, historical: true })), message: 'Saved status is historical. Verify again before account-sensitive work, especially after switching profiles.' }
+    }
+    if (input.action === 'verify' && input.platform === 'spotify') {
+      return {
+        platform: input.platform, profile: input.profile, checkedSurface: input.spotifySurface,
+        verification: result.checkedSpotifyCapability ?? null,
+        liveChecked: Boolean(result.liveChecked), lastCheckedAt: result.lastCheckedAt ?? null,
+        savedCapabilities: Object.fromEntries(Object.entries(socialConnectionObservation(result).spotifyCapabilities ?? {}).map(([surface, capability]) => [surface, { ...(capability as object), historical: true }])),
+        message: 'Only checkedSurface was inspected now. Other saved capabilities are historical; verify each required service before account-sensitive work.',
+      }
+    }
+    return { ...socialConnectionObservation({ ...result, platform: input.platform, profile: input.profile }), sessionPath: undefined, liveChecked: Boolean(result.liveChecked), saved: input.action === 'add' || Boolean(result.liveChecked), ...(input.action === 'add' ? { message: 'Account reference saved. Next open its browser, sign in and select the intended account, then verify.' } : {}) }
+  })
   // Set keep awake while running setting (requires Electron power-manager)
   server.handle(RPC_CHANNELS.power.SET_KEEP_AWAKE, async (_ctx, enabled: boolean) => {
     const { setKeepAwakeWhileRunning } = await import('@craft-agent/shared/config/storage')
@@ -66,11 +147,11 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
     await updateConfiguredProxySettings(settings)
   })
 
-  server.handle(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LIST, async () => {
+  registerSocial(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LIST, async () => {
     return runSocialJson(['doctor', '--json'])
   })
 
-  server.handle(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_ADD, async (_ctx, input: SocialAccountInput) => {
+  registerSocial(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_ADD, async (_ctx, input: SocialAccountInput) => {
     const ref = assertSocialRef(input)
     return runSocialJson([
       'profile', 'add', ref.platform,
@@ -82,7 +163,7 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
     ])
   })
 
-  server.handle(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_UPDATE, async (_ctx, input: SocialAccountInput) => {
+  registerSocial(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_UPDATE, async (_ctx, input: SocialAccountInput) => {
     const ref = assertSocialRef(input)
     return runSocialJson([
       'profile', 'update', ref.platform,
@@ -94,12 +175,12 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
     ])
   })
 
-  server.handle(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_DELETE, async (_ctx, input: SocialAccountRef) => {
+  registerSocial(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_DELETE, async (_ctx, input: SocialAccountRef) => {
     const ref = assertSocialRef(input)
     return runSocialJson(['profile', 'delete', ref.platform, '--profile', ref.profile, '--json'])
   })
 
-  server.handle(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LOGIN, async (_ctx, input: SocialAccountRef) => {
+  registerSocial(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LOGIN, async (_ctx, input: SocialAccountRef) => {
     const ref = assertSocialRef(input)
     const result = await runSocialJson(['profile', 'login', ref.platform, '--profile', ref.profile, '--json']) as SocialAccountCommandResult
     const sessionPath = typeof result.sessionPath === 'string' ? result.sessionPath : null
@@ -114,7 +195,7 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
       : ref.platform === 'spotify' && input.spotifySurface === 'ads-manager'
         ? 'ads-manager'
         : 'artists'
-    const instanceId = browserPaneManager.createInstance(socialBrowserInstanceId(ref), {
+    const instanceId = browserPaneManager.createInstance(socialBrowserInstanceId(ref, ref.platform === 'spotify' ? spotifySurface : undefined), {
       show: false,
       partition,
     })
@@ -138,7 +219,7 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
     }
   })
 
-  server.handle(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS, async (_ctx, input: SocialAccountStatusInput) => {
+  registerSocial(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS, async (_ctx, input: SocialAccountStatusInput) => {
     const ref = assertSocialRef(input)
     if (input.live && deps.browserPaneManager) {
       const current = await runSocialJson([
@@ -198,7 +279,7 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
             severity: bothReady ? 'info' : wrongAccount ? 'error' : 'warning',
             message: spotifyCapabilityMessage(checked.capabilities),
             nextAction: bothReady ? 'none' : checked.capabilities.artists.ready ? 'open_web_player_login' : 'open_artists_login',
-            browserInstanceId: socialBrowserInstanceId(ref),
+            browserInstanceId: socialBrowserInstanceId(ref, input.spotifySurface),
             spotifyCapabilities: checked.capabilities,
           }
         }
@@ -228,6 +309,7 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
         }
       }
     }
+    if (input.live) throw new Error('Could not inspect the saved browser. Open the account browser, finish signing in, then verify again.')
     return runSocialJson([
       'profile', 'status', ref.platform,
       '--profile', ref.profile,
@@ -476,8 +558,11 @@ function socialBrowserPartition(ref: { platform: string; profile: string }): str
   return `persist:social-${ref.platform}-${socialBrowserSegment(ref.profile)}`
 }
 
-function socialBrowserInstanceId(ref: { platform: string; profile: string }): string {
-  return `social-${ref.platform}-${socialBrowserSegment(ref.profile)}`
+function socialBrowserInstanceId(ref: { platform: string; profile: string }, surface?: SpotifyLoginSurface): string {
+  const base = `social-${ref.platform}-${socialBrowserSegment(ref.profile)}`
+  // Keep the existing Artists window and saved partition; other surfaces need
+  // separate navigation targets, not separate logins.
+  return ref.platform === 'spotify' && surface && surface !== 'artists' ? `${base}-${surface}` : base
 }
 
 function socialBrowserSegment(value: string): string {
@@ -494,7 +579,7 @@ async function verifySpotifyBrowserCapabilities(
   discoveredAccountUrl: string | null
   verification: SocialBrowserVerification
 } | null> {
-  const instanceId = socialBrowserInstanceId(ref)
+  const instanceId = socialBrowserInstanceId(ref, surface)
   let instance = browserPaneManager.getInstance(instanceId)
   if (!instance) {
     browserPaneManager.createInstance(instanceId, {
@@ -505,8 +590,16 @@ async function verifySpotifyBrowserCapabilities(
   }
   if (!instance) return null
 
+  if (surface) {
+    const url = String(instance.currentUrl || '')
+    if (!url || url === 'about:blank') {
+      await browserPaneManager.navigate(instanceId, socialLoginUrl('spotify', surface))
+      await wait(1500)
+    }
+  }
+
   const artistsPage = surface
-    ? surface === 'artists' ? await readSpotifyBrowserPage(browserPaneManager, instanceId) : null
+    ? surface === 'artists' ? await readSpotifyBrowserPage(browserPaneManager, instanceId, surface) : null
     : await navigateAndReadBrowserPage(browserPaneManager, instanceId, socialLoginUrl('spotify', 'artists'))
   const artistsLoggedIn = hasLoggedInSignal(
     'spotify',
@@ -519,17 +612,20 @@ async function verifySpotifyBrowserCapabilities(
   const artistsReady = artistsLoggedIn && (!surface || Boolean(selectedArtistId))
 
   const webPlayerPage = surface
-    ? surface === 'web-player' ? await readSpotifyBrowserPage(browserPaneManager, instanceId) : null
+    ? surface === 'web-player' ? await readSpotifyBrowserPage(browserPaneManager, instanceId, surface) : null
     : await navigateAndReadBrowserPage(browserPaneManager, instanceId, socialLoginUrl('spotify', 'web-player'))
   const webPlayerLoggedIn = hasLoggedInSignal(
     'spotify',
     String(webPlayerPage?.text || ''),
     String(webPlayerPage?.url || ''),
   )
-  const discoveredAccountUrl = findSpotifyUserAccountUrl([
+  const detectedAccountUrl = findSpotifyUserAccountUrl([
     String(webPlayerPage?.url || ''),
     ...(Array.isArray(webPlayerPage?.links) ? webPlayerPage.links : []),
   ])
+  // Public playlist/profile links can expose a user ID on a logged-out page.
+  // Do not persist that as the signed-in identity.
+  const discoveredAccountUrl = webPlayerLoggedIn ? detectedAccountUrl : null
   const expectedAccountUrl = normalizeComparableUrl(status.accountUrl)
   const observedAccountUrl = normalizeComparableUrl(discoveredAccountUrl)
   const wrongAccount = Boolean(
@@ -545,7 +641,7 @@ async function verifySpotifyBrowserCapabilities(
   )
 
   const adsManagerPage = surface
-    ? surface === 'ads-manager' ? await readSpotifyBrowserPage(browserPaneManager, instanceId) : null
+    ? surface === 'ads-manager' ? await readSpotifyBrowserPage(browserPaneManager, instanceId, surface) : null
     : await navigateAndReadBrowserPage(browserPaneManager, instanceId, socialLoginUrl('spotify', 'ads-manager'))
   const adsManagerLoggedIn = hasLoggedInSignal(
     'spotify',
@@ -584,7 +680,7 @@ async function verifySpotifyBrowserCapabilities(
       status: wrongAccount
         ? 'wrong_account'
         : !webPlayerLoggedIn
-          ? 'login_needed'
+          ? detectedAccountUrl ? 'identity_unverified' : 'login_needed'
           : observedAccountUrl
             ? 'ready'
             : 'identity_unverified',
@@ -592,7 +688,9 @@ async function verifySpotifyBrowserCapabilities(
       message: wrongAccount
         ? 'The Web Player is logged into a different Spotify account.'
         : !webPlayerLoggedIn
-          ? 'Log in to the Web Player to enable playlist creation.'
+          ? detectedAccountUrl
+            ? 'A Spotify user link was found, but a signed-in Web Player could not be confirmed. Open this service and verify again.'
+            : 'Log in to the Web Player to enable playlist creation.'
           : observedAccountUrl
             ? 'Playlist access is ready.'
             : 'The Web Player is logged in, but its account identity could not be verified.',
@@ -653,8 +751,9 @@ async function navigateAndReadBrowserPage(
 async function readSpotifyBrowserPage(
   browserPaneManager: NonNullable<HandlerDeps['browserPaneManager']>,
   instanceId: string,
+  expectedSurface?: SpotifyLoginSurface,
 ): Promise<BrowserIdentityPage | null> {
-  return browserPaneManager.evaluate(instanceId, `(() => {
+  const page = await browserPaneManager.evaluate(instanceId, `(() => {
     const links = Array.from(document.querySelectorAll('a[href]')).slice(0, 500).map((a) => a.href)
     return {
       url: location.href,
@@ -662,7 +761,16 @@ async function readSpotifyBrowserPage(
       text: (document.body?.innerText || '').slice(0, 50000),
       links,
     }
-  })()`) as Promise<BrowserIdentityPage | null>
+  })()`) as BrowserIdentityPage | null
+  if (expectedSurface && page) {
+    const hosts = { artists: ['artists.spotify.com'], 'web-player': ['open.spotify.com'], 'ads-manager': ['adsmanager.spotify.com', 'ads.spotify.com'] }
+    let host = ''
+    try { host = new URL(String(page.url || '')).hostname } catch { /* Incomplete navigation. */ }
+    if (!hosts[expectedSurface].includes(host)) {
+      throw new Error('This Spotify service browser is on a different page or still completing sign-in. Open the requested service, finish signing in, then verify again.')
+    }
+  }
+  return page
 }
 
 function spotifyCapabilityMessage(capabilities: SpotifyCapabilities): string {

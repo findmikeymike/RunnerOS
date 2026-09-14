@@ -90,7 +90,21 @@ describe('STARTER_SKILLS', () => {
     expect(parsed.content).toContain('references/features.md');
     const reference = skill!.files.find(file => file.path === 'references/features.md');
     expect(reference?.content).toContain('Settings → Connections');
-    expect(reference?.content).toContain('Manage workers');
+    expect(reference?.content).toContain('Manage library');
+    expect(reference?.content).toContain('General is the default broader mode');
+    expect(reference?.content).toContain('setup_llm_connection');
+    expect(reference?.content).toContain('completing a new connection in the wizard makes it the app default');
+    expect(reference?.content).toContain('reauthenticating an existing connection preserves defaults');
+    expect(reference?.content).toContain('actual provider validation API');
+    expect(reference?.content).toContain('setup_social_account');
+    expect(reference?.content).toContain('not proof the current session');
+    const choices = skill?.files.find(file => file.path === 'references/connection-choices.md')?.content;
+    expect(getSkillMd(skill!)).toContain('references/connection-choices.md');
+    expect(choices).toContain('per-call and rolling weekly Monid limits');
+    expect(choices).toContain('cannot guarantee unlimited free usage');
+    expect(choices).toContain("verify this app's eligibility");
+    expect(choices).toContain('personally complete payment');
+    expect(choices).toContain('does not make a connected tool free');
   });
 
   it('workflow-creator can save confirmed workflow drafts', () => {

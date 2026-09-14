@@ -113,3 +113,28 @@ describe('Inline guide skill migration', () => {
     expect(existsSync(join(options.globalSkillsDir, 'artist-os-guide'))).toBe(false);
   });
 });
+
+
+describe('Shipped feature reference migration', () => {
+  for (const version of baselines.references) {
+    test(`upgrades exact ${version.file} and preserves customized references`, () => {
+      const target = join(options.globalSkillsDir, 'artist-os-guide', version.path);
+      const previous = fixture(version.file);
+      expect(digest(previous)).toBe(version.sha256);
+      mkdirSync(join(target, '..'), { recursive: true });
+      writeFileSync(target, previous);
+      expect(migrateHelperGuide(options).updatedSkills).toEqual(['artist-os-guide']);
+      const current = STARTER_SKILLS.find(skill => skill.slug === 'artist-os-guide')!.files.find(file => file.path === version.path)!.content;
+      expect(readFileSync(target, 'utf8')).toBe(current);
+      expect(migrateHelperGuide(options).updatedSkills).toEqual([]);
+      for (const suffix of ['\n', '\nMy private notes']) {
+        writeFileSync(target, previous + suffix);
+        expect(migrateHelperGuide(options).updatedSkills).toEqual([]);
+        expect(readFileSync(target, 'utf8')).toBe(previous + suffix);
+      }
+      rmSync(target);
+      expect(migrateHelperGuide(options).updatedSkills).toEqual([]);
+      expect(existsSync(target)).toBe(false);
+    });
+  }
+});

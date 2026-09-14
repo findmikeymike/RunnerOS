@@ -36,6 +36,8 @@ export interface WorkspaceMigrationRuntimeLease {
 }
 
 export interface ISessionManager {
+  setLlmConnectionSetupHandler(handler: (input: import('@craft-agent/session-tools-core').SetupLlmConnectionInput, workspaceId: string, sessionId: string) => Promise<unknown>): void
+  setSocialAccountSetupHandler(handler: (input: import('@craft-agent/session-tools-core').SetupSocialAccountInput, workspaceId: string, sessionId: string) => Promise<unknown>): void
   getSignalService(): import('../signals/SignalService').SignalService
   getSignalReader(): import('../signals/SignalReader').SignalReader
   findSignalHandoff(workspaceId: string, workerSlug: string, reference: import('@craft-agent/shared/shared-intel').SignalEntryReference): Promise<string | null>

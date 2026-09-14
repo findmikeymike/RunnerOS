@@ -1,3 +1,4 @@
+import { queueLlmSetupRequest } from '../lib/llm-setup-request'
 import { workspaceLocation, restoreWorkspaceLocation, canPersistWorkspaceLocation, type WorkspaceHomeKind } from './workspace-location'
 /**
  * NavigationContext
@@ -1121,6 +1122,7 @@ export function NavigationProvider({
     if (!workspaceId) return
 
     const cleanup = window.electronAPI.onDeepLinkNavigate((nav: DeepLinkNavigation) => {
+      if (nav.llmSetup) queueLlmSetupRequest(nav.llmSetup)
       let route: string | null = null
 
       if (nav.view) {

@@ -113,6 +113,11 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
   React.useEffect(() => {
     void refreshCommunity()
   }, [refreshCommunity])
+  React.useEffect(() => window.electronAPI.onWorkspaceContextChanged((changedWorkspaceId, docs) => {
+    if (changedWorkspaceId === workspaceId && docs.some(doc => doc.slug === 'artist-community')) {
+      void refreshCommunity(false)
+    }
+  }), [workspaceId, refreshCommunity])
   useWorkspaceSyncRefresh(workspaceId, ['records'], () => refreshCommunity(false))
 
   const contacts = community?.contacts.filter((fan) => !fan.deletedAt) ?? []

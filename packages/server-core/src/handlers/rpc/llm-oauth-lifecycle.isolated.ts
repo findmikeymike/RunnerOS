@@ -26,8 +26,8 @@ const { registerLlmConnectionsHandlers } = await import('./llm-connections')
 afterEach(() => records.clear())
 function setup() {
   const handlers = new Map<string, any>()
-  registerLlmConnectionsHandlers({ handle: (name: string, handler: any) => handlers.set(name, handler) } as any,
-    { platform: { logger: { info() {}, warn() {}, error() {} } }, sessionManager: {} } as any)
+  registerLlmConnectionsHandlers({ handle: (name: string, handler: any) => handlers.set(name, handler), push() {} } as any,
+    { platform: { logger: { info() {}, warn() {}, error() {} } }, sessionManager: { setLlmConnectionSetupHandler() {} } } as any)
   return handlers
 }
 function gate() {

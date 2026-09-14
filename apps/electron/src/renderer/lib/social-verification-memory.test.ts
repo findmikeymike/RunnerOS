@@ -42,6 +42,15 @@ describe('social verification display memory', () => {
     memory.remember({ ...row(), liveChecked: true, lastCheckedAt: '2026-09-14T12:00:00Z', profileStatus: 'login_needed' }, revision)
     expect(new SocialVerificationMemory(storage).merge(doctor(row())).platforms[0]!.profiles[0]!.ready).toBe(false)
   })
+  test('host verification overrides stale renderer cache after an agent recheck', () => {
+    const memory = new SocialVerificationMemory()
+    remember(memory, row())
+    const host = { ...row(), ready: false, profileStatus: 'wrong_account', savedVerification: true, lastCheckedAt: '2026-09-14T12:00:00Z' }
+    const result = memory.merge(doctor(host)).platforms[0]!.profiles[0]!
+    expect(result.ready).toBe(false)
+    expect(result.profileStatus).toBe('wrong_account')
+    expect(result.lastCheckedAt).toBe(host.lastCheckedAt)
+  })
   test('corrupt storage does not block loading accounts', () => {
     const memory = new SocialVerificationMemory({ getItem: () => '{broken', setItem: () => {} })
     expect(memory.merge(doctor(row())).platforms[0]!.profiles[0]!.ready).toBe(false)

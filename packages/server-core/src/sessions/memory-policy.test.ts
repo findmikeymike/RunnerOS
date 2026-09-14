@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions'
-import { canDirectlyMutateUserMemory, canSaveRunnerSecrets, canScheduleWork, directUserMemoryPolicyError, runnerSecretPolicyError } from './SessionManager'
+import { canUseConnectionSetup, canDirectlyMutateUserMemory, canSaveRunnerSecrets, canScheduleWork, directUserMemoryPolicyError, runnerSecretPolicyError } from './SessionManager'
 
 describe('session memory write policy', () => {
   test('allows direct user memory writes from manual sessions', () => {
@@ -47,5 +47,25 @@ describe('scheduled work tool policy', () => {
     expect(canScheduleWork({ agentSlug: ORCHESTRATOR_SLUG })).toBe(false)
     expect(canScheduleWork({ agentSlug: SETUP_CONCIERGE_SLUG })).toBe(false)
     expect(canScheduleWork()).toBe(false)
+  })
+})
+
+
+describe('interactive connection setup policy', () => {
+  test('allows direct Setup Concierge and Artist Manager conversations', () => {
+    for (const agentSlug of [CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG]) {
+      expect(canUseConnectionSetup({ spawnedFromAgent: { agentSlug }, launchReceipt: { origin: 'agent', createdAt: 1 } })).toBe(true)
+    }
+    expect(canUseConnectionSetup({})).toBe(false)
+    expect(canUseConnectionSetup({ spawnedFromAgent: { agentSlug: 'ad-runner' } })).toBe(false)
+  })
+  test('blocks delegated and automated ancestry including a branched helper', () => {
+    const spawnedFromAgent = { agentSlug: SETUP_CONCIERGE_SLUG }
+    expect(canUseConnectionSetup({ spawnedFromAgent, triggeredBy: { automationId: 'a' } })).toBe(false)
+    for (const origin of ['automation', 'workflow', 'deep-research', 'spawned-session'] as const) {
+      expect(canUseConnectionSetup({ spawnedFromAgent, launchReceipt: { createdAt: 1, origin } })).toBe(false)
+    }
+    expect(canUseConnectionSetup({ spawnedFromAgent, launchReceipt: { createdAt: 1, origin: 'branch', automatedAncestry: true } })).toBe(false)
+    expect(canUseConnectionSetup({ spawnedFromAgent, launchReceipt: { createdAt: 1, origin: 'agent', delegation: { mechanism: 'message-agent', depth: 1 } } })).toBe(false)
   })
 })

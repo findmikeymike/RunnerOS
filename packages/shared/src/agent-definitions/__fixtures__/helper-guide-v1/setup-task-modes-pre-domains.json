@@ -1,0 +1,55 @@
+[
+  {
+    "kind": "focus",
+    "id": "connect",
+    "label": "Connect an Account",
+    "icon": "plug",
+    "description": "Save the right connection securely and check that it works.",
+    "primarySkillSlugs": [
+      "artist-os-guide"
+    ],
+    "context": {
+      "preloadTopics": [],
+      "retrieveOnDemandTopics": [
+        "Exact selected service, current connection status, missing setup fields and its source guide",
+        "Use encrypted save_secret and source_test when available; never place credentials in context or outputs"
+      ],
+      "maxPreloadChars": 2000
+    }
+  },
+  {
+    "kind": "focus",
+    "id": "choose-tools",
+    "label": "Choose Tools",
+    "icon": "compass",
+    "description": "Find the smallest set of connections for a specific job.",
+    "primarySkillSlugs": [
+      "source-recipe"
+    ],
+    "context": {
+      "preloadTopics": [],
+      "retrieveOnDemandTopics": [
+        "The exact capability goal and live active source catalog; curate a focused source bundle rather than claiming to create a new capability",
+        "Use Monid as the default marketplace route; Zero needs explicit choice or confirmed Monid capability absence, never merely a connection or balance problem"
+      ],
+      "maxPreloadChars": 2000
+    }
+  },
+  {
+    "kind": "focus",
+    "id": "app-help",
+    "label": "App Help",
+    "icon": "circle-help",
+    "description": "Find the right place and the next useful step.",
+    "primarySkillSlugs": [
+      "artist-os-guide"
+    ],
+    "context": {
+      "preloadTopics": [],
+      "retrieveOnDemandTopics": [
+        "Current feature question and minimal relevant app state; load no source catalog or artist campaign context unless needed"
+      ],
+      "maxPreloadChars": 1500
+    }
+  }
+]

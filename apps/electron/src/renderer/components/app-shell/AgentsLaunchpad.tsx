@@ -1865,7 +1865,7 @@ function summarizePrompt(prompt: string) {
 }
 
 function getFoundationalWorkerDescription(slug: string): string | undefined {
-  if (slug === 'setup-concierge') return 'Get set up, connect your tools, and find your way around Artist OS.'
+  if (slug === 'setup-concierge') return 'Start here. Get your whole app set up and get help using it.'
   if (slug === CONCIERGE_SLUG) return 'Talk through your artist direction and coordinate the right next work with your team.'
   if (slug === 'anything-agent') return 'Get help with broader tasks and the external tools you use.'
   return undefined
