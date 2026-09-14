@@ -1235,7 +1235,7 @@ export default function SecretsSettingsPage() {
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto w-full max-w-[1600px] space-y-2 px-6 pb-8 pt-2">
           <div className="flex justify-end">
-            <Button variant="ghost" size="sm" className="!h-7 !rounded-lg !border !border-white/10 !bg-gradient-to-b !from-white/10 !to-white/[0.035] !px-2.5 !text-[11px] !text-white/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)] hover:!text-white/85" onClick={load} disabled={loading}>
+            <Button variant="ghost" size="sm" className="!h-7 !rounded-lg !border !border-white/10 !bg-gradient-to-b !from-white/10 !to-white/[0.035] !px-2.5 !text-[11px] !text-white/65 shadow-hairline-top hover:!text-white/85" onClick={load} disabled={loading}>
               {loading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="mr-2 h-3.5 w-3.5" />}
               Refresh
             </Button>
