@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   copyFileSync,
+  createReadStream,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -52,6 +53,22 @@ import {
 } from './types.ts';
 import { normalizeTrackCharacter } from './track-intelligence.ts';
 import { hashFileSha256 } from '../utils/hash-file.ts';
+
+function cleanImportLabel(value: string | undefined): string | undefined {
+  const cleaned = value?.trim();
+  return cleaned || undefined;
+}
+
+function cleanImportNotes(value: string | undefined): string | undefined {
+  const cleaned = value?.trim();
+  return cleaned || undefined;
+}
+
+function displayVaultFileName(fileName: string): string {
+  const extension = extname(fileName);
+  const stem = extension ? fileName.slice(0, -extension.length) : fileName;
+  return stem.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim() || fileName;
+}
 
 const DEFAULT_DIRECTORIES = [
   'music/masters-finals',
@@ -272,6 +289,32 @@ export function resolveArtistVaultAssetPath(
     return resolve(workspaceRootPath, asset.relativePath);
   }
   return asset.absolutePath && !asset.absolutePath.includes('\0') ? asset.absolutePath : null;
+}
+
+export async function readArtistVaultAssetDataUrl(
+  workspaceRootPath: string,
+  workspaceId: string,
+  assetId: string,
+): Promise<string> {
+  const asset = loadArtistVaultManifest(workspaceRootPath, workspaceId).assets.find((candidate) => candidate.id === assetId);
+  if (!asset) throw new Error(`Vault asset not found: ${assetId}`);
+  const path = resolveArtistVaultAssetPath(workspaceRootPath, asset);
+  if (!path) throw new Error('This Vault file has no usable path.');
+  const info = await statAsync(path);
+  if (!info.isFile()) throw new Error('This Vault file is missing.');
+  const mimeType = asset.mimeType ?? inferVaultMimeType(path);
+  if (!mimeType || !/^(image|video|audio)\//.test(mimeType)) throw new Error('No inline preview for this file type.');
+  const limit = 32 * 1024 * 1024;
+  const tooLarge = 'This file is too large for inline preview (32 MB maximum).';
+  if (info.size > limit) throw new Error(tooLarge);
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of createReadStream(path)) {
+    size += chunk.length;
+    if (size > limit) throw new Error(tooLarge);
+    chunks.push(chunk as Buffer);
+  }
+  return `data:${mimeType};base64,${Buffer.concat(chunks).toString('base64')}`;
 }
 
 export function hashArtistVaultAssetFileSha256(workspaceRootPath: string, asset: VaultAssetRecord): string {
@@ -502,6 +545,7 @@ export function importArtistVaultAssets(
 
   for (const candidate of plan.candidates) {
     try {
+      const detail = options.details?.find((item) => item.sourcePath === candidate.sourcePath);
       const destination = resolve(workspaceRootPath, candidate.destinationRelativePath);
       mkdirSync(dirname(destination), { recursive: true });
       copyFileSync(candidate.sourcePath, destination);
@@ -510,7 +554,7 @@ export function importArtistVaultAssets(
         id: `vault_asset_${randomUUID()}`,
         category: candidate.category,
         kind: candidate.kind,
-        label: displayVaultKind(candidate.kind),
+        label: cleanImportLabel(detail?.label) ?? displayVaultFileName(candidate.fileName),
         relativePath: candidate.destinationRelativePath,
         mimeType: candidate.mimeType ?? inferVaultMimeType(candidate.fileName),
         sizeBytes,
@@ -519,7 +563,7 @@ export function importArtistVaultAssets(
         status: candidate.defaultStatus,
         rightsStatus: candidate.defaultRightsStatus,
         usableByAgents: candidate.defaultUsableByAgents,
-        notes: candidate.reason,
+        notes: cleanImportNotes(detail?.notes),
         createdAt: now,
         updatedAt: now,
       };
@@ -556,6 +600,7 @@ export async function importArtistVaultAssetsAsync(
 
   for (const candidate of plan.candidates) {
     try {
+      const detail = options.details?.find((item) => item.sourcePath === candidate.sourcePath);
       const destination = resolve(workspaceRootPath, candidate.destinationRelativePath);
       await mkdirAsync(dirname(destination), { recursive: true });
       await copyFileAsync(candidate.sourcePath, destination);
@@ -564,7 +609,7 @@ export async function importArtistVaultAssetsAsync(
         id: `vault_asset_${randomUUID()}`,
         category: candidate.category,
         kind: candidate.kind,
-        label: displayVaultKind(candidate.kind),
+        label: cleanImportLabel(detail?.label) ?? displayVaultFileName(candidate.fileName),
         relativePath: candidate.destinationRelativePath,
         mimeType: candidate.mimeType ?? inferVaultMimeType(candidate.fileName),
         sizeBytes,
@@ -573,7 +618,7 @@ export async function importArtistVaultAssetsAsync(
         status: candidate.defaultStatus,
         rightsStatus: candidate.defaultRightsStatus,
         usableByAgents: candidate.defaultUsableByAgents,
-        notes: candidate.reason,
+        notes: cleanImportNotes(detail?.notes),
         createdAt: now,
         updatedAt: now,
       };

@@ -53,6 +53,7 @@ const EXPECTED_CHANNELS: string[] = [
   "artistVault:linkFolder",
   "artistVault:openFolder",
   "artistVault:planImport",
+  "artistVault:readAssetDataUrl",
   "artistVault:reviewTrack",
   "artistVault:saveOutputAsset",
   "artistVault:scan",

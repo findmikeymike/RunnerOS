@@ -367,6 +367,8 @@ function getLyricsTranscriberPath(): string {
   return firstExistingPath(
     [
       resourcesBase ? join(resourcesBase, 'tools', 'lyrics-transcriber') : '',
+      // Native macOS launches need not inherit the repository working directory.
+      resourcesBase ? join(findRepoRoot(resourcesBase), 'tools', 'lyrics-transcriber') : '',
       join(appRoot, 'tools', 'lyrics-transcriber'),
       join(REPO_ROOT, 'tools', 'lyrics-transcriber'),
       join(process.cwd(), 'tools', 'lyrics-transcriber'),

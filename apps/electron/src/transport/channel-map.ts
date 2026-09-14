@@ -532,6 +532,7 @@ export const CHANNEL_MAP = {
 
   // Artist Vault
   getArtistVaultManifest: invoke(RPC_CHANNELS.artistVault.GET),
+  readArtistVaultAssetDataUrl: invoke(RPC_CHANNELS.artistVault.READ_ASSET_DATA_URL),
   planArtistVaultImports: invoke(RPC_CHANNELS.artistVault.PLAN_IMPORT),
   chooseArtistVaultAssetFiles: invoke(RPC_CHANNELS.artistVault.CHOOSE_FILES),
   importArtistVaultAssets: invoke(RPC_CHANNELS.artistVault.IMPORT),

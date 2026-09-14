@@ -2095,14 +2095,14 @@ Use only when the user clearly approves that exact item as final. Never silently
 
   list_campaign_assets: `List registered working/source files in the current campaign. Campaign Assets are inputs and works in progress; they are not final unless promoted into the Release Kit.`,
 
-  list_artist_vault: `List agent-usable items from the Artist HQ Vault. The HQ Vault is the artist's reusable career library: masters, lyrics, press photos, face references, logos, bios, merch, and other long-lived material. Private or disallowed items are omitted.`,
+  list_artist_vault: `List items agents may work with from the Artist HQ Vault. The HQ Vault is the artist's reusable career library: masters, lyrics, press photos, face references, logos, bios, merch, and other long-lived material. Internal-only items are listed without a file path; use get_asset_record only when the task requires that exact asset. Internal-only does not authorize sending, posting, pitching, publishing, or Release Kit promotion.`,
 
   list_campaign_outputs: `List durable agent and user work products in a campaign. Outputs are drafts and deliverables with provenance; they are not approved canon until the user promotes an exact file into the Release Kit.`,
 
   get_campaign_output: `Get one campaign Output manifest, including its file assets and provenance. Use this before promoting an Output when the user refers to prior agent work by name or description.`,
   list_x_editorial_history: `Read recent HQ-owned Daily X Slates, including exact candidate copy, lane, timing, Campaign linkage, and status. Use this before drafting to prevent repetition and schedule fatigue.`,
 
-  get_asset_record: `Get one exact registered Campaign Asset or HQ Vault record by id. Use this to inspect metadata, rights, agent usability, and path before using or promoting it.`,
+  get_asset_record: `Get one exact registered Campaign Asset or HQ Vault record by id. Use this to inspect metadata, rights, agent usability, and path before working with it. An internal-only path may be read or analyzed inside Artist OS, but must never be sent, posted, pitched, published, or promoted to a Release Kit.`,
 
   create_lab_song: `Create a new Song in the Lab.
 

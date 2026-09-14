@@ -13,6 +13,7 @@ import {
   linkArtistVaultFolderAsync,
   loadArtistVaultManifest,
   planArtistVaultImports,
+  readArtistVaultAssetDataUrl,
   resolveArtistVaultAssetPath,
   reviewArtistVaultTrackIntelligence,
   saveArtistVaultTrackDraft,
@@ -49,6 +50,7 @@ import { verifiedArtistVaultManifestForAgents } from '../../track-intelligence/a
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.artistVault.GET,
+  RPC_CHANNELS.artistVault.READ_ASSET_DATA_URL,
   RPC_CHANNELS.artistVault.PLAN_IMPORT,
   RPC_CHANNELS.artistVault.CHOOSE_FILES,
   RPC_CHANNELS.artistVault.IMPORT,
@@ -121,6 +123,14 @@ export function registerArtistVaultHandlers(server: RpcServer, deps: HandlerDeps
     const rootPath = resolveRootPath(workspaceId)
     return loadArtistVaultManifest(rootPath, workspaceId)
   })
+
+  server.handle(
+    RPC_CHANNELS.artistVault.READ_ASSET_DATA_URL,
+    async (_ctx, workspaceId: string, assetId: string): Promise<string> => {
+      const rootPath = resolveRootPath(workspaceId)
+      return readArtistVaultAssetDataUrl(rootPath, workspaceId, assetId)
+    },
+  )
 
   server.handle(
     RPC_CHANNELS.artistVault.PLAN_IMPORT,

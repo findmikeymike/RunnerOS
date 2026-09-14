@@ -48,6 +48,7 @@ type ImportDraft = {
   kindHint: VaultKindHint
   paths: string[]
   plan: Awaited<ReturnType<typeof window.electronAPI.planArtistVaultImports>> | null
+  details: Array<{ sourcePath: string; label: string; notes: string }>
 }
 
 const CATEGORIES: Array<{
@@ -112,7 +113,7 @@ const CATEGORY_KIND_LABELS: Record<VaultCategory, Array<{ kind: VaultAssetKind; 
   ],
 }
 
-const emptyImportDraft: ImportDraft = { open: false, kindHint: 'any', paths: [], plan: null }
+const emptyImportDraft: ImportDraft = { open: false, kindHint: 'any', paths: [], plan: null, details: [] }
 const INPUT_CLASS = 'h-9 w-full rounded-[10px] border border-white/[0.06] bg-[#0b0b0b] px-3 text-sm text-white/76 outline-none placeholder:text-white/26 focus:border-[#f97316]/35'
 const QUICK_TAGS: Record<VaultCategory, string[]> = {
   music: ['master', 'demo', 'stem', 'clean-version', 'lyrics', 'mix-ref'],
@@ -127,6 +128,8 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   const [manifest, setManifest] = React.useState<VaultManifest | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [busy, setBusy] = React.useState<string | null>(null)
+  const [analyzingTrackId, setAnalyzingTrackId] = React.useState<string | null>(null)
+  const analysisInFlight = React.useRef(false)
   const [selectedCategory, setSelectedCategory] = React.useState<VaultCategory>('music')
   const [pastReleases, setPastReleases] = React.useState(false)
   const [pastReleaseId, setPastReleaseId] = React.useState('all')
@@ -222,7 +225,17 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
     if (!workspaceId) return
     if (!paths.length) return
     const plan = await window.electronAPI.planArtistVaultImports(workspaceId, paths, { kindHint })
-    setImportDraft({ open: true, kindHint, paths, plan })
+    setImportDraft({
+      open: true,
+      kindHint,
+      paths,
+      plan,
+      details: plan.candidates.map((candidate) => ({
+        sourcePath: candidate.sourcePath,
+        label: displayFileName(candidate.fileName),
+        notes: '',
+      })),
+    })
   }, [workspaceId])
 
   const startImport = React.useCallback(async (kindHint: VaultKindHint) => {
@@ -260,7 +273,9 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   }, [planImportPaths, selectedCategory, selectedKind])
 
   const analyzeTrack = React.useCallback(async (asset: VaultAssetRecord, force = false, openReview = true): Promise<boolean> => {
-    if (!workspaceId) return false
+    if (!workspaceId || analysisInFlight.current) return false
+    analysisInFlight.current = true
+    setAnalyzingTrackId(asset.id)
     setBusy(`track:${asset.id}`)
     try {
       const result = await window.electronAPI.transcribeArtistVaultTrack(workspaceId, { assetId: asset.id, force })
@@ -280,6 +295,8 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
       toast.error(error instanceof Error ? error.message : String(error))
       return false
     } finally {
+      analysisInFlight.current = false
+      setAnalyzingTrackId(null)
       setBusy(null)
     }
   }, [workspaceId])
@@ -288,7 +305,10 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
     if (!workspaceId || !importDraft.paths.length) return
     setBusy('import')
     try {
-      const result = await window.electronAPI.importArtistVaultAssets(workspaceId, importDraft.paths, { kindHint: importDraft.kindHint })
+      const result = await window.electronAPI.importArtistVaultAssets(workspaceId, importDraft.paths, {
+        kindHint: importDraft.kindHint,
+        details: importDraft.details,
+      })
       setManifest(result.manifest)
       const firstImported = result.imported[0]
       setSelectedAssetId(firstImported?.id ?? selectedAssetId)
@@ -546,10 +566,12 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
           </main>
 
           <AssetDetailPanel
+            workspaceId={workspaceId}
             asset={selectedAsset}
             busy={busy === `asset:${selectedAsset?.id}`}
             onUpdate={updateAsset}
             onAnalyze={analyzeTrack}
+            analyzingTrackId={analyzingTrackId}
             onReviewTrack={(assetId) => setTrackReviewAssetId(assetId)}
             onCreateVariants={(assetId) => setVariantSetupSourceId(assetId)}
           />
@@ -560,6 +582,10 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
         draft={importDraft}
         busy={busy === 'import'}
         onClose={() => setImportDraft(emptyImportDraft)}
+        onChangeDetail={(sourcePath, patch) => setImportDraft((current) => ({
+          ...current,
+          details: current.details.map((detail) => detail.sourcePath === sourcePath ? { ...detail, ...patch } : detail),
+        }))}
         onConfirm={confirmImport}
       />
       <TrackIntelligenceReviewDialog
@@ -582,24 +608,28 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
 }
 
 function AssetDetailPanel({
+  workspaceId,
   asset,
   busy,
   onUpdate,
   onAnalyze,
+  analyzingTrackId,
   onReviewTrack,
   onCreateVariants,
 }: {
+  workspaceId: string
   asset: VaultAssetRecord | null
   busy: boolean
   onUpdate: (assetId: string, patch: VaultAssetUpdatePatch) => Promise<void>
   onAnalyze: (asset: VaultAssetRecord, force?: boolean) => Promise<boolean>
+  analyzingTrackId: string | null
   onReviewTrack: (assetId: string) => void
   onCreateVariants: (assetId: string) => void
 }) {
   const [label, setLabel] = React.useState('')
   const [kind, setKind] = React.useState<VaultAssetKind>('other')
   const [purpose, setPurpose] = React.useState<AssetPurpose>('seed')
-  const [privateAsset, setPrivateAsset] = React.useState(false)
+  const [internalOnly, setInternalOnly] = React.useState(false)
   const [campaigns, setCampaigns] = React.useState('')
   const [tags, setTags] = React.useState('')
   const [genre, setGenre] = React.useState('')
@@ -613,7 +643,7 @@ function AssetDetailPanel({
     setLabel(asset.label)
     setKind(asset.kind)
     setPurpose(asset.status === 'final' || asset.status === 'approved' ? 'final' : 'seed')
-    setPrivateAsset(asset.rightsStatus === 'private' || !asset.usableByAgents)
+    setInternalOnly(asset.rightsStatus === 'private')
     setCampaigns((asset.campaigns ?? []).join(', '))
     setTags((asset.tags ?? []).join(', '))
     setGenre((asset.genre ?? []).join(', '))
@@ -632,7 +662,7 @@ function AssetDetailPanel({
             Inspector
           </div>
           <h2 className="text-xl font-semibold tracking-tight text-white/84">Quick tagger</h2>
-          <p className="mt-1 text-sm leading-5 text-white/34">Select an asset to preview, tag, and decide whether agents can use it.</p>
+          <p className="mt-1 text-sm leading-5 text-white/34">Select an asset to preview, tag, and set its use status.</p>
         </div>
         <div className="flex flex-1 items-center justify-center">
           <div className="max-w-[260px] text-center">
@@ -648,12 +678,13 @@ function AssetDetailPanel({
   }
 
   const quickTags = QUICK_TAGS[asset.category] ?? QUICK_TAGS.references
+  const selectedTags = splitList(tags)
   const save = () => onUpdate(asset.id, {
     kind,
     label,
     status: purpose === 'final' ? 'final' : 'review',
-    rightsStatus: privateAsset ? 'private' : 'safe-to-use',
-    usableByAgents: !privateAsset,
+    rightsStatus: internalOnly ? 'private' : 'safe-to-use',
+    usableByAgents: true,
     campaigns: splitList(campaigns),
     tags: splitList(tags),
     genre: splitList(genre),
@@ -682,13 +713,7 @@ function AssetDetailPanel({
         </div>
       </div>
 
-      <div className="mb-4 rounded-[12px] border border-white/[0.055] bg-black/30 p-3">
-        <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.16em] text-white/36">Preview</div>
-        <div className="flex h-36 flex-col items-center justify-center rounded-[10px] border border-white/[0.05] bg-[#050505] text-center">
-          <AssetIcon asset={asset} className="mb-2 h-8 w-8 text-white/30" />
-          <div className="max-w-[240px] truncate text-xs text-white/52">{asset.relativePath ?? asset.absolutePath ?? 'No path'}</div>
-        </div>
-      </div>
+      <AssetPreview workspaceId={workspaceId} asset={asset} />
 
       {asset.category === 'video' ? (
         <button
@@ -704,7 +729,7 @@ function AssetDetailPanel({
       ) : null}
 
       <div className="space-y-3">
-        <Field label="Label">
+        <Field label="Name">
           <input value={label} onChange={(event) => setLabel(event.target.value)} className={INPUT_CLASS} />
         </Field>
 
@@ -726,12 +751,45 @@ function AssetDetailPanel({
               <button
                 key={tag}
                 type="button"
-                onClick={() => setTags((current) => appendListValue(current, tag))}
-                className="rounded-full border border-white/[0.06] bg-white/[0.025] px-2.5 py-1 text-[11px] text-white/56 hover:border-[#f97316]/35 hover:text-white/86"
+                aria-pressed={selectedTags.includes(tag)}
+                onClick={() => setTags((current) => toggleListValue(current, tag))}
+                className={cn(
+                  'rounded-full border px-2.5 py-1 text-[11px] transition-colors',
+                  selectedTags.includes(tag)
+                    ? 'border-[#f97316]/40 bg-[#f97316]/12 text-[#fdba74]'
+                    : 'border-white/[0.06] bg-white/[0.025] text-white/56 hover:border-[#f97316]/35 hover:text-white/86',
+                )}
               >
-                + {formatTag(tag)}
+                {selectedTags.includes(tag) ? <CheckCircle2 className="mr-1 inline h-3 w-3" /> : '+ '}
+                {formatTag(tag)}
               </button>
             ))}
+          </div>
+          <div className="mt-3 border-t border-white/[0.055] pt-3">
+            <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-white/32">Selected tags</div>
+            {selectedTags.length ? (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {selectedTags.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    aria-label={`Remove ${formatTag(tag)} tag`}
+                    onClick={() => setTags((current) => removeListValue(current, tag))}
+                    className="inline-flex items-center gap-1 rounded-full border border-[#f97316]/25 bg-[#f97316]/8 px-2 py-1 text-[11px] text-[#fdba74]/85 hover:bg-[#f97316]/14"
+                  >
+                    {formatTag(tag)}
+                    <X className="h-3 w-3" />
+                  </button>
+                ))}
+              </div>
+            ) : <div className="mb-2 text-xs text-white/28">No tags yet</div>}
+            <input
+              aria-label="Add custom tags"
+              value={tags}
+              onChange={(event) => setTags(event.target.value)}
+              placeholder="Add custom tags, separated by commas"
+              className={INPUT_CLASS}
+            />
           </div>
         </div>
 
@@ -741,25 +799,25 @@ function AssetDetailPanel({
             onClick={() => setPurpose('final')}
             className={cn('rounded-[12px] border px-3 py-2 text-left transition-colors', purpose === 'final' ? 'border-[#f97316]/45 bg-[#2a1206]/55' : 'border-white/[0.06] bg-white/[0.025] hover:bg-white/[0.045]')}
           >
-            <span className="block text-sm font-semibold text-white/82">Final / master</span>
-            <span className="mt-0.5 block text-xs text-white/38">Ready to send, pitch, post, or use.</span>
+            <span className="block text-sm font-semibold text-white/82">Final / ready</span>
+            <span className="mt-0.5 block text-xs text-white/38">Approved for external use.</span>
           </button>
           <button
             type="button"
             onClick={() => setPurpose('seed')}
             className={cn('rounded-[12px] border px-3 py-2 text-left transition-colors', purpose === 'seed' ? 'border-[#f97316]/45 bg-[#2a1206]/55' : 'border-white/[0.06] bg-white/[0.025] hover:bg-white/[0.045]')}
           >
-            <span className="block text-sm font-semibold text-white/82">Seed / demo</span>
-            <span className="mt-0.5 block text-xs text-white/38">Useful reference, draft, idea, or working file.</span>
+            <span className="block text-sm font-semibold text-white/82">Working / reference</span>
+            <span className="mt-0.5 block text-xs text-white/38">A draft, source, idea, or reference.</span>
           </button>
         </div>
 
         <label className="flex items-center justify-between gap-3 rounded-[12px] border border-white/[0.06] bg-white/[0.025] px-3 py-2">
           <span>
-            <span className="block text-sm font-medium text-white/76">Private</span>
-            <span className="block text-xs text-white/36">Do not send, post, pitch, or expose path to agents.</span>
+            <span className="block text-sm font-medium text-white/76">Internal only</span>
+            <span className="block text-xs text-white/36">Agents can still work with it inside Artist OS. Never send, post, pitch, or publish it.</span>
           </span>
-          <input type="checkbox" checked={privateAsset} onChange={(event) => setPrivateAsset(event.target.checked)} className="h-4 w-4 accent-[#f97316]" />
+          <input type="checkbox" checked={internalOnly} onChange={(event) => setInternalOnly(event.target.checked)} className="h-4 w-4 accent-[#f97316]" />
         </label>
 
         {asset.category === 'music' && (
@@ -771,10 +829,10 @@ function AssetDetailPanel({
             {asset.kind === 'master-final' || asset.kind === 'demo' ? (
               <div className="mb-3 flex gap-2">
                 {asset.trackIntelligence?.draft || asset.trackIntelligence?.approved ? (
-                  <button type="button" onClick={() => onReviewTrack(asset.id)} className="h-8 flex-1 rounded-[8px] bg-white/[0.07] px-3 text-xs text-white/70 hover:bg-white/[0.1] hover:text-white">Review lyrics</button>
+                  <button type="button" disabled={analyzingTrackId !== null} onClick={() => onReviewTrack(asset.id)} className="h-8 flex-1 rounded-[8px] bg-white/[0.07] px-3 text-xs text-white/70 hover:bg-white/[0.1] hover:text-white">Review lyrics</button>
                 ) : null}
-                <button type="button" onClick={() => void onAnalyze(asset, Boolean(asset.trackIntelligence?.approved))} className="h-8 flex-1 rounded-[8px] bg-[#f97316]/15 px-3 text-xs text-[#fb923c] hover:bg-[#f97316]/22">
-                  {asset.trackIntelligence ? 'Re-analyze' : 'Analyze track'}
+                <button type="button" disabled={busy || analyzingTrackId !== null} aria-busy={analyzingTrackId === asset.id} onClick={() => void onAnalyze(asset, Boolean(asset.trackIntelligence?.approved))} className="inline-flex h-8 flex-1 items-center justify-center gap-2 rounded-[8px] bg-[#f97316]/15 px-3 text-xs text-[#fb923c] hover:bg-[#f97316]/22 disabled:cursor-wait disabled:opacity-60">
+                  {analyzingTrackId === asset.id ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing lyrics…</> : asset.trackIntelligence ? 'Re-analyze' : 'Analyze track'}
                 </button>
               </div>
             ) : null}
@@ -799,10 +857,6 @@ function AssetDetailPanel({
           <input value={campaigns} onChange={(event) => setCampaigns(event.target.value)} placeholder="release-one, tour-content" className={INPUT_CLASS} />
         </Field>
 
-        <Field label="Tags">
-          <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="face-reference, press, cover" className={INPUT_CLASS} />
-        </Field>
-
         <Field label="Notes">
           <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} className={cn(INPUT_CLASS, 'h-auto resize-none py-2')} />
         </Field>
@@ -821,15 +875,70 @@ function AssetDetailPanel({
   )
 }
 
+function AssetPreview({ workspaceId, asset }: { workspaceId: string; asset: VaultAssetRecord }) {
+  const previewKind = asset.mimeType?.startsWith('image/')
+    ? 'image'
+    : asset.mimeType?.startsWith('video/')
+      ? 'video'
+      : asset.mimeType?.startsWith('audio/')
+        ? 'audio'
+        : null
+  const [dataUrl, setDataUrl] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    let active = true
+    setDataUrl(null)
+    setError(null)
+    if (!previewKind) return () => { active = false }
+    window.electronAPI.readArtistVaultAssetDataUrl(workspaceId, asset.id)
+      .then((url) => {
+        if (active) setDataUrl(url)
+      })
+      .catch((reason) => {
+        if (active) setError(reason instanceof Error ? reason.message : String(reason))
+      })
+    return () => { active = false }
+  }, [asset.id, previewKind, workspaceId])
+
+  return (
+    <div className="mb-4 rounded-[12px] border border-white/[0.055] bg-black/30 p-3">
+      <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.16em] text-white/36">Preview</div>
+      <div className="flex min-h-36 items-center justify-center overflow-hidden rounded-[10px] border border-white/[0.05] bg-[#050505] text-center">
+        {error ? (
+          <div className="px-4 text-xs leading-5 text-white/38">{error.includes('too large for inline preview') ? 'This file exceeds the 32 MB inline preview limit. Your full file is still saved in the Vault.' : 'Preview unavailable for this file.'}</div>
+        ) : !previewKind ? (
+          <div className="px-4">
+            <AssetIcon asset={asset} className="mx-auto mb-2 h-8 w-8 text-white/30" />
+            <div className="text-xs text-white/38">No inline preview for this file type.</div>
+          </div>
+        ) : !dataUrl ? (
+          <Loader2 className="h-5 w-5 animate-spin text-white/28" />
+        ) : previewKind === 'image' ? (
+          <img src={dataUrl} alt={asset.label} onError={() => setError('Image preview failed')} className="max-h-52 w-full object-contain" />
+        ) : previewKind === 'video' ? (
+          <video src={dataUrl} controls preload="metadata" onError={() => setError('Video preview failed')} className="max-h-52 w-full bg-black object-contain" />
+        ) : (
+          <div className="w-full px-3 py-6">
+            <audio src={dataUrl} controls preload="metadata" onError={() => setError('Audio preview failed')} className="w-full" />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ImportModal({
   draft,
   busy,
   onClose,
+  onChangeDetail,
   onConfirm,
 }: {
   draft: ImportDraft
   busy: boolean
   onClose: () => void
+  onChangeDetail: (sourcePath: string, patch: { label?: string; notes?: string }) => void
   onConfirm: () => void
 }) {
   if (!draft.open) return null
@@ -841,33 +950,50 @@ function ImportModal({
         <div className="flex items-start justify-between gap-4 border-b border-white/[0.06] p-4">
           <div>
             <h2 className="text-xl font-semibold text-white/90">Confirm Vault Import</h2>
-            <p className="mt-1 text-sm text-white/46">Review where files will land before they are copied into the Artist Vault.</p>
+            <p className="mt-1 text-sm text-white/46">Name each file and add any context your team should know.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full p-2 text-white/42 hover:bg-white/[0.06] hover:text-white">
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="max-h-[58vh] overflow-y-auto p-4">
-          <div className="mb-4 grid grid-cols-3 gap-2">
-            <Metric label="Selected" value={draft.paths.length} />
-            <Metric label="Ready" value={candidates.length} />
-            <Metric label="Skipped" value={skipped.length} />
-          </div>
           <div className="space-y-2">
-            {candidates.map((candidate) => (
-              <div key={`${candidate.sourcePath}:${candidate.destinationRelativePath}`} className="rounded-[12px] border border-white/[0.055] bg-white/[0.02] p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-white/78">{candidate.fileName}</div>
-                    <div className="mt-1 truncate font-mono text-[11px] text-white/38">{candidate.destinationRelativePath}</div>
+            {candidates.map((candidate) => {
+              const detail = draft.details.find((item) => item.sourcePath === candidate.sourcePath)
+              return (
+                <div key={candidate.sourcePath} className="rounded-[12px] border border-white/[0.055] bg-white/[0.02] p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="truncate text-xs text-white/38">{candidate.fileName}</div>
+                    <div className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-emerald-300/72">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Ready to import
+                    </div>
                   </div>
-                  <span className="shrink-0 rounded-full border border-white/[0.06] px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-white/42">{candidate.kind}</span>
+                  <div className="grid gap-3">
+                    <Field label="Name this asset">
+                      <input
+                        value={detail?.label ?? ''}
+                        onChange={(event) => onChangeDetail(candidate.sourcePath, { label: event.target.value })}
+                        placeholder="Give it a name you'll recognize"
+                        className={INPUT_CLASS}
+                      />
+                    </Field>
+                    <Field label="Add context for agents">
+                      <textarea
+                        value={detail?.notes ?? ''}
+                        onChange={(event) => onChangeDetail(candidate.sourcePath, { notes: event.target.value })}
+                        rows={2}
+                        placeholder="What's happening, best moment, intended use…"
+                        className={cn(INPUT_CLASS, 'h-auto resize-none py-2')}
+                      />
+                    </Field>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
             {skipped.map((item) => (
               <div key={item.path} className="rounded-[12px] border border-red-500/20 bg-red-500/8 p-3 text-sm text-red-200/75">
-                <div className="truncate">{item.path}</div>
+                <div className="truncate">{displayFileName(item.path)}</div>
                 <div className="mt-1 text-xs text-red-200/48">{item.reason}</div>
               </div>
             ))}
@@ -875,7 +1001,7 @@ function ImportModal({
         </div>
         <div className="flex justify-end gap-2 border-t border-white/[0.06] p-4">
           <button type="button" onClick={onClose} className="h-9 rounded-[9px] border border-white/[0.07] px-4 text-sm text-white/60 hover:bg-white/[0.045]">Cancel</button>
-          <button type="button" disabled={busy || candidates.length === 0} onClick={onConfirm} className="inline-flex h-9 items-center gap-2 rounded-[9px] bg-white/90 px-4 text-sm font-semibold text-black hover:bg-white disabled:cursor-wait disabled:opacity-60">
+          <button type="button" disabled={busy || candidates.length === 0 || draft.details.some((detail) => !detail.label.trim())} onClick={onConfirm} className="inline-flex h-9 items-center gap-2 rounded-[9px] bg-white/90 px-4 text-sm font-semibold text-black hover:bg-white disabled:cursor-wait disabled:opacity-60">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Import
           </button>
@@ -908,11 +1034,7 @@ function AssetRow({ asset, selected, onSelect }: { asset: VaultAssetRecord; sele
       <div className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-white/[0.045]"><AssetIcon asset={asset} className="h-4 w-4 text-white/48" /></div>
       <div className="min-w-0">
         <div className="truncate text-sm font-medium text-white/78">{asset.label}</div>
-        <div className="truncate font-mono text-[11px] text-white/32">
-          {asset.category === 'music' && [asset.genre?.[0], asset.moods?.[0], asset.bpm ? `${asset.bpm} BPM` : null].filter(Boolean).length
-            ? [asset.genre?.[0], asset.moods?.[0], asset.bpm ? `${asset.bpm} BPM` : null].filter(Boolean).join(' · ')
-            : asset.relativePath ?? asset.absolutePath ?? 'No path'}
-        </div>
+        {asset.notes?.trim() ? <div className="truncate text-[11px] text-white/32">{asset.notes}</div> : null}
       </div>
       <div className="truncate text-xs text-white/42">{formatKind(asset.kind)}</div>
       <VisibilityBadge asset={asset} />
@@ -951,15 +1073,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-[12px] border border-white/[0.055] bg-white/[0.02] p-3">
-      <div className="text-[10px] uppercase tracking-[0.16em] text-white/34">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-white/82">{value}</div>
-    </div>
-  )
-}
-
 function AssetIcon({ asset, className }: { asset: VaultAssetRecord; className?: string }) {
   const Icon = asset.category === 'music' ? Music2
     : asset.category === 'video' ? Video
@@ -972,10 +1085,20 @@ function AssetIcon({ asset, className }: { asset: VaultAssetRecord; className?: 
 
 function VisibilityBadge({ asset }: { asset: VaultAssetRecord }) {
   const usable = isAgentUsable(asset)
+  const internal = asset.rightsStatus === 'private'
+  const needsClearance = asset.rightsStatus === 'needs-clearance'
+  const label = internal ? 'Internal' : needsClearance ? 'Needs clearance' : usable ? 'Ready' : 'Working'
   return (
-    <span className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium', usable ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200/72' : 'border-white/[0.07] bg-white/[0.025] text-white/40')}>
-      {usable ? <ShieldCheck className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
-      {usable ? 'Ready' : 'Private'}
+    <span className={cn(
+      'inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium',
+      internal || needsClearance
+        ? 'border-amber-400/20 bg-amber-400/10 text-amber-200/72'
+        : usable
+          ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200/72'
+          : 'border-white/[0.07] bg-white/[0.025] text-white/40',
+    )}>
+      {internal || needsClearance ? <Lock className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
+      {label}
     </span>
   )
 }
@@ -1021,9 +1144,22 @@ function splitList(value: string): string[] {
   return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))]
 }
 
-function appendListValue(current: string, value: string): string {
+function toggleListValue(current: string, value: string): string {
   const items = splitList(current)
-  return items.includes(value) ? current : [...items, value].join(', ')
+  return items.includes(value)
+    ? items.filter((item) => item !== value).join(', ')
+    : [...items, value].join(', ')
+}
+
+function removeListValue(current: string, value: string): string {
+  return splitList(current).filter((item) => item !== value).join(', ')
+}
+
+function displayFileName(value: string): string {
+  const fileName = value.replace(/\\/g, '/').split('/').pop() ?? value
+  const dot = fileName.lastIndexOf('.')
+  const stem = dot > 0 ? fileName.slice(0, dot) : fileName
+  return stem.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim() || fileName
 }
 
 function parseBpm(value: string): number | null {
@@ -1033,7 +1169,6 @@ function parseBpm(value: string): number | null {
 
 function isAgentUsable(asset: VaultAssetRecord): boolean {
   if (!asset.usableByAgents) return false
-  if (asset.rightsStatus === 'private' || asset.rightsStatus === 'needs-clearance') return false
   if (asset.status === 'draft' || asset.status === 'archived' || asset.status === 'missing') return false
   return Boolean(asset.relativePath || asset.absolutePath)
 }

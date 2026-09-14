@@ -138,6 +138,7 @@ function lyricsTranscriberBin(workspaceRootPath: string): string {
 async function runLyricsTranscriber(bin: string, args: string[]): Promise<LyricsTranscriberPayload> {
   const result = await execFileAsync(process.execPath, [bin, ...args, '--json'], {
     cwd: dirname(bin),
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     maxBuffer: 32 * 1024 * 1024,
   })
   return JSON.parse(result.stdout) as LyricsTranscriberPayload
