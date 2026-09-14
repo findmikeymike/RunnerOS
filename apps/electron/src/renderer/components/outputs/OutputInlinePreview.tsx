@@ -16,6 +16,7 @@ import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import { isXEditorialSlateOutput } from '@craft-agent/shared/x-editorial'
 import { XEditorialSlatePreview } from './XEditorialSlatePreview'
 import { SocialVariantSetPreview } from './SocialVariantSetPreview'
+import { cn } from '@/lib/utils'
 
 const OutputModelPreview = React.lazy(() => import('./OutputModelPreview').then((module) => ({ default: module.OutputModelPreview })))
 const OutputExcalidrawPreview = React.lazy(() => import('./OutputExcalidrawPreview').then((module) => ({ default: module.OutputExcalidrawPreview })))
@@ -30,6 +31,7 @@ interface OutputInlinePreviewProps {
   primary?: OutputAssetDTO
   className?: string
   compact?: boolean
+  textAppearance?: 'default' | 'paper'
   onPreviewSettled?: OutputPreviewSettledHandler
   socialVariantActions?: {
     onUse?: (variantId: string) => void
@@ -49,6 +51,7 @@ export function OutputInlinePreview({
   primary,
   className,
   compact = false,
+  textAppearance = 'default',
   onPreviewSettled,
   socialVariantActions,
 }: OutputInlinePreviewProps) {
@@ -72,6 +75,12 @@ export function OutputInlinePreview({
   const [syncRevision, setSyncRevision] = React.useState(0)
   useWorkspaceSyncRefresh(workspaceId, ['outputs'], () => setSyncRevision((current) => current + 1))
   const electronAPI = window.electronAPI as OutputsElectronAPI
+  const textPreviewClassName = textAppearance === 'paper'
+    ? cn(
+        className,
+        'items-start justify-start bg-white text-zinc-950 [--background:#fff] [--foreground:#18181b]',
+      )
+    : className
 
   const hasStaticPreview = Boolean(
     (mode === 'image' || mode === 'video' || mode === 'audio') && dataUrl
@@ -295,8 +304,8 @@ export function OutputInlinePreview({
 
   if (mode === 'markdown' && content) {
     return (
-      <div className={className}>
-        <div className={compact ? 'text-sm leading-6' : 'runneros-card p-4'}>
+      <div className={textPreviewClassName}>
+        <div className={compact ? 'mx-auto w-full max-w-[840px] px-5 py-6 text-sm leading-6' : 'runneros-card p-4'}>
           <Markdown safeMode={manifest.kind === 'report' || manifest.tags?.includes('signals-v1')} mode="minimal">{content}</Markdown>
         </div>
       </div>
@@ -365,7 +374,7 @@ export function OutputInlinePreview({
 
   if ((mode === 'text' || mode === 'receipt') && content) {
     return (
-      <pre className={className ?? 'runneros-card max-h-[520px] overflow-auto whitespace-pre-wrap p-3 text-xs text-white/68'}>
+      <pre className={textPreviewClassName ?? 'runneros-card max-h-[520px] overflow-auto whitespace-pre-wrap p-3 text-xs text-white/68'}>
         {content}
       </pre>
     )

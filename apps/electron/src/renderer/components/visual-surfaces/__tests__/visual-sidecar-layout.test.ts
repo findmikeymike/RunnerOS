@@ -3,13 +3,24 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 describe('visual sidecar layout', () => {
-  it('uses a local dark palette so canvas text stays readable', () => {
+  it('keeps the Canvas chrome and board on the local dark palette', () => {
     const panel = readFileSync(join(import.meta.dir, '..', 'VisualSurfacePanel.tsx'), 'utf8')
     const board = readFileSync(join(import.meta.dir, '..', 'VisualBoardSurface.tsx'), 'utf8')
 
     expect(panel).toContain("'dark z-[7] flex min-h-0 animate-in text-foreground")
     expect(panel).toContain("'dark relative min-h-[220px]")
     expect(board).toContain('dark flex h-full min-h-0 flex-col overflow-hidden bg-[#050505] text-foreground')
+  })
+
+  it('renders Canvas text artifacts as black type on a white paper surface', () => {
+    const adapters = readFileSync(join(import.meta.dir, '..', 'VisualSurfaceAdapters.tsx'), 'utf8')
+    const preview = readFileSync(
+      join(import.meta.dir, '..', '..', 'outputs', 'OutputInlinePreview.tsx'),
+      'utf8',
+    )
+
+    expect(adapters).toContain('textAppearance="paper"')
+    expect(preview).toContain('bg-white text-zinc-950')
   })
 
   it('wires the adjustable canvas width into the single-panel layout', () => {

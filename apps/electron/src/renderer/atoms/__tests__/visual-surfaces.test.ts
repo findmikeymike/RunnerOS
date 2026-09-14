@@ -139,4 +139,50 @@ describe('visual sidecar atoms', () => {
     store.set(closeVisualSidecarAtom)
     expect(store.get(visualSidecarAtom).resolvedPresentation).toBeNull()
   })
+
+  it('keeps the resolved sidecar presentation when selecting another surface in the same session', () => {
+    const store = createStore()
+
+    store.set(openOutputVisualSurfaceAtom, {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      outputId: 'output-1',
+      title: 'First report',
+      kind: 'report',
+      createdAt: '2026-05-22T00:00:00.000Z',
+    })
+    store.set(resolveVisualSurfacePresentationAtom, 'sidecar')
+
+    store.set(openOutputVisualSurfaceAtom, {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      outputId: 'output-2',
+      title: 'Second report',
+      kind: 'report',
+      createdAt: '2026-05-22T00:01:00.000Z',
+    })
+    expect(store.get(visualSidecarAtom).resolvedPresentation).toBe('sidecar')
+
+    store.set(openDemoVisualSurfaceAtom, {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+    })
+    expect(store.get(visualSidecarAtom).resolvedPresentation).toBe('sidecar')
+  })
+
+  it('resolves presentation again when opening a surface for another session', () => {
+    const store = createStore()
+
+    store.set(openDemoVisualSurfaceAtom, {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+    })
+    store.set(resolveVisualSurfacePresentationAtom, 'sidecar')
+    store.set(openDemoVisualSurfaceAtom, {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-2',
+    })
+
+    expect(store.get(visualSidecarAtom).resolvedPresentation).toBeNull()
+  })
 })

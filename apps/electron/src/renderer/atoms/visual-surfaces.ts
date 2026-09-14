@@ -104,7 +104,10 @@ export const openDemoVisualSurfaceAtom = atom(
       activeSurface: surface,
       isCollapsed: false,
       focusedAt: Date.now(),
-      resolvedPresentation: null,
+      resolvedPresentation: current.activeSurface?.workspaceId === input.workspaceId
+        && current.activeSurface.sessionId === input.sessionId
+        ? current.resolvedPresentation
+        : null,
       rememberedSurfacesBySession: rememberSurface(current.rememberedSurfacesBySession, surface),
     })
   },
@@ -128,7 +131,10 @@ export const openOutputVisualSurfaceAtom = atom(
       activeSurface: surface,
       isCollapsed: false,
       focusedAt: Date.now(),
-      resolvedPresentation: null,
+      resolvedPresentation: current.activeSurface?.workspaceId === input.workspaceId
+        && current.activeSurface.sessionId === input.sessionId
+        ? current.resolvedPresentation
+        : null,
       rememberedSurfacesBySession: rememberSurface(current.rememberedSurfacesBySession, surface),
     })
   },
