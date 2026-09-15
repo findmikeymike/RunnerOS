@@ -1,3 +1,4 @@
+import { buildOutputRoute } from './output-routes'
 /**
  * Route Registry
  *
@@ -228,6 +229,14 @@ export const routes = {
 
     /** Chronological workflow/session/automation outputs */
     outputs: () => 'outputs' as const,
+
+    /** Scoped library, optionally with an exact owning-workspace preview. */
+    outputLibrary: (scope: 'all' | 'workspace', workspaceId?: string, selection?: { workspaceId: string; outputId: string }) => buildOutputRoute({
+      outputScope: scope,
+      outputScopeWorkspaceId: workspaceId,
+      outputWorkspaceId: selection?.workspaceId,
+      outputId: selection?.outputId,
+    }),
 
     /** Output detail page */
     output: (outputId: string) => `outputs/${outputId}` as const,

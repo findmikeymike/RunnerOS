@@ -1,7 +1,8 @@
 import * as React from 'react'
-import { AlertTriangle, Archive, CalendarClock, CheckCircle2, ExternalLink, Eye, FileText, FileVideo, FolderOpen, Link2, Loader2, PackageCheck, PanelTopOpen, ReceiptText, Route, Star } from 'lucide-react'
+import { AlertTriangle, Archive, CalendarClock, CheckCircle2, ExternalLink, Eye, FileText, FileVideo, FolderOpen, PanelTopOpen, Star, MoreHorizontal, MessageSquare } from 'lucide-react'
 import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -24,6 +25,7 @@ interface Props {
   workspaceId: string
   outputId?: string
   currentCampaignId?: string
+  remote?: boolean
 }
 
 type OutputsElectronAPI = typeof window.electronAPI & {
@@ -45,14 +47,17 @@ const IMAGE_OUTPUT_VAULT_KIND_OPTIONS: Array<{ value: ImageOutputVaultKindHint; 
   { value: 'face-reference', label: 'Face Reference' },
 ]
 
-export default function OutputDetailPage({ workspaceId, outputId, currentCampaignId }: Props) {
+export default function OutputDetailPage({ workspaceId, outputId, currentCampaignId, remote = false }: Props) {
   const { navigate } = useNavigation()
-  const { workspaces, onSelectWorkspace } = useAppShellContext()
-  const { getOutput, outputs, loading, error, promoteToFinal, removeFromFinal } = useOutputs(workspaceId)
+  const { workspaces, activeWorkspaceId, onSelectWorkspace, onCreateSession, onInputChange, getDraft } = useAppShellContext()
+  const { getOutput, outputs, promoteToFinal, removeFromFinal } = useOutputs(workspaceId)
   const openOutputVisualSurface = useSetAtom(openOutputVisualSurfaceAtom)
   const openDemoVisualSurface = useSetAtom(openDemoVisualSurfaceAtom)
   const [manifest, setManifest] = React.useState<OutputManifestDTO | null>(null)
   const [detailError, setDetailError] = React.useState<string | null>(null)
+  const [vaultDialog, setVaultDialog] = React.useState(false)
+  const [continuing, setContinuing] = React.useState(false)
+  const [loadedOwner, setLoadedOwner] = React.useState<string | null>(null)
   const [savingToVault, setSavingToVault] = React.useState(false)
   const [imageVaultKindHint, setImageVaultKindHint] = React.useState<ImageOutputVaultKindHint>('cover-art')
   const [finalAction, setFinalAction] = React.useState<'promote' | 'primary' | 'remove' | null>(null)
@@ -60,52 +65,43 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
   const [pendingSchedule, setPendingSchedule] = React.useState(false)
   const [pendingVariantUse, setPendingVariantUse] = React.useState<{ variantId: string; assetId: string } | null>(null)
 
+  const kitWorkspaceIds = JSON.stringify(workspaces.filter((workspace) =>
+    isArtistCampaignWorkspace(workspace) && !remote && !workspaces.find((entry) => entry.id === activeWorkspaceId)?.remoteServer && !workspace.remoteServer && (!currentCampaignId || workspace.id === currentCampaignId)
+  ).map((workspace) => workspace.id))
   React.useEffect(() => {
     setCampaignFinals([])
-    if (!currentCampaignId) return
+    const ids = JSON.parse(kitWorkspaceIds) as string[]
     let active = true
-    const refresh = () => window.electronAPI.getReleaseKit(currentCampaignId).then((kit) => {
-      if (active) setCampaignFinals(kit.items)
-    }).catch(() => { if (active) setCampaignFinals([]) })
+    let revision = 0
+    const refresh = async () => {
+      const request = ++revision
+      const results = await Promise.allSettled(ids.map((id) => window.electronAPI.getReleaseKit(id)))
+      if (active && revision === request) setCampaignFinals(results.flatMap((result) => result.status === 'fulfilled' ? result.value.items : []))
+    }
     void refresh()
-    const unsubscribe = window.electronAPI.onReleaseKitChanged((id, kit) => {
-      if (active && id === currentCampaignId) setCampaignFinals(kit.items)
-    })
+    const unsubscribe = window.electronAPI.onReleaseKitChanged((id) => { if (ids.includes(id)) void refresh() })
     return () => { active = false; unsubscribe() }
-  }, [currentCampaignId])
+  }, [kitWorkspaceIds])
 
   React.useEffect(() => {
-    if (!outputId) {
-      setManifest(null)
-      setDetailError(null)
-      return
-    }
     let mounted = true
+    setManifest(null)
+    setLoadedOwner(null)
     setDetailError(null)
+    if (!outputId) return
     getOutput(outputId).then((loaded) => {
       if (!mounted) return
-      if (!loaded) {
-        const summary = outputs.find((entry) => entry.id === outputId)
-        if (summary) {
-          setManifest({
-            ...summary,
-            summary: summary.summary ?? '',
-            origin: summary.origin ?? { source: 'manual' },
-            assets: summary.primary ? [summary.primary] : [],
-            receipts: [],
-            links: [],
-          })
-          return
-        }
-        setDetailError('Output not found.')
+      if (!loaded || loaded.id !== outputId || (loaded.workspaceId && loaded.workspaceId !== workspaceId)) {
+        setDetailError('This Output could not be loaded. Reopen it from the library.')
         return
       }
-      setManifest(loaded)
+      setLoadedOwner(workspaceId)
+      setManifest({ ...loaded, workspaceId })
     }).catch((err) => {
       if (mounted) setDetailError(err instanceof Error ? err.message : String(err))
     })
     return () => { mounted = false }
-  }, [getOutput, outputId, outputs])
+  }, [getOutput, outputId, workspaceId, outputs])
 
   React.useEffect(() => {
     setImageVaultKindHint('cover-art')
@@ -119,16 +115,16 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
     )
   }
 
-  if (detailError || error) {
+  if (detailError) {
     return (
       <div className="m-5 flex items-center gap-2 rounded-[14px] border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
         <AlertTriangle className="h-4 w-4" />
-        <span>{detailError ?? error}</span>
+        <span>{detailError}</span>
       </div>
     )
   }
 
-  if (!manifest || loading) {
+  if (!manifest || manifest.id !== outputId || loadedOwner !== workspaceId) {
     return <div className="runneros-glass-route flex h-full items-center justify-center text-sm text-white/50">Loading output</div>
   }
 
@@ -140,13 +136,13 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
   const canChooseVaultKind = canChooseImageVaultKind(manifest)
   const isXEditorialSlate = isXEditorialSlateOutput(manifest)
   const scheduleFinal = schedulingFinalForOutput(manifest, currentCampaignId)
-  const readySnapshots = currentCampaignId ? releaseKitFinalsForOutput(manifest, currentCampaignId, campaignFinals) : []
+  const readySnapshots = campaignFinals.filter((item) => releaseKitFinalsForOutput(manifest, item.campaignId, [item]).length > 0)
   const openScheduleInCampaign = async (campaignId: string, snapshot?: ReleaseKitItem) => {
     try {
       if (manifest.kind === 'image' || manifest.kind === 'video') {
         const assetId = snapshot && (snapshot.source.type === 'output' || snapshot.source.type === 'legacy-final') ? snapshot.source.assetId : scheduleFinal?.assetId
         if (!assetId) throw new Error('Choose an exact Final file before scheduling this Output.')
-        if (campaignId !== currentCampaignId) await onSelectWorkspace(campaignId)
+        if (campaignId !== activeWorkspaceId) await onSelectWorkspace(campaignId)
         setPendingReleaseKitOutput(manifest.id, assetId, {
           releaseKitItemId: snapshot?.id,
           sourceWorkspaceId: manifest.workspaceId ?? workspaceId,
@@ -168,7 +164,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
       targetCampaignId: campaignId,
     })
     try {
-      if (campaignId !== currentCampaignId) await onSelectWorkspace(campaignId)
+      if (campaignId !== activeWorkspaceId) await onSelectWorkspace(campaignId)
       navigate(routes.view.campaign('release-kit'))
       setPendingVariantUse(null)
     } catch (switchError) {
@@ -197,200 +193,79 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
     onRevise: (variantId: string) => void reviseSocialVariant(workspaceId, manifest, variantId, setManifest, navigate),
   } : undefined
 
+  const finished = isFinal || readySnapshots.length > 0
+  const canSchedule = !isXEditorialSlate && (manifest.kind === 'image' || manifest.kind === 'video') && finished
+  const makeFinal = async () => {
+    if (!currentCampaignId) { setFinalAction('promote'); return }
+    try {
+      if (activeWorkspaceId !== currentCampaignId) await onSelectWorkspace(currentCampaignId)
+      setPendingReleaseKitOutput(manifest.id, undefined, { sourceWorkspaceId: workspaceId, targetCampaignId: currentCampaignId })
+      navigate(routes.view.campaign('release-kit'))
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Could not open Release Kit.') }
+  }
+  const openOwnedRoute = async (route: Parameters<typeof navigate>[0]) => {
+    try { if (activeWorkspaceId !== workspaceId) await onSelectWorkspace(workspaceId); navigate(route) }
+    catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Could not open workspace.') }
+  }
+  const continueWithAgent = async () => {
+    setContinuing(true)
+    try {
+      const targetSession = sessionId ?? (await onCreateSession(workspaceId, { name: `Continue: ${manifest.title}` })).id
+      const prompt = `Continue working with Output "${manifest.title}" (outputId: ${manifest.id}, workspaceId: ${workspaceId}). `
+      const draft = getDraft(targetSession)
+      onInputChange(targetSession, draft ? `${draft}\n\n${prompt}` : prompt)
+      await onSelectWorkspace(workspaceId)
+      navigate(routes.view.allSessions(targetSession))
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Could not open the agent.') }
+    finally { setContinuing(false) }
+  }
+
   return (
-    <div className="runneros-glass-route h-full overflow-y-auto">
-      <div className="runneros-page-wrap">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="runneros-page-title truncate">{manifest.title}</h1>
-              <StatusPill status={manifest.status} />
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-white/48">
-              <span>{formatKind(manifest.kind)}</span>
-              <span>{manifest.createdAt}</span>
-              <span>{originLabel(manifest)}</span>
-            </div>
+    <div className="h-full overflow-y-auto bg-[#0d0d0e] text-white">
+      <div className="mx-auto max-w-4xl space-y-5 px-5 py-5 sm:px-6">
+        <header className="space-y-3 pr-8">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-white/45">
+            <span>{formatKind(manifest.kind)}</span><span aria-hidden="true">·</span>
+            <span>{formatOutputDate(manifest.createdAt)}</span><span aria-hidden="true">·</span>
+            <span>{originLabel(manifest)}</span>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            {!isXEditorialSlate && (manifest.kind === 'image' || manifest.kind === 'video') && (isFinal || readySnapshots.length > 0) && <Button size="sm" variant="outline" className="border-[#f97316] bg-[#f97316] text-black hover:border-[#fb923c] hover:bg-[#fb923c] hover:text-black" onClick={() => {
-              if (!currentCampaignId && !scheduleFinal) { toast.error('Choose one Primary Final before scheduling this Output.'); return }
-              if (currentCampaignId && readySnapshots.length === 1) void openScheduleInCampaign(currentCampaignId, readySnapshots[0])
-              else if (currentCampaignId && readySnapshots.length === 0) void openScheduleInCampaign(currentCampaignId)
-              else setPendingSchedule(true)
-            }}>
-              <CalendarClock className="mr-1.5 h-3.5 w-3.5" />
-              Schedule Final
-            </Button>}
-            {!isXEditorialSlate && (currentCampaignId ? (
-              <Button size="sm" variant="outline" className="border-emerald-400/20 bg-emerald-400/10 text-white/82 hover:bg-emerald-400/15 hover:text-white" onClick={() => {
-                setPendingReleaseKitOutput(manifest.id)
-                navigate(routes.view.campaign('release-kit'))
-              }}>
-                <PackageCheck className="mr-1.5 h-3.5 w-3.5" />
-                Approve in Release Kit
-              </Button>
-            ) : (
-              <Button size="sm" variant="outline" className="border-emerald-400/20 bg-emerald-400/10 text-white/82 hover:bg-emerald-400/15 hover:text-white" onClick={() => setFinalAction('promote')}>
-                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                Set as Final
-              </Button>
-            ))}
-            {!currentCampaignId && isFinal && (
-              <Button size="sm" variant="outline" className="border-sky-400/20 bg-sky-400/10 text-white/82 hover:bg-sky-400/15 hover:text-white" onClick={() => setFinalAction('primary')}>
-                <Star className="mr-1.5 h-3.5 w-3.5" />
-                Set as Primary
-              </Button>
-            )}
-            {!currentCampaignId && isFinal && (
-              <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => setFinalAction('remove')}>
-                Remove from Finals
-              </Button>
-            )}
-            {sessionId && (
-              <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => focusOutputSurface(workspaceId, manifest, sessionId, openOutputVisualSurface)}>
-                <Eye className="mr-1.5 h-3.5 w-3.5" />
-                Focus
-              </Button>
-            )}
-            {sessionId && canSendToCanvas && (
-              <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => sendOutputToCanvas(workspaceId, manifest, sessionId, openDemoVisualSurface)}>
-                <PanelTopOpen className="mr-1.5 h-3.5 w-3.5" />
-                Canvas
-              </Button>
-            )}
-            {videoProjectAsset && (
-              <Button size="sm" variant="outline" className="border-[#f97316]/25 bg-[#f97316]/12 text-white/82 hover:bg-[#f97316]/20 hover:text-white" onClick={() => navigate(routes.view.videoStudio(manifest.id))}>
-                <FileVideo className="mr-1.5 h-3.5 w-3.5" />
-                Video Studio
-              </Button>
-            )}
-            {!isXEditorialSlate && primary && (
-              <>
-                {canChooseVaultKind && (
-                  <ImageVaultKindSelect
-                    value={imageVaultKindHint}
-                    disabled={savingToVault}
-                    onChange={setImageVaultKindHint}
-                  />
-                )}
-                <Button size="sm" variant="outline" disabled={savingToVault} className="border-[#f97316]/25 bg-[#f97316]/12 text-white/82 hover:bg-[#f97316]/20 hover:text-white disabled:cursor-wait disabled:opacity-60" onClick={() => void saveOutputToVault(workspaceId, manifest, primary, imageVaultKindHint, setSavingToVault)}>
-                  {savingToVault ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Archive className="mr-1.5 h-3.5 w-3.5" />}
-                  Save to Vault
-                </Button>
-                <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => openAsset(workspaceId, manifest, primary)}>
-                  <FileText className="mr-1.5 h-3.5 w-3.5" />
-                  Open
-                </Button>
-                <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => showAsset(workspaceId, manifest, primary)}>
-                  <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-                  Show
-                </Button>
-              </>
-            )}
-          </div>
+          <h1 className="break-words text-xl font-semibold leading-snug tracking-tight text-white/95">{manifest.title}</h1>
+          <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] ${finished ? 'bg-emerald-400/10 text-emerald-300' : 'bg-white/[0.06] text-white/60'}`}>{manifest.status === 'failed' ? 'Failed' : manifest.status === 'cancelled' ? 'Cancelled' : finished ? 'Final' : 'Ready for review'}</span>
+        </header>
+        <div className="flex flex-wrap items-center gap-2">
+          {canSchedule ? <Button size="sm" className="bg-[#f97316] text-black hover:bg-[#fb923c]" onClick={() => {
+            if (!currentCampaignId && !scheduleFinal && readySnapshots.length === 0) { toast.error('Choose one Primary Final before scheduling this Output.'); return }
+            if (readySnapshots.length === 1) void openScheduleInCampaign(readySnapshots[0]!.campaignId, readySnapshots[0])
+            else if (currentCampaignId && readySnapshots.length === 0) void openScheduleInCampaign(currentCampaignId)
+            else setPendingSchedule(true)
+          }}><CalendarClock className="mr-1.5 h-3.5 w-3.5" />Schedule Final</Button>
+          : !isXEditorialSlate && !finished && <Button size="sm" className="bg-[#f97316] text-black hover:bg-[#fb923c]" onClick={() => void makeFinal()}><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Make Final</Button>}
+          <Button size="sm" variant="outline" disabled={continuing} className="border-white/10 bg-white/[0.035]" onClick={() => void continueWithAgent()}><MessageSquare className="mr-1.5 h-3.5 w-3.5" />Continue with agent</Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button size="sm" variant="ghost" aria-label="More Output actions"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-48">
+              {!isXEditorialSlate && finished && <DropdownMenuItem onSelect={() => void makeFinal()}><CheckCircle2 className="mr-2 h-4 w-4" />{currentCampaignId ? 'Open Release Kit' : 'Make another Final'}</DropdownMenuItem>}
+              {!currentCampaignId && isFinal && <><DropdownMenuItem onSelect={() => setFinalAction('primary')}><Star className="mr-2 h-4 w-4" />Set Primary Final</DropdownMenuItem><DropdownMenuItem onSelect={() => setFinalAction('remove')}>Remove from Finals</DropdownMenuItem></>}
+              {sessionId && <DropdownMenuItem onSelect={() => focusOutputSurface(workspaceId, manifest, sessionId, openOutputVisualSurface)}><Eye className="mr-2 h-4 w-4" />Focus in session</DropdownMenuItem>}
+              {sessionId && canSendToCanvas && <DropdownMenuItem onSelect={() => sendOutputToCanvas(workspaceId, manifest, sessionId, openDemoVisualSurface)}><PanelTopOpen className="mr-2 h-4 w-4" />Open Canvas</DropdownMenuItem>}
+              {videoProjectAsset && <DropdownMenuItem onSelect={() => void openOwnedRoute(routes.view.videoStudio(manifest.id))}><FileVideo className="mr-2 h-4 w-4" />Open Video Studio</DropdownMenuItem>}
+              {!isXEditorialSlate && primary && <><DropdownMenuSeparator /><DropdownMenuItem disabled={savingToVault} onSelect={() => setVaultDialog(true)}><Archive className="mr-2 h-4 w-4" />Save to Vault</DropdownMenuItem><DropdownMenuItem onSelect={() => openAsset(workspaceId, manifest, primary)}><FileText className="mr-2 h-4 w-4" />Open file</DropdownMenuItem><DropdownMenuItem onSelect={() => showAsset(workspaceId, manifest, primary)}><FolderOpen className="mr-2 h-4 w-4" />Show in folder</DropdownMenuItem></>}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-
-      <div className="flex max-w-5xl flex-col gap-5">
-        <Section title="Preview">
-          <OutputInlinePreview
-            workspaceId={workspaceId}
-            manifest={manifest}
-            primary={primary}
-            socialVariantActions={socialVariantActions}
-          />
-        </Section>
-
-        {!isXEditorialSlate && <>
-        <Section title="Summary">
-          <p className="runneros-card px-3 py-2 text-sm leading-6 text-white/68">{manifest.summary || 'No summary provided.'}</p>
-        </Section>
-
-        <Section title="Assets">
-          {manifest.assets.length === 0 ? (
-            <EmptyLine>No assets</EmptyLine>
-          ) : (
-            <div className="runneros-card overflow-hidden">
-              {manifest.assets.map((asset) => (
-                <button
-                  key={asset.id}
-                  type="button"
-                  onClick={() => openAsset(workspaceId, manifest, asset)}
-                  className="flex w-full items-center justify-between gap-3 border-b border-white/[0.06] px-3 py-2 text-left text-sm last:border-b-0 hover:bg-white/[0.045]"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium text-white/78">{asset.label}</span>
-                    <span className="block truncate text-xs text-white/42">{asset.role} · {asset.mimeType ?? 'file'} · {asset.path}</span>
-                  </span>
-                  <span className="shrink-0 text-xs text-white/42">{formatBytes(asset.sizeBytes)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </Section>
-
-        <Section title="Receipts and links">
-          {manifest.receipts.length === 0 && manifest.links.length === 0 ? (
-            <EmptyLine>No receipts or links</EmptyLine>
-          ) : (
-            <div className="grid gap-2">
-              {manifest.receipts.map((receipt) => (
-                <div key={receipt.id} className="runneros-card p-3 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 font-medium text-white/78">
-                      <ReceiptText className="h-4 w-4 text-white/42" />
-                      {receipt.provider} · {receipt.action}
-                    </div>
-                    <StatusPill status={receipt.status} />
-                  </div>
-                  <div className="mt-1 text-xs text-white/42">{receipt.displayText || receipt.externalId || receipt.occurredAt}</div>
-                  {receipt.url && <ExternalButton url={receipt.url} />}
-                </div>
-              ))}
-              {manifest.links.map((link) => (
-                <div key={link.id} className="runneros-card p-3 text-sm">
-                  <div className="flex items-center gap-2 font-medium text-white/78">
-                    <Link2 className="h-4 w-4 text-white/42" />
-                    {link.label}
-                  </div>
-                  <div className="mt-1 truncate text-xs text-white/42">{link.url}</div>
-                  <ExternalButton url={link.url} />
-                </div>
-              ))}
-            </div>
-          )}
-        </Section>
-
-        <Section title="Provenance">
-          <div className="runneros-card p-3">
-            <KeyValueRows
-              rows={[
-                ['Source', manifest.origin.source],
-                ['Workflow', manifest.origin.workflowName ?? manifest.origin.workflowSlug],
-                ['Run', manifest.origin.workflowRunId],
-                ['Step', manifest.origin.stepId],
-                ['Session', manifest.origin.sessionId],
-                ['Agent', manifest.origin.agentName ?? manifest.origin.agentSlug],
-                ['Automation', manifest.origin.automationId],
-              ]}
-            />
-            <div className="mt-3 flex flex-wrap gap-2">
-              {manifest.origin.workflowRunId && (
-                <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => navigate(routes.view.workflowRun(manifest.origin.workflowRunId!))}>
-                  <Route className="mr-1.5 h-3.5 w-3.5" />
-                  Open run
-                </Button>
-              )}
-              {manifest.origin.sessionId && (
-                <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => navigate(routes.view.allSessions(manifest.origin.sessionId!))}>
-                  Open session
-                </Button>
-              )}
-            </div>
+        <OutputInlinePreview key={`${workspaceId}:${manifest.id}`} workspaceId={workspaceId} manifest={manifest} primary={primary} socialVariantActions={socialVariantActions} onOpenVideoStudio={() => void openOwnedRoute(routes.view.videoStudio(manifest.id))} />
+        {!isXEditorialSlate && manifest.summary?.trim() && <p className="text-sm leading-relaxed text-white/60">{manifest.summary}</p>}
+        {!isXEditorialSlate && <details className="border-t border-white/[0.07] pt-3">
+          <summary className="cursor-pointer text-xs text-white/45 hover:text-white/75">Files, links and history</summary>
+          <div className="mt-4 space-y-5">
+            {manifest.assets.length > 0 && <Section title="Files"><div className="divide-y divide-white/[0.05]">{manifest.assets.map((asset) => <button key={asset.id} type="button" onClick={() => openAsset(workspaceId, manifest, asset)} className="flex w-full items-center justify-between gap-3 py-2 text-left text-sm hover:text-white"><span className="min-w-0"><span className="block truncate text-white/75">{asset.label}</span><span className="block truncate text-xs text-white/35">{asset.mimeType ?? 'File'} · {asset.path}</span></span><span className="shrink-0 text-xs text-white/40">{formatBytes(asset.sizeBytes)}</span></button>)}</div></Section>}
+            {(manifest.receipts.length > 0 || manifest.links.length > 0) && <Section title="Receipts and links"><div className="space-y-3">{manifest.receipts.map((receipt) => <div key={receipt.id} className="text-sm"><div className="flex items-center justify-between gap-2"><span className="text-white/70">{receipt.provider} · {receipt.action}</span><StatusPill status={receipt.status} /></div><p className="text-xs text-white/40">{receipt.displayText || receipt.externalId || formatOutputDate(receipt.occurredAt)}</p>{receipt.url && <ExternalButton url={receipt.url} />}</div>)}{manifest.links.map((link) => <div key={link.id} className="text-sm text-white/70"><span>{link.label}</span><ExternalButton url={link.url} /></div>)}</div></Section>}
+            <Section title="Created by"><KeyValueRows rows={[
+              ['Source', manifest.origin.source], ['Workflow', manifest.origin.workflowName ?? manifest.origin.workflowSlug], ['Run', manifest.origin.workflowRunId], ['Step', manifest.origin.stepId], ['Session', manifest.origin.sessionId], ['Agent', manifest.origin.agentName ?? manifest.origin.agentSlug], ['Automation', manifest.origin.automationId],
+            ]} />{manifest.origin.workflowRunId && <Button size="sm" variant="ghost" onClick={() => void openOwnedRoute(routes.view.workflowRun(manifest.origin.workflowRunId!))}>Open run</Button>}</Section>
           </div>
-        </Section>
-        </>}
-      </div>
+        </details>}
+      <Dialog open={vaultDialog} onOpenChange={setVaultDialog}><DialogContent className="max-w-sm"><DialogHeader><DialogTitle>Save to Vault</DialogTitle><DialogDescription>Keep this file in your artist library.</DialogDescription></DialogHeader>{canChooseVaultKind && <ImageVaultKindSelect value={imageVaultKindHint} disabled={savingToVault} onChange={setImageVaultKindHint} />}<Button disabled={savingToVault || !primary} onClick={() => { if (primary) void saveOutputToVault(workspaceId, manifest, primary, imageVaultKindHint, setSavingToVault) }}>{savingToVault ? 'Saving…' : 'Save to Vault'}</Button></DialogContent></Dialog>
       {!currentCampaignId ? <OutputFinalActionDialog
         open={Boolean(finalAction)}
         action={finalAction ?? 'promote'}
@@ -409,7 +284,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
             <DialogDescription>{currentCampaignId ? 'Choose the exact finished version. Then choose its destination and timing.' : 'Choose the campaign for this finished version. Then choose its destination and timing.'} Nothing is sent until you authorize scheduling.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
-            {currentCampaignId && readySnapshots.length > 0 ? readySnapshots.map((snapshot) => <Button key={snapshot.id} variant="outline" onClick={() => void openScheduleInCampaign(currentCampaignId, snapshot)}>{snapshot.title} · {new Date(snapshot.promotedAt).toLocaleString()}</Button>) : campaignWorkspaces.map((campaign) => <Button key={campaign.id} variant="outline" onClick={() => void openScheduleInCampaign(campaign.id)}>{campaign.name}</Button>)}
+            {readySnapshots.length > 0 ? readySnapshots.map((snapshot) => <Button key={snapshot.id} variant="outline" onClick={() => void openScheduleInCampaign(snapshot.campaignId, snapshot)}>{snapshot.title} · {new Date(snapshot.promotedAt).toLocaleString()}</Button>) : campaignWorkspaces.map((campaign) => <Button key={campaign.id} variant="outline" onClick={() => void openScheduleInCampaign(campaign.id)}>{campaign.name}</Button>)}
             {!currentCampaignId && !campaignWorkspaces.length && <p className="text-sm text-muted-foreground">Create a campaign to schedule this Final. It stays ready for use in HQ.</p>}
           </div>
         </DialogContent>
@@ -559,9 +434,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function EmptyLine({ children }: { children: React.ReactNode }) {
-  return <div className="runneros-card px-3 py-2 text-sm text-white/45">{children}</div>
-}
 
 function ExternalButton({ url }: { url: string }) {
   return (
@@ -692,4 +564,9 @@ function formatBytes(size?: number): string {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
   return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+function formatOutputDate(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }

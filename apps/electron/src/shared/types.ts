@@ -1,3 +1,4 @@
+import { buildOutputRoute, parseOutputLibraryRoute, type OutputRouteFields } from './output-routes'
 // =============================================================================
 // Protocol re-exports (channels, DTOs, events, wire types)
 // =============================================================================
@@ -1932,7 +1933,7 @@ export interface DeepResearchRunNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
-export interface OutputsNavigationState {
+export interface OutputsNavigationState extends OutputRouteFields {
   navigator: 'outputs'
   outputId?: string
   rightSidebar?: RightSidebarPanel
@@ -2111,7 +2112,7 @@ export const getNavigationStateKey = (state: NavigationState): string => {
     return `deep-research/${state.runId}`
   }
   if (state.navigator === 'outputs') {
-    return state.outputId ? `outputs/${state.outputId}` : 'outputs'
+    return buildOutputRoute(state)
   }
   if (state.navigator === 'videoStudio') {
     return `video-studio/${state.outputId}`
@@ -2215,6 +2216,10 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   }
 
   // Handle outputs
+  if (key.startsWith('outputs/library/')) {
+    const fields = parseOutputLibraryRoute(key)
+    return fields ? { navigator: 'outputs', ...fields } : null
+  }
   if (key === 'outputs') return { navigator: 'outputs' }
   if (key.startsWith('outputs/')) {
     const outputId = key.slice('outputs/'.length)

@@ -1,3 +1,4 @@
+import { buildOutputRoute, parseOutputLibraryRoute, type OutputRouteFields } from './output-routes'
 /**
  * Route Parser
  *
@@ -37,7 +38,7 @@ export interface ParsedRoute {
 
 export type NavigatorType = 'campaign' | 'lab' | 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'agenda' | 'community' | 'website' | 'vault' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'videoStudio' | 'settings'
 
-export interface ParsedCompoundRoute {
+export interface ParsedCompoundRoute extends OutputRouteFields {
   /** The navigator type */
   navigator: NavigatorType
   /** Session filter (only for sessions navigator) */
@@ -299,6 +300,10 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 
   // Outputs navigator
   if (first === 'outputs') {
+    if (segments[1] === 'library' && segments.length > 2) {
+      const fields = parseOutputLibraryRoute(route)
+      return fields ? { navigator: 'outputs', ...fields, details: fields.outputId ? { type: 'output', id: fields.outputId } : null } : null
+    }
     const outputId = segments[1]
     if (!outputId) return { navigator: 'outputs', details: null }
     return {
@@ -476,7 +481,7 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   }
 
   if (parsed.navigator === 'outputs') {
-    return parsed.outputId ? `outputs/${parsed.outputId}` : 'outputs'
+    return buildOutputRoute(parsed)
   }
 
   if (parsed.navigator === 'videoStudio') {
@@ -663,10 +668,11 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
   }
 
   if (compound.navigator === 'outputs') {
-    if (compound.outputId) {
-      return { type: 'view', name: 'output-info', id: compound.outputId, params: {} }
-    }
-    return { type: 'view', name: 'outputs', params: {} }
+    const params: Record<string, string> = {}
+    if (compound.outputScope) params.outputScope = compound.outputScope
+    if (compound.outputScopeWorkspaceId) params.outputScopeWorkspaceId = compound.outputScopeWorkspaceId
+    if (compound.outputWorkspaceId) params.outputWorkspaceId = compound.outputWorkspaceId
+    return { type: 'view', name: compound.outputId ? 'output-info' : 'outputs', id: compound.outputId, params }
   }
 
   if (compound.navigator === 'videoStudio') {
@@ -879,9 +885,7 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
   }
 
   if (compound.navigator === 'outputs') {
-    return compound.outputId
-      ? { navigator: 'outputs', outputId: compound.outputId }
-      : { navigator: 'outputs' }
+    return { navigator: 'outputs', outputId: compound.outputId, outputScope: compound.outputScope, outputScopeWorkspaceId: compound.outputScopeWorkspaceId, outputWorkspaceId: compound.outputWorkspaceId }
   }
 
   if (compound.navigator === 'videoStudio') {
@@ -1016,10 +1020,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       if (parsed.id) return { navigator: 'deepResearchRun', runId: parsed.id }
       return { navigator: 'workflows', details: { type: 'recent-runs' } }
     case 'outputs':
-      return { navigator: 'outputs' }
     case 'output-info':
-      if (parsed.id) return { navigator: 'outputs', outputId: parsed.id }
-      return { navigator: 'outputs' }
+      return { navigator: 'outputs', outputId: parsed.id, outputScope: parsed.params.outputScope === 'all' || parsed.params.outputScope === 'workspace' ? parsed.params.outputScope : undefined, outputScopeWorkspaceId: parsed.params.outputScopeWorkspaceId, outputWorkspaceId: parsed.params.outputWorkspaceId }
     case 'video-studio':
       if (parsed.id) return { navigator: 'videoStudio', outputId: parsed.id }
       return { navigator: 'outputs' }
@@ -1183,6 +1185,9 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
     return {
       navigator: 'outputs',
       outputId: state.outputId,
+      outputScope: state.outputScope,
+      outputScopeWorkspaceId: state.outputScopeWorkspaceId,
+      outputWorkspaceId: state.outputWorkspaceId,
       details: state.outputId ? { type: 'output', id: state.outputId } : null,
     }
   }

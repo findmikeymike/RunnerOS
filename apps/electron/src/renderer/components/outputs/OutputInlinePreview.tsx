@@ -16,6 +16,7 @@ import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import { isXEditorialSlateOutput } from '@craft-agent/shared/x-editorial'
 import { XEditorialSlatePreview } from './XEditorialSlatePreview'
 import { SocialVariantSetPreview } from './SocialVariantSetPreview'
+import { parseVisualBoardSnapshot, VISUAL_BOARD_TAG, VISUAL_BOARD_SESSION_TAG } from '@craft-agent/shared/visual-board'
 import { cn } from '@/lib/utils'
 
 const OutputModelPreview = React.lazy(() => import('./OutputModelPreview').then((module) => ({ default: module.OutputModelPreview })))
@@ -32,6 +33,7 @@ interface OutputInlinePreviewProps {
   className?: string
   compact?: boolean
   textAppearance?: 'default' | 'paper'
+  onOpenVideoStudio?: () => void
   onPreviewSettled?: OutputPreviewSettledHandler
   socialVariantActions?: {
     onUse?: (variantId: string) => void
@@ -53,6 +55,7 @@ export function OutputInlinePreview({
   compact = false,
   textAppearance = 'default',
   onPreviewSettled,
+  onOpenVideoStudio,
   socialVariantActions,
 }: OutputInlinePreviewProps) {
   const { navigate } = useNavigation()
@@ -154,7 +157,7 @@ export function OutputInlinePreview({
         manifest={manifest}
         asset={videoProjectAsset}
         className={className}
-        onOpen={() => navigate(routes.view.videoStudio(manifest.id))}
+        onOpen={() => onOpenVideoStudio ? onOpenVideoStudio() : navigate(routes.view.videoStudio(manifest.id))}
         onPreviewSettled={onPreviewSettled}
       />
     )
@@ -203,7 +206,7 @@ export function OutputInlinePreview({
             size="sm"
             variant="outline"
             className="absolute right-2 top-2 border-white/[0.12] bg-black/70 text-white/80 hover:bg-black/85 hover:text-white"
-            onClick={() => navigate(routes.view.videoStudio(manifest.id))}
+            onClick={() => onOpenVideoStudio ? onOpenVideoStudio() : navigate(routes.view.videoStudio(manifest.id))}
           >
             <FileVideo className="mr-1.5 h-3.5 w-3.5" />
             Open in Video Studio
@@ -326,6 +329,19 @@ export function OutputInlinePreview({
     )
   }
 
+  if (mode === 'json' && (manifest.tags?.includes(VISUAL_BOARD_TAG) || manifest.tags?.includes(VISUAL_BOARD_SESSION_TAG))) {
+    if (content === null) return <EmptyPreview className={className}>Loading board…</EmptyPreview>
+    const board = parseVisualBoardSnapshot(content, { workspaceId, sessionId: manifest.origin.sessionId })
+    if (!board) return <EmptyPreview className={className}>This board preview is unavailable. Open its session to continue.</EmptyPreview>
+    return <div className={cn('grid gap-3 sm:grid-cols-2', className)}>
+      {board.cards.length === 0 && <p className="text-sm text-white/45">This board has no cards yet.</p>}
+      {board.cards.map((card) => <article key={card.id} className="min-w-0 rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
+        <h3 className="mb-2 break-words text-sm font-medium text-white/85">{card.title}</h3>
+        {card.type === 'note' ? <div className="text-sm text-white/65"><Markdown>{card.body}</Markdown></div> : <><p className="mb-3 text-sm leading-relaxed text-white/55">{card.summary}</p><Button size="sm" variant="outline" onClick={() => navigate(routes.view.outputLibrary('workspace', workspaceId, { workspaceId, outputId: card.outputId }))}>Open {card.kind.replace(/-/g, ' ')}</Button></>}
+      </article>)}
+    </div>
+  }
+
   if (mode === 'json' && content) {
     return (
       <ShikiCodeViewer
@@ -432,6 +448,7 @@ function OutputVideoProjectPreview({
   asset: OutputAssetDTO
   className?: string
   onOpen: () => void
+  onOpenVideoStudio?: () => void
   onPreviewSettled?: OutputPreviewSettledHandler
 }) {
   const [summary, setSummary] = React.useState<ReturnType<typeof summarizeVideoProject>>(null)

@@ -195,7 +195,7 @@ function sortOutputs(outputs: OutputSummaryDTO[]): OutputSummaryDTO[] {
   return [...outputs].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
 }
 
-function coerceSummary(raw: unknown): OutputSummaryDTO | null {
+export function coerceSummary(raw: unknown): OutputSummaryDTO | null {
   if (!raw || typeof raw !== 'object') return null
   const value = raw as Record<string, unknown>
   if (typeof value.id !== 'string' || typeof value.title !== 'string') return null

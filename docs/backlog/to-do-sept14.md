@@ -217,14 +217,25 @@ For each completed slice, append: item number, owner, decision, commit, loaded b
 
 ### September 15 — Item 2: Output usefulness, Final meaning, and scheduling handoff
 
-- Owner: Codex. Implemented in the canonical main working tree; **uncommitted**.
+- Owner: Codex. Committed as `f0329c20a` on canonical `main`; not pushed.
 - Shared agent instructions and tool descriptions define an Output as a usable result worth reviewing, reusing, or handing off, with explicit exclusions for scratch work. This is agent guidance, not a semantic classifier guaranteeing every artifact meets the threshold.
 - Final means the exact version is finished and ready for use. Shared instructions, serialized Release Kit context, and UI explanations keep approval of finished form separate from scheduling, sending, and publication.
 - Finished image/video Outputs expose a prominent **Schedule Final** action. Campaigns resolve the exact ready Release Kit snapshot and ask when multiple versions exist. HQ chooses a campaign and explicitly approves the exact file into its Release Kit if needed. Existing scheduling/account/rights/approval checks remain authoritative; promotion itself creates no schedule.
 - Removed the misleading universal social-post shortcut for documents/audio/drafts. Those artifacts remain available for ordinary use and agent handoff.
 - Natural-language requests use available connected publishing capabilities in the appropriate campaign. The general agent Calendar tool still does not create native social-post jobs, and delegation does not grant access to another campaign; the shared guidance names those limits and the Release Kit UI route.
 - Verification: focused contract and UI-helper checks, shared/session-tool/Electron typechecks, and a production renderer build in a temporary directory. Independent code review found no remaining blocking issue. Full-suite findings exposed two older registration test fixtures missing the existing HQ model-setup handler; corrected the fixtures without changing product behavior. All six discovery shards and 53 isolated test processes passed, including reruns of the two affected shards after those fixture fixes.
-- Loaded build/live smoke: **not performed**. No app launch/restart, saved-data mutation, commit, push, or external action. Current bundle was preserved. Real provider scheduling and visual acceptance remain open; the wider Outputs detail-view simplification is a separate slice.
+- Subsequent authorized build/launch: canonical Artist OS built at `f0329c20a`, verified matching main/preload/renderer stamps, and launched against the existing profile with durable recovery enabled. Real provider scheduling and visual acceptance of that slice remained open. No push or external publishing action.
+
+
+### September 15 — Item 2: Shared Outputs library and preview
+
+- Owner: Codex. Implemented on canonical `main` after `f0329c20a`; **uncommitted**.
+- HQ and Campaign sidebars open their own Outputs. The toolbar opens one shared library across permitted local workspaces, with search, workspace filter, and Finals filter. Remote work remains scoped to its connected workspace.
+- Orange banner retained. Rows show type, owner, available agent/workflow identity, and review/Final state. Automatic session boards are hidden from the library without deleting them; their existing links show readable cards.
+- Selection opens a wide, closable side preview while retaining the library. Exact owner travels with the link. Primary actions are Make Final/Schedule Final and Continue with agent; other actions and technical details use progressive disclosure.
+- Copied Release Kit snapshots contribute Final status without being converted into mutable pointers. Scheduling resolves the exact snapshot and switches to its campaign. Final still does not authorize timing or distribution.
+- Verification: Electron typecheck; 70 focused route, boundary, Final, and preview-helper tests; Artist OS production renderer build to a temporary directory. Headless Chrome with disposable fixtures passed scope isolation, duplicate IDs, formatted preview, row switching, close/search persistence, Escape/expand, and exact-Final campaign handoff. No external services were called.
+- Release readiness: real-profile Electron visual acceptance and provider scheduling remain unverified for this redesign. The running app and its data were preserved; no restart, commit, push, or publication for this slice.
 
 
 ---

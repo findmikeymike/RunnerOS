@@ -2033,7 +2033,11 @@ function AppShellContent({
   }, [navigateToSession])
 
   const handleOutputsClick = useCallback(() => {
-    navigate(routes.view.outputs())
+    if (activeWorkspaceId) navigate(routes.view.outputLibrary('workspace', activeWorkspaceId))
+  }, [activeWorkspaceId])
+
+  const handleAllOutputsClick = useCallback(() => {
+    navigate(routes.view.outputLibrary('all'))
   }, [])
 
   const handleOutputSelect = useCallback((outputId: string) => {
@@ -2226,7 +2230,7 @@ function AppShellContent({
     if (action === 'workspace.workers') navigate(routes.view.agents())
     else if (action === 'workspace.workflows') navigate(routes.view.workflows())
     else if (action === 'workspace.automations') navigate(routes.view.automations())
-    else if (action === 'app.outputs') navigate(routes.view.outputs())
+    else if (action === 'app.outputs') navigate(routes.view.outputLibrary('all'))
     else if (action === 'app.tools') navigate(routes.view.sources())
     else if (action === 'app.skills') navigate(routes.view.skills())
     else if (action === 'workspace.context') navigate(routes.view.workspaceContext())
@@ -2537,19 +2541,21 @@ function AppShellContent({
       result.push({ id: 'nav:release-board', type: 'nav', action: handleCampaignReleaseBoardClick })
       result.push({ id: 'nav:release-kit', type: 'nav', action: handleCampaignReleaseKitClick })
       result.push({ id: 'nav:calendar', type: 'nav', action: handleCampaignCalendarClick })
-      result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
       result.push({ id: 'nav:work', type: 'nav', action: handleAgentsClick })
+      result.push({ id: 'nav:outputs', type: 'nav', action: handleOutputsClick })
+      result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
       return result
     }
 
     result.push({ id: 'nav:hq', type: 'nav', action: () => handleArtistHQNavClick('home') })
-    result.push({ id: 'nav:work-chat', type: 'nav', action: handleWorkChatClick })
     if (SHOW_HQ_PLAN_NAV) {
       result.push({ id: 'nav:plan', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
     }
     result.push({ id: 'nav:people', type: 'nav', action: () => handleArtistHQNavClick('network') })
     result.push({ id: 'nav:signals', type: 'nav', action: () => handleArtistHQNavClick('signals') })
     result.push({ id: 'nav:work', type: 'nav', action: handleAgentsClick })
+    result.push({ id: 'nav:outputs', type: 'nav', action: handleOutputsClick })
+    result.push({ id: 'nav:work-chat', type: 'nav', action: handleWorkChatClick })
     result.push({ id: 'nav:brain', type: 'nav', action: () => toggleMainNavGroup('brain') })
     if (brainExpanded) {
       result.push({ id: 'nav:profile', type: 'nav', action: () => handleArtistHQNavClick('profile') })
@@ -2805,6 +2811,7 @@ function AppShellContent({
     if (effectiveSidebarAndNavigatorHidden) return false
     if (isCampaignNavigation(navState)) return false
     if (isLabNavigation(navState)) return false
+    if (isOutputsNavigation(navState)) return false
     if (isAutoCompact) return true
     if (isSessionsNavigation(navState)) return false
     if (isAgentsNavigation(navState)) return false
@@ -2816,7 +2823,6 @@ function AppShellContent({
     if (isAgendaNavigation(navState)) return false
     if (isCommunityNavigation(navState)) return false
     if (isVaultNavigation(navState)) return false
-    if (isOutputsNavigation(navState)) return false
     if (isSettingsNavigation(navState)) return false
     return true
   }, [effectiveSidebarAndNavigatorHidden, isAutoCompact, navState])
@@ -2933,6 +2939,13 @@ function AppShellContent({
           onClick: handleAgentsClick,
         },
         {
+          id: "nav:outputs",
+          title: "Outputs",
+          icon: FileText,
+          variant: isOutputsNavigation(navState) ? "default" : "ghost",
+          onClick: handleOutputsClick,
+        },
+        {
           id: "nav:chat",
           title: "Command",
           label: String(workspaceSessionMetas.length),
@@ -2981,6 +2994,13 @@ function AppShellContent({
         icon: Briefcase,
         variant: workActive ? "default" : "ghost",
         onClick: handleAgentsClick,
+      },
+      {
+        id: "nav:outputs",
+        title: "Outputs",
+        icon: FileText,
+        variant: isOutputsNavigation(navState) ? "default" : "ghost",
+        onClick: handleOutputsClick,
       },
       {
         id: "nav:work-chat",
@@ -3189,7 +3209,7 @@ function AppShellContent({
           onOpenTools={handleSourcesClick}
           onOpenSkills={handleSkillsClick}
           onOpenWorkspaceContext={() => navigate(routes.view.workspaceContext())}
-          onOpenOutputs={handleOutputsClick}
+          onOpenOutputs={handleAllOutputsClick}
           onOpenUserGuide={openArtistGuide}
           onOpenKeyboardShortcuts={onOpenKeyboardShortcuts}
           onOpenStoredUserPreferences={onOpenStoredUserPreferences}

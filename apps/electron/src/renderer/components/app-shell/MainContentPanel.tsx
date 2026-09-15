@@ -59,7 +59,7 @@ import WorkflowEditPage from '@/pages/WorkflowEditPage'
 import WorkflowRunPage from '@/pages/WorkflowRunPage'
 import DeepResearchRunPage from '@/pages/DeepResearchRunPage'
 import RecentRunsPage from '@/pages/RecentRunsPage'
-import OutputDetailPage from '@/pages/OutputDetailPage'
+import OutputsLibraryPage from '@/pages/OutputsLibraryPage'
 import VideoStudioPage from '@/pages/VideoStudioPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { ArtistHQHome } from './ArtistHQHome'
@@ -643,25 +643,9 @@ export function MainContentPanel({
   }
 
   if (isOutputsNavigation(navState)) {
-    if (!navState.outputId) {
-      return wrapWithStoplight(
-        <Panel variant="grow" className={className}>
-          <ResourceRows
-            label="Output layer"
-            title="Outputs"
-            description="Artifacts, files, reports, and receipts created by sessions and workflows."
-            outputs={outputs}
-            loading={outputsLoading}
-            error={outputsError}
-            onOpenOutput={(outputId) => navigate(routes.view.output(outputId))}
-          />
-        </Panel>
-      )
-    }
-
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <OutputDetailPage outputId={navState.outputId} workspaceId={activeWorkspaceId || ''} currentCampaignId={activeCampaignId} />
+        <OutputsLibraryPage navigation={navState} />
       </Panel>
     )
   }
