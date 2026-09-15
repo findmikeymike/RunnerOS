@@ -1,4 +1,4 @@
-import { registeredActivationSlugs, LAB_DEFAULT_WORKER_SLUGS, isRegisteredAgentAllowedInArtistWorkspace } from './registration.ts'
+import { registeredActivationSlugs, LAB_DEFAULT_WORKER_SLUGS, isRegisteredAgentAllowedInArtistWorkspace, defaultWorkerSlugs } from './registration.ts'
 
 export const RELEASE_MANAGER_AGENT_SLUG = 'artist-os-release-manager'
 export const ANYTHING_AGENT_SLUG = 'anything-agent'
@@ -37,11 +37,12 @@ export function initialAgentSlugsForWorkspace(
 ): readonly string[] {
   if (rootAlreadyExisted) return []
   if (scope === 'lab') return LAB_DEFAULT_ACTIVATED_AGENT_SLUGS
-  if (scope === 'campaign') return [
+  if (scope === 'campaign') return [...new Set([
     RELEASE_MANAGER_AGENT_SLUG,
     ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
     ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
-  ]
+    ...defaultWorkerSlugs(true),
+  ])]
   if (scope === 'hq') return [
     ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
     ...HQ_DEFAULT_ACTIVATED_AGENT_SLUGS,

@@ -1012,7 +1012,7 @@ body
     ])
     expect(initialAgentSlugsForWorkspace('lab', false)).toEqual(LAB_DEFAULT_ACTIVATED_AGENT_SLUGS)
     expect(initialAgentSlugsForWorkspace('lab', true)).toEqual([])
-    expect(CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['anticipation-director'])
+    expect(CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['anticipation-director', 'art-director', 'video-director', 'video-editor-agent', 'social-publisher'])
     expect(HQ_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['catalog-royalty-agent', 'legal-agent'])
     expect(HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual([ANYTHING_AGENT_SLUG, 'scriptwriter', 'site-builder', 'website-agent'])
     expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([
@@ -1022,6 +1022,26 @@ body
       'site-builder',
       'website-agent',
       'anticipation-director',
+      'art-director',
+      'video-director',
+      'video-editor-agent',
+      'social-publisher',
+      'branding-agent',
+      'world-builder',
+      'college-radio-agent',
+      'spotify-playlist-creator',
+      'x-editorial',
+      'content-genius',
+      'scroll-stopper',
+      'content-director',
+      'ad-creative-agent',
+      'ads-strategist',
+      'ads-agent',
+      'ig-trending-power-up',
+      'influencer-campaign-power-up',
+      'playlisting-power-up',
+      'record-doctor',
+      'industry-hunter',
     ])
     expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([
       ANYTHING_AGENT_SLUG,

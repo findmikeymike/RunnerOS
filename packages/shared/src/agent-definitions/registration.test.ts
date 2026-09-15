@@ -41,8 +41,29 @@ describe('built-in registration policy', () => {
       expect(initialAgentSlugsForWorkspace(scope, true)).toEqual([])
     }
     expect(initialAgentSlugsForWorkspace('hq', false)).toHaveLength(6)
-    expect(initialAgentSlugsForWorkspace('campaign', false)).toHaveLength(6)
+    expect(initialAgentSlugsForWorkspace('campaign', false)).toHaveLength(26)
     expect(initialAgentSlugsForWorkspace('lab', false)).toHaveLength(6)
+  })
+
+  test('new campaigns include the complete curated roster while HQ and Lab defaults stay unchanged', () => {
+    const campaign = initialAgentSlugsForWorkspace('campaign', false)
+    expect(new Set(campaign).size).toBe(campaign.length)
+    for (const slug of defaultWorkerSlugs(true)) expect(campaign).toContain(slug)
+    expect(initialAgentSlugsForWorkspace('campaign', true)).toEqual([])
+    for (const slug of ['art-director', 'video-director', 'video-editor-agent', 'social-publisher']) {
+      expect(campaign.filter(entry => entry === slug)).toHaveLength(1)
+      expect(defaultWorkerSlugs(true)).toContain(slug)
+      expect(defaultWorkerSlugs(false)).not.toContain(slug)
+      expect(initialAgentSlugsForWorkspace('hq', false)).not.toContain(slug)
+      expect(initialAgentSlugsForWorkspace('lab', false)).not.toContain(slug)
+      expect(initialAgentSlugsForWorkspace('campaign', true)).not.toContain(slug)
+    }
+    expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([
+      'anything-agent', 'scriptwriter', 'site-builder', 'website-agent', 'catalog-royalty-agent', 'legal-agent',
+    ])
+    expect(initialAgentSlugsForWorkspace('lab', false)).toEqual([
+      'the-excavator', 'reverse-magic', 'hooker', 'legendary-writer', 'reference-master', 'record-doctor',
+    ])
   })
 
   test('recovery restores missing and corrupt definitions, preserves edits and deletion tombstones', () => {
