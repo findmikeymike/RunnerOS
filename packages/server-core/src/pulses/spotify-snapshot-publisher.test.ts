@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { loadContextDoc } from '@craft-agent/shared/workspace-context'
@@ -57,5 +57,29 @@ describe('publishLatestSpotifySnapshotContext', () => {
     writeSnapshot(root, { snapshotDate: '2026-08-28', metrics: null })
 
     expect(publishLatestSpotifySnapshotContext(root)).toMatchObject({ published: false, reason: 'invalid' })
+  })
+
+  test('an empty capture never replaces useful existing context', () => {
+    const root = workspace()
+    const file = writeSnapshot(root, { snapshotDate: '2026-09-15', metrics: { streams: 42, listeners: 12 } })
+    expect(publishLatestSpotifySnapshotContext(root).published).toBe(true)
+    writeFileSync(file, JSON.stringify({ snapshotDate: '2026-09-15', metrics: { streams: null, listeners: null } }))
+    expect(publishLatestSpotifySnapshotContext(root).reason).toBe('invalid')
+    expect(loadContextDoc(root, ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG)?.body).toContain('"streams": 42')
+  })
+
+  test('skips an incomplete newer file without hiding a fresh valid snapshot', () => {
+    const root = workspace()
+    const good = writeSnapshot(root, { snapshotDate: '2026-09-15', metrics: { streams: 42 } })
+    const incomplete = join(root, 'data', 'spotify', 'snapshots', 'incomplete.json')
+    writeFileSync(incomplete, '{')
+    const now = Date.now()
+    utimesSync(incomplete, new Date(now + 1000), new Date(now + 1000))
+    expect(publishLatestSpotifySnapshotContext(root, { minimumModifiedAt: now - 1000 })).toMatchObject({ published: true, snapshotPath: good })
+  })
+  test('an immediate second run cannot claim the previous capture as new', () => {
+    const root = workspace()
+    const file = writeSnapshot(root, { snapshotDate: '2026-09-15', metrics: { streams: 42 } })
+    expect(publishLatestSpotifySnapshotContext(root, { excludePaths: [file] }).published).toBe(false)
   })
 })

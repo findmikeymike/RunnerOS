@@ -36,7 +36,7 @@ function fixture(messages: Message[]) {
   const manager: any = Object.create(SessionManager.prototype)
   Object.assign(manager, {
     sessions: new Map([[managed.id, managed]]), workspaceMigrationLocks: new Set(), taskModeOpenings: new Map(),
-    sendMessageAdmissionLocks: new Map(), pendingPermissionRequests: new Map(),
+    sendMessageAdmissionLocks: new Map(), pendingPermissionRequests: new Map(), nativeSpotifyRuns: new Map(),
     assertPaidExecutionAuthorized: () => {},
     acquireSendMessageAdmissionLock: async () => () => operations.push('unlock'),
     ensureMessagesLoaded: async () => {}, validateSignalHandoffBeforeSend: async () => null,

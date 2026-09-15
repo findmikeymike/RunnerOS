@@ -1,82 +1,36 @@
 ---
 name: spotify-analytics-snapshot
-description: Weekly Spotify snapshot into Artist HQ context, captured from the artist's connected Spotify for Artists browser session. Private streams, listeners, followers, saves, top cities, and source-of-streams come from the logged-in browser — there is no Spotify API path.
+description: Save Spotify Pulse core metrics immediately, then add matching-window top locations and tracks within one bounded refresh.
 ---
 
 # Spotify Analytics Snapshot
 
-Use this skill on the weekly Spotify heartbeat, or when the user wants a fresh read of the artist's Spotify presence. All data comes from **Spotify for Artists** through the artist's connected, logged-in browser session, using RunnerOS browser tools. There is no API lane and no client credentials.
+Current Fresh Snapshot contract: **core first, useful breakdowns second**, within one shared **120-second budget**. This overrides older instructions to collect chart history or every metric.
 
-## Prerequisites
-
-- The Spotify account is connected in Settings → Spotify (one saved account covers Spotify for Artists and the web player).
-- Run `social` commands (`node src/social.mjs ...`) from the Printing Press Social source path.
-
-## Workflow
-
-1. Verify the session first — never guess numbers when it is missing or the account does not match:
-
-```bash
-node src/social.mjs profile status spotify --profile <id> --live --json
-```
-
-2. Get the browser plan and the exact fields to capture:
-
-```bash
-node src/social.mjs snapshot spotify --profile <id> --json
-```
-
-3. Run the returned `browserPlan` against the verified Spotify for Artists session with RunnerOS browser tools. Read streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams. Also select the longest useful historical range and capture up to 12 completed months of streams and monthly listeners. Provider chart labels/hover values are preferred; reasonable whole-number chart estimates are acceptable for the directional HQ visual. Never invent a month the provider does not show. Save the observed values as JSON under `$CRAFT_WORKSPACE_PATH/data/spotify/captures/`.
-
-4. Normalize and save the captured numbers:
+1. From the injected Printing Press Social absolute Local path, resolve the saved Spotify profile using `node src/social.mjs catalog --json`. Attach `browser_tool profile spotify <id> --foreground`. Run `node src/social.mjs profile status spotify --profile <id> --live --json` once and verify matching account/artist using its documented check.
+2. Request `node src/social.mjs snapshot spotify --profile <id> --json` once for the flat capture schema. Read exact streams, listeners, and displayed reporting window on **Spotify for Artists Home overview**.
+3. Immediately **Write** the flat capture inside the exact absolute `dataFolderPath` from `<session_state>`. Normalize from the source Local path:
 
 ```bash
 node src/social.mjs snapshot spotify --profile <id> \
-  --capture-file "$CRAFT_WORKSPACE_PATH/data/spotify/captures/<YYYY-MM-DD>.json" \
-  --workspace "$CRAFT_WORKSPACE_PATH" --json
+  --capture-file <absolute-session-data-file> \
+  --workspace <absolute-current-workspace-path> --json
 ```
 
-The default output is `data/spotify/snapshots/<YYYY-MM-DD>-s4a.json` inside the explicit workspace. Relative `--out` paths are also workspace-relative. Existing snapshots are immutable and finalization fails closed if the target already exists.
+Use the workspace path in session context, not an assumed environment variable. Omit `--out` for a unique append-only filename. The server publishes this core snapshot to `artist-spotify-snapshot` immediately; do not call `context_write`.
 
-5. Write the returned `contextPayload` as the `artist-spotify-snapshot` context doc.
-6. Run `delta-brief.ts` only when there are two comparable snapshots of the same data source.
+4. **After core save succeeds**, visit **Audience Location once** for up to five countries/cities and **Music Songs once** for up to five tracks. Verify each page's displayed reporting window matches the core window before combining. Do not change ranges, paginate, inspect charts, or hunt extra pages. Omit any breakdown with a mismatched or unavailable window.
+5. Write a second full capture into another session data file, retaining the original core values and adding only matching-window `topCountries`, `topCities`, and `topTracks`. Normalize as a second new snapshot, then stop. Never overwrite the first snapshot. Briefly summarize saved metrics/breakdowns and any missing data.
 
-## Output Contract
+## Capture contract
 
-```json
-{
-  "version": 1,
-  "dataSource": "spotify-for-artists-browser",
-  "snapshotDate": "2026-07-08",
-  "windowDays": 28,
-  "artist": { "name": "...", "spotifyUrl": "...", "profile": "..." },
-  "metrics": { "streams": 0, "listeners": 0, "followers": 0, "saves": 0 },
-  "dailyStreams": [{ "date": "YYYY-MM-DD", "streams": 0 }],
-  "monthlyStreams": [{ "month": "YYYY-MM", "streams": 0 }],
-  "monthlyListeners": [{ "month": "YYYY-MM", "listeners": 0 }],
-  "geo": { "topCities": [], "topCountries": [] },
-  "tracks": [{ "name": "...", "streams": 0, "spotifyUrl": "..." }],
-  "sources": {},
-  "partial": false,
-  "errors": [],
-  "updatedAt": "ISO timestamp"
-}
-```
+Follow the returned plan's schema. `streams` and `listeners` are top-level fields, never nested under `metrics`. Track rows belong to **`topTracks`**, not `tracks`. The selected profile supplies artist identity. Do not copy placeholder zero values: use observed numbers, null for missing metrics, empty arrays for uncollected breakdowns. Keep the original core values and reporting window in the enriched capture.
 
-Any metric not visible on the page is `null`, and missing monthly history is an empty array. The snapshot is marked `partial: true` with missing fields listed in `errors`. If the reporting window is unavailable, `windowDays` is also `null`. If the capture date is unavailable or invalid, finalization uses today's date only for safe file ownership and records that fallback in `errors`.
+## Stop rules
 
-`delta-brief.ts` discovers legacy `<date>.json`, API `<date>-web-api.json`, and browser `<date>-s4a.json` snapshots. It compares only compatible data sources/reporting windows and treats missing rates, playlists, tracks, sources, or metrics as unavailable rather than zero.
-
-## Failure Handling
-
-- Session not connected / not logged in / wrong account → stop and point the user to Settings → Spotify. Do not fabricate.
-- Spotify for Artists page did not load a value → capture it as `null`, mark `partial`.
-- Login expired → stop, report, do not retry blindly.
-- No prior snapshot → snapshot still writes; the brief reports "no prior snapshot, no delta."
-
-## Never
-
-- Never fabricate streams, listeners, followers, saves, cities, tracks, source percentages, or months. Approximate monthly chart readings must still come from visible provider history.
-- Never modify a past snapshot. Snapshot writes fail closed when the target already exists.
-- Never bypass approvals — this skill is read-only.
-- Never silently drop a tracked playlist feature; surface its disappearance as an anomaly.
+- **An extra page fails once:** preserve the saved core snapshot, explain the missing breakdowns, and end.
+- **One shared 120-second budget:** stop collection in time to save enrichment. If time expires, keep core and end. Do not start a new budget after the first save.
+- Failed setup/core command: correct its error and retry once, then stop with the exact issue. Blank Home: foreground the attached browser and retry loading once. Never loop malformed tool calls.
+- Missing login, wrong artist/account, or no observable core metric: stop with the exact issue. Do not fabricate a success. Verified identity and at least one core metric are required for a partial core save.
+- Never collect followers, saves, daily/monthly histories, playlists, or source-of-streams during this refresh. Leave those optional fields null/empty. No estimates, network inspection, or undocumented APIs.
+- Write only inside session `dataFolderPath`; no shell redirection or workspace capture writes. Browsing is read-only. Never modify permissions or past snapshots.

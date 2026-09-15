@@ -21,6 +21,29 @@ describe('Tier 1 task-mode recipes', () => {
     }
   })
 
+  test('fresh Spotify scope remains bounded and save-first across current delivery surfaces', () => {
+    const mode = TIER_ONE_TASK_MODES['spotify-analyst']!.find(mode => mode.id === 'fresh-snapshot')!
+    const agent = STARTER_AGENTS.find(agent => agent.slug === 'spotify-analyst')!
+    const skill = BUNDLED_STARTER_SKILLS.find(skill => skill.slug === 'spotify-analytics-snapshot')!
+    const prompt = agent.systemPrompt
+    expect(mode.description).toContain('Overrides older collection instructions')
+    expect(mode.description).toContain('without context_write')
+    expect(prompt).toContain('--foreground')
+    expect(prompt).toContain('Spotify for Artists Home overview')
+    expect(JSON.stringify(skill)).toContain('Spotify for Artists Home overview')
+    expect(prompt).toContain('dataFolderPath')
+    expect(prompt).toContain('--workspace <absolute-current-workspace-path>')
+    expect(prompt).toContain('Only after core save succeeds')
+    expect(prompt).toContain('topTracks')
+    expect(prompt).toContain('matches the core window')
+    expect(prompt).toContain('If an extra page fails once')
+    expect(prompt).not.toContain('up to 12 completed months')
+    expect(prompt).not.toContain('reasonable whole-number')
+    expect(JSON.stringify(skill)).toContain('dataFolderPath')
+    expect(JSON.stringify(skill)).toContain('120-second budget')
+    expect(JSON.stringify(skill)).not.toContain('reasonable whole-number')
+  })
+
   test('marketplace providers are never preloaded, including comprehensive choices', () => {
     for (const modes of Object.values(TIER_ONE_TASK_MODES)) {
       for (const mode of modes) {

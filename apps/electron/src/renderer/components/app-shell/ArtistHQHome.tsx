@@ -3309,6 +3309,7 @@ function SpotifyPulseDetails({
   }))
   const topTracks = (snapshot?.tracks ?? []).slice(0, 8)
   const topCities = (snapshot?.geo?.topCities ?? []).slice(0, 8)
+  const topCountries = (snapshot?.geo?.topCountries ?? []).slice(0, 8)
   const discoveryPlaylists = (snapshot?.playlistsDriving ?? []).slice(0, 8)
   const discoverySources = Object.entries(snapshot?.sources ?? {})
   const streamsPerListener = typeof snapshot?.metrics.streams === 'number'
@@ -3322,7 +3323,7 @@ function SpotifyPulseDetails({
       open={open}
       onOpenChange={onOpenChange}
       title="Spotify Pulse"
-      description={`${sourceLabel}${snapshot ? ` · ${formatShortDate(snapshot.snapshotDate)}` : ''}`}
+      description={`${sourceLabel}${snapshot ? ` · ${formatShortDate(snapshot.snapshotDate)}${snapshot.windowDays ? ` · ${snapshot.windowDays}-day window` : ''}` : ''}`}
     >
       <PulseTrendCard
         label={activeHasMonthly ? `Monthly ${metric}` : `${activeMetricLabel} trend`}
@@ -3347,11 +3348,11 @@ function SpotifyPulseDetails({
       />
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-white/[0.06] bg-white/[0.06] sm:grid-cols-3">
         <SignalStat label="Streams / listener" value={streamsPerListener} />
-        <SignalStat label="Followers" value={formatMetric(snapshot?.metrics.followers)} />
-        <SignalStat label="Saves" value={formatMetric(snapshot?.metrics.saves)} />
-        <SignalStat label="Popularity" value={formatMetric(snapshot?.metrics.popularity)} />
-        <SignalStat label="Save rate" value={formatRateMetric(snapshot?.metrics.saveRate)} />
-        <SignalStat label="Skip rate" value={formatRateMetric(snapshot?.metrics.skipRate)} />
+        {typeof snapshot?.metrics.followers === 'number' ? <SignalStat label="Followers" value={formatMetric(snapshot.metrics.followers)} /> : null}
+        {typeof snapshot?.metrics.saves === 'number' ? <SignalStat label="Saves" value={formatMetric(snapshot.metrics.saves)} /> : null}
+        {typeof snapshot?.metrics.popularity === 'number' ? <SignalStat label="Popularity" value={formatMetric(snapshot.metrics.popularity)} /> : null}
+        {typeof snapshot?.metrics.saveRate === 'number' ? <SignalStat label="Save rate" value={formatRateMetric(snapshot.metrics.saveRate)} /> : null}
+        {typeof snapshot?.metrics.skipRate === 'number' ? <SignalStat label="Skip rate" value={formatRateMetric(snapshot.metrics.skipRate)} /> : null}
       </div>
       {monthlyBreakdown.length > 0 ? <PulseDisclosureSection title="Monthly breakdown" summary={`${monthlyBreakdown.length} months`}>
         {monthlyBreakdown.slice().reverse().map((point) => (
@@ -3370,7 +3371,7 @@ function SpotifyPulseDetails({
           <PulseDetailRow
             key={track.id ?? track.name}
             label={track.name}
-            value={`${formatPulseExactMetric(track.streams)} streams · ${formatPulseExactMetric(track.saves)} saves`}
+            value={[typeof track.streams === 'number' ? `${formatPulseExactMetric(track.streams)} streams` : null, typeof track.saves === 'number' ? `${formatPulseExactMetric(track.saves)} saves` : null].filter(Boolean).join(' · ')}
           />
         ))}
       </PulseDisclosureSection> : null}
@@ -3380,6 +3381,15 @@ function SpotifyPulseDetails({
             key={`${city.city}-${city.country ?? ''}`}
             label={[city.city, city.country].filter(Boolean).join(', ')}
             value={`${formatPulseExactMetric(city.listeners)} listeners`}
+          />
+        ))}
+      </PulseDisclosureSection> : null}
+      {topCountries.length > 0 ? <PulseDisclosureSection title="Top countries" summary={`${topCountries.length} shown`}>
+        {topCountries.map((country) => (
+          <PulseDetailRow
+            key={country.country}
+            label={country.country}
+            value={`${formatPulseExactMetric(country.listeners)} listeners`}
           />
         ))}
       </PulseDisclosureSection> : null}
@@ -4496,7 +4506,7 @@ function formatRateMetric(value: number | undefined): string {
 function formatShortDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', ...(/^\d{4}-\d{2}-\d{2}$/.test(value) ? { timeZone: 'UTC' } : {}) }).format(date)
 }
 
 function EmptyLine({ title, detail }: { title: string; detail: string }) {
@@ -5440,15 +5450,13 @@ function writeBooleanLocalStorage(key: string, value: boolean): void {
 }
 
 function createSpotifySyncPrompt(): string {
-  return `Run the Spotify snapshot for this Artist HQ workspace.
+  return `Refresh Spotify Pulse in two stages within one shared 120-second budget. This current Fresh Snapshot contract overrides older collection instructions.
 
-Use Artist Profile first, then use @printing-press-social from its injected absolute Local path to resolve the exact connected Spotify profile. Do not search for or use another RunnerOS checkout. Verify the live account, request the bounded Spotify for Artists snapshot browser plan, capture current values plus up to 12 completed months of streams and listeners from the provider's history, and normalize the capture through \`snapshot spotify\` into this workspace.
+Use Artist Profile and @printing-press-social at its injected absolute Local path. Attach the saved profile with browser_tool profile spotify <id> --foreground and verify account/artist once. Read exact streams, listeners, and reporting window on Spotify for Artists Home overview. Immediately Write a flat capture in the current session's absolute dataFolderPath, then normalize using snapshot spotify --profile <id> --capture-file <absolute-session-data-file> --workspace <absolute-current-workspace-path> --json. Omit --out for a unique filename. The server publishes core metrics to ${ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG} immediately; do not call context_write.
 
-If the Spotify browser profile is missing, logged out, or points at the wrong account, stop with that exact setup issue. Do not ask for Spotify client credentials and do not fabricate unavailable metrics.
+After the core snapshot saves, visit Audience Location once for top five countries/cities and Music Songs once for top five tracks. Verify each displayed reporting window matches core before including it. Write a second full capture retaining core plus matching-window topCountries, topCities, topTracks; normalize a second new snapshot, then stop. If an extra page fails once, preserve core, report missing breakdowns and end. Omit mismatched or unverifiable windows. Keep both stages inside 120 seconds.
 
-Write the returned context payload to Artist HQ workspace context slug ${ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG} so Spotify Pulse turns current.
-
-Keep the final note short: snapshot date, key movement, any missing setup.`
+No pagination, charts, date-range changes, follower/save/history/source hunts, estimates, network inspection, or undocumented APIs. Retry failed setup/core commands once after correcting the error; if Home is blank, foreground and reload once. Stop on wrong account or missing login. Never overwrite saved snapshots. End with a short summary of saved metrics and breakdowns or exact missing data.`
 }
 
 function createSpotifySyncMatcher(executionTarget: PulseExecutionTarget = {}): Record<string, unknown> {

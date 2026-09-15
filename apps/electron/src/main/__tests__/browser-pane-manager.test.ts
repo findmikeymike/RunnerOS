@@ -71,6 +71,7 @@ function createMockWebContents() {
     stop: mock(() => {}),
     setUserAgent: mock(() => {}),
     setBackgroundColor: mock(() => {}),
+    setBackgroundThrottling: mock((_allowed: boolean) => {}),
     capturePage: mock(async () => {
       const img = {
         isEmpty: () => false,
@@ -1129,6 +1130,68 @@ describe('BrowserPaneManager', () => {
     }))
 
     await expect(manager.screenshot('screenshot-empty-png')).rejects.toThrow('Failed to capture screenshot: empty image buffer')
+  })
+
+  it('keeps only session-owned pages rendering in the background and restores throttling after release', () => {
+    const manualId = manager.createInstance('manual-background')
+    const manual = (manager as any).instances.get(manualId)
+    expect(manual.pageView._opts.webPreferences.backgroundThrottling).toBe(true)
+    manager.bindSession(manualId, 'background-owner')
+    expect(manual.pageView.webContents.setBackgroundThrottling).toHaveBeenLastCalledWith(false)
+    manager.unbindSession(manualId)
+    expect(manual.pageView.webContents.setBackgroundThrottling).toHaveBeenLastCalledWith(true)
+
+    const socialId = manager.useSocialProfileForSession('background-owner', 'spotify', 'render-test')
+    const social = (manager as any).instances.get(socialId)
+    expect(social.pageView._opts.webPreferences.backgroundThrottling).toBe(false)
+    expect(social.isVisible).toBe(false)
+    expect(social.window.show).not.toHaveBeenCalled()
+    expect(social.window.focus).not.toHaveBeenCalled()
+    manager.unbindAllForSession('background-owner')
+    expect(social.pageView.webContents.setBackgroundThrottling).toHaveBeenLastCalledWith(true)
+    manager.useSocialProfileForSession('next-background-owner', 'spotify', 'render-test')
+    expect(social.pageView.webContents.setBackgroundThrottling).toHaveBeenLastCalledWith(false)
+  })
+
+  it.each(['UnknownVizError', 'Failed to capture screenshot: UnknownVizError'])('recovers %s through bounded inactive reveal', async (message) => {
+    manager.createInstance('viz-recovery')
+    const instance = (manager as any).instances.get('viz-recovery')
+    const originalCapture = instance.pageView.webContents.capturePage
+    let calls = 0
+    instance.pageView.webContents.capturePage = mock(async (...args: unknown[]) => {
+      if (++calls <= 3) throw new Error(message)
+      return originalCapture(...args)
+    })
+    const result = await manager.screenshot('viz-recovery', { includeMetadata: true })
+    expect(calls).toBe(4)
+    expect(result.imageBuffer.toString()).toBe('fake-png')
+    expect(instance.window.showInactive).toHaveBeenCalledTimes(1)
+    expect(instance.window.focus).not.toHaveBeenCalled()
+    expect(instance.isVisible).toBe(false)
+  })
+
+  it('bounds persistent Viz failures and restores the hidden state', async () => {
+    manager.createInstance('viz-exhausted')
+    const instance = (manager as any).instances.get('viz-exhausted')
+    instance.pageView.webContents.capturePage = mock(async () => {
+      const error = new Error('Capture failed')
+      error.name = 'UnknownVizError'
+      throw error
+    })
+    await expect(manager.screenshot('viz-exhausted')).rejects.toThrow('current display surface is unavailable')
+    expect(instance.pageView.webContents.capturePage).toHaveBeenCalledTimes(4)
+    expect(instance.window.showInactive).toHaveBeenCalledTimes(1)
+    expect(instance.window.hide).toHaveBeenCalled()
+    expect(instance.isVisible).toBe(false)
+  })
+
+  it('does not retry unrelated screenshot errors', async () => {
+    manager.createInstance('capture-unrelated-error')
+    const instance = (manager as any).instances.get('capture-unrelated-error')
+    instance.pageView.webContents.capturePage = mock(async () => { throw new Error('Permission denied') })
+    await expect(manager.screenshot('capture-unrelated-error')).rejects.toThrow('Permission denied')
+    expect(instance.pageView.webContents.capturePage).toHaveBeenCalledTimes(1)
+    expect(instance.window.showInactive).not.toHaveBeenCalled()
   })
 
   it('recovers screenshot via non-disruptive inactive reveal and restores hidden state', async () => {

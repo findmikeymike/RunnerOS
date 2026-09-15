@@ -7,7 +7,7 @@ export interface UseWorkspaceContextResult {
   docs: ContextDocDTO[]
   loading: boolean
   error: string | null
-  refresh: () => Promise<void>
+  refresh: (ensureFresh?: boolean) => Promise<void>
   upsert: (input: { slug: string; metadata: ContextDocMetadata; body: string; expectedBody?: string | null }) => Promise<ContextDocDTO>
   remove: (slug: string) => Promise<boolean>
 }
@@ -15,8 +15,9 @@ export interface UseWorkspaceContextResult {
 const NULL_WORKSPACE_KEY = '__no_workspace__'
 const loadedWorkspaceKeys = new Set<string>()
 const inFlightRefreshes = new Map<string, Promise<void>>()
+const invalidatedWorkspaceKeys = new Set<string>()
 const mountedWorkspaceKeys = new Map<string, number>()
-const refreshersByWorkspaceKey = new Map<string, () => Promise<void>>()
+const refreshersByWorkspaceKey = new Map<string, (ensureFresh?: boolean) => Promise<void>>()
 let workspaceContextCleanup: (() => void) | null = null
 
 function getWorkspaceKey(workspaceId: string | null | undefined): string {
@@ -35,29 +36,34 @@ export function useWorkspaceContext(workspaceId: string | null | undefined): Use
   const workspaceKey = getWorkspaceKey(workspaceId)
   const [state, setState] = useAtom(workspaceContextStateAtomFamily(workspaceKey))
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (ensureFresh = false) => {
+    // A changed event must not disappear behind a fetch that started before it.
+    // Coalesce events by workspace and discard any superseded response.
+    if (ensureFresh) invalidatedWorkspaceKeys.add(workspaceKey)
     const existing = inFlightRefreshes.get(workspaceKey)
     if (existing) return existing
 
     const run = (async () => {
       setState((prev) => ({ ...prev, loading: true }))
       try {
-        const docs = workspaceId
-          ? await window.electronAPI.listWorkspaceContextDocs(workspaceId)
-          : []
-        const next: WorkspaceContextState = {
-          docs: sortDocs(docs),
-          loading: false,
-          error: null,
-        }
-        setState(next)
-        loadedWorkspaceKeys.add(workspaceKey)
-      } catch (err) {
-        setState((prev) => ({
-          ...prev,
-          loading: false,
-          error: err instanceof Error ? err.message : String(err),
-        }))
+        do {
+          invalidatedWorkspaceKeys.delete(workspaceKey)
+          try {
+            const docs = await (workspaceId
+              ? window.electronAPI.listWorkspaceContextDocs(workspaceId)
+              : Promise.resolve([]))
+            if (invalidatedWorkspaceKeys.has(workspaceKey)) continue
+            setState({ docs: sortDocs(docs), loading: false, error: null })
+            loadedWorkspaceKeys.add(workspaceKey)
+          } catch (err) {
+            if (invalidatedWorkspaceKeys.has(workspaceKey)) continue
+            setState((prev) => ({
+              ...prev,
+              loading: false,
+              error: err instanceof Error ? err.message : String(err),
+            }))
+          }
+        } while (invalidatedWorkspaceKeys.has(workspaceKey))
       } finally {
         inFlightRefreshes.delete(workspaceKey)
       }
@@ -89,7 +95,7 @@ export function useWorkspaceContext(workspaceId: string | null | undefined): Use
         const changedKey = getWorkspaceKey(changedWorkspaceId)
         const refreshChanged = refreshersByWorkspaceKey.get(changedKey)
         if (refreshChanged) {
-          refreshChanged()
+          void refreshChanged(true)
           return
         }
         void docs

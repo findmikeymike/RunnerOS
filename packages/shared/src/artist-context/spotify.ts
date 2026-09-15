@@ -40,6 +40,7 @@ export interface ArtistSpotifySnapshot {
   monthlyListeners?: ArtistSpotifyMonthlyListener[];
   geo?: {
     topCities?: Array<{ city: string; country?: string; listeners?: number }>;
+    topCountries?: Array<{ country: string; listeners?: number }>;
   };
   tracks?: Array<{ id?: string; name: string; streams?: number; saves?: number; playlistAdds?: number }>;
   playlistsDriving?: Array<{ name: string; type?: string; listeners?: number; addedDate?: string | null }>;
@@ -248,15 +249,21 @@ function normalizeDataSource(value: unknown): ArtistSpotifyDataSource | undefine
 
 function normalizeGeo(value: unknown): ArtistSpotifySnapshot['geo'] {
   const candidate = value as ArtistSpotifySnapshot['geo'];
-  if (!Array.isArray(candidate?.topCities)) return undefined;
+  if (!candidate || (!Array.isArray(candidate.topCities) && !Array.isArray(candidate.topCountries))) return undefined;
   return {
-    topCities: candidate.topCities
-      .filter((city) => normalizeInlineText(city.city))
+    topCities: Array.isArray(candidate.topCities) ? candidate.topCities
+      .filter((city) => city && normalizeInlineText(city.city))
       .map((city) => ({
         city: city.city,
         country: normalizeInlineText(city.country),
         listeners: toFiniteNumber(city.listeners),
-      })),
+      })) : undefined,
+    topCountries: Array.isArray(candidate.topCountries) ? candidate.topCountries
+      .filter((country) => country && normalizeInlineText(country.country))
+      .map((country) => ({
+        country: normalizeInlineText(country.country)!,
+        listeners: toFiniteNumber(country.listeners),
+      })) : undefined,
   };
 }
 

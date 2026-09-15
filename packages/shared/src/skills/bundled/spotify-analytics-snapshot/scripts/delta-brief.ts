@@ -10,6 +10,7 @@ type Track = { id?: string; name: string; streams?: OptionalNumber };
 type Playlist = { name: string; type?: string; listeners?: OptionalNumber };
 type Snapshot = {
   snapshotDate: string;
+  updatedAt?: number;
   dataSource?: string;
   windowDays?: OptionalNumber;
   artist: { name?: string };
@@ -71,12 +72,18 @@ async function listSnapshotFiles(dir: string): Promise<string[]> {
   const stat = await fs.stat(dir).catch(() => null);
   if (!stat?.isDirectory()) return [];
   return (await fs.readdir(dir))
-    .filter((name) => /^\d{4}-\d{2}-\d{2}(?:-(?:s4a|web-api))?\.json$/.test(name))
+    .filter((name) => /^\d{4}-\d{2}-\d{2}(?:-(?:s4a|web-api)(?:-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})?)?\.json$/i.test(name))
     .sort();
 }
 
 function finiteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function validatedTimestamp(value: unknown): number | undefined {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value ? timestamp : undefined;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -107,6 +114,7 @@ async function readSnapshot(filePath: string): Promise<Snapshot> {
 
   return {
     snapshotDate,
+    updatedAt: validatedTimestamp(root.updatedAt),
     dataSource: typeof root.dataSource === "string" ? root.dataSource : undefined,
     windowDays: finiteNumber(root.windowDays),
     artist: { name: typeof artistInput.name === "string" ? artistInput.name : undefined },
@@ -229,8 +237,12 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   const files = await listSnapshotFiles(options.snapshotsDir);
   if (!files.length) throw new Error(`No snapshots found in ${options.snapshotsDir}.`);
-  const snapshots = await Promise.all(files.map(async (file) => ({ file, snapshot: await readSnapshot(path.join(options.snapshotsDir, file)) })));
-  snapshots.sort((a, b) => a.snapshot.snapshotDate.localeCompare(b.snapshot.snapshotDate) || a.file.localeCompare(b.file));
+  const snapshots = await Promise.all(files.map(async (file) => {
+    const filePath = path.join(options.snapshotsDir, file);
+    const [snapshot, stat] = await Promise.all([readSnapshot(filePath), fs.stat(filePath)]);
+    return { snapshot, capturedAt: snapshot.updatedAt ?? stat.mtimeMs };
+  }));
+  snapshots.sort((a, b) => a.snapshot.snapshotDate.localeCompare(b.snapshot.snapshotDate) || a.capturedAt - b.capturedAt);
   const current = snapshots.at(-1);
   if (!current) throw new Error(`No snapshots found in ${options.snapshotsDir}.`);
   const previous = snapshots.slice(0, -1).reverse().find((candidate) => compatible(candidate.snapshot, current.snapshot));

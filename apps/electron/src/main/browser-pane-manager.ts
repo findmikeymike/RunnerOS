@@ -415,6 +415,10 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     const pageView = new BrowserView({
       webPreferences: {
+        // Session-owned pages must keep timers, visibility-dependent loading, and
+        // painting alive while agents use their saved profile in the background.
+        // Manual browsers retain Electron's normal background power saving.
+        backgroundThrottling: ownerType !== 'session',
         partition,
         session: ses,
         contextIsolation: true,
@@ -1538,7 +1542,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
   private isDisplaySurfaceUnavailableError(error: unknown): boolean {
     if (!(error instanceof Error)) return false
-    return error.message.toLowerCase().includes('current display surface not available for capture')
+    const description = `${error.name}: ${error.message}`.toLowerCase()
+    return description.includes('current display surface not available for capture')
+      || /\bunknownvizerror\b/.test(description)
   }
 
   private async capturePageImage(
@@ -1873,6 +1879,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       instance.boundSessionId = sessionId
       instance.ownerType = 'session'
       instance.ownerSessionId = sessionId
+      if (!instance.pageView.webContents.isDestroyed()) instance.pageView.webContents.setBackgroundThrottling(false)
       this.emitStateChange(instance)
     }
   }
@@ -1882,6 +1889,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     if (instance) {
       instance.boundSessionId = null
       instance.ownerType = 'manual'
+      if (!instance.pageView.webContents.isDestroyed()) instance.pageView.webContents.setBackgroundThrottling(true)
       // Preserve ownerSessionId as last-known owner for lifecycle targeting.
       this.emitStateChange(instance)
     }
@@ -1893,6 +1901,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       if (instance.boundSessionId === sessionId) {
         instance.boundSessionId = null
         instance.ownerType = 'manual'
+        if (!instance.pageView.webContents.isDestroyed()) instance.pageView.webContents.setBackgroundThrottling(true)
         // Keep ownerSessionId for post-turn lifecycle commands like `close` and `hide`.
         instance.ownerSessionId = instance.ownerSessionId ?? sessionId
         this.emitStateChange(instance)

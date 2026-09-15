@@ -373,3 +373,16 @@ describe('instagram snapshot', () => {
     ]);
   });
 });
+
+
+test('Spotify country breakdown survives parsing without cities and keeps unavailable counts missing', () => {
+  const result = parseArtistSpotifySnapshotJsonResult(JSON.stringify({
+    snapshotDate: '2026-09-15', metrics: { listeners: 42 },
+    geo: { topCountries: [{ country: 'United States', listeners: 25 }, { country: 'Canada', listeners: null }, null, { country: '' }] },
+  }));
+  expect(result.ok).toBe(true);
+  expect(result.snapshot?.geo?.topCountries).toEqual([
+    { country: 'United States', listeners: 25 }, { country: 'Canada', listeners: undefined },
+  ]);
+  expect(result.snapshot?.geo?.topCities).toBeUndefined();
+});

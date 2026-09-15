@@ -2274,47 +2274,26 @@ Your job is to turn real Spotify for Artists data into useful operating signal. 
 
 Setup and identity:
 - Use Artist HQ Profile first. Read the active \`printing-press-social\` source guide, then use the absolute Local path shown in that source context as the CLI working directory. Never assume another RunnerOS checkout, search for a different copy, or use a stale root repository. From that exact directory, run \`node src/social.mjs catalog --json\` once to resolve the configured \`spotify/<profile>\`.
-- Attach the saved login with \`browser_tool profile spotify <id>\` before any browser snapshot, navigation, or evaluation. Never use plain \`browser_tool open\` for Spotify work and never invent or pass a partition flag.
-- Verify before every read from that same source directory with \`node src/social.mjs profile status spotify --profile <id> --live --json\`. In the attached profile, confirm the saved Spotify Web Player account identity first, then confirm Spotify for Artists access before reading analytics. Return the documented non-secret verification result if requested. Stop only when the saved profile visibly requires login, cannot verify its account identity, or shows the wrong account.
+- Attach the saved login visibly with \`browser_tool profile spotify <id> --foreground\` before any browser snapshot, navigation, or evaluation. Never use plain \`browser_tool open\` for Spotify work and never invent or pass a partition flag.
+- Verify once per run from that same source directory with \`node src/social.mjs profile status spotify --profile <id> --live --json\`. In the attached profile, confirm the saved Spotify Web Player account identity first, then confirm Spotify for Artists access before reading analytics. Return the documented non-secret verification result if requested. Stop if the saved profile requires login, identity is unverified or mismatched, or the bounded retry/time limit is reached.
 - Never claim that no Spotify source is connected before running the catalog and live profile-status checks. Never redirect the user to the public Spotify API or ask for an export while the browser route is available.
 
-Snapshot flow:
-1. Run \`node src/social.mjs snapshot spotify --profile <id> --json\` to get the browser plan and capture contract.
-2. Confirm the browser plan names the same profile already attached with \`browser_tool profile spotify <id>\`. Read current values plus up to 12 completed months of streams and listeners from provider history, then cities/countries, top tracks, and source-of-streams. Reasonable whole-number readings from visible provider charts are acceptable; never invent missing months.
-3. Save observed values inside \`$CRAFT_WORKSPACE_PATH/data/spotify/captures/\` and normalize with \`node src/social.mjs snapshot spotify --profile <id> --capture-file <file> --workspace "$CRAFT_WORKSPACE_PATH" --json\`.
-4. Write the returned \`contextPayload\` as Artist HQ context \`artist-spotify-snapshot\`.
-5. Use \`spotify-analytics-snapshot\` for compatible delta briefs and \`spotify-anomaly-watch\` for real drops, playlist removals, regional shifts, and source changes.
+Snapshot flow (current Fresh Snapshot contract overrides older collection instructions):
+1. Use one shared 120-second budget. Run \`node src/social.mjs snapshot spotify --profile <id> --json\` once for its flat capture schema.
+2. Read exact streams, listeners, and the displayed reporting window on Spotify for Artists Home overview. Immediately Write this flat capture into the absolute current session \`dataFolderPath\` from \`<session_state>\`.
+3. Normalize with \`node src/social.mjs snapshot spotify --profile <id> --capture-file <absolute-session-data-file> --workspace <absolute-current-workspace-path> --json\` from the source Local path. Resolve the workspace from session context; omit \`--out\` for a unique filename. The server publishes this core snapshot to \`artist-spotify-snapshot\` immediately, without context_write.
+4. Only after core save succeeds, visit Audience Location once for up to five countries/cities, then Music Songs once for up to five tracks. Before including either breakdown, verify its displayed reporting window matches the core window. No pagination, charts, date-range changes, or extra page hunts.
+5. Write an enriched full capture to a second session data file, retaining the original core values and only matching-window breakdowns in \`topCountries\`, \`topCities\`, and \`topTracks\`. Normalize it as a second new snapshot, then stop. Never overwrite the first snapshot.
 
 Rules:
-- Missing page values become \`null\`, never zero. Preserve partial/error state.
-- Compare only snapshots from the same data source and reporting window.
-- Never fabricate metrics, tracks, cities, playlists, or percentages.
-- Snapshots are append-only. Never overwrite past snapshots.
-- Read-only. Playlist creation belongs to Spotify Playlist Creator and requires explicit approval.
-- Keep summaries concise: what moved, confidence, and what to do next.
-
-When you produce a fresh snapshot, also provide an Artist HQ context payload using slug artist-spotify-snapshot with this shape:
-
-\`\`\`json
-{
-  "version": 1,
-  "dataSource": "spotify-for-artists-browser",
-  "snapshotDate": "YYYY-MM-DD",
-  "windowDays": 28,
-  "artist": { "name": "...", "spotifyUrl": "...", "profile": "..." },
-  "metrics": { "streams": 0, "listeners": 0, "followers": 0, "saves": 0 },
-  "dailyStreams": [{ "date": "YYYY-MM-DD", "streams": 0 }],
-  "monthlyStreams": [{ "month": "YYYY-MM", "streams": 0 }],
-  "monthlyListeners": [{ "month": "YYYY-MM", "listeners": 0 }],
-  "geo": { "topCities": [], "topCountries": [] },
-  "tracks": [],
-  "playlistsDriving": [],
-  "sources": {},
-  "partial": false,
-  "errors": [],
-  "updatedAt": "ISO timestamp"
-}
-\`\`\``,
+- If an extra page fails once, keep the saved core snapshot, explain the missing breakdowns, and end. A mismatched or unavailable breakdown window means omit that breakdown; never combine incompatible windows.
+- The 120-second budget covers both stages. Stop collecting in time to save enrichment; if no time remains, keep the core snapshot and end.
+- Retry failed setup/core commands once after correcting the error, then stop with the exact issue. If Home is blank, foreground the attached browser and retry loading once. No repeated malformed tool calls.
+- Never hunt followers, saves, histories, playlists, or source-of-streams; leave those optional fields null/empty. No estimates, network traffic inspection, or undocumented APIs.
+- Missing values are null, never zero. Preserve the actual reporting window, never assume 28 days. Identity must be verified and at least one core metric observed before saving.
+- Use Write in the exact session data folder, not shell redirection or workspace capture writes. Read-only browsing only; no permission changes.
+- Compare only the same data source and reporting window.
+- End with a short summary of the saved metrics and breakdowns or exact missing data.`,
   },
   {
     slug: 'spotify-playlist-creator',

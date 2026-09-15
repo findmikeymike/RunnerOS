@@ -108,9 +108,17 @@ test('snapshot without capture returns a browser plan + capture contract', () =>
   assert.ok(result.browserPlan.steps.length > 0);
   assert.equal(result.browserPlan.browserSession.partition, 'persist:social-spotify-artist01');
   assert.ok(result.capture.fields.streams);
-  assert.ok(result.capture.fields.dailyStreams);
-  assert.ok(result.capture.fields.monthlyStreams);
-  assert.ok(result.capture.fields.monthlyListeners);
+  assert.deepEqual(Object.keys(result.capture.fields), ['snapshotDate', 'windowDays', 'streams', 'listeners']);
+  assert.match(result.browserPlan.steps.join(' '), /open the artist HOME overview/);
+  assert.match(result.browserPlan.steps.join(' '), /use its displayed reporting window/);
+  assert.match(result.browserPlan.steps.join(' '), /use null for unavailable or rounded values/);
+  assert.deepEqual(Object.keys(result.capture.optionalFields), ['topCities', 'topCountries', 'topTracks']);
+  const coreSave = result.browserPlan.steps.findIndex(step => step.startsWith('SAVE FIRST:'));
+  const breakdown = result.browserPlan.steps.findIndex(step => step.includes('visit one Location page'));
+  assert.ok(coreSave >= 0 && breakdown > coreSave);
+  assert.match(result.browserPlan.steps.join(' '), /displayed reporting window matches the saved core window/);
+  assert.match(result.browserPlan.steps.join(' '), /second full capture retaining the exact saved core values/);
+  assert.doesNotMatch(result.browserPlan.steps.join(' '), /longest useful historical|open the artist Audience|open Audience > Where|open Music > Songs/);
 });
 
 test('snapshot normalizes captured numbers and never fabricates missing ones', () => {
@@ -156,9 +164,34 @@ test('snapshot normalizes captured numbers and never fabricates missing ones', (
     { month: '2026-06', listeners: 3000 },
     { month: '2026-07', listeners: 3400 },
   ]);
-  assert.equal(result.snapshot.partial, true);
-  assert.match(result.snapshot.errors.join(' '), /saves/);
+  assert.equal(result.snapshot.partial, false);
+  assert.deepEqual(result.snapshot.errors, []);
   assert.equal(result.snapshot.geo.topCities[0].city, 'London');
+});
+
+test('snapshot uses verified captured artist identity instead of the login account URL', () => {
+  const env = home();
+  const added = JSON.parse(run(['profile', 'add', 'spotify', '--profile', 'artist01', '--handle', 'Login User', '--account-url', 'https://open.spotify.com/user/login-user', '--json'], env));
+  assert.equal(added.ok, true);
+  const workspace = mkdtempSync(path.join(tmpdir(), 'spotify-identity-'));
+  const captureFile = path.join(workspace, 'capture.json');
+  const capture = { snapshotDate: '2026-09-15', windowDays: 28, streams: 179642, listeners: 81259 };
+  const artistUrl = 'https://open.spotify.com/artist/1234567890123456789012';
+  writeFileSync(captureFile, JSON.stringify({ ...capture, artist: { spotifyUrl: artistUrl, name: ' Observed Artist ' } }));
+  const result = JSON.parse(run(['snapshot', 'spotify', '--profile', 'artist01', '--capture-file', captureFile, '--workspace', workspace, '--json'], env));
+  assert.equal(result.snapshot.artist.spotifyUrl, artistUrl);
+  assert.equal(result.snapshot.artist.name, 'Observed Artist');
+  assert.equal(result.snapshot.artist.profile, 'artist01');
+  assert.equal(JSON.parse(readFileSync(result.outPath, 'utf8')).artist.spotifyUrl, artistUrl);
+  const legacy = JSON.parse(run(['snapshot', 'spotify', '--profile', 'artist01', '--capture-json', JSON.stringify(capture), '--no-out', '--json'], env));
+  assert.equal(legacy.snapshot.artist.spotifyUrl, 'https://open.spotify.com/user/login-user');
+  assert.equal(legacy.snapshot.artist.name, 'Login User');
+  const unnamed = JSON.parse(run(['snapshot', 'spotify', '--profile', 'artist01', '--capture-json', JSON.stringify({ ...capture, artist: { spotifyUrl: artistUrl, name: ' ' } }), '--no-out', '--json'], env));
+  assert.equal(unnamed.snapshot.artist.name, 'Login User');
+  for (const spotifyUrl of ['https://open.spotify.com/user/login-user', 'https://open.spotify.com/artist/short', 'https://evil.test/artist/1234567890123456789012', null]) {
+    const failed = runFailure(['snapshot', 'spotify', '--profile', 'artist01', '--capture-json', JSON.stringify({ ...capture, artist: { spotifyUrl } }), '--workspace', workspace, '--json'], env);
+    assert.equal(failed.code, 'INVALID_CAPTURE');
+  }
 });
 
 test('snapshot writes a snapshot file when --out is given', () => {
@@ -180,10 +213,45 @@ test('snapshot resolves default and relative output inside the workspace', () =>
   const capture = JSON.stringify({ snapshotDate: '2026-07-08', windowDays: 28, streams: 1, listeners: 1, followers: 1, saves: 1 });
 
   const defaultResult = JSON.parse(run(['snapshot', 'spotify', '--profile', 'artist01', '--capture-json', capture, '--workspace', workspace, '--json'], env));
-  assert.equal(defaultResult.outPath, path.join(workspace, 'data/spotify/snapshots/2026-07-08-s4a.json'));
+  assert.equal(path.dirname(defaultResult.outPath), path.join(workspace, 'data/spotify/snapshots'));
+  assert.match(path.basename(defaultResult.outPath), /^2026-07-08-s4a-[a-f0-9-]+\.json$/);
 
   const relativeResult = JSON.parse(run(['snapshot', 'spotify', '--profile', 'artist01', '--capture-json', JSON.stringify({ ...JSON.parse(capture), snapshotDate: '2026-07-09' }), '--out', 'captures/latest.json', '--json'], { ...env, CRAFT_WORKSPACE_PATH: workspace }));
   assert.equal(relativeResult.outPath, path.join(workspace, 'captures/latest.json'));
+});
+
+test('core-only captures complete and repeated same-day refreshes preserve earlier snapshots', () => {
+  const env = home();
+  const workspace = mkdtempSync(path.join(tmpdir(), 'spotify-core-workspace-'));
+  addProfile(env);
+  const capture = { snapshotDate: '2026-09-15', windowDays: 28, streams: 0, listeners: 0 };
+  const args = ['snapshot', 'spotify', '--profile', 'artist01', '--workspace', workspace, '--json'];
+  const first = JSON.parse(run([...args, '--capture-json', JSON.stringify(capture)], env));
+  const savedFirst = readFileSync(first.outPath, 'utf8');
+  const second = JSON.parse(run([...args, '--capture-json', JSON.stringify({ ...capture, topCities: [{ city: 'Chicago', listeners: 0 }], topCountries: [{ country: 'US', listeners: 0 }], topTracks: [{ name: 'Song', streams: 0 }] })], env));
+  assert.equal(first.snapshot.partial, false);
+  assert.deepEqual(first.snapshot.errors, []);
+  assert.equal(first.snapshot.metrics.followers, null);
+  assert.equal(first.snapshot.metrics.saves, null);
+  assert.deepEqual(first.snapshot.monthlyStreams, []);
+  assert.notEqual(first.outPath, second.outPath);
+  assert.equal(readFileSync(first.outPath, 'utf8'), savedFirst);
+  const enriched = JSON.parse(readFileSync(second.outPath, 'utf8'));
+  assert.deepEqual(enriched.metrics, first.snapshot.metrics);
+  assert.equal(enriched.windowDays, first.snapshot.windowDays);
+  assert.equal(enriched.partial, false);
+  assert.equal(enriched.geo.topCities[0].city, 'Chicago');
+  assert.equal(enriched.geo.topCountries[0].country, 'US');
+  assert.equal(enriched.tracks[0].name, 'Song');
+});
+
+test('core capture reports a missing listener count without inventing it', () => {
+  const env = home();
+  addProfile(env);
+  const result = JSON.parse(run(['snapshot', 'spotify', '--profile', 'artist01', '--no-out', '--json', '--capture-json', JSON.stringify({ snapshotDate: '2026-09-15', windowDays: 28, streams: 10 })], env));
+  assert.equal(result.snapshot.partial, true);
+  assert.equal(result.snapshot.metrics.listeners, null);
+  assert.deepEqual(result.snapshot.errors, ['Missing metrics: listeners.']);
 });
 
 test('snapshot marks missing date/window and malformed optional shapes as partial', () => {

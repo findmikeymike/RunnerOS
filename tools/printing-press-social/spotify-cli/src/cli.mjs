@@ -300,19 +300,20 @@ async function handleSnapshot(flags) {
         steps: [
           `open Spotify for Artists (${S4A_HOME})`,
           'verify visible account matches profile',
-          'open the Audience/Home overview and select the longest useful historical range',
-          'read streams, listeners, followers, saves, the date range window, and visible daily stream trend points',
-          'capture up to 12 completed calendar months of streams and monthly listeners from visible labels, hover values, or reasonable whole-number chart estimates',
-          'open Audience > Where they listen for top cities and top countries',
-          'open Music > Songs for top tracks (streams per track)',
-          'open the source-of-streams breakdown if available',
-          'return the captured values as JSON to feed back with --capture-json',
+          'open the artist HOME overview; use its displayed reporting window (normally Last 28 days), without switching to Audience',
+          'read the visible artist identity, exact whole-number streams and listeners, and reporting window on HOME; use null for unavailable or rounded values such as 180K, and do not navigate to chase them',
+          'if the page is an empty shell, bring this same tab to the foreground once and read it again; do not loop through pages',
+          'SAVE FIRST: Write the core capture in the current session data folder and normalize it with snapshot spotify --capture-file <absolute-capture-path> --workspace <workspace-path> --json before any secondary navigation',
+          'only within the remaining two-minute run budget, visit one Location page for up to 5 visible top countries and 5 visible top cities, then one Songs page for up to 5 visible top tracks',
+          'include each breakdown only when its displayed reporting window matches the saved core window; skip missing, mismatched, or rounded counts without further navigation',
+          'no pagination, charts, history, followers, saves, or source-of-streams collection; if a secondary page fails or time runs out, keep the saved core snapshot',
+          'if breakdowns were captured, Write a second full capture retaining the exact saved core values and window, add the optional rows, then normalize to a new unique snapshot; never save a breakdown-only snapshot',
         ],
       }),
       next: [
         'Run the browserPlan through RunnerOS browser tools against the verified Spotify for Artists session.',
         'Collect the numbers into the capture contract shape.',
-        'Save the observed JSON in the workspace, then re-run with --capture-file <capture.json> --out <new-snapshot.json> --json.',
+        'Use Write to save observed JSON in the current session data folder (inside the workspace), then re-run with --capture-file <absolute-capture-path> --workspace <workspace-path> --json. The default snapshot filename is unique.',
       ],
     }, flags.json);
     return;
@@ -354,23 +355,36 @@ function snapshotCaptureContract(flags) {
       windowDays: 'integer, the reporting window length in days',
       streams: 'integer|null',
       listeners: 'integer|null',
-      followers: 'integer|null',
-      saves: 'integer|null',
-      dailyStreams: '[{ date: YYYY-MM-DD, streams: integer }] for visible points in the selected reporting window',
-      monthlyStreams: '[{ month: YYYY-MM, streams: integer }] for up to 12 completed calendar months',
-      monthlyListeners: '[{ month: YYYY-MM, listeners: integer }] for up to 12 completed calendar months',
-      topCities: '[{ city: string, country?: string, listeners?: number }]',
-      topCountries: '[{ country: string, listeners?: number }]',
-      topTracks: '[{ name: string, streams?: number, spotifyUrl?: string }]',
-      sources: '{ [sourceName: string]: number } e.g. playlists/algorithmic/listener-own/editorial',
     },
-    rule: 'Use provider values when shown. Reasonable whole-number estimates read from a provider chart are allowed for monthly history; never invent months or movement the page does not show.',
+    optionalFields: {
+      topCities: 'up to 5 [{ city: string, country?: string, listeners?: integer }] from one Location page with the same reporting window',
+      topCountries: 'up to 5 [{ country: string, listeners?: integer }] from that same Location page and reporting window',
+      topTracks: 'up to 5 [{ name: string, streams?: integer, spotifyUrl?: string }] from one Songs page with the same reporting window',
+    },
+    rule: 'Verify the visible artist matches the saved profile. Read only exact HOME overview values and its displayed reporting window. Do not expand rounded K/M values into estimated counts. Save core first. Optional Location and Songs breakdowns may follow only within the remaining two-minute budget and matching displayed window. Save a second full capture retaining core; missing breakdowns do not make core partial. No chart estimates, pagination, or other secondary-page collection. Optional legacy fields remain accepted.',
   };
 }
 
 function normalizeSnapshot(captured, { profile }) {
   if (!isPlainObject(captured)) {
     throw new CliError('Snapshot capture must be a JSON object.', 'INVALID_CAPTURE');
+  }
+  let capturedArtistUrl = null;
+  let capturedArtistName = null;
+  if (captured.artist !== undefined) {
+    if (!isPlainObject(captured.artist)) {
+      throw new CliError('Captured artist must be an object.', 'INVALID_CAPTURE');
+    }
+    if (captured.artist.spotifyUrl !== undefined) {
+      const url = captured.artist.spotifyUrl;
+      if (typeof url !== 'string' || !/^https:\/\/open\.spotify\.com\/artist\/[A-Za-z0-9]{22}$/.test(url)) {
+        throw new CliError('Captured artist spotifyUrl must be a canonical Spotify artist URL with a 22-character artist ID.', 'INVALID_CAPTURE');
+      }
+      capturedArtistUrl = url;
+    }
+    if (typeof captured.artist.name === 'string' && captured.artist.name.trim()) {
+      capturedArtistName = captured.artist.name.trim();
+    }
   }
   const errors = Array.isArray(captured.errors)
     ? captured.errors.filter((value) => typeof value === 'string' && value.trim()).map((value) => value.trim())
@@ -391,7 +405,7 @@ function normalizeSnapshot(captured, { profile }) {
     followers: captureMetric(captured, 'followers', errors),
     saves: captureMetric(captured, 'saves', errors),
   };
-  const missing = Object.entries(metrics).filter(([, value]) => value === null).map(([key]) => key);
+  const missing = ['streams', 'listeners'].filter((key) => metrics[key] === null);
   if (missing.length) errors.push(`Missing metrics: ${missing.join(', ')}.`);
 
   const topCities = normalizeCityList(captured.topCities, errors);
@@ -401,8 +415,6 @@ function normalizeSnapshot(captured, { profile }) {
   const dailyStreams = normalizeDailyStreams(captured.dailyStreams, errors);
   const monthlyStreams = normalizeMonthlySeries(captured.monthlyStreams, 'streams', errors);
   const monthlyListeners = normalizeMonthlySeries(captured.monthlyListeners, 'listeners', errors);
-  if (monthlyStreams.length < 2) errors.push('Fewer than two completed months of stream history were captured.');
-  if (monthlyListeners.length < 2) errors.push('Fewer than two completed months of listener history were captured.');
 
   return {
     version: 1,
@@ -410,8 +422,8 @@ function normalizeSnapshot(captured, { profile }) {
     snapshotDate,
     windowDays,
     artist: {
-      name: profile.accountHandle || null,
-      spotifyUrl: profile.accountUrl || null,
+      name: capturedArtistName || profile.accountHandle || null,
+      spotifyUrl: capturedArtistUrl || profile.accountUrl || null,
       profile: profile.id,
     },
     metrics,
@@ -613,7 +625,7 @@ function resolveSnapshotOutPath(flags, snapshotDate) {
   const workspace = resolveWorkspace(flags);
   const resolved = out && out !== true
     ? (path.isAbsolute(String(out)) ? path.normalize(String(out)) : path.resolve(workspace, String(out)))
-    : path.join(workspace, 'data', 'spotify', 'snapshots', `${snapshotDate}-s4a.json`);
+    : path.join(workspace, 'data', 'spotify', 'snapshots', `${snapshotDate}-s4a-${randomUUID()}.json`);
   assertPathInsideWorkspace(workspace, resolved, 'Snapshot output');
   return resolved;
 }

@@ -234,7 +234,10 @@ import { WebsiteService, type WebsiteToolResult } from '../website/WebsiteServic
 import { loadWebsiteManifest, type ApprovalBinding } from '@craft-agent/shared/website'
 import { CommunityToolService } from '../community/CommunityToolService'
 import type { CommunityMailResult } from '../community/CommunityMailService'
-import { publishLatestSpotifySnapshotContext } from '../pulses/spotify-snapshot-publisher'
+import { listSpotifySnapshotPaths, publishLatestSpotifySnapshotContext } from '../pulses/spotify-snapshot-publisher'
+import { collectSpotifyNative, isSpotifyBrowserDraining } from '../pulses/spotify-native-collector'
+import { selectSpotifyPulseProfile, spotifyArtistIdFromProfile } from '../pulses/spotify-profile-selection'
+import { artistProfileDoc } from '@craft-agent/shared/artist-context'
 import { recoverInterruptedWorkspaceMigrations } from '../workspaces/workspace-migration-recovery'
 import {
   loadAllGlobalWorkflows,
@@ -2116,6 +2119,14 @@ export class SessionManager implements ISessionManager {
   private agentProviders = new WeakMap<AgentInstance, ReturnType<typeof resolveBackendContext>['provider']>()
   private sendMessageAdmissionLocks: Map<string, Promise<void>> = new Map()
   private taskModeOpenings = new Map<string, SendMessageOptions>()
+  private spotifyPulseSocialCli?: (args: string[]) => Promise<unknown>
+  private nativeSpotifyRuns = new Map<string, AbortController>()
+
+  setSpotifyPulseSocialCli(run: (args: string[]) => Promise<unknown>): void {
+    this.spotifyPulseSocialCli = run
+  }
+
+  private spotifyPulseRuns = new Map<string, Promise<{ sessionId: string }>>()
   private canvasVisualReviewAttempts: Map<string, number> = new Map()
   private automationMessagingBinder?: (input: {
     workspaceId: string
@@ -14250,6 +14261,7 @@ user a clickable link to where the thing now lives.`
     // Signal intent to stop - let the event loop drain remaining events before clearing isProcessing
     // This prevents losing in-flight messages after soft interrupt
     managed.stopRequested = wasProcessing
+    this.nativeSpotifyRuns.get(sessionId)?.abort()
     // Track interruption so the next user message gets a context note
     // telling the LLM the previous response was cut short
     if (wasProcessing) managed.wasInterrupted = true
@@ -14288,6 +14300,9 @@ user a clickable link to where the thing now lives.`
 
     this.persistSession(managed)
     await this.flushSession(managed.id)
+
+    // Native reads own bounded cleanup and must retain browser ownership until drained.
+    if (this.nativeSpotifyRuns.has(sessionId)) return
 
     // Safety timeout: if event loop doesn't complete within 5 seconds, force cleanup
     // This handles cases where the generator gets stuck
@@ -14454,7 +14469,7 @@ user a clickable link to where the thing now lives.`
     // Clear agent control overlay between turns. The session keeps browser
     // ownership (boundSessionId) — only the visual overlay is removed.
     // Full unbind happens below when the queue is empty (session truly done).
-    if (this.browserPaneManager) {
+    if (this.browserPaneManager && !isSpotifyBrowserDraining(sessionId)) {
       await this.browserPaneManager.clearVisualsForSession(sessionId)
       if (managed.processingGeneration !== settledGeneration) return
     }
@@ -14510,7 +14525,7 @@ user a clickable link to where the thing now lives.`
       // Session is truly done — release browser ownership.
       // The window stays alive (hidden) and becomes reusable by future sessions.
       // On the next turn, getOrCreateForSession() will re-bind it.
-      if (this.browserPaneManager) {
+      if (this.browserPaneManager && !isSpotifyBrowserDraining(sessionId)) {
         await this.browserPaneManager.clearVisualsForSession(sessionId)
       if (managed.processingGeneration !== settledGeneration) return
         this.browserPaneManager.unbindAllForSession(sessionId)
@@ -16192,8 +16207,28 @@ user a clickable link to where the thing now lives.`
   async executePromptAutomation(
     input: ExecutePromptAutomationInput,
   ): Promise<{ sessionId: string }> {
+    if (input.agentSlug !== 'spotify-analyst' || input.taskModeId !== 'fresh-snapshot') {
+      return this.executePromptAutomationAdmitted(input)
+    }
+    // Coalesce repeated manual/weekly starts before either creates a session.
+    const key = input.workspaceRootPath
+    const existing = this.spotifyPulseRuns.get(key)
+    const active = [...this.sessions.values()].some(session => session.workspace.id === input.workspaceId
+      && session.spawnedFromAgent?.agentSlug === 'spotify-analyst' && session.isProcessing)
+    if (existing || active) throw new Error('Spotify Pulse is already running for this Artist HQ. Open the current run to follow its progress.')
+    const run = this.executePromptAutomationAdmitted(input)
+    this.spotifyPulseRuns.set(key, run)
+    try { return await run }
+    finally { if (this.spotifyPulseRuns.get(key) === run) this.spotifyPulseRuns.delete(key) }
+  }
+
+  private async executePromptAutomationAdmitted(
+    input: ExecutePromptAutomationInput,
+  ): Promise<{ sessionId: string }> {
     this.assertBackgroundExecutionFence(input.workspaceRootPath, input.backgroundFence)
     const automationStartedAt = Date.now()
+    const spotifySnapshotBaseline = input.agentSlug === 'spotify-analyst'
+      ? listSpotifySnapshotPaths(input.workspaceRootPath) : []
     const {
       workspaceId,
       workspaceRootPath,
@@ -16316,16 +16351,16 @@ user a clickable link to where the thing now lives.`
         ].join('\n')
       : prompt
 
-    // Send the prompt
-    await this.sendMessage(session.id, teamModePrompt, undefined, undefined, {
+    const sendPrompt = () => this.sendMessage(session.id, teamModePrompt, undefined, undefined, {
       backgroundFence: input.backgroundFence,
       skillSlugs: resolved?.skillSlugs,
       legacySkillReferences: input.legacySkillReferences,
     })
 
-    if (agentSlug === 'spotify-analyst') {
+    const publishSpotify = () => {
       const published = publishLatestSpotifySnapshotContext(workspaceRootPath, {
         minimumModifiedAt: automationStartedAt,
+        excludePaths: spotifySnapshotBaseline,
       })
       if (published.published) {
         scheduleHqStateContextRefresh(workspaceRootPath)
@@ -16335,9 +16370,64 @@ user a clickable link to where the thing now lives.`
           workspaceId,
           loadAllContextDocs(workspaceRootPath),
         )
-      } else if (published.reason !== 'unchanged') {
-        sessionLog.warn(`[Spotify Pulse] No fresh HQ snapshot was published for session ${session.id}: ${published.reason ?? 'unknown'}`)
       }
+      return published.published || published.reason === 'unchanged'
+    }
+    if (agentSlug === 'spotify-analyst' && taskModeId === 'fresh-snapshot') {
+      if (!managed || !this.browserPaneManager || !this.spotifyPulseSocialCli) {
+        throw new Error('Spotify Pulse requires the Artist OS desktop browser. Open Artist OS and retry.')
+      }
+      const controller = new AbortController()
+      this.nativeSpotifyRuns.set(session.id, controller)
+      managed.processingGeneration++
+      const generation = managed.processingGeneration
+      managed.stopRequested = false
+      this.setProcessing(managed, true)
+      const userMessage: Message = { id: generateMessageId(), role: 'user', content: 'Refresh Spotify Pulse: current listening stats, top songs, and locations.', timestamp: this.monotonic() }
+      managed.messages.push(userMessage)
+      this.persistSession(managed)
+      this.sendEvent({ type: 'user_message', sessionId: session.id, message: userMessage, status: 'processing' }, workspaceId)
+      let succeeded = false
+      const addNotice = (message: string) => {
+        managed.messages.push({ id: generateMessageId(), role: 'info', content: message, timestamp: this.monotonic() })
+        this.persistSession(managed)
+        this.sendEvent({ type: 'info', sessionId: session.id, message }, workspaceId)
+      }
+      try {
+        // This collector only navigates and reads rendered pages. It never performs
+        // external mutations, including in shared-folder Team Mode.
+        const artist = artistProfileDoc.parse(loadContextDoc(workspaceRootPath, 'artist-profile') ?? undefined).value
+        const artistId = spotifyArtistIdFromProfile(artist)
+        const profile = selectSpotifyPulseProfile(await this.spotifyPulseSocialCli(['catalog', '--json']))
+        this.assertBackgroundExecutionFence(workspaceRootPath, input.backgroundFence)
+        if (controller.signal.aborted) throw new Error('Spotify Pulse stopped.')
+        const result = await collectSpotifyNative({
+          browser: this.browserPaneManager,
+          timeoutMs: Math.max(1, Math.min(110_000, 120_000 - (Date.now() - automationStartedAt))),
+          sessionId: session.id, artistId, profile, workspaceRoot: workspaceRootPath,
+          captureDir: join(getSessionStoragePath(workspaceRootPath, session.id), 'data'),
+          runSocialJson: this.spotifyPulseSocialCli,
+          isCancelled: () => controller.signal.aborted || managed.processingGeneration !== generation,
+          onSaved: () => {
+            this.assertBackgroundExecutionFence(workspaceRootPath, input.backgroundFence)
+            if (!publishSpotify()) throw new Error('The saved Spotify snapshot could not update Artist HQ.')
+          },
+        })
+        if (controller.signal.aborted || managed.processingGeneration !== generation) throw new Error('Spotify Pulse stopped.')
+        succeeded = true
+        addNotice(`Spotify Pulse updated: ${result.streams.toLocaleString()} streams, ${result.listeners.toLocaleString()} listeners over ${result.windowDays} days; ${result.tracks} top songs, ${result.cities} cities, ${result.countries} countries.${result.partial ? ' Some breakdowns were unavailable; collected data is saved.' : ''}`)
+        sessionLog.info(`[Spotify Pulse] ${session.id}: native ${result.partial ? 'partial' : 'complete'} in ${Date.now() - automationStartedAt}ms`, result.warnings)
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        addNotice(`Spotify Pulse ${controller.signal.aborted ? 'stopped' : 'could not finish'}: ${detail}`)
+        throw error
+      } finally {
+        this.nativeSpotifyRuns.delete(session.id)
+        await this.onProcessingStopped(session.id, controller.signal.aborted ? 'interrupted' : succeeded ? 'complete' : 'error', generation)
+      }
+    } else {
+      await sendPrompt()
+      if (agentSlug === 'spotify-analyst') publishSpotify()
     }
 
     return { sessionId: session.id }

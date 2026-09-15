@@ -25,17 +25,23 @@ Two-step, because the browser reads the page and feeds numbers back:
 # 1. Get the plan + the exact fields to capture:
 node src/social.mjs snapshot spotify --profile <id> --json
 # 2. Run the returned browserPlan against the verified session with RunnerOS browser tools,
-#    save the observed capture JSON in the workspace, then normalize + save:
+#    use Write to save observed JSON in the current session data folder, then normalize + save:
 node src/social.mjs snapshot spotify --profile <id> \
-  --capture-file "$CRAFT_WORKSPACE_PATH/data/spotify/captures/<date>.json" \
+  --capture-file "<absolute-session-data-folder>/spotify-capture-<unique>.json" \
   --workspace "$CRAFT_WORKSPACE_PATH" --json
 ```
 
 Rules:
+- Routine Pulse first reads the verified artist HOME overview: exact streams, listeners, and its displayed reporting window. Save and normalize core BEFORE secondary navigation.
+- Within the remaining two-minute budget, visit one Location page for up to five countries and five cities, then one Songs page for up to five tracks. Include rows only for a displayed window matching core; skip unavailable, mismatched, or rounded counts. No pagination, charts, history, followers, saves, or sources.
+- If breakdowns were captured, Write and normalize a second full capture retaining the exact core values and window plus optional rows. Never write a breakdown-only snapshot. If time runs out or a page fails, keep the saved core.
+- Save immediately after reading the core overview. If the page is an empty shell, bring the same tab forward once and retry reading; stop rather than navigating repeatedly.
+- Use Write in the session data folder under the workspace, including in safe mode. Do not use shell redirection to create the capture.
+- Missing optional fields do not make an otherwise valid core capture partial; older extended captures remain supported.
 - Only record numbers actually read from the page. Use `null` for anything not visible. Never estimate or fabricate streams, listeners, followers, saves, cities, or source percentages.
 - Every metric carries its snapshot date and window.
 - Missing or invalid dates/windows are marked partial; an unavailable window remains `null`.
-- Default and relative outputs stay under the workspace. Existing snapshot files are never overwritten.
+- Default and relative outputs stay under the workspace. Default filenames are unique for repeated same-day runs. Existing snapshot files are never overwritten, including explicit --out paths.
 - After saving, write the returned `contextPayload` as the `artist-spotify-snapshot` context doc.
 
 ## Playlist create (Spotify web player)

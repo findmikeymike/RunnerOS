@@ -302,8 +302,8 @@ export const TIER_ONE_TASK_MODES: Record<string, AgentTaskModeDefinition[]> = {
   'spotify-analyst': withAdjacency([
     mode('growth-review', 'Growth Review', 'Interpret existing Spotify evidence and choose the next move.', ['spotify-growth-intake'], ['artist-profile', 'artist-spotify-snapshot', 'mission-brief'],
       { retrieve: ['Dated existing snapshots, briefs, alerts, release goals, and reporting windows; delegate playlist creation or campaign execution'] }),
-    mode('fresh-snapshot', 'Fresh Snapshot', 'Capture fresh Spotify for Artists metrics.', ['spotify-analytics-snapshot'], ['artist-profile', 'artist-spotify-snapshot'],
-      { requiredSourceSlugs: ['printing-press-social'], retrieve: ['Exact saved Spotify profile and live account identity, requested reporting window, and prior compatible snapshot'] }),
+    mode('fresh-snapshot', 'Fresh Snapshot', 'Save Home metrics first, then top locations and tracks in one 120-second budget. Overrides older collection instructions. Only combine matching reporting windows; server publishes without context_write.', ['spotify-analytics-snapshot'], ['artist-profile', 'artist-spotify-snapshot'],
+      { requiredSourceSlugs: ['printing-press-social'], retrieve: ['Verify saved account/artist once; foreground Spotify for Artists Home overview; immediately Write flat streams/listeners/window into session dataFolderPath and normalize with absolute workspace. After core save, one Audience Location and one Music Songs visit for top five countries/cities/tracks; verify matching windows, write full enriched capture with original core and topTracks, normalize second snapshot. Extra page failure: keep core and end. No history, pagination, charts or metric hunts; one shared 120-second budget.'] }),
     mode('check-changes', 'Check Changes', 'Check saved snapshots for significant movement.', ['spotify-anomaly-watch'], ['artist-profile', 'artist-spotify-snapshot'],
       { retrieve: ['Existing dated snapshot files with compatible source and reporting windows; this mode does not scrape or require a live Spotify connection'] }),
   ], {
