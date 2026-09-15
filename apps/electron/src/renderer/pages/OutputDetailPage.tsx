@@ -15,6 +15,7 @@ import { openDemoVisualSurfaceAtom, openOutputVisualSurfaceAtom } from '@/atoms/
 import { findVideoProjectAsset } from '@/components/outputs/video-project-output'
 import { OutputFinalActionDialog } from '@/components/outputs/OutputFinalActionDialog'
 import { schedulingFinalForOutput, releaseKitFinalsForOutput, isAdOutput } from '@/lib/output-finals-actions'
+import { outputLibraryStatus } from '@/lib/output-library'
 import { setPendingReleaseKitOutput } from '@/lib/release-kit-navigation'
 import { isArtistCampaignWorkspace } from '@/lib/artist-workspace'
 import type { ReleaseKitItem } from '@craft-agent/shared/release-kit'
@@ -194,6 +195,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
   } : undefined
 
   const finished = isFinal || readySnapshots.length > 0
+  const status = outputLibraryStatus(manifest, finished)
   const canSchedule = !isXEditorialSlate && (manifest.kind === 'image' || manifest.kind === 'video') && finished
   const makeFinal = async () => {
     if (!currentCampaignId) { setFinalAction('promote'); return }
@@ -230,7 +232,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
             <span>{originLabel(manifest)}</span>
           </div>
           <h1 className="break-words text-xl font-semibold leading-snug tracking-tight text-white/95">{manifest.title}</h1>
-          <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] ${finished ? 'bg-emerald-400/10 text-emerald-300' : 'bg-white/[0.06] text-white/60'}`}>{manifest.status === 'failed' ? 'Failed' : manifest.status === 'cancelled' ? 'Cancelled' : finished ? 'Final' : 'Ready for review'}</span>
+          {status && <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] ${finished ? 'bg-emerald-400/10 text-emerald-300' : 'bg-white/[0.06] text-white/60'}`}>{status}</span>}
         </header>
         <div className="flex flex-wrap items-center gap-2">
           {canSchedule ? <Button size="sm" className="bg-[#f97316] text-black hover:bg-[#fb923c]" onClick={() => {

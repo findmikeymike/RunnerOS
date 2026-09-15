@@ -44,12 +44,12 @@ export function isVisibleLibraryOutput(output: OutputSummaryDTO): boolean {
     && output.tags?.includes('visual-board') && output.tags.includes('session-board'))
 }
 
-export function outputLibraryStatus(output: OutputSummaryDTO, isFinal = Boolean(output.finals?.length)): string {
+export function outputLibraryStatus(output: OutputSummaryDTO, isFinal = Boolean(output.finals?.length)): string | null {
   if (output.status === 'failed') return 'Failed'
   if (output.status === 'cancelled') return 'Cancelled'
   if (isFinal) return 'Final'
   if (output.approval?.state === 'changes_requested') return 'Changes requested'
-  return 'Ready for review'
+  return null
 }
 
 export function outputLibraryTargets(workspaces: OutputLibraryWorkspace[], activeWorkspaceId: string | null, scopeWorkspaceId?: string, remoteActive = false): OutputLibraryWorkspace[] {

@@ -25,7 +25,7 @@ describe('Output library boundaries', () => {
     expect(isVisibleLibraryOutput({ ...output, origin: { source: 'manual' }, tags: ['visual-board', 'session-board'] })).toBe(true)
   })
   test('saved published Outputs do not imply external publication or Final', () => {
-    expect(outputLibraryStatus(output)).toBe('Ready for review')
+    expect(outputLibraryStatus(output)).toBeNull()
     expect(outputLibraryStatus(output, true)).toBe('Final')
     expect(outputLibraryStatus({ ...output, status: 'failed' }, true)).toBe('Failed')
   })

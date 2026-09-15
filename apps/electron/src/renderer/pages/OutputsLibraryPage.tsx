@@ -87,10 +87,11 @@ export default function OutputsLibraryPage({ navigation }: { navigation: Outputs
                 const key = outputLibraryKey(output.workspaceId!, output.id)
                 const isSelected = navigation.outputId === output.id && ownerId === output.workspaceId
                 const isFinal = finalOutputKeys.has(key)
+                const status = outputLibraryStatus(output, isFinal)
                 return <li key={key}><button type="button" aria-current={isSelected ? 'true' : undefined} onClick={(event) => selectOutput(output, event.currentTarget)} className={cn('flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline focus-visible:outline-orange-400', isSelected ? 'border-orange-500/40 bg-orange-500/[0.08]' : 'border-transparent hover:border-white/10 hover:bg-white/[0.035]')}>
                   <OutputThumbnail output={output} />
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="line-clamp-2 text-sm font-medium text-white/90">{output.title}</span><span className={cn('text-[10px]', isFinal ? 'text-orange-300' : 'text-white/45')}>{outputLibraryStatus(output, isFinal)}</span></div>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="line-clamp-2 text-sm font-medium text-white/90">{output.title}</span>{status && <span className={cn('text-[10px]', isFinal ? 'text-orange-300' : 'text-white/45')}>{status}</span>}</div>
                     <p className="mt-1 truncate text-xs text-white/55">{kindLabel(output)} · {workspaceName(output.workspaceId!)}</p>
                     <p className="mt-1 truncate text-xs text-white/45">{creatorLabel(output)}</p>
                     {output.summary && <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-white/55">{output.summary}</p>}
@@ -104,7 +105,7 @@ export default function OutputsLibraryPage({ navigation }: { navigation: Outputs
           {navigation.outputId && <DialogPrimitive.Content aria-describedby={undefined} onInteractOutside={(event) => event.preventDefault()} onCloseAutoFocus={(event) => { event.preventDefault(); (lastRow.current?.isConnected ? lastRow.current : searchInput.current)?.focus({ preventScroll: true }) }} className={cn('z-20 flex min-h-0 min-w-0 flex-col border-l border-white/10 bg-[#0a0a0a] shadow-strong outline-none', expanded ? 'absolute inset-0' : 'w-[64%] min-w-[320px]')}>
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-4 py-2">
               <DialogPrimitive.Title className="truncate text-xs text-white/60">{selected ? workspaceName(ownerId) : 'Output preview'}</DialogPrimitive.Title>
-              <div className="flex gap-1"><Button variant="ghost" size="icon" aria-label={expanded ? 'Reduce preview' : 'Expand preview'} onClick={() => setExpanded(!expanded)}>{expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button><DialogPrimitive.Close asChild><Button variant="ghost" size="icon" aria-label="Close output preview"><X className="h-4 w-4" /></Button></DialogPrimitive.Close></div>
+              <div className="flex gap-1"><Button variant="ghost" size="icon" className="size-9 shrink-0 text-white/75 hover:bg-white/10 hover:text-white" aria-label={expanded ? 'Reduce preview' : 'Expand preview'} onClick={() => setExpanded(!expanded)}>{expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</Button><DialogPrimitive.Close asChild><Button variant="ghost" size="icon" className="size-9 shrink-0 rounded-lg border border-white/15 bg-white/[0.08] text-white hover:bg-white/15 hover:text-white focus-visible:ring-2 focus-visible:ring-orange-400" aria-label="Close output preview" title="Close preview (Esc)"><X className="size-5" aria-hidden="true" /></Button></DialogPrimitive.Close></div>
             </div>
             <div className="min-h-0 flex-1">
               {ownerAvailable ? <OutputDetailPage key={outputLibraryKey(ownerId, navigation.outputId)} remote={remoteActive} workspaceId={ownerId} outputId={navigation.outputId} currentCampaignId={isArtistCampaignWorkspace(selectedWorkspace) ? ownerId : undefined} /> : <p role="alert" className="p-6 text-sm text-white/60">Open this output’s workspace to preview it.</p>}
