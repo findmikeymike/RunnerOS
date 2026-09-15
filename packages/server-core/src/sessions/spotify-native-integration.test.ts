@@ -82,7 +82,7 @@ function fixture() {
     }))
     return { ok: true, status: 'succeeded' }
   }
-  manager.setSpotifyPulseSocialCli(normalize)
+  manager.setPulseSocialCli(normalize)
   const input = { workspaceId: 'hq', workspaceRootPath: root, prompt: 'Refresh', agentSlug: 'spotify-analyst', taskModeId: 'fresh-snapshot' }
   return { manager, internal, input, managed, changes, events, navigation, normalize, root }
 }
@@ -99,14 +99,14 @@ test('fresh-snapshot automation publishes core then enrichment and settles witho
   expect(f.managed.isProcessing).toBe(false)
   expect(f.managed.lastSettledProcessingGeneration).toBe(f.managed.processingGeneration)
   expect(f.events.some(event => event.type === 'complete')).toBe(true)
-  expect(f.internal.nativeSpotifyRuns.size).toBe(0)
+  expect(f.internal.nativePulseRuns.size).toBe(0)
 }, 20_000)
 
 test('duplicate automation start is rejected before creating another session', async () => {
   const f = fixture()
   let release!: () => void
   const gate = new Promise<void>(resolve => { release = resolve })
-  f.manager.setSpotifyPulseSocialCli(async args => { if (args[0] === 'catalog') await gate; return f.normalize(args) })
+  f.manager.setPulseSocialCli(async args => { if (args[0] === 'catalog') await gate; return f.normalize(args) })
   const first = f.manager.executePromptAutomation(f.input)
   await expect(f.manager.executePromptAutomation(f.input)).rejects.toThrow('already running')
   release()
@@ -138,6 +138,6 @@ test('manual cancellation after core publication keeps the widget data and settl
   expect(parseSnapshot(loadContextDoc(f.root, 'artist-spotify-snapshot')!.body).metrics.streams).toBe(179642)
   expect(f.managed.isProcessing).toBe(false)
   expect(f.managed.wasInterrupted).toBe(true)
-  expect(f.internal.nativeSpotifyRuns.size).toBe(0)
+  expect(f.internal.nativePulseRuns.size).toBe(0)
   expect(f.manager.sendMessage).not.toHaveBeenCalled()
 }, 20_000)

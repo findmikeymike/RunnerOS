@@ -236,6 +236,8 @@ import { CommunityToolService } from '../community/CommunityToolService'
 import type { CommunityMailResult } from '../community/CommunityMailService'
 import { listSpotifySnapshotPaths, publishLatestSpotifySnapshotContext } from '../pulses/spotify-snapshot-publisher'
 import { collectSpotifyNative, isSpotifyBrowserDraining } from '../pulses/spotify-native-collector'
+import { collectInstagramNative, selectInstagramPulseProfile, isInstagramBrowserDraining } from '../pulses/instagram-native-collector'
+import { listInstagramSnapshotPaths, publishLatestInstagramSnapshotContext } from '../pulses/instagram-snapshot-publisher'
 import { selectSpotifyPulseProfile, spotifyArtistIdFromProfile } from '../pulses/spotify-profile-selection'
 import { artistProfileDoc } from '@craft-agent/shared/artist-context'
 import { recoverInterruptedWorkspaceMigrations } from '../workspaces/workspace-migration-recovery'
@@ -2119,14 +2121,14 @@ export class SessionManager implements ISessionManager {
   private agentProviders = new WeakMap<AgentInstance, ReturnType<typeof resolveBackendContext>['provider']>()
   private sendMessageAdmissionLocks: Map<string, Promise<void>> = new Map()
   private taskModeOpenings = new Map<string, SendMessageOptions>()
-  private spotifyPulseSocialCli?: (args: string[]) => Promise<unknown>
-  private nativeSpotifyRuns = new Map<string, AbortController>()
+  private pulseSocialCli?: (args: string[]) => Promise<unknown>
+  private nativePulseRuns = new Map<string, AbortController>()
 
-  setSpotifyPulseSocialCli(run: (args: string[]) => Promise<unknown>): void {
-    this.spotifyPulseSocialCli = run
+  setPulseSocialCli(run: (args: string[]) => Promise<unknown>): void {
+    this.pulseSocialCli = run
   }
 
-  private spotifyPulseRuns = new Map<string, Promise<{ sessionId: string }>>()
+  private pulseRuns = new Map<string, Promise<{ sessionId: string }>>()
   private canvasVisualReviewAttempts: Map<string, number> = new Map()
   private automationMessagingBinder?: (input: {
     workspaceId: string
@@ -14261,7 +14263,7 @@ user a clickable link to where the thing now lives.`
     // Signal intent to stop - let the event loop drain remaining events before clearing isProcessing
     // This prevents losing in-flight messages after soft interrupt
     managed.stopRequested = wasProcessing
-    this.nativeSpotifyRuns.get(sessionId)?.abort()
+    this.nativePulseRuns.get(sessionId)?.abort()
     // Track interruption so the next user message gets a context note
     // telling the LLM the previous response was cut short
     if (wasProcessing) managed.wasInterrupted = true
@@ -14302,7 +14304,7 @@ user a clickable link to where the thing now lives.`
     await this.flushSession(managed.id)
 
     // Native reads own bounded cleanup and must retain browser ownership until drained.
-    if (this.nativeSpotifyRuns.has(sessionId)) return
+    if (this.nativePulseRuns.has(sessionId)) return
 
     // Safety timeout: if event loop doesn't complete within 5 seconds, force cleanup
     // This handles cases where the generator gets stuck
@@ -14469,7 +14471,7 @@ user a clickable link to where the thing now lives.`
     // Clear agent control overlay between turns. The session keeps browser
     // ownership (boundSessionId) — only the visual overlay is removed.
     // Full unbind happens below when the queue is empty (session truly done).
-    if (this.browserPaneManager && !isSpotifyBrowserDraining(sessionId)) {
+    if (this.browserPaneManager && !isSpotifyBrowserDraining(sessionId) && !isInstagramBrowserDraining(sessionId)) {
       await this.browserPaneManager.clearVisualsForSession(sessionId)
       if (managed.processingGeneration !== settledGeneration) return
     }
@@ -14525,7 +14527,7 @@ user a clickable link to where the thing now lives.`
       // Session is truly done — release browser ownership.
       // The window stays alive (hidden) and becomes reusable by future sessions.
       // On the next turn, getOrCreateForSession() will re-bind it.
-      if (this.browserPaneManager && !isSpotifyBrowserDraining(sessionId)) {
+      if (this.browserPaneManager && !isSpotifyBrowserDraining(sessionId) && !isInstagramBrowserDraining(sessionId)) {
         await this.browserPaneManager.clearVisualsForSession(sessionId)
       if (managed.processingGeneration !== settledGeneration) return
         this.browserPaneManager.unbindAllForSession(sessionId)
@@ -16207,19 +16209,19 @@ user a clickable link to where the thing now lives.`
   async executePromptAutomation(
     input: ExecutePromptAutomationInput,
   ): Promise<{ sessionId: string }> {
-    if (input.agentSlug !== 'spotify-analyst' || input.taskModeId !== 'fresh-snapshot') {
-      return this.executePromptAutomationAdmitted(input)
-    }
-    // Coalesce repeated manual/weekly starts before either creates a session.
-    const key = input.workspaceRootPath
-    const existing = this.spotifyPulseRuns.get(key)
+    const platform = input.agentSlug === 'spotify-analyst' && input.taskModeId === 'fresh-snapshot' ? 'spotify'
+      : input.agentSlug === 'social-publisher' && input.taskModeId === 'growth' ? 'instagram' : null
+    if (!platform) return this.executePromptAutomationAdmitted(input)
+    // Independent platforms can run together; duplicate starts cannot.
+    const key = `${input.workspaceRootPath}:${platform}`
+    const existing = this.pulseRuns.get(key)
     const active = [...this.sessions.values()].some(session => session.workspace.id === input.workspaceId
-      && session.spawnedFromAgent?.agentSlug === 'spotify-analyst' && session.isProcessing)
-    if (existing || active) throw new Error('Spotify Pulse is already running for this Artist HQ. Open the current run to follow its progress.')
+      && session.spawnedFromAgent?.agentSlug === input.agentSlug && session.isProcessing)
+    if (existing || active) throw new Error(`${platform === 'spotify' ? 'Spotify Pulse' : 'Instagram Insights'} is already running for this Artist HQ. Open the current run to follow its progress.`)
     const run = this.executePromptAutomationAdmitted(input)
-    this.spotifyPulseRuns.set(key, run)
+    this.pulseRuns.set(key, run)
     try { return await run }
-    finally { if (this.spotifyPulseRuns.get(key) === run) this.spotifyPulseRuns.delete(key) }
+    finally { if (this.pulseRuns.get(key) === run) this.pulseRuns.delete(key) }
   }
 
   private async executePromptAutomationAdmitted(
@@ -16227,6 +16229,8 @@ user a clickable link to where the thing now lives.`
   ): Promise<{ sessionId: string }> {
     this.assertBackgroundExecutionFence(input.workspaceRootPath, input.backgroundFence)
     const automationStartedAt = Date.now()
+    const instagramPulse = input.agentSlug === 'social-publisher' && input.taskModeId === 'growth'
+    const instagramSnapshotBaseline = instagramPulse ? listInstagramSnapshotPaths(input.workspaceRootPath) : []
     const spotifySnapshotBaseline = input.agentSlug === 'spotify-analyst'
       ? listSpotifySnapshotPaths(input.workspaceRootPath) : []
     const {
@@ -16373,17 +16377,28 @@ user a clickable link to where the thing now lives.`
       }
       return published.published || published.reason === 'unchanged'
     }
-    if (agentSlug === 'spotify-analyst' && taskModeId === 'fresh-snapshot') {
-      if (!managed || !this.browserPaneManager || !this.spotifyPulseSocialCli) {
-        throw new Error('Spotify Pulse requires the Artist OS desktop browser. Open Artist OS and retry.')
+    const publishInstagram = () => {
+      const published = publishLatestInstagramSnapshotContext(workspaceRootPath, {
+        minimumModifiedAt: automationStartedAt, excludePaths: instagramSnapshotBaseline,
+      })
+      if (published.published) {
+        scheduleHqStateContextRefresh(workspaceRootPath)
+        this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, loadAllContextDocs(workspaceRootPath))
+      }
+      return published.published || published.reason === 'unchanged'
+    }
+    if ((agentSlug === 'spotify-analyst' && taskModeId === 'fresh-snapshot') || instagramPulse) {
+      const pulseName = instagramPulse ? 'Instagram Insights' : 'Spotify Pulse'
+      if (!managed || !this.browserPaneManager || !this.pulseSocialCli) {
+        throw new Error(`${pulseName} requires the Artist OS desktop browser. Open Artist OS and retry.`)
       }
       const controller = new AbortController()
-      this.nativeSpotifyRuns.set(session.id, controller)
+      this.nativePulseRuns.set(session.id, controller)
       managed.processingGeneration++
       const generation = managed.processingGeneration
       managed.stopRequested = false
       this.setProcessing(managed, true)
-      const userMessage: Message = { id: generateMessageId(), role: 'user', content: 'Refresh Spotify Pulse: current listening stats, top songs, and locations.', timestamp: this.monotonic() }
+      const userMessage: Message = { id: generateMessageId(), role: 'user', content: instagramPulse ? 'Refresh Instagram Insights: current followers, views, interactions, engagement, and profile visits.' : 'Refresh Spotify Pulse: current listening stats, top songs, and locations.', timestamp: this.monotonic() }
       managed.messages.push(userMessage)
       this.persistSession(managed)
       this.sendEvent({ type: 'user_message', sessionId: session.id, message: userMessage, status: 'processing' }, workspaceId)
@@ -16396,33 +16411,49 @@ user a clickable link to where the thing now lives.`
       try {
         // This collector only navigates and reads rendered pages. It never performs
         // external mutations, including in shared-folder Team Mode.
-        const artist = artistProfileDoc.parse(loadContextDoc(workspaceRootPath, 'artist-profile') ?? undefined).value
-        const artistId = spotifyArtistIdFromProfile(artist)
-        const profile = selectSpotifyPulseProfile(await this.spotifyPulseSocialCli(['catalog', '--json']))
+        const catalog = await this.pulseSocialCli(['catalog', '--json'])
         this.assertBackgroundExecutionFence(workspaceRootPath, input.backgroundFence)
-        if (controller.signal.aborted) throw new Error('Spotify Pulse stopped.')
-        const result = await collectSpotifyNative({
-          browser: this.browserPaneManager,
-          timeoutMs: Math.max(1, Math.min(110_000, 120_000 - (Date.now() - automationStartedAt))),
-          sessionId: session.id, artistId, profile, workspaceRoot: workspaceRootPath,
-          captureDir: join(getSessionStoragePath(workspaceRootPath, session.id), 'data'),
-          runSocialJson: this.spotifyPulseSocialCli,
-          isCancelled: () => controller.signal.aborted || managed.processingGeneration !== generation,
-          onSaved: () => {
-            this.assertBackgroundExecutionFence(workspaceRootPath, input.backgroundFence)
-            if (!publishSpotify()) throw new Error('The saved Spotify snapshot could not update Artist HQ.')
-          },
-        })
-        if (controller.signal.aborted || managed.processingGeneration !== generation) throw new Error('Spotify Pulse stopped.')
+        if (controller.signal.aborted) throw new Error(`${pulseName} stopped.`)
+        const isCancelled = () => controller.signal.aborted || managed.processingGeneration !== generation
+        if (instagramPulse) {
+          const snapshot = await collectInstagramNative({
+            browser: this.browserPaneManager, sessionId: session.id,
+            profile: selectInstagramPulseProfile(catalog), workspaceRoot: workspaceRootPath,
+            captureDir: join(getSessionStoragePath(workspaceRootPath, session.id), 'data'),
+            timeoutMs: Math.max(1, Math.min(60_000, 120_000 - (Date.now() - automationStartedAt))),
+            isCancelled,
+            onSaved: () => {
+              this.assertBackgroundExecutionFence(workspaceRootPath, input.backgroundFence)
+              if (!publishInstagram()) throw new Error('The saved Instagram snapshot could not update Artist HQ.')
+            },
+          })
+          if (isCancelled()) throw new Error('Instagram Insights stopped.')
+          addNotice(`Instagram Insights updated for ${snapshot.profile.handle}: ${snapshot.metrics.followers?.toLocaleString() ?? 'unavailable'} followers, ${snapshot.metrics.views?.toLocaleString() ?? 'unavailable'} views, ${snapshot.metrics.interactions?.toLocaleString() ?? 'unavailable'} interactions over ${snapshot.windowDays} days.`)
+          sessionLog.info(`[Instagram Insights] ${session.id}: native complete in ${Date.now() - automationStartedAt}ms`)
+        } else {
+          const artist = artistProfileDoc.parse(loadContextDoc(workspaceRootPath, 'artist-profile') ?? undefined).value
+          const result = await collectSpotifyNative({
+            browser: this.browserPaneManager,
+            timeoutMs: Math.max(1, Math.min(110_000, 120_000 - (Date.now() - automationStartedAt))),
+            sessionId: session.id, artistId: spotifyArtistIdFromProfile(artist), profile: selectSpotifyPulseProfile(catalog), workspaceRoot: workspaceRootPath,
+            captureDir: join(getSessionStoragePath(workspaceRootPath, session.id), 'data'),
+            runSocialJson: this.pulseSocialCli, isCancelled,
+            onSaved: () => {
+              this.assertBackgroundExecutionFence(workspaceRootPath, input.backgroundFence)
+              if (!publishSpotify()) throw new Error('The saved Spotify snapshot could not update Artist HQ.')
+            },
+          })
+          if (isCancelled()) throw new Error('Spotify Pulse stopped.')
+          addNotice(`Spotify Pulse updated: ${result.streams.toLocaleString()} streams, ${result.listeners.toLocaleString()} listeners over ${result.windowDays} days; ${result.tracks} top songs, ${result.cities} cities, ${result.countries} countries.${result.partial ? ' Some breakdowns were unavailable; collected data is saved.' : ''}`)
+          sessionLog.info(`[Spotify Pulse] ${session.id}: native ${result.partial ? 'partial' : 'complete'} in ${Date.now() - automationStartedAt}ms`, result.warnings)
+        }
         succeeded = true
-        addNotice(`Spotify Pulse updated: ${result.streams.toLocaleString()} streams, ${result.listeners.toLocaleString()} listeners over ${result.windowDays} days; ${result.tracks} top songs, ${result.cities} cities, ${result.countries} countries.${result.partial ? ' Some breakdowns were unavailable; collected data is saved.' : ''}`)
-        sessionLog.info(`[Spotify Pulse] ${session.id}: native ${result.partial ? 'partial' : 'complete'} in ${Date.now() - automationStartedAt}ms`, result.warnings)
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error)
-        addNotice(`Spotify Pulse ${controller.signal.aborted ? 'stopped' : 'could not finish'}: ${detail}`)
+        addNotice(`${pulseName} ${controller.signal.aborted ? 'stopped' : 'could not finish'}: ${detail}`)
         throw error
       } finally {
-        this.nativeSpotifyRuns.delete(session.id)
+        this.nativePulseRuns.delete(session.id)
         await this.onProcessingStopped(session.id, controller.signal.aborted ? 'interrupted' : succeeded ? 'complete' : 'error', generation)
       }
     } else {

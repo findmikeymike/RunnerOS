@@ -1,86 +1,53 @@
 ---
 name: instagram-growth-snapshot
-description: "Use when reading a connected Instagram professional account's Insights, capturing a dated 14-day growth snapshot, comparing growth or decline, or refreshing Artist HQ Social Pulse. Read-only; not for posting, comment replies, or DMs."
+description: "Read a connected Instagram professional account's current Insights and refresh Artist HQ Social Pulse. Read-only; not for posting, replies, DMs, or ads."
 metadata:
-  version: 1.0.0
-  last_verified: 2026-08-28
+  version: 1.1.0
+  last_verified: 2026-09-15
 ---
 
 # Instagram Growth Snapshot
 
-Use this skill for manual or weekly read-only Instagram Insights checks. One Social Publisher run handles the full job. Do not create one worker per metric or per post.
+## Artist HQ manual and weekly Pulse
 
-## Default Profile Rule
+Artist HQ's manual refresh and weekly automation use the native collector. The host attaches the saved Instagram profile, verifies the account identity, reads its own-account Insights at `https://www.instagram.com/accounts/insights/?timeframe=30`, saves a unique dated snapshot, and publishes `artist-instagram-snapshot` automatically. Do not launch another browser collection or write duplicate context for that run.
 
-1. Read `sources/printing-press-social/guide.md` directly.
-2. From `tools/printing-press-social`, run `node src/social.mjs catalog --live --json`.
-3. If the user named an exact Instagram profile, use it.
-4. Otherwise, select the **first returned Instagram profile whose `ready` value is true**, preserving catalog order. This deterministic default applies only to this read-only snapshot skill.
-5. Never select a logged-out, unverified, wrong-account, or missing session. If no Instagram profile is ready, stop and point to Settings → Instagram.
+Capture the current visible reporting window and exact visible followers, views, interactions, accounts engaged, and profile visits. Include reach or follower change only when actually shown. Record the real window; the URL's requested 30 days is not proof of the displayed range. Missing means unknown/null, never zero. Zero is valid only when Instagram displays zero.
 
-## Capture
+No follower-history search, post-by-post collection, ads, range hunting, chart estimates, private endpoints, or network inspection. Save useful partial results; briefly state missing metrics. Never relabel an old snapshot as a successful new refresh.
 
-1. Attach the exact saved session with `browser_tool profile instagram <profile>`; never use a generic browser session.
-2. Verify the visible Instagram identity against the saved handle or account URL before reading data.
-3. Open the professional dashboard / Insights page.
-4. Select the last 14 completed days when Instagram offers a custom range. If it does not, use the nearest visible supported range and record its real `windowDays`; never label a different range as 14 days.
-5. Capture only values visibly reported by Instagram:
-   - current followers
-   - follower growth or decline for the selected period
-   - accounts reached
-   - accounts engaged
-   - content interactions
-   - profile visits
-   - aggregate likes and comments, when visible
-6. Open the follower-history view and capture every completed month Instagram exposes, up to 12 months. Capture month-end followers, net follower change, or both. Provider chart labels/hover values are preferred; reasonable whole-number chart estimates are acceptable for the directional HQ visual. Never invent a month the provider does not show.
-7. Do not scan individual posts when aggregate Insights are available. If aggregate likes/comments are unavailable and a post-level fallback is genuinely useful, inspect only posts published inside the reporting window, mark the snapshot partial, and state the limitation.
-8. Save the raw observed JSON under `$CRAFT_WORKSPACE_PATH/data/instagram/captures/<YYYY-MM-DD>.json`.
+## Ad hoc agent fallback
 
-Use this raw capture shape. Missing values are `null`, never zero:
+Use one bounded read-only run, at most 120 seconds including save time:
+
+1. Use the injected `printing-press-social` source context. From its exact absolute **Local path**, run `node src/social.mjs catalog --json` once. Do not guess a checkout or read private source/skill files. Use the explicitly requested saved Instagram profile; otherwise require one unambiguous saved Instagram profile. If missing or ambiguous, stop with the specific connection/profile issue.
+2. Attach `browser_tool profile instagram <profile> --foreground`. Verify the visible signed-in identity against the saved handle/account URL before reading Insights. Never use a generic browser or a different account. Stop on login, identity mismatch, or access restrictions.
+3. Open the direct own-account Insights URL above. Read only the displayed current window and metrics. If blank, foreground the attached browser and retry loading once. If still unavailable, stop. Do not browse around for history or substitute public profile counts.
+4. **Write** the raw JSON capture inside the exact absolute `dataFolderPath` injected in `<session_state>`. Use a new filename each run. Keep the shape below; copy only observed values.
+5. Normalize with the skill's `scripts/normalize-snapshot.ts` helper only through an available, documented safe script-execution tool. If the runtime exposes `run_skill_script`, follow its actual schema and pass the absolute session capture path and current workspace path (`--capture`, `--workspace`); omit `--out` for a unique immutable snapshot. Do not invent this tool, read/copy private helper source, invoke guessed private paths, or change permissions. If no supported helper is available, retain the session capture and explain that Artist HQ's native Refresh is needed to save the Pulse snapshot.
+6. Successful native Pulse publication is handled by the host. For an ad hoc run, only claim the widget updated after publication is confirmed; a saved capture alone is not a published snapshot. End with the actual reporting window, key observed metrics, and any missing data.
+
+Raw capture shape (example numbers are placeholders, not defaults):
 
 ```json
 {
-  "snapshotDate": "2026-08-28",
-  "windowDays": 14,
-  "profile": { "profile": "main", "handle": "@artist", "accountUrl": "https://instagram.com/artist" },
+  "snapshotDate": "2026-09-15",
+  "windowDays": 30,
+  "profile": { "profile": "main", "handle": "@artist", "accountUrl": "https://www.instagram.com/artist/" },
   "metrics": {
     "followers": 4200,
-    "followerDelta": 37,
-    "accountsReached": 1800,
-    "accountsEngaged": 240,
+    "views": 12000,
     "interactions": 390,
-    "profileVisits": 120,
-    "likes": 330,
-    "comments": 60
+    "accountsEngaged": 240,
+    "profileVisits": null,
+    "accountsReached": null,
+    "followerDelta": null
   },
-  "monthlyFollowers": [
-    { "month": "2026-06", "followers": 4150, "net": 24 },
-    { "month": "2026-07", "followers": 4187, "net": 37 }
-  ],
-  "partial": false,
-  "errors": []
+  "partial": true,
+  "errors": ["Profile visits, reach and follower change were not visible"]
 }
 ```
 
-## Finalize
+## Boundaries
 
-Normalize the capture into an immutable snapshot:
-
-```bash
-"${CRAFT_BUN:-bun}" "${CRAFT_GLOBAL_SKILLS_DIR:-$HOME/.agents/skills}/instagram-growth-snapshot/scripts/normalize-snapshot.ts" \
-  --capture "$CRAFT_WORKSPACE_PATH/data/instagram/captures/<YYYY-MM-DD>.json" \
-  --workspace "$CRAFT_WORKSPACE_PATH"
-```
-
-The script writes `data/instagram/snapshots/<YYYY-MM-DD>-insights.json` and returns a `contextPayload`. Write that payload to Workspace Context slug `artist-instagram-snapshot` so Artist HQ Social Pulse updates immediately.
-
-Finish with a short private note: reporting window, captured month range, follower growth/decline, reach, interactions, and any missing data.
-
-## Failure Rules
-
-- This job is read-only and needs no approval.
-- Never publish, reply, DM, follow, edit, or change account settings.
-- Never record passwords, cookies, tokens, recovery codes, or 2FA secrets.
-- Never fabricate hidden metrics or months. Approximate monthly chart readings must still come from visible provider history.
-- Never overwrite a past snapshot. Same-date reruns must stop or use a later capture date after confirming the data is actually newer.
-- If the visible account does not match the saved profile, stop without reading analytics.
+Read-only collection needs no publishing approval. Never publish, reply, DM, follow, edit account settings, record secrets, or overwrite previous snapshots. Same-day reruns use new UUID filenames with the true capture date. If no metric is observable, report the failure and preserve the previous Pulse.

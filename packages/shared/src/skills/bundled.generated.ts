@@ -28966,109 +28966,21 @@ If a full HyperFrames installation is available, the reference files are in:
     slug: "instagram-growth-snapshot",
     files: [
       {
-        path: "scripts/normalize-snapshot.test.ts",
-        content: `import { describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
-import { normalizeInstagramCapture } from './normalize-snapshot'
-
-const script = path.join(import.meta.dir, 'normalize-snapshot.ts')
-
-describe('Instagram snapshot normalizer', () => {
-  test('preserves signed follower movement and marks missing metrics partial', () => {
-    const snapshot = normalizeInstagramCapture({
-      snapshotDate: '2026-08-28',
-      windowDays: 14,
-      profile: { profile: 'main', handle: '@artist' },
-      metrics: { followers: 1000, followerDelta: -9, accountsReached: 250 },
-      monthlyFollowers: [
-        { month: '2026-07', followers: 975, net: 12 },
-        { month: '2026-08', net: -9 },
-      ],
-    }, new Date('2026-08-28T12:00:00.000Z'))
-
-    expect(snapshot.metrics.followerDelta).toBe(-9)
-    expect(snapshot.metrics.interactions).toBeNull()
-    expect(snapshot.monthlyFollowers).toEqual([
-      { month: '2026-07', followers: 975, net: 12 },
-      { month: '2026-08', net: -9 },
-    ])
-    expect(snapshot.partial).toBe(true)
-    expect(snapshot.errors.join(' ')).toContain('interactions')
-  })
-
-  test('requires an exact profile and capture date', () => {
-    expect(() => normalizeInstagramCapture({ profile: {}, metrics: {} })).toThrow()
-  })
-
-  test('normalizes signed monthly history without inventing missing totals', () => {
-    const snapshot = normalizeInstagramCapture({
-      snapshotDate: '2026-09-09',
-      windowDays: 30,
-      profile: { profile: 'main' },
-      metrics: {},
-      monthlyFollowers: [
-        { month: '2026-08', net: -4 },
-        { month: '2026-07', followers: 100 },
-        { month: '2026-08', net: -3 },
-        { month: 'bad', net: 9 },
-      ],
-    })
-
-    expect(snapshot.monthlyFollowers).toEqual([
-      { month: '2026-07', followers: 100 },
-      { month: '2026-08', net: -3 },
-    ])
-    expect(snapshot.errors.join(' ')).toContain('Invalid monthlyFollowers')
-  })
-
-  test('writes inside the workspace once and refuses overwrite or path escape', () => {
-    const workspace = mkdtempSync(path.join(tmpdir(), 'instagram-snapshot-'))
-    const captureDir = path.join(workspace, 'data/instagram/captures')
-    mkdirSync(captureDir, { recursive: true })
-    const capture = path.join(captureDir, '2026-08-28.json')
-    writeFileSync(capture, JSON.stringify({
-      snapshotDate: '2026-08-28',
-      windowDays: 14,
-      profile: { profile: 'main' },
-      metrics: { followers: 1000, followerDelta: 8 },
-      monthlyFollowers: [
-        { month: '2026-07', net: 5 },
-        { month: '2026-08', net: 8 },
-      ],
-    }))
-
-    const args = [process.execPath, script, '--capture', capture, '--workspace', workspace]
-    expect(Bun.spawnSync(args).exitCode).toBe(0)
-    expect(Bun.spawnSync(args).exitCode).not.toBe(0)
-    expect(Bun.spawnSync([...args, '--out', '../escaped.json']).exitCode).not.toBe(0)
-  })
-})
-`,
-      },
-      {
-        path: "scripts/normalize-snapshot.ts",
-        content: `#!/usr/bin/env npx tsx
-import { promises as fs } from 'node:fs'
-import path from 'node:path'
-
-type CliOptions = { capture: string; workspace: string; out?: string }
-
-export interface NormalizedInstagramSnapshot {
+        path: "scripts/normalization-core.ts",
+        content: `export interface NormalizedInstagramSnapshot {
   version: 1
   dataSource: 'instagram-insights-browser'
   snapshotDate: string
   windowDays: number | null
   profile: { profile: string; handle: string | null; accountUrl: string | null }
-  metrics: Record<'followers' | 'followerDelta' | 'accountsReached' | 'accountsEngaged' | 'interactions' | 'profileVisits' | 'likes' | 'comments', number | null>
+  metrics: Record<'views' | 'followers' | 'followerDelta' | 'accountsReached' | 'accountsEngaged' | 'interactions' | 'profileVisits' | 'likes' | 'comments', number | null>
   monthlyFollowers: Array<{ month: string; followers?: number; net?: number }>
   partial: boolean
   errors: string[]
   updatedAt: string
 }
 
-const metricNames = ['followers', 'followerDelta', 'accountsReached', 'accountsEngaged', 'interactions', 'profileVisits', 'likes', 'comments'] as const
+const metricNames = ['views', 'followers', 'followerDelta', 'accountsReached', 'accountsEngaged', 'interactions', 'profileVisits', 'likes', 'comments'] as const
 
 export function normalizeInstagramCapture(input: unknown, now = new Date()): NormalizedInstagramSnapshot {
   const root = record(input)
@@ -29076,21 +28988,24 @@ export function normalizeInstagramCapture(input: unknown, now = new Date()): Nor
   const metrics = record(root.metrics)
   const snapshotDate = string(root.snapshotDate)
   const profileId = string(profile.profile)
-  if (!snapshotDate || !/^\\d{4}-\\d{2}-\\d{2}$/.test(snapshotDate)) throw new Error('capture snapshotDate must use YYYY-MM-DD')
+  if (!snapshotDate || !/^\\d{4}-\\d{2}-\\d{2}$/.test(snapshotDate) || Number.isNaN(Date.parse(snapshotDate)) || new Date(snapshotDate).toISOString().slice(0, 10) !== snapshotDate) throw new Error('capture snapshotDate must use YYYY-MM-DD')
   if (!profileId) throw new Error('capture profile.profile is required')
 
   const errors = Array.isArray(root.errors) ? root.errors.filter((value): value is string => typeof value === 'string' && Boolean(value.trim())) : []
   const normalizedMetrics = Object.fromEntries(metricNames.map((name) => [name, metric(metrics[name], name === 'followerDelta')])) as NormalizedInstagramSnapshot['metrics']
-  const missing = metricNames.filter((name) => normalizedMetrics[name] === null)
-  if (missing.length) errors.push(\`Metrics not visible: \${missing.join(', ')}.\`)
+  if (Object.values(normalizedMetrics).every(value => value === null)) throw new Error('capture needs at least one exact usable metric')
+  const windowDays = positiveInteger(root.windowDays)
+  if (windowDays === null) throw new Error('capture windowDays must be a positive whole number')
+  for (const name of metricNames) {
+    if (metrics[name] != null && normalizedMetrics[name] === null) errors.push(\`Invalid \${name} ignored; expected an exact whole-number count.\`)
+  }
   const monthlyFollowers = normalizeMonthlyFollowers(root.monthlyFollowers, errors)
-  if (monthlyFollowers.length < 2) errors.push('Fewer than two completed months of follower history were captured.')
 
   return {
     version: 1,
     dataSource: 'instagram-insights-browser',
     snapshotDate,
-    windowDays: positiveInteger(root.windowDays),
+    windowDays,
     profile: {
       profile: profileId,
       handle: string(profile.handle),
@@ -29098,52 +29013,10 @@ export function normalizeInstagramCapture(input: unknown, now = new Date()): Nor
     },
     metrics: normalizedMetrics,
     monthlyFollowers,
-    partial: root.partial === true || missing.length > 0 || positiveInteger(root.windowDays) === null || monthlyFollowers.length < 2,
+    partial: root.partial === true || errors.length > 0,
     errors: [...new Set(errors)],
     updatedAt: now.toISOString(),
   }
-}
-
-async function main(): Promise<void> {
-  const options = parseArgs(process.argv.slice(2))
-  const workspace = path.resolve(options.workspace)
-  const capture = insideWorkspace(workspace, options.capture)
-  const parsed = JSON.parse(await fs.readFile(capture, 'utf8')) as unknown
-  const snapshot = normalizeInstagramCapture(parsed)
-  const output = insideWorkspace(workspace, options.out ?? \`data/instagram/snapshots/\${snapshot.snapshotDate}-insights.json\`)
-  await fs.mkdir(path.dirname(output), { recursive: true })
-  await fs.writeFile(output, \`\${JSON.stringify(snapshot, null, 2)}\\n\`, { flag: 'wx' })
-  console.log(JSON.stringify({
-    ok: true,
-    outPath: output,
-    snapshot,
-    contextPayload: { slug: 'artist-instagram-snapshot', body: snapshot },
-  }, null, 2))
-}
-
-function parseArgs(argv: string[]): CliOptions {
-  const options: Partial<CliOptions> = {}
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index]
-    const next = () => {
-      const value = argv[++index]
-      if (!value) throw new Error(\`Missing value for \${arg}\`)
-      return value
-    }
-    if (arg === '--capture') options.capture = next()
-    else if (arg === '--workspace') options.workspace = next()
-    else if (arg === '--out') options.out = next()
-    else throw new Error(\`Unknown argument: \${arg}\`)
-  }
-  if (!options.capture || !options.workspace) throw new Error('Usage: normalize-snapshot.ts --capture <path> --workspace <path> [--out <path>]')
-  return options as CliOptions
-}
-
-function insideWorkspace(workspace: string, candidate: string): string {
-  const resolved = path.resolve(workspace, candidate)
-  const relative = path.relative(workspace, resolved)
-  if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('path must stay inside the workspace')
-  return resolved
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -29155,7 +29028,7 @@ function string(value: unknown): string | null {
 }
 
 function metric(value: unknown, signed: boolean): number | null {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) return null
   if (!signed && value < 0) return null
   return value
 }
@@ -29197,6 +29070,192 @@ function normalizeMonthlyFollowers(
     .sort((left, right) => left.month.localeCompare(right.month))
     .slice(-12)
 }
+`,
+      },
+      {
+        path: "scripts/normalize-snapshot.test.ts",
+        content: `import { describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, writeFileSync, symlinkSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { normalizeInstagramCapture } from './normalize-snapshot'
+
+const script = path.join(import.meta.dir, 'normalize-snapshot.ts')
+
+describe('Instagram snapshot normalizer', () => {
+  test('preserves signed follower movement without requiring optional metrics', () => {
+    const snapshot = normalizeInstagramCapture({
+      snapshotDate: '2026-08-28',
+      windowDays: 14,
+      profile: { profile: 'main', handle: '@artist' },
+      metrics: { followers: 1000, followerDelta: -9, accountsReached: 250 },
+      monthlyFollowers: [
+        { month: '2026-07', followers: 975, net: 12 },
+        { month: '2026-08', net: -9 },
+      ],
+    }, new Date('2026-08-28T12:00:00.000Z'))
+
+    expect(snapshot.metrics.followerDelta).toBe(-9)
+    expect(snapshot.metrics.interactions).toBeNull()
+    expect(snapshot.monthlyFollowers).toEqual([
+      { month: '2026-07', followers: 975, net: 12 },
+      { month: '2026-08', net: -9 },
+    ])
+    expect(snapshot.partial).toBe(false)
+    expect(snapshot.errors).toEqual([])
+  })
+
+  test('native views remain views and a core-only capture is complete', () => {
+    const snapshot = normalizeInstagramCapture({ snapshotDate: '2026-09-15', windowDays: 30,
+      profile: { profile: 'main' }, metrics: { views: 12345, followers: 0 }, monthlyFollowers: [] })
+    expect(snapshot.metrics.views).toBe(12345)
+    expect(snapshot.metrics.accountsReached).toBeNull()
+    expect(snapshot.metrics.followers).toBe(0)
+    expect(snapshot.partial).toBe(false)
+    expect(snapshot.errors).toEqual([])
+  })
+
+  test('rejects invalid dates, missing window, empty metrics, rounded strings and fractional counts', () => {
+    const capture = { snapshotDate: '2026-09-15', windowDays: 30, profile: { profile: 'main' }, metrics: { views: 2 } }
+    for (const patch of [{ snapshotDate: '2026-02-30' }, { windowDays: null }, { metrics: {} }, { metrics: { views: '12K' } }, { metrics: { views: 1.5 } }, { metrics: { views: Infinity } }]) {
+      expect(() => normalizeInstagramCapture({ ...capture, ...patch })).toThrow()
+    }
+  })
+
+  test('requires an exact profile and capture date', () => {
+    expect(() => normalizeInstagramCapture({ profile: {}, metrics: {} })).toThrow()
+  })
+
+  test('normalizes signed monthly history without inventing missing totals', () => {
+    const snapshot = normalizeInstagramCapture({
+      snapshotDate: '2026-09-09',
+      windowDays: 30,
+      profile: { profile: 'main' },
+      metrics: { followers: 100 },
+      monthlyFollowers: [
+        { month: '2026-08', net: -4 },
+        { month: '2026-07', followers: 100 },
+        { month: '2026-08', net: -3 },
+        { month: 'bad', net: 9 },
+      ],
+    })
+
+    expect(snapshot.monthlyFollowers).toEqual([
+      { month: '2026-07', followers: 100 },
+      { month: '2026-08', net: -3 },
+    ])
+    expect(snapshot.errors.join(' ')).toContain('Invalid monthlyFollowers')
+  })
+
+  test('allows same-day refreshes but refuses explicit overwrite and path escape', () => {
+    const workspace = mkdtempSync(path.join(tmpdir(), 'instagram-snapshot-'))
+    const captureDir = path.join(workspace, 'data/instagram/captures')
+    mkdirSync(captureDir, { recursive: true })
+    const capture = path.join(captureDir, '2026-08-28.json')
+    writeFileSync(capture, JSON.stringify({
+      snapshotDate: '2026-08-28',
+      windowDays: 14,
+      profile: { profile: 'main' },
+      metrics: { followers: 1000, followerDelta: 8 },
+      monthlyFollowers: [
+        { month: '2026-07', net: 5 },
+        { month: '2026-08', net: 8 },
+      ],
+    }))
+
+    const args = [process.execPath, script, '--capture', capture, '--workspace', workspace]
+    const first = JSON.parse(Bun.spawnSync(args).stdout.toString())
+    const second = JSON.parse(Bun.spawnSync(args).stdout.toString())
+    expect(first.outPath).not.toBe(second.outPath)
+    expect(JSON.parse(readFileSync(first.outPath, 'utf8')).metrics.followers).toBe(1000)
+    expect(Bun.spawnSync([...args, '--out', first.outPath]).exitCode).not.toBe(0)
+    const outside = mkdtempSync(path.join(tmpdir(), 'instagram-outside-'))
+    symlinkSync(outside, path.join(workspace, 'escape'))
+    expect(Bun.spawnSync([...args, '--out', 'escape/nested/snapshot.json']).exitCode).not.toBe(0)
+    const outsideCapture = path.join(outside, 'capture.json')
+    writeFileSync(outsideCapture, readFileSync(capture))
+    expect(Bun.spawnSync([process.execPath, script, '--workspace', workspace, '--capture', path.join(workspace, 'escape/capture.json')]).exitCode).not.toBe(0)
+    expect(Bun.spawnSync([...args, '--out', '../escaped.json']).exitCode).not.toBe(0)
+  })
+})
+`,
+      },
+      {
+        path: "scripts/normalize-snapshot.ts",
+        content: `#!/usr/bin/env npx tsx
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
+import { randomUUID } from 'node:crypto'
+
+type CliOptions = { capture: string; workspace: string; out?: string }
+
+import { normalizeInstagramCapture } from './normalization-core'
+export { normalizeInstagramCapture, type NormalizedInstagramSnapshot } from './normalization-core'
+
+async function main(): Promise<void> {
+  const options = parseArgs(process.argv.slice(2))
+  const workspace = path.resolve(options.workspace)
+  const capture = insideWorkspace(workspace, options.capture)
+  await assertRealContainment(workspace, capture)
+  const parsed = JSON.parse(await fs.readFile(capture, 'utf8')) as unknown
+  const snapshot = normalizeInstagramCapture(parsed)
+  const output = insideWorkspace(workspace, options.out ?? \`data/instagram/snapshots/\${snapshot.snapshotDate}-insights-\${randomUUID()}.json\`)
+  await assertRealContainment(workspace, path.dirname(output))
+  await fs.mkdir(path.dirname(output), { recursive: true })
+  await assertRealContainment(workspace, path.dirname(output))
+  await fs.writeFile(output, \`\${JSON.stringify(snapshot, null, 2)}\\n\`, { flag: 'wx' })
+  console.log(JSON.stringify({
+    ok: true,
+    outPath: output,
+    snapshot,
+    contextPayload: { slug: 'artist-instagram-snapshot', body: snapshot },
+  }, null, 2))
+}
+
+function parseArgs(argv: string[]): CliOptions {
+  const options: Partial<CliOptions> = {}
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    const next = () => {
+      const value = argv[++index]
+      if (!value) throw new Error(\`Missing value for \${arg}\`)
+      return value
+    }
+    if (arg === '--capture') options.capture = next()
+    else if (arg === '--workspace') options.workspace = next()
+    else if (arg === '--out') options.out = next()
+    else throw new Error(\`Unknown argument: \${arg}\`)
+  }
+  if (!options.capture || !options.workspace) throw new Error('Usage: normalize-snapshot.ts --capture <path> --workspace <path> [--out <path>]')
+  return options as CliOptions
+}
+
+function insideWorkspace(workspace: string, candidate: string): string {
+  const resolved = path.resolve(workspace, candidate)
+  const relative = path.relative(workspace, resolved)
+  if (relative === '..' || relative.startsWith(\`..\${path.sep}\`) || path.isAbsolute(relative)) throw new Error('path must stay inside the workspace')
+  return resolved
+}
+
+async function assertRealContainment(workspace: string, candidate: string): Promise<void> {
+  const realWorkspace = await fs.realpath(workspace)
+  let ancestor = candidate
+  while (true) {
+    try {
+      const realAncestor = await fs.realpath(ancestor)
+      insideWorkspace(realWorkspace, realAncestor)
+      return
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      // A dangling symlink is not a missing directory we may create through.
+      try { if ((await fs.lstat(ancestor)).isSymbolicLink()) throw new Error('path contains a dangling symlink') }
+      catch (statError) { if ((statError as NodeJS.ErrnoException).code !== 'ENOENT') throw statError }
+      const parent = path.dirname(ancestor)
+      if (parent === ancestor) throw new Error('workspace path cannot be resolved')
+      ancestor = parent
+    }
+  }
+}
 
 if (import.meta.main) {
   main().catch((error) => {
@@ -29210,90 +29269,57 @@ if (import.meta.main) {
         path: "SKILL.md",
         content: `---
 name: instagram-growth-snapshot
-description: "Use when reading a connected Instagram professional account's Insights, capturing a dated 14-day growth snapshot, comparing growth or decline, or refreshing Artist HQ Social Pulse. Read-only; not for posting, comment replies, or DMs."
+description: "Read a connected Instagram professional account's current Insights and refresh Artist HQ Social Pulse. Read-only; not for posting, replies, DMs, or ads."
 metadata:
-  version: 1.0.0
-  last_verified: 2026-08-28
+  version: 1.1.0
+  last_verified: 2026-09-15
 ---
 
 # Instagram Growth Snapshot
 
-Use this skill for manual or weekly read-only Instagram Insights checks. One Social Publisher run handles the full job. Do not create one worker per metric or per post.
+## Artist HQ manual and weekly Pulse
 
-## Default Profile Rule
+Artist HQ's manual refresh and weekly automation use the native collector. The host attaches the saved Instagram profile, verifies the account identity, reads its own-account Insights at \`https://www.instagram.com/accounts/insights/?timeframe=30\`, saves a unique dated snapshot, and publishes \`artist-instagram-snapshot\` automatically. Do not launch another browser collection or write duplicate context for that run.
 
-1. Read \`sources/printing-press-social/guide.md\` directly.
-2. From \`tools/printing-press-social\`, run \`node src/social.mjs catalog --live --json\`.
-3. If the user named an exact Instagram profile, use it.
-4. Otherwise, select the **first returned Instagram profile whose \`ready\` value is true**, preserving catalog order. This deterministic default applies only to this read-only snapshot skill.
-5. Never select a logged-out, unverified, wrong-account, or missing session. If no Instagram profile is ready, stop and point to Settings → Instagram.
+Capture the current visible reporting window and exact visible followers, views, interactions, accounts engaged, and profile visits. Include reach or follower change only when actually shown. Record the real window; the URL's requested 30 days is not proof of the displayed range. Missing means unknown/null, never zero. Zero is valid only when Instagram displays zero.
 
-## Capture
+No follower-history search, post-by-post collection, ads, range hunting, chart estimates, private endpoints, or network inspection. Save useful partial results; briefly state missing metrics. Never relabel an old snapshot as a successful new refresh.
 
-1. Attach the exact saved session with \`browser_tool profile instagram <profile>\`; never use a generic browser session.
-2. Verify the visible Instagram identity against the saved handle or account URL before reading data.
-3. Open the professional dashboard / Insights page.
-4. Select the last 14 completed days when Instagram offers a custom range. If it does not, use the nearest visible supported range and record its real \`windowDays\`; never label a different range as 14 days.
-5. Capture only values visibly reported by Instagram:
-   - current followers
-   - follower growth or decline for the selected period
-   - accounts reached
-   - accounts engaged
-   - content interactions
-   - profile visits
-   - aggregate likes and comments, when visible
-6. Open the follower-history view and capture every completed month Instagram exposes, up to 12 months. Capture month-end followers, net follower change, or both. Provider chart labels/hover values are preferred; reasonable whole-number chart estimates are acceptable for the directional HQ visual. Never invent a month the provider does not show.
-7. Do not scan individual posts when aggregate Insights are available. If aggregate likes/comments are unavailable and a post-level fallback is genuinely useful, inspect only posts published inside the reporting window, mark the snapshot partial, and state the limitation.
-8. Save the raw observed JSON under \`$CRAFT_WORKSPACE_PATH/data/instagram/captures/<YYYY-MM-DD>.json\`.
+## Ad hoc agent fallback
 
-Use this raw capture shape. Missing values are \`null\`, never zero:
+Use one bounded read-only run, at most 120 seconds including save time:
+
+1. Use the injected \`printing-press-social\` source context. From its exact absolute **Local path**, run \`node src/social.mjs catalog --json\` once. Do not guess a checkout or read private source/skill files. Use the explicitly requested saved Instagram profile; otherwise require one unambiguous saved Instagram profile. If missing or ambiguous, stop with the specific connection/profile issue.
+2. Attach \`browser_tool profile instagram <profile> --foreground\`. Verify the visible signed-in identity against the saved handle/account URL before reading Insights. Never use a generic browser or a different account. Stop on login, identity mismatch, or access restrictions.
+3. Open the direct own-account Insights URL above. Read only the displayed current window and metrics. If blank, foreground the attached browser and retry loading once. If still unavailable, stop. Do not browse around for history or substitute public profile counts.
+4. **Write** the raw JSON capture inside the exact absolute \`dataFolderPath\` injected in \`<session_state>\`. Use a new filename each run. Keep the shape below; copy only observed values.
+5. Normalize with the skill's \`scripts/normalize-snapshot.ts\` helper only through an available, documented safe script-execution tool. If the runtime exposes \`run_skill_script\`, follow its actual schema and pass the absolute session capture path and current workspace path (\`--capture\`, \`--workspace\`); omit \`--out\` for a unique immutable snapshot. Do not invent this tool, read/copy private helper source, invoke guessed private paths, or change permissions. If no supported helper is available, retain the session capture and explain that Artist HQ's native Refresh is needed to save the Pulse snapshot.
+6. Successful native Pulse publication is handled by the host. For an ad hoc run, only claim the widget updated after publication is confirmed; a saved capture alone is not a published snapshot. End with the actual reporting window, key observed metrics, and any missing data.
+
+Raw capture shape (example numbers are placeholders, not defaults):
 
 \`\`\`json
 {
-  "snapshotDate": "2026-08-28",
-  "windowDays": 14,
-  "profile": { "profile": "main", "handle": "@artist", "accountUrl": "https://instagram.com/artist" },
+  "snapshotDate": "2026-09-15",
+  "windowDays": 30,
+  "profile": { "profile": "main", "handle": "@artist", "accountUrl": "https://www.instagram.com/artist/" },
   "metrics": {
     "followers": 4200,
-    "followerDelta": 37,
-    "accountsReached": 1800,
-    "accountsEngaged": 240,
+    "views": 12000,
     "interactions": 390,
-    "profileVisits": 120,
-    "likes": 330,
-    "comments": 60
+    "accountsEngaged": 240,
+    "profileVisits": null,
+    "accountsReached": null,
+    "followerDelta": null
   },
-  "monthlyFollowers": [
-    { "month": "2026-06", "followers": 4150, "net": 24 },
-    { "month": "2026-07", "followers": 4187, "net": 37 }
-  ],
-  "partial": false,
-  "errors": []
+  "partial": true,
+  "errors": ["Profile visits, reach and follower change were not visible"]
 }
 \`\`\`
 
-## Finalize
+## Boundaries
 
-Normalize the capture into an immutable snapshot:
-
-\`\`\`bash
-"\${CRAFT_BUN:-bun}" "\${CRAFT_GLOBAL_SKILLS_DIR:-$HOME/.agents/skills}/instagram-growth-snapshot/scripts/normalize-snapshot.ts" \\
-  --capture "$CRAFT_WORKSPACE_PATH/data/instagram/captures/<YYYY-MM-DD>.json" \\
-  --workspace "$CRAFT_WORKSPACE_PATH"
-\`\`\`
-
-The script writes \`data/instagram/snapshots/<YYYY-MM-DD>-insights.json\` and returns a \`contextPayload\`. Write that payload to Workspace Context slug \`artist-instagram-snapshot\` so Artist HQ Social Pulse updates immediately.
-
-Finish with a short private note: reporting window, captured month range, follower growth/decline, reach, interactions, and any missing data.
-
-## Failure Rules
-
-- This job is read-only and needs no approval.
-- Never publish, reply, DM, follow, edit, or change account settings.
-- Never record passwords, cookies, tokens, recovery codes, or 2FA secrets.
-- Never fabricate hidden metrics or months. Approximate monthly chart readings must still come from visible provider history.
-- Never overwrite a past snapshot. Same-date reruns must stop or use a later capture date after confirming the data is actually newer.
-- If the visible account does not match the saved profile, stop without reading analytics.
+Read-only collection needs no publishing approval. Never publish, reply, DM, follow, edit account settings, record secrets, or overwrite previous snapshots. Same-day reruns use new UUID filenames with the true capture date. If no metric is observable, report the failure and preserve the previous Pulse.
 `,
       },
     ],

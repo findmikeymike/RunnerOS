@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 describe('Social Pulse Instagram layout', () => {
-  test('keeps controls and renders first-run monthly growth in the signals strip and modal', () => {
+  test('keeps controls and shows real views when growth is unavailable', () => {
     const source = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
     const stripStart = source.indexOf('function SignalsStrip')
     const stripEnd = source.indexOf('function SignalTile')
@@ -19,10 +19,11 @@ describe('Social Pulse Instagram layout', () => {
     expect(strip).toContain('Run Instagram Insights now — manual')
     expect(strip).toContain('Weekly Instagram Insights auto-run')
     expect(strip).toContain('value={formatMetric(instagramSnapshot?.metrics.followers)}')
-    expect(strip).toContain('label="Monthly growth"')
+    expect(strip).toContain("label={instagramShowViews ? 'Views' : 'Monthly growth'}")
+    expect(strip).not.toContain('?? instagramHistory.at(-1)?.followerDelta')
     expect(strip).toContain('ariaLabel="Open Instagram Pulse analysis"')
     expect(strip).toContain('trendMode="bars"')
-    expect(strip).toContain('instagramMonthlyFollowers.at(-1)?.net')
+    expect(strip).toContain('instagramNetTrend.at(-1) ?? instagramSnapshot?.metrics.followerDelta')
     expect(strip).toContain('signedTrend')
     expect(strip).toContain('buildArtistSpotifyMonthlyStreams(spotifySnapshot)')
     expect(strip).toContain('buildArtistSpotifyMonthlyListeners(spotifySnapshot)')
@@ -37,10 +38,12 @@ describe('Social Pulse Instagram layout', () => {
     expect(spotifyDetails).toContain('title="Monthly breakdown"')
     expect(spotifyDetails).toContain('title="Top tracks"')
     expect(spotifyDetails).toContain('defaultOpen')
-    expect(details).toContain("useState<'followers' | 'growth'>('followers')")
+    expect(details).toContain("useState<'followers' | 'growth' | 'views'>('followers')")
     expect(details).toContain('title="Instagram Pulse"')
+    expect(details).toContain("{ label: 'Views', value: snapshot?.metrics.views }")
+    expect(details).toContain("typeof item.value === 'number' && Number.isFinite(item.value)")
     expect(details).toContain('label="Instagram chart metric"')
-    expect(details).toContain("mode={metric === 'followers' ? 'line' : 'bars'}")
+    expect(details).toContain("mode={activeMetric === 'growth' ? 'bars' : 'line'}")
     expect(details).toContain('selectPulseGrowthSeries(growthPoints, historyGrowthPoints, currentGrowthPoint)')
     expect(details).toContain('formatPulseExactMetric(point.followers)')
     expect(details).toContain('title="Monthly follower breakdown"')

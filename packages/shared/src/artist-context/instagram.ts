@@ -29,6 +29,7 @@ export interface ArtistInstagramSnapshot {
     accountUrl?: string;
   };
   metrics: {
+    views?: number;
     followers?: number;
     followerDelta?: number;
     accountsReached?: number;
@@ -104,6 +105,7 @@ export function parseArtistInstagramSnapshotJsonResult(
           accountUrl: normalizeInlineText(parsed.profile?.accountUrl),
         },
         metrics: {
+          views: toNonNegativeNumber(parsed.metrics.views),
           followers: toNonNegativeNumber(parsed.metrics.followers),
           // Deltas may legitimately be negative.
           followerDelta: toFiniteNumber(parsed.metrics.followerDelta),

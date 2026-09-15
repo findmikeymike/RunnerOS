@@ -18,6 +18,7 @@ export * from './voice.ts';
 export * from './branding.ts';
 export * from './spotify.ts';
 export * from './instagram.ts';
+export * from './instagram-normalize.ts';
 export * from './workspace-link.ts';
 export * from './calendar.ts';
 export * from './network.ts';

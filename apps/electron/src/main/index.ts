@@ -949,7 +949,7 @@ app.whenReady().then(async () => {
               log: (message) => console.info(`[ScheduledSocial] ${message}`),
             }),
           )
-          sm.setSpotifyPulseSocialCli(runSocialJson)
+          sm.setPulseSocialCli(runSocialJson)
           sm.setBrowserPaneManager(browserPaneManager!)
           return sm
         },

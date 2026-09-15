@@ -1,66 +1,24 @@
 #!/usr/bin/env npx tsx
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 type CliOptions = { capture: string; workspace: string; out?: string }
 
-export interface NormalizedInstagramSnapshot {
-  version: 1
-  dataSource: 'instagram-insights-browser'
-  snapshotDate: string
-  windowDays: number | null
-  profile: { profile: string; handle: string | null; accountUrl: string | null }
-  metrics: Record<'followers' | 'followerDelta' | 'accountsReached' | 'accountsEngaged' | 'interactions' | 'profileVisits' | 'likes' | 'comments', number | null>
-  monthlyFollowers: Array<{ month: string; followers?: number; net?: number }>
-  partial: boolean
-  errors: string[]
-  updatedAt: string
-}
-
-const metricNames = ['followers', 'followerDelta', 'accountsReached', 'accountsEngaged', 'interactions', 'profileVisits', 'likes', 'comments'] as const
-
-export function normalizeInstagramCapture(input: unknown, now = new Date()): NormalizedInstagramSnapshot {
-  const root = record(input)
-  const profile = record(root.profile)
-  const metrics = record(root.metrics)
-  const snapshotDate = string(root.snapshotDate)
-  const profileId = string(profile.profile)
-  if (!snapshotDate || !/^\d{4}-\d{2}-\d{2}$/.test(snapshotDate)) throw new Error('capture snapshotDate must use YYYY-MM-DD')
-  if (!profileId) throw new Error('capture profile.profile is required')
-
-  const errors = Array.isArray(root.errors) ? root.errors.filter((value): value is string => typeof value === 'string' && Boolean(value.trim())) : []
-  const normalizedMetrics = Object.fromEntries(metricNames.map((name) => [name, metric(metrics[name], name === 'followerDelta')])) as NormalizedInstagramSnapshot['metrics']
-  const missing = metricNames.filter((name) => normalizedMetrics[name] === null)
-  if (missing.length) errors.push(`Metrics not visible: ${missing.join(', ')}.`)
-  const monthlyFollowers = normalizeMonthlyFollowers(root.monthlyFollowers, errors)
-  if (monthlyFollowers.length < 2) errors.push('Fewer than two completed months of follower history were captured.')
-
-  return {
-    version: 1,
-    dataSource: 'instagram-insights-browser',
-    snapshotDate,
-    windowDays: positiveInteger(root.windowDays),
-    profile: {
-      profile: profileId,
-      handle: string(profile.handle),
-      accountUrl: string(profile.accountUrl),
-    },
-    metrics: normalizedMetrics,
-    monthlyFollowers,
-    partial: root.partial === true || missing.length > 0 || positiveInteger(root.windowDays) === null || monthlyFollowers.length < 2,
-    errors: [...new Set(errors)],
-    updatedAt: now.toISOString(),
-  }
-}
+import { normalizeInstagramCapture } from './normalization-core'
+export { normalizeInstagramCapture, type NormalizedInstagramSnapshot } from './normalization-core'
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2))
   const workspace = path.resolve(options.workspace)
   const capture = insideWorkspace(workspace, options.capture)
+  await assertRealContainment(workspace, capture)
   const parsed = JSON.parse(await fs.readFile(capture, 'utf8')) as unknown
   const snapshot = normalizeInstagramCapture(parsed)
-  const output = insideWorkspace(workspace, options.out ?? `data/instagram/snapshots/${snapshot.snapshotDate}-insights.json`)
+  const output = insideWorkspace(workspace, options.out ?? `data/instagram/snapshots/${snapshot.snapshotDate}-insights-${randomUUID()}.json`)
+  await assertRealContainment(workspace, path.dirname(output))
   await fs.mkdir(path.dirname(output), { recursive: true })
+  await assertRealContainment(workspace, path.dirname(output))
   await fs.writeFile(output, `${JSON.stringify(snapshot, null, 2)}\n`, { flag: 'wx' })
   console.log(JSON.stringify({
     ok: true,
@@ -91,60 +49,28 @@ function parseArgs(argv: string[]): CliOptions {
 function insideWorkspace(workspace: string, candidate: string): string {
   const resolved = path.resolve(workspace, candidate)
   const relative = path.relative(workspace, resolved)
-  if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('path must stay inside the workspace')
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('path must stay inside the workspace')
   return resolved
 }
 
-function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
-}
-
-function string(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-function metric(value: unknown, signed: boolean): number | null {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return null
-  if (!signed && value < 0) return null
-  return value
-}
-
-function positiveInteger(value: unknown): number | null {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
-}
-
-function normalizeMonthlyFollowers(
-  value: unknown,
-  errors: string[],
-): Array<{ month: string; followers?: number; net?: number }> {
-  if (value == null) return []
-  if (!Array.isArray(value)) {
-    errors.push('Monthly follower history was not an array and was ignored.')
-    return []
+async function assertRealContainment(workspace: string, candidate: string): Promise<void> {
+  const realWorkspace = await fs.realpath(workspace)
+  let ancestor = candidate
+  while (true) {
+    try {
+      const realAncestor = await fs.realpath(ancestor)
+      insideWorkspace(realWorkspace, realAncestor)
+      return
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      // A dangling symlink is not a missing directory we may create through.
+      try { if ((await fs.lstat(ancestor)).isSymbolicLink()) throw new Error('path contains a dangling symlink') }
+      catch (statError) { if ((statError as NodeJS.ErrnoException).code !== 'ENOENT') throw statError }
+      const parent = path.dirname(ancestor)
+      if (parent === ancestor) throw new Error('workspace path cannot be resolved')
+      ancestor = parent
+    }
   }
-  const byMonth = new Map<string, { month: string; followers?: number; net?: number }>()
-  value.forEach((item, index) => {
-    const candidate = record(item)
-    const month = string(candidate.month)
-    if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
-      errors.push(`Invalid monthlyFollowers[${index}] month was ignored.`)
-      return
-    }
-    const followers = metric(candidate.followers, false)
-    const net = metric(candidate.net, true)
-    if (followers === null && net === null) {
-      errors.push(`monthlyFollowers[${index}] had no usable follower value and was ignored.`)
-      return
-    }
-    byMonth.set(month, {
-      month,
-      ...(followers === null ? {} : { followers }),
-      ...(net === null ? {} : { net }),
-    })
-  })
-  return [...byMonth.values()]
-    .sort((left, right) => left.month.localeCompare(right.month))
-    .slice(-12)
 }
 
 if (import.meta.main) {

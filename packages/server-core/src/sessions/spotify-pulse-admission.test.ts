@@ -38,3 +38,26 @@ test('a draining Spotify session blocks a replacement even after its automation 
   host.executePromptAutomationAdmitted = async () => { throw new Error('should not launch') }
   await expect(manager.executePromptAutomation(input)).rejects.toThrow('already running')
 })
+
+test('Instagram and Spotify admit independently while duplicate Instagram waits for its run', async () => {
+  const manager = new SessionManager()
+  const host = manager as any
+  const finish = new Map<string, () => void>()
+  const admitted: string[] = []
+  host.executePromptAutomationAdmitted = async (request: typeof input) => {
+    admitted.push(request.agentSlug)
+    await new Promise<void>(resolve => finish.set(request.agentSlug, resolve))
+    return { sessionId: request.agentSlug }
+  }
+  const instagram = { ...input, agentSlug: 'social-publisher', taskModeId: 'growth' }
+  const igRun = manager.executePromptAutomation(instagram)
+  const spotifyRun = manager.executePromptAutomation(input)
+  await expect(manager.executePromptAutomation(instagram)).rejects.toThrow('Instagram Insights is already running')
+  expect(admitted).toEqual(['social-publisher', 'spotify-analyst'])
+  finish.get('spotify-analyst')!()
+  await spotifyRun
+  await expect(manager.executePromptAutomation(instagram)).rejects.toThrow('already running')
+  finish.get('social-publisher')!()
+  await igRun
+  expect(host.pulseRuns.size).toBe(0)
+})

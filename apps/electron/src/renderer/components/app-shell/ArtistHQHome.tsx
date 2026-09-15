@@ -788,9 +788,8 @@ export function ArtistHQHome({
     void window.electronAPI.searchFiles(snapshotsPath, '.json')
       .then(async (files) => {
         const snapshotFiles = files
-          .filter((file) => file.type === 'file' && /^\d{4}-\d{2}-\d{2}(?:-(?:s4a|web-api))?\.json$/.test(file.name))
+          .filter((file) => file.type === 'file' && /^\d{4}-\d{2}-\d{2}(?:-(?:s4a|web-api)(?:-[a-f0-9-]{36})?)?\.json$/i.test(file.name))
           .sort((left, right) => left.name.localeCompare(right.name))
-          .slice(-24)
         const parsed = await Promise.all(snapshotFiles.map(async (file) => {
           try {
             const result = parseArtistSpotifySnapshotJsonResult(await window.electronAPI.readFile(file.path))
@@ -802,6 +801,7 @@ export function ArtistHQHome({
         if (cancelled) return
         const snapshots = parsed.filter((snapshot): snapshot is ArtistSpotifySnapshot => Boolean(snapshot))
         if (spotifySnapshot) snapshots.push(spotifySnapshot)
+        snapshots.sort((left, right) => left.snapshotDate.localeCompare(right.snapshotDate) || left.updatedAt.localeCompare(right.updatedAt))
         setSpotifyHistory(buildArtistSpotifyStreamHistory(snapshots))
       })
       .catch(() => {
@@ -827,9 +827,8 @@ export function ArtistHQHome({
     void window.electronAPI.searchFiles(snapshotsPath, '.json')
       .then(async (files) => {
         const snapshotFiles = files
-          .filter((file) => file.type === 'file' && /^\d{4}-\d{2}-\d{2}-insights\.json$/.test(file.name))
+          .filter((file) => file.type === 'file' && /^\d{4}-\d{2}-\d{2}-insights(?:-[a-f0-9-]{36})?\.json$/i.test(file.name))
           .sort((left, right) => left.name.localeCompare(right.name))
-          .slice(-24)
         const parsed = await Promise.all(snapshotFiles.map(async (file) => {
           try {
             const result = parseArtistInstagramSnapshotJsonResult(await window.electronAPI.readFile(file.path))
@@ -841,6 +840,7 @@ export function ArtistHQHome({
         if (cancelled) return
         const snapshots = parsed.filter((snapshot): snapshot is ArtistInstagramSnapshot => Boolean(snapshot))
         if (instagramSnapshot) snapshots.push(instagramSnapshot)
+        snapshots.sort((left, right) => left.snapshotDate.localeCompare(right.snapshotDate) || left.updatedAt.localeCompare(right.updatedAt))
         setInstagramHistory(buildArtistInstagramGrowthHistory(snapshots))
         setInstagramMonthlyFollowers(buildArtistInstagramMonthlyFollowers(snapshots))
       })
@@ -2915,6 +2915,8 @@ function SignalsStrip({
   const instagramNetTrend = instagramMonthlyFollowers
     .map((point) => point.net)
     .filter((value): value is number => typeof value === 'number')
+  const instagramGrowthValue = instagramNetTrend.at(-1) ?? instagramSnapshot?.metrics.followerDelta
+  const instagramShowViews = typeof instagramGrowthValue !== 'number' && typeof instagramSnapshot?.metrics.views === 'number'
   const instagramFoot = instagramSnapshot
     ? monthlyRangeFoot(instagramMonthlyFollowers.map((point) => point.month))
       ?? `${instagramSnapshot.profile.handle ?? instagramSnapshot.profile.profile}${instagramSnapshot.windowDays ? ` · ${instagramSnapshot.windowDays} days` : ''}`
@@ -3020,13 +3022,15 @@ function SignalsStrip({
           />
           <SignalTile
             embedded
-            label="Monthly growth"
-            value={formatSignedMetric(instagramMonthlyFollowers.at(-1)?.net ?? instagramSnapshot?.metrics.followerDelta)}
-            trend={instagramNetTrend.length > 0 ? instagramNetTrend : instagramHistory.map((point) => point.followerDelta)}
+            label={instagramShowViews ? 'Views' : 'Monthly growth'}
+            value={instagramShowViews ? formatMetric(instagramSnapshot?.metrics.views) : formatSignedMetric(instagramGrowthValue)}
+            trend={instagramShowViews ? [] : instagramNetTrend.length > 0 ? instagramNetTrend : instagramHistory.map((point) => point.followerDelta)}
             trendMode="bars"
-            signedTrend
-            foot={monthlyRangeFoot(instagramMonthlyFollowers.map((point) => point.month))
-              ?? (instagramSnapshot?.windowDays ? `${instagramSnapshot.windowDays} days` : instagramPending)}
+            signedTrend={!instagramShowViews}
+            foot={instagramShowViews
+              ? (instagramSnapshot?.windowDays ? `${instagramSnapshot.windowDays} days` : 'Latest read')
+              : monthlyRangeFoot(instagramMonthlyFollowers.map((point) => point.month))
+                ?? (instagramSnapshot?.windowDays ? `${instagramSnapshot.windowDays} days` : instagramPending)}
             ariaLabel="Open Instagram Pulse analysis"
             onOpen={() => setSocialOpen(true)}
           />
@@ -4164,7 +4168,7 @@ function SocialPulseDetails({
   readyProfiles: number
   error: string | null
 }) {
-  const [metric, setMetric] = React.useState<'followers' | 'growth'>('followers')
+  const [metric, setMetric] = React.useState<'followers' | 'growth' | 'views'>('followers')
   const statusLabel = busy
     ? 'Checking'
     : snapshot
@@ -4192,8 +4196,21 @@ function SocialPulseDetails({
     ? { key: snapshot.snapshotDate, label: snapshot.windowDays ? `${snapshot.windowDays} days` : 'Latest', value: snapshot.metrics.followerDelta }
     : undefined
   const fallbackGrowthPoints = selectPulseGrowthSeries(growthPoints, historyGrowthPoints, currentGrowthPoint)
-  const activePoints = metric === 'followers' ? fallbackFollowerPoints : fallbackGrowthPoints
-  const activeHasMonthly = (metric === 'followers' ? followerPoints : growthPoints).length > 0
+  const viewPoints: PulseChartPoint[] = typeof snapshot?.metrics.views === 'number'
+    ? [{ key: snapshot.snapshotDate, label: snapshot.windowDays ? `${snapshot.windowDays} days` : formatShortDate(snapshot.snapshotDate), value: snapshot.metrics.views }]
+    : []
+  const activeMetric = (metric === 'growth' && !fallbackGrowthPoints.length) || (metric === 'views' && !viewPoints.length) ? 'followers' : metric
+  const activePoints = activeMetric === 'views' ? viewPoints : activeMetric === 'followers' ? fallbackFollowerPoints : fallbackGrowthPoints
+  const activeHasMonthly = activeMetric !== 'views' && (activeMetric === 'followers' ? followerPoints : growthPoints).length > 0
+  const detailMetrics = [
+    { label: 'Views', value: snapshot?.metrics.views },
+    { label: 'Reach', value: snapshot?.metrics.accountsReached },
+    { label: 'Engaged', value: snapshot?.metrics.accountsEngaged },
+    { label: 'Interactions', value: snapshot?.metrics.interactions },
+    { label: 'Profile visits', value: snapshot?.metrics.profileVisits },
+    { label: 'Likes', value: snapshot?.metrics.likes },
+    { label: 'Comments', value: snapshot?.metrics.comments },
+  ].filter((item): item is { label: string; value: number } => typeof item.value === 'number' && Number.isFinite(item.value))
   const latestGrowth = fallbackGrowthPoints.at(-1)
   const growthComparison = latestGrowth
     ? `${formatSignedMetric(latestGrowth.value)} net in ${latestGrowth.label}`
@@ -4207,33 +4224,28 @@ function SocialPulseDetails({
       description={statusLabel}
     >
       <PulseTrendCard
-        label={metric === 'followers' ? 'Follower growth' : activeHasMonthly ? 'Monthly net growth' : 'Follower change'}
+        label={activeMetric === 'views' ? 'Views' : activeMetric === 'followers' ? 'Followers' : activeHasMonthly ? 'Monthly net growth' : 'Follower change'}
         points={activePoints}
-        valueFormatter={metric === 'followers' ? formatMetric : formatSignedMetric}
-        detailFormatter={metric === 'followers' ? formatPulseExactMetric : formatSignedMetric}
-        comparison={metric === 'followers' ? pulseTrendComparison(activePoints) : growthComparison}
+        valueFormatter={activeMetric === 'growth' ? formatSignedMetric : formatMetric}
+        detailFormatter={activeMetric === 'growth' ? formatSignedMetric : formatPulseExactMetric}
+        comparison={activeMetric === 'views' ? (snapshot?.windowDays ? `${snapshot.windowDays}-day reporting window` : 'Latest captured read') : activeMetric === 'followers' ? pulseTrendComparison(activePoints) : growthComparison}
         range={activeHasMonthly ? monthlyRangeFoot(monthlyFollowers.map((point) => point.month)) ?? 'Completed months' : pulsePointRange(activePoints)}
         countLabel={activeHasMonthly ? 'completed months' : 'captured reads'}
         empty="Run Instagram Insights to capture the first performance read."
-        mode={metric === 'followers' ? 'line' : 'bars'}
-        signed={metric === 'growth'}
+        mode={activeMetric === 'growth' ? 'bars' : 'line'}
+        signed={activeMetric === 'growth'}
         controls={(
           <PulseMetricTabs
             label="Instagram chart metric"
-            value={metric}
-            options={[{ value: 'followers', label: 'Followers' }, { value: 'growth', label: 'Monthly growth' }]}
-            onChange={(value) => setMetric(value as 'followers' | 'growth')}
+            value={activeMetric}
+            options={[{ value: 'followers', label: 'Followers' }, ...(fallbackGrowthPoints.length ? [{ value: 'growth', label: 'Growth' }] : []), ...(viewPoints.length ? [{ value: 'views', label: 'Views' }] : [])]}
+            onChange={(value) => setMetric(value as 'followers' | 'growth' | 'views')}
           />
         )}
       />
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-white/[0.06] bg-white/[0.06] sm:grid-cols-3">
-        <SignalStat label="Reach" value={formatMetric(snapshot?.metrics.accountsReached)} />
-        <SignalStat label="Engaged" value={formatMetric(snapshot?.metrics.accountsEngaged)} />
-        <SignalStat label="Interactions" value={formatMetric(snapshot?.metrics.interactions)} />
-        <SignalStat label="Profile visits" value={formatMetric(snapshot?.metrics.profileVisits)} />
-        <SignalStat label="Likes" value={formatMetric(snapshot?.metrics.likes)} />
-        <SignalStat label="Comments" value={formatMetric(snapshot?.metrics.comments)} />
-      </div>
+      {detailMetrics.length > 0 ? <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-white/[0.06] bg-white/[0.06] sm:grid-cols-3">
+        {detailMetrics.map((item) => <SignalStat key={item.label} label={item.label} value={formatPulseExactMetric(item.value)} />)}
+      </div> : null}
       {monthlyFollowers.length > 0 || history.length > 0 ? <PulseDisclosureSection
         title="Monthly follower breakdown"
         summary={monthlyFollowers.length > 0 ? `${monthlyFollowers.length} months` : `${history.length} reads`}
@@ -5479,13 +5491,11 @@ function createSpotifySyncMatcher(executionTarget: PulseExecutionTarget = {}): R
 }
 
 function createInstagramSyncPrompt(): string {
-  return `Run the read-only Instagram Growth Snapshot for this Artist HQ workspace.
+  return `Refresh Instagram Pulse using the native read-only Account Insights collector.
 
-Load the instagram-growth-snapshot skill. If no exact Instagram profile was named, select the first ready Instagram profile returned by the live Printing Press Social catalog, preserving catalog order. Attach that saved browser session, verify the visible account identity, and read current Instagram Insights plus every completed month of follower history the provider exposes, up to 12 months.
+Use the exact saved Instagram profile and verify the displayed account. Read the single Account Insights page at /accounts/insights/?timeframe=30 in its foreground saved session. Capture only exact visible followers, views, interactions, engaged accounts, and profile visits with the actual displayed reporting window. Views are views, never reach; unavailable values stay absent.
 
-Save an immutable snapshot under data/instagram/snapshots and write its context payload to Workspace Context slug ${ARTIST_INSTAGRAM_SNAPSHOT_CONTEXT_SLUG} so Social Pulse updates.
-
-Do not publish, reply, DM, follow, or change account settings. Never fabricate unavailable metrics. Keep the final note short: profile, actual reporting window, follower growth or decline, reach, interactions, and blockers.`
+Use one bounded refresh. Do not navigate through historical months, individual posts, ads, or other metric pages. The host saves an immutable snapshot and publishes ${ARTIST_INSTAGRAM_SNAPSHOT_CONTEXT_SLUG} to update Pulse; no separate context_write or model-led browsing is needed. Stop on login, account mismatch, unreadable reporting window, or timeout. Never publish, message, change settings, or estimate metrics.`
 }
 
 function createInstagramSyncMatcher(executionTarget: PulseExecutionTarget = {}): Record<string, unknown> {
