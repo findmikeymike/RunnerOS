@@ -499,3 +499,35 @@ must not leak across variants.
 - **27 In-App User Guide** — Slice 0; optional C1 help added only if shipped.
 - **09 / 14 State Of Play** — Slice B's attention item flows through the
   existing `buildAttention` path.
+
+
+## September 15 — Parked extension: shared destinations and concurrent workers
+
+**Status: LATER / parked.** Michael requested a backlog item after recognizing that this spans Website, X Editorial, Social Publisher, Ads, and other domains. This records the problem and candidate direction; it does not authorize implementation or claim that coordination already works. The older verification claims in this document are historical and must be rechecked against current HEAD.
+
+### Clarified intent
+
+The artist should be able to start a worker wherever the request feels logical. HQ/Campaign determines the work's purpose and context; a shared website, social account, ad account/campaign, or other destination needs consistent ownership and coordination across entry points. Do not require the artist to remember which duplicate worker card is the safe one to use. Preserve one explicit owner per job and campaign attribution; a shared destination does not flatten workspace permissions or overwrite artist-wide canon.
+
+Examples: an HQ bio update and a campaign release-page update may target the same website. HQ X ideas and campaign X ideas may share one account and editorial plan. Ads Strategy, Ad Creative and Ads execution may overlap on the same ad campaign, assets or budget. Two different workers can conflict; two runs of the same worker can also be independent.
+
+### Work to scope before building
+
+- [ ] Inventory shared destinations and existing ownership, history, queues, locks, approval and retry protections in each domain. Include Website/Site Builder, X Editorial, Social Publisher with TryPost/Postiz/browser paths, and Ads first; identify other affected domains rather than assuming every worker needs the same behavior.
+- [ ] Define destination identity (artist, site/domain, provider/account, ad campaign, asset/revision) separately from job owner and agent name. Distinguish duplicate intent, compatible parallel drafting, overlapping edits, and irreversible execution.
+- [ ] Cover every entry path: worker cards, existing chats, Artist Manager, delegated agents, workflows, Calendar jobs and automations. A warning on one launcher cannot be the enforcement boundary.
+- [ ] Propose a small existing-work affordance: show relevant work underway, who/what owns it, and offer **Continue existing work** or an explicitly separate request. Similar wording alone must not silently merge or cancel jobs.
+- [ ] Design durable coordination for conflicting mutations/external actions: recheck the current revision before applying changes, preserve exact approvals and budgets, prevent repeat execution, and reconcile uncertain provider outcomes before retrying. A per-operation lock or shared history alone is insufficient.
+- [ ] Define stale-run recovery, cancellation, crashes/restarts, and the supported single-machine/Team Mode boundary. Never claim cross-machine protection from an in-memory lock.
+- [ ] Choose one bounded domain to prove the contract first (Website is a candidate), then extend to X/social and Ads using shared foundations with domain-specific rules. Do not design or implement a universal scheduler in this backlog task.
+
+### Acceptance criteria
+
+- Starting the same work from HQ and Campaign surfaces the existing work and keeps its brief, owner and destination clear.
+- Simultaneous starts cannot bypass coordination; conflicting changes cannot silently overwrite one another or cause duplicate posts, deployments, ad launches or spend.
+- Independent ideas and unrelated destinations can proceed in parallel. Sharing an agent name or account alone does not make requests duplicates.
+- Exact content/version/account/timing/budget approvals remain authoritative. Reusing a conversation or marking an Output Final grants no new execution permission.
+- Crash/retry/timeout/cancel/restart tests demonstrate safe recovery, including a provider action that succeeded before its receipt was saved. Uncertain results are shown honestly.
+- Existing conversations, outputs, schedules, connections, user customization and workspace access boundaries survive migration. Validate the chosen domain in the real app before calling it ready.
+
+Current partial foundation observed September 15: agent website tools resolve to the HQ website and use operation locks; campaign X Editorial launches carry campaign context into HQ, with editorial history available. These facts do not establish a general cross-run coordination guarantee. Re-audit before implementation and reuse existing Scheduled Work/State of Play mechanisms where suitable. V2 profile enrichment and conversational background-work proposals remain separately parked.

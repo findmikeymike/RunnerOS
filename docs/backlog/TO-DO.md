@@ -114,6 +114,10 @@ Current finishing pass: [TO DO — SEPTEMBER 14](./to-do-sept14.md). Tracks Outp
 
 ## LATER
 
+### Shared Work Across HQ And Campaigns
+
+- [ ] **LATER — Coordinate shared destinations across worker runs. Parked; design/audit before implementation.** Let artists start workers from HQ or a Campaign while the app resolves the job context, existing work, and shared destination. Cover Website/Site Builder, X Editorial, Social Publisher, Ads, and other workers touching the same accounts or assets. Offer continuation of relevant existing work; prevent conflicting updates, duplicate publishing and duplicate spend without blocking independent creative work. Audit manual chats, Manager/delegated work, workflows and automations together. [Scope and acceptance criteria](../creator-command-center/todo/45-hq-campaign-scope-clarity-spec.md#september-15--parked-extension-shared-destinations-and-concurrent-workers).
+
 ### Reliability And Product Truth
 
 - [ ] **Sign and notarize public macOS installers.** This does not block local development or smoke testing. Before customer distribution, restore/import a valid `Developer ID Application` identity for team `6TWTVSA34P`, rebuild Artist OS arm64/x64 packages, pass strict signature verification, notarize, staple, and verify Gatekeeper on a clean Mac.

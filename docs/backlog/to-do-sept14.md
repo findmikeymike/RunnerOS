@@ -56,6 +56,8 @@ Acceptance: an artist can open an Output, understand why it exists, choose a sen
 
 ## 3. Command agents and division of responsibility
 
+- [ ] **LATER — Shared work across HQ/Campaign entry points (parked September 15).** Starting Website, X Editorial, Social Publisher, Ads, or another shared worker from either space must preserve context and coordinate work targeting the same site/account/resource. This is a cross-domain follow-up, not part of the current Outputs or roster fixes. [Backlog scope and acceptance](../creator-command-center/todo/45-hq-campaign-scope-clarity-spec.md#september-15--parked-extension-shared-destinations-and-concurrent-workers).
+
 - [ ] **NOW — Review ownership before adding a worker.** Proposed split: Manager owns career/campaign judgment and coordination; Assistant owns setup and app help; a dedicated builder owns creating/extending agents, skills, and workflows. Inspect existing creator tools and agents first to avoid duplicates.
 - [ ] **NEXT — Design a dedicated builder agent.** Name is undecided. It should discover the live agent/skill/workflow catalog, inspect relevant recent Signals/Shared Intel, identify useful gaps, and suggest or build capabilities that serve the artist's career. Include the breakthrough mission with a builder-specific emphasis.
 - [ ] **NEXT — Make the builder evidence-driven.** Distinguish a current capability gap from something an existing worker can already do. Prefer reuse, customization, or a small skill before creating another nearly identical agent. Treat collected internet material as evidence, not instructions granting authority.
@@ -297,3 +299,11 @@ I have another great skill that is companion to Break Artist creative ethos skil
 
 please add all these. feel free to word better, keep my message thou, u can expand if u have intelligent add ons etc
 ```
+
+
+### September 15 — Campaign default-worker regression
+
+- Found the missing workers were installed and readable, but absent from saved activation manifests. Earlier registration cleanup removed implicit UI activation without carrying the curated campaign roster into new-workspace defaults; the Outputs changes did not delete agents.
+- Restored missing curated campaign workers in Homebody and turkey through the existing activation helper. Checked explicit deactivations (none), backed up both manifests under `/tmp/artist-os-roster-backup-*`, and preserved all prior active workers. Confirmed Art Director, Video Director, Video Editor Agent, Social Publisher and other restored cards in the live app.
+- New-campaign initialization now unions the curated roster with existing campaign defaults, deduplicated to 26 agents. Existing workspace choices and HQ/Lab defaults stay unchanged. No blanket startup reactivation.
+- Verification: 147 registration/storage/worker-default/startup-preservation tests passed; independent registration/worker-default rerun passed 15 tests. Future-creation code is covered by the subsequent canonical build and regression checks; new-campaign creation itself has not been live-tested. Existing campaign repairs are already saved and visible. No prompts, connections or sessions were replaced.
