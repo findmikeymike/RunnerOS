@@ -68,7 +68,7 @@ export function serializeReleaseKitContext(manifest: ReleaseKitManifest): string
   return [
     'This is the approved campaign Release Kit. Use these snapshots before Campaign Assets or draft Outputs when final campaign material is required.',
     '',
-    'Do not treat Release Kit status as permission to publish, send, spend, or change an external account.',
+    'Final means this exact version is finished and ready for use. Release Kit status does not mean scheduled or due now, sets no date, and is not permission to publish, send, spend, or change an external account. Distribution requires a separate user instruction and the existing approval flow for the exact item, destination, content, and timing.',
     '',
     '```json',
     JSON.stringify({

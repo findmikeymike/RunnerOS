@@ -2027,9 +2027,9 @@ This is history, not facts. Durable preferences and standing instructions live i
 
 Your prompt already lists the last few sessions; reach for this when you need older ones, or when a memory section said entries were not shown.`,
 
-  create_output: `Publish a first-class user-facing output from this session.
+  create_output: `Save a first-class user-facing Output from this session.
 
-Use this when you have produced a durable deliverable or external-action receipt that the user should find later from the Outputs area instead of hunting through chat.
+Use this for a usable result worth reviewing, reusing, or handing off. The artist should be able to meaningfully review or use it as it stands: a complete first-draft script, developed cover option, watchable video cut, research report with findings, or useful external-action receipt. Save it in Outputs instead of leaving it buried in chat. An Output need not be Final; Final is a separate artist choice of the exact finished version.
 
 Good outputs include research reports, generated media, exported datasets, code review reports, deployment receipts, published-post receipts, sent-message receipts, and final workflow deliverables.
 
@@ -2052,7 +2052,7 @@ If an Output already exists, use visual_surface_state and visual_surface to pin/
 
 Use Browser Pane or browser tools, not Canvas, when the user wants to test, debug, inspect, click through, check console logs, verify layout, capture screenshots, or interact with live web behavior.
 
-Do NOT use this for ordinary chat replies, scratch notes, temporary plans, or files that are not intended as final deliverables. Prefer one concise primary output over dumping every intermediate artifact.`,
+Do NOT use this for ordinary chat replies, brainstorming fragments, scratch notes, temporary planning scaffolds, test renders, logs, or throwaway variations. Preserve useful reviewable drafts and distinct options, but do not register every intermediate artifact or duplicate an existing Output.`,
 
   get_social_variant_set: `Read the durable social video Variant Set bound to this Raw Video Editor session.
 
@@ -2079,6 +2079,8 @@ Inputs:
 - slot: named Finals slot like Cover Art, Shortform Clips, Artist Bio, Press Copy, Captions, Ads, References.
 - makePrimary: optional; marks the current default for that slot without deleting other Finals.
 
+Final means this exact version is finished and ready for use. It does not mean scheduled, due now, or authorized to distribute. Promotion sets no date and starts no posting or sending. Scheduling requires a separate user instruction and the existing approval flow for the exact version, destination accounts, content, and timing.
+
 Campaign Release Kit promotion duplicates the selected file into an immutable hashed snapshot. This does not publish, send, spend, or delete competing options.`,
 
   list_release_kit: `List the approved campaign Release Kit. Release Kit items are copied, hashed snapshots that agents may treat as campaign canon. Use this before reaching into working Campaign Assets or draft Outputs when final material is needed.`,
@@ -2087,7 +2089,7 @@ Campaign Release Kit promotion duplicates the selected file into an immutable ha
 
   promote_to_release_kit: `Copy one registered Campaign Asset, HQ Vault asset, or Output file into the campaign Release Kit.
 
-Use only when the user clearly approves that exact item as final. Never silently finalize a draft. This tool accepts trusted source IDs, not arbitrary filesystem paths. Promotion creates an independent hashed snapshot; later edits to the source do not mutate the final.`,
+Use only when the user clearly approves that exact item as final. Never silently finalize a draft. This tool accepts trusted source IDs, not arbitrary filesystem paths. Promotion creates an independent hashed snapshot; later edits to the source do not mutate the final. Final means finished and ready for use, not scheduled or due now. It sets no timing and grants no permission to post, send, publish, or spend. Use a separate explicit scheduling instruction and the existing approval flow for distribution.`,
 
   remove_from_release_kit: `Remove one exact item from the campaign Release Kit. Use only when the user clearly asks to remove or demote that final. This deletes the Release Kit snapshot, not its original Campaign Asset, HQ Vault asset, or Output.`,
 

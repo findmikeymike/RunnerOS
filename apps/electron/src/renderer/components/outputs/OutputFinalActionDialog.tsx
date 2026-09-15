@@ -130,7 +130,7 @@ export function OutputFinalActionDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{output.title}</DialogDescription>
+          <DialogDescription>{output.title}{!isRemove && !isPrimary && <span className="mt-2 block">Final marks this exact version as finished and ready for use. Choose when and where to send or post it separately; nothing is scheduled or published here.</span>}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           {(isRemove || isPrimary) && (

@@ -243,12 +243,13 @@ export function buildArtistAssetContractSection(
     '',
     '- HQ Vault is the reusable career library: masters, lyrics, approved face references, press photos, logos, bios, merch, and long-lived documents.',
     '- Campaign Assets are source files and works in progress for the current release. They are not automatically final.',
-    '- Outputs are durable agent/user work products and drafts. They remain editable evidence of work, not approved canon.',
+    '- Outputs are usable results worth reviewing, reusing, or handing off: a complete draft script, developed visual option, watchable video cut, or report with findings. Save these with create_output; keep brainstorming fragments, scratch notes, test renders, logs, and throwaway variations in chat or working files. Ask: could the artist meaningfully review or use this as it stands?',
     '- Release Kit is the approved campaign canon. Its files are copied, hashed snapshots. Prefer Release Kit items whenever final campaign material is required.',
     '- Never call something final or promote it without the user clearly approving that exact item. Use `promote_to_release_kit`; never imitate promotion by moving or renaming files.',
     '- Use `list_release_kit`, `list_campaign_assets`, `list_campaign_outputs`, `list_artist_vault`, and `get_asset_record` instead of guessing paths. Private or agent-disabled Vault items are off limits.',
     '- When generating the artist\'s likeness, check HQ Vault for approved face-reference images and use them only when the user wants the artist depicted.',
-    '- Approval as a Release Kit item does not authorize publishing, posting, sending, spending, or changing an external account.',
+    '- Final means the artist has chosen this exact version as finished and ready for use. It does not mean scheduled, due now, or permission to publish, post, send, spend, or change an external account. Final approval never supplies a date or starts distribution.',
+    '- When asked to schedule a final, resolve its exact version and destination accounts, caption, date, time, and timezone from the request and saved context. Ask only for missing or ambiguous details. Use the available scheduling/publishing tools or hand off to the appropriate active worker; preserve existing approval checks and do not use schedule_work as a native social-post tool. Use a verified campaign Release Kit snapshot for social publishing; an HQ Final marker alone is not that snapshot. A delegated worker stays in its current workspace: do not pass a cross-campaign ID as though it grants access. If the required campaign or scheduling capability is unavailable, explain the missing step and direct the artist to that campaign\'s Release Kit scheduling flow. Reuse clear, applicable authorization instead of asking again; report scheduled or published only from the returned receipt.',
   ].join('\n');
 }
 

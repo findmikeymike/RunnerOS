@@ -13,10 +13,10 @@ import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks
 import { openDemoVisualSurfaceAtom, openOutputVisualSurfaceAtom } from '@/atoms/visual-surfaces'
 import { findVideoProjectAsset } from '@/components/outputs/video-project-output'
 import { OutputFinalActionDialog } from '@/components/outputs/OutputFinalActionDialog'
-import { campaignCalendarPrefillForOutput, isAdOutput } from '@/lib/output-finals-actions'
-import { setPendingCampaignCalendarPrefill } from '@/lib/campaign-calendar'
+import { schedulingFinalForOutput, releaseKitFinalsForOutput, isAdOutput } from '@/lib/output-finals-actions'
 import { setPendingReleaseKitOutput } from '@/lib/release-kit-navigation'
 import { isArtistCampaignWorkspace } from '@/lib/artist-workspace'
+import type { ReleaseKitItem } from '@craft-agent/shared/release-kit'
 import type { VaultKindHint } from '@craft-agent/shared/artist-vault'
 import { isXEditorialSlateOutput } from '@craft-agent/shared/x-editorial'
 
@@ -56,7 +56,23 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
   const [savingToVault, setSavingToVault] = React.useState(false)
   const [imageVaultKindHint, setImageVaultKindHint] = React.useState<ImageOutputVaultKindHint>('cover-art')
   const [finalAction, setFinalAction] = React.useState<'promote' | 'primary' | 'remove' | null>(null)
+  const [campaignFinals, setCampaignFinals] = React.useState<ReleaseKitItem[]>([])
+  const [pendingSchedule, setPendingSchedule] = React.useState(false)
   const [pendingVariantUse, setPendingVariantUse] = React.useState<{ variantId: string; assetId: string } | null>(null)
+
+  React.useEffect(() => {
+    setCampaignFinals([])
+    if (!currentCampaignId) return
+    let active = true
+    const refresh = () => window.electronAPI.getReleaseKit(currentCampaignId).then((kit) => {
+      if (active) setCampaignFinals(kit.items)
+    }).catch(() => { if (active) setCampaignFinals([]) })
+    void refresh()
+    const unsubscribe = window.electronAPI.onReleaseKitChanged((id, kit) => {
+      if (active && id === currentCampaignId) setCampaignFinals(kit.items)
+    })
+    return () => { active = false; unsubscribe() }
+  }, [currentCampaignId])
 
   React.useEffect(() => {
     if (!outputId) {
@@ -123,6 +139,27 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
   const isFinal = Boolean(manifest.finals?.length)
   const canChooseVaultKind = canChooseImageVaultKind(manifest)
   const isXEditorialSlate = isXEditorialSlateOutput(manifest)
+  const scheduleFinal = schedulingFinalForOutput(manifest, currentCampaignId)
+  const readySnapshots = currentCampaignId ? releaseKitFinalsForOutput(manifest, currentCampaignId, campaignFinals) : []
+  const openScheduleInCampaign = async (campaignId: string, snapshot?: ReleaseKitItem) => {
+    try {
+      if (manifest.kind === 'image' || manifest.kind === 'video') {
+        const assetId = snapshot && (snapshot.source.type === 'output' || snapshot.source.type === 'legacy-final') ? snapshot.source.assetId : scheduleFinal?.assetId
+        if (!assetId) throw new Error('Choose an exact Final file before scheduling this Output.')
+        if (campaignId !== currentCampaignId) await onSelectWorkspace(campaignId)
+        setPendingReleaseKitOutput(manifest.id, assetId, {
+          releaseKitItemId: snapshot?.id,
+          sourceWorkspaceId: manifest.workspaceId ?? workspaceId,
+          targetCampaignId: campaignId,
+          scheduleFinal: true,
+        })
+        navigate(routes.view.campaign('release-kit'))
+      }
+      setPendingSchedule(false)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not open scheduling.')
+    }
+  }
   const campaignWorkspaces = workspaces.filter(isArtistCampaignWorkspace)
   const openVariantInCampaign = async (campaignId: string, variantId: string, assetId: string) => {
     setPendingReleaseKitOutput(manifest.id, assetId, {
@@ -176,9 +213,14 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            {!isXEditorialSlate && <Button size="sm" variant="outline" className="border-blue-400/20 bg-blue-400/10 text-white/82 hover:bg-blue-400/15 hover:text-white" onClick={() => scheduleOutputInCampaignCalendar(manifest, currentCampaignId, navigate)}>
+            {!isXEditorialSlate && (manifest.kind === 'image' || manifest.kind === 'video') && (isFinal || readySnapshots.length > 0) && <Button size="sm" variant="outline" className="border-[#f97316] bg-[#f97316] text-black hover:border-[#fb923c] hover:bg-[#fb923c] hover:text-black" onClick={() => {
+              if (!currentCampaignId && !scheduleFinal) { toast.error('Choose one Primary Final before scheduling this Output.'); return }
+              if (currentCampaignId && readySnapshots.length === 1) void openScheduleInCampaign(currentCampaignId, readySnapshots[0])
+              else if (currentCampaignId && readySnapshots.length === 0) void openScheduleInCampaign(currentCampaignId)
+              else setPendingSchedule(true)
+            }}>
               <CalendarClock className="mr-1.5 h-3.5 w-3.5" />
-              Schedule
+              Schedule Final
             </Button>}
             {!isXEditorialSlate && (currentCampaignId ? (
               <Button size="sm" variant="outline" className="border-emerald-400/20 bg-emerald-400/10 text-white/82 hover:bg-emerald-400/15 hover:text-white" onClick={() => {
@@ -360,6 +402,18 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
         removeFromFinal={removeFromFinal}
         currentCampaignId={currentCampaignId}
       /> : null}
+      <Dialog open={pendingSchedule} onOpenChange={setPendingSchedule}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Schedule this Final</DialogTitle>
+            <DialogDescription>{currentCampaignId ? 'Choose the exact finished version. Then choose its destination and timing.' : 'Choose the campaign for this finished version. Then choose its destination and timing.'} Nothing is sent until you authorize scheduling.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            {currentCampaignId && readySnapshots.length > 0 ? readySnapshots.map((snapshot) => <Button key={snapshot.id} variant="outline" onClick={() => void openScheduleInCampaign(currentCampaignId, snapshot)}>{snapshot.title} · {new Date(snapshot.promotedAt).toLocaleString()}</Button>) : campaignWorkspaces.map((campaign) => <Button key={campaign.id} variant="outline" onClick={() => void openScheduleInCampaign(campaign.id)}>{campaign.name}</Button>)}
+            {!currentCampaignId && !campaignWorkspaces.length && <p className="text-sm text-muted-foreground">Create a campaign to schedule this Final. It stays ready for use in HQ.</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={Boolean(pendingVariantUse)} onOpenChange={(open) => {
         if (!open) setPendingVariantUse(null)
       }}>
@@ -440,15 +494,6 @@ async function reviseSocialVariant(
       description: error instanceof Error ? error.message : String(error),
     })
   }
-}
-
-function scheduleOutputInCampaignCalendar(
-  manifest: OutputManifestDTO,
-  currentCampaignId: string | undefined,
-  navigate: (route: ReturnType<typeof routes.view.campaign>) => void,
-): void {
-  setPendingCampaignCalendarPrefill(campaignCalendarPrefillForOutput(manifest, currentCampaignId))
-  navigate(routes.view.campaign('calendar'))
 }
 
 function focusOutputSurface(

@@ -202,7 +202,9 @@ describe('composeAgentSystemPrompt', () => {
     expect(result).toContain(ARTIST_ASSET_CONTRACT_HEADER);
     expect(result).toContain('HQ Vault is the reusable career library');
     expect(result).toContain('Campaign Assets are source files and works in progress');
-    expect(result).toContain('Outputs are durable agent/user work products and drafts');
+    expect(result).toContain('Outputs are usable results worth reviewing, reusing, or handing off');
+    expect(result).toContain('Final approval never supplies a date or starts distribution');
+    expect(result).toContain('Ask only for missing or ambiguous details');
     expect(result).toContain('Release Kit is the approved campaign canon');
     expect(result).toContain('promote_to_release_kit');
     expect(result).toContain('approved face-reference images');

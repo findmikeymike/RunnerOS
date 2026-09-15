@@ -4,6 +4,7 @@ import type {
   OutputSummaryDTO,
   RemoveOutputFromFinalInputDTO,
 } from '@/hooks/useOutputs'
+import type { ReleaseKitItem } from '@craft-agent/shared/release-kit'
 import type { CampaignCalendarPrefill } from './campaign-calendar'
 
 type OutputLike = OutputSummaryDTO | OutputManifestDTO
@@ -52,6 +53,19 @@ export function defaultFinalSlotForOutput(output: OutputLike): string {
   return output.context?.scope === 'hq' ? 'Brand Copy' : 'Press Copy'
 }
 
+export function releaseKitFinalsForOutput(output: OutputLike, campaignId: string, items: ReleaseKitItem[]): ReleaseKitItem[] {
+  return items.filter((item) => item.campaignId === campaignId && item.status === 'ready'
+    && (item.source.type === 'output' || item.source.type === 'legacy-final')
+    && item.source.outputId === output.id
+    && (item.source.type === 'output' ? item.source.sourceWorkspaceId ?? campaignId : campaignId) === (output.workspaceId ?? campaignId))
+}
+
+export function schedulingFinalForOutput(output: OutputLike, currentCampaignId?: string): OutputFinalPointerDTO | undefined {
+  const finals = output.finals?.filter((entry) => entry.scope === 'hq' || !currentCampaignId || entry.campaignId === currentCampaignId) ?? []
+  const primary = finals.filter((entry) => entry.isPrimary)
+  return primary.length === 1 ? primary[0] : finals.length === 1 ? finals[0] : undefined
+}
+
 export function campaignCalendarPrefillForOutput(
   output: OutputManifestDTO,
   currentCampaignId?: string,
@@ -65,7 +79,7 @@ export function campaignCalendarPrefillForOutput(
   return {
     title: `Schedule ${output.title}`,
     kind: 'scheduled-job',
-    actionType: 'post-asset',
+    actionType: (output.kind === 'image' || output.kind === 'video') && selectedFinal ? 'post-asset' : 'ask-agent',
     ...(selectedFinal ? {
       finalRefs: [{
         outputId: selectedFinal.outputId,

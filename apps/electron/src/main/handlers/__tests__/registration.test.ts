@@ -63,7 +63,9 @@ function createMockServer(): RpcServer {
 
 function createMockDeps(): HandlerDeps {
   return {
-    sessionManager: {} as HandlerDeps['sessionManager'],
+    sessionManager: {
+      setLlmConnectionSetupHandler: () => {},
+    } as unknown as HandlerDeps['sessionManager'],
     platform: {
       appRootPath: '',
       resourcesPath: '',

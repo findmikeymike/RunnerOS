@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { campaignCalendarPrefillForOutput, defaultFinalSlotForOutput, resolveCampaignFinalId } from '../output-finals-actions'
+import { campaignCalendarPrefillForOutput, defaultFinalSlotForOutput, resolveCampaignFinalId, schedulingFinalForOutput, releaseKitFinalsForOutput } from '../output-finals-actions'
+import type { ReleaseKitItem } from '@craft-agent/shared/release-kit'
 import type { OutputFinalPointerDTO, OutputManifestDTO, OutputSummaryDTO } from '@/hooks/useOutputs'
 
 const output = (campaignId?: string): OutputSummaryDTO => ({
@@ -123,8 +124,34 @@ describe('campaignCalendarPrefillForOutput', () => {
     expect(campaignCalendarPrefillForOutput(manifest, 'campaign-1')).toEqual({
       title: 'Schedule Cover',
       kind: 'scheduled-job',
-      actionType: 'post-asset',
+      actionType: 'ask-agent',
       outputRefs: [{ outputId: 'output-1', title: 'Cover', kind: 'image' }],
     })
+  })
+})
+
+
+describe('Final scheduling selection', () => {
+  test('does not silently select among multiple final versions', () => {
+    const candidates = [{ ...final('c'), id: 'a', isPrimary: false }, { ...final('c'), id: 'b', isPrimary: false }]
+    expect(schedulingFinalForOutput({ ...output('c'), finals: candidates }, 'c')).toBeUndefined()
+    expect(schedulingFinalForOutput({ ...output('c'), finals: candidates.map((entry) => ({ ...entry, isPrimary: true })) }, 'c')).toBeUndefined()
+    expect(schedulingFinalForOutput({ ...output('c'), finals: [candidates[0]!, { ...candidates[1]!, isPrimary: true }] }, 'c')?.id).toBe('b')
+  })
+
+  test('excludes another campaign final and preserves HQ final choice', () => {
+    expect(schedulingFinalForOutput({ ...output('c'), finals: [final('other')] }, 'c')).toBeUndefined()
+    expect(schedulingFinalForOutput({ ...output(), finals: [{ ...final('c'), scope: 'hq', campaignId: undefined }] })?.scope).toBe('hq')
+  })
+
+  test('does not prefill social publishing for a final document', () => {
+    const document = { ...output('c'), kind: 'document', assets: [], receipts: [], links: [], finals: [final('c')] } as OutputManifestDTO
+    expect(campaignCalendarPrefillForOutput(document, 'c').actionType).toBe('ask-agent')
+  })
+
+  test('recognizes ready Release Kit snapshots only in the exact source workspace', () => {
+    const item = { id: 'snapshot', campaignId: 'c', status: 'ready', source: { type: 'output', outputId: 'output-1', assetId: 'a', sourceWorkspaceId: 'workspace-1' } } as ReleaseKitItem
+    const candidates = [item, { ...item, id: 'missing', status: 'missing' }, { ...item, id: 'draft', status: 'needs-review' }, { ...item, id: 'wrong-campaign', campaignId: 'elsewhere' }, { ...item, id: 'wrong-source', source: { ...item.source, sourceWorkspaceId: 'other' } }] as ReleaseKitItem[]
+    expect(releaseKitFinalsForOutput(output('c'), 'c', candidates).map((entry) => entry.id)).toEqual(['snapshot'])
   })
 })

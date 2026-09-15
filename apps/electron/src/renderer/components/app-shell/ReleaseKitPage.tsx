@@ -37,9 +37,9 @@ import type { OutputSummaryDTO } from '@/hooks/useOutputs'
 import type { OutputAsset, OutputManifest, SocialVariantDestinationIntent } from '@craft-agent/shared/outputs'
 import { Button } from '@/components/ui/button'
 import { CompactPageHeader } from './CompactPageHeader'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { consumePendingReleaseKitOutput } from '@/lib/release-kit-navigation'
+import { consumePendingReleaseKitOutput, type PendingReleaseKitOutput } from '@/lib/release-kit-navigation'
 import {
   featuredReleaseKitItem,
   isUnverifiedReleaseKitItem,
@@ -120,6 +120,8 @@ export function ReleaseKitPage({
   const [error, setError] = React.useState<string | null>(null)
   const [tab, setTab] = React.useState<'finals' | 'variants' | 'outputs'>('finals')
   const [addOpen, setAddOpen] = React.useState(false)
+  const [scheduleIntent, setScheduleIntent] = React.useState<PendingReleaseKitOutput | null>(null)
+  const [schedulingPromotion, setSchedulingPromotion] = React.useState(false)
   const [prefillOutput, setPrefillOutput] = React.useState<OutputSummaryDTO | null>(null)
   const [itemPaths, setItemPaths] = React.useState<Record<string, string>>({})
   const [selectedItemId, setSelectedItemId] = React.useState<string | null>(null)
@@ -256,12 +258,56 @@ export function ReleaseKitPage({
       })().catch((cause) => toast.error('Could not prepare this version', { description: cause instanceof Error ? cause.message : String(cause) }))
       return
     }
+    if (pending.scheduleFinal) {
+      setScheduleIntent(pending)
+      return
+    }
     const output = outputs.find((candidate) => candidate.id === pending.outputId)
     if (!output) return
     setTab('outputs')
     setPrefillOutput({ ...output, ...(pending.assetId ? { primaryAssetId: pending.assetId } : {}) })
     setAddOpen(true)
   }, [outputs, outputsLoading, workspaceId])
+
+  React.useEffect(() => {
+    const pending = scheduleIntent
+    if (!pending) return
+      let cancelled = false
+      if (pending.targetCampaignId !== workspaceId || !pending.assetId) {
+        setScheduleIntent(null)
+        toast.error('Could not open this Final', { description: 'Choose the campaign and exact Final file again.' })
+        return
+      }
+      const sourceWorkspaceId = pending.sourceWorkspaceId ?? workspaceId
+      void (async () => {
+        const current = await window.electronAPI.getReleaseKit(workspaceId)
+        if (cancelled) return
+        const existing = current.items.filter((item) => (!pending.releaseKitItemId || item.id === pending.releaseKitItemId) && item.status === 'ready'
+          && (item.source.type === 'output' || item.source.type === 'legacy-final')
+          && item.source.outputId === pending.outputId
+          && item.source.assetId === pending.assetId
+          && (item.source.type === 'output' ? item.source.sourceWorkspaceId ?? workspaceId : workspaceId) === sourceWorkspaceId)
+        if (existing.length > 1) throw new Error('More than one saved Final matches this file. Choose the exact version in the Release Kit.')
+        if (existing[0]) {
+          setManifest(current)
+          setSelectedItemId(existing[0].id)
+          setScheduleIntent(null)
+          return
+        }
+        if (pending.releaseKitItemId) throw new Error('The selected Final snapshot is no longer ready. Choose another version.')
+        const output = await window.electronAPI.getOutput(sourceWorkspaceId, pending.outputId)
+        if (cancelled) return
+        if (!output || ![...output.assets, ...(output.primary ? [output.primary] : [])].some((asset) => asset.id === pending.assetId)) {
+          throw new Error('The exact Final file is no longer available.')
+        }
+        setTab('outputs')
+        setSchedulingPromotion(true)
+        setPrefillOutput({ ...output, workspaceId: sourceWorkspaceId, primaryAssetId: pending.assetId, assetCount: output.assets.length, receiptCount: output.receipts.length, linkCount: output.links.length })
+        setAddOpen(true)
+        setScheduleIntent(null)
+      })().catch((cause) => { if (!cancelled) { setScheduleIntent(null); toast.error('Could not prepare this Final', { description: cause instanceof Error ? cause.message : String(cause) }) } })
+      return () => { cancelled = true }
+  }, [scheduleIntent, workspaceId])
 
   React.useEffect(() => {
     let cancelled = false
@@ -376,7 +422,7 @@ export function ReleaseKitPage({
 
       <AddFinalDialog
         open={addOpen}
-        onOpenChange={(next) => { setAddOpen(next); if (!next) setPrefillOutput(null) }}
+        onOpenChange={(next) => { setAddOpen(next); if (!next) { setPrefillOutput(null); setSchedulingPromotion(false) } }}
         workspaceId={workspaceId}
         hqWorkspaceId={hqWorkspaceId}
         outputs={outputs}
@@ -384,6 +430,10 @@ export function ReleaseKitPage({
         onAdded={(next) => {
           setManifest(next)
           setTab('finals')
+          if (schedulingPromotion && prefillOutput?.primaryAssetId) {
+            const added = next.items.filter((item) => item.source.type === 'output' && item.source.outputId === prefillOutput.id && item.source.assetId === prefillOutput.primaryAssetId && (item.source.sourceWorkspaceId ?? workspaceId) === (prefillOutput.workspaceId ?? workspaceId))
+            if (added.length === 1) setSelectedItemId(added[0]!.id)
+          }
         }}
       />
       <ReleaseKitAssetDrawer
@@ -992,7 +1042,7 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostI
             }} className="rounded-md p-1 text-white/45 hover:bg-white/[0.06] hover:text-white"><ArrowLeft className="h-4 w-4" /></button> : null}
             <div>
               <DrawerTitle className="text-base text-white/86">{mode === 'details' ? item.title : mode === 'where' ? 'Choose an account' : mode === 'post' ? 'Write the post' : 'Choose when'}</DrawerTitle>
-              <DrawerDescription>{mode === 'details' ? `${displaySubtype(item.subtype)}${item.sizeBytes ? ` · ${formatFileSize(item.sizeBytes)}` : ''}` : `Schedule ${item.title}`}</DrawerDescription>
+              <DrawerDescription>{mode === 'details' ? `${displaySubtype(item.subtype)}${item.sizeBytes ? ` · ${formatFileSize(item.sizeBytes)}` : ''} · Finished and ready for use. Schedule separately when you choose.` : `Schedule ${item.title}`}</DrawerDescription>
             </div>
           </div>
         </DrawerHeader>
@@ -1126,14 +1176,15 @@ function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, output
     if (!open || !prefillOutput) return
     let cancelled = false
     setBusy(true)
-    void window.electronAPI.getOutput(workspaceId, prefillOutput.id).then((output) => {
+    void window.electronAPI.getOutput(prefillOutput.workspaceId ?? workspaceId, prefillOutput.id).then((output) => {
       if (cancelled) return
-      const choices = output ? sourceChoicesFromOutput(output) : []
+      const choices = output ? sourceChoicesFromOutput(output).map((choice) => ({ ...choice, source: choice.source.type === 'output' ? { ...choice.source, sourceWorkspaceId: prefillOutput.workspaceId ?? workspaceId } : choice.source })) : []
       setSourceKind('output')
       setOutputChoices(choices)
       const requested = prefillOutput.primaryAssetId
         ? choices.find((choice) => choice.source.type === 'output' && choice.source.assetId === prefillOutput.primaryAssetId)
         : undefined
+      if (prefillOutput.primaryAssetId && !requested) throw new Error('The selected Final file is no longer available. Choose it again.')
       if (requested) selectSource(requested)
       else if (choices.length === 1) selectSource(choices[0]!)
       else setStage('item')
@@ -1214,6 +1265,7 @@ function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, output
             {stage !== 'source' ? <button type="button" onClick={() => setStage(stage === 'details' && sourceKind !== 'upload' ? 'item' : 'source')} className="rounded-[5px] p-1 text-white/45 hover:bg-white/[0.06] hover:text-white"><ArrowLeft className="h-4 w-4" /></button> : null}
             <DialogTitle>{stage === 'source' ? 'Add a final' : stage === 'item' ? 'Choose the exact item' : 'Final details'}</DialogTitle>
           </div>
+          <DialogDescription>Save a stable copy of this finished version for use. Posting, sending, and timing are separate decisions.</DialogDescription>
         </DialogHeader>
 
         {stage === 'source' ? (

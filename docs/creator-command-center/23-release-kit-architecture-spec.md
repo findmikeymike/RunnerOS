@@ -82,7 +82,7 @@ Examples:
 - campaign plans, brand-world documents, press copy, and outreach packets
 - a synthesis created from several earlier Outputs
 
-Useful agent work must become an Output instead of remaining only in chat history. Outputs remain visible after later work is created.
+An Output is a usable result worth reviewing, reusing, or handing off. The artist should be able to meaningfully review or use it as it stands: a complete draft script, developed cover option, watchable video cut, or report with findings. Preserve these instead of leaving them only in chat. Brainstorming fragments, temporary scaffolds, test renders, logs, and throwaway variations stay in chat or working files. Outputs remain visible after later work is created; becoming an Output does not require Final approval.
 
 ### Release Kit
 
@@ -91,6 +91,8 @@ The approved, campaign-specific launch package.
 Release Kit replaces the user-facing term `Finals` for campaign work. Internally, an item is still final and may be primary, but the page and filesystem are named Release Kit.
 
 Release Kit can contain multiple approved items in a category. One item may optionally be Primary when a single default is needed.
+
+Final means the artist has chosen the exact version as finished and ready for use. It does not mean scheduled, due now, or authorized to distribute. Finalization sets no date and does not post or send. Scheduling is a separate user action, through the UI or an agent, bound to the exact final, destination accounts, content, date, time, and timezone. Resolve missing details only; preserve applicable authorization and the existing approval flow. Final media should expose a clear Schedule action without starting scheduling automatically.
 
 ## Release Kit Categories
 

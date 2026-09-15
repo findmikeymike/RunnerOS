@@ -42,6 +42,8 @@ Current implementation: [team guidance](../../packages/shared/src/agent-prompt/a
 
 ## 2. Outputs: clarify what happens next
 
+**September 15 agreed contract:** An Output is a usable result worth reviewing, reusing, or handing off, including complete drafts and developed options. Scratch work, fragments, test renders, logs, and throwaway variations do not qualify. Final means the artist chose the exact version as finished and ready for use; it sets no timing and grants no distribution permission. Final media should make Schedule the clear next available action, with explicit destination/content/timing and existing approval checks.
+
 **User observation:** opening an Output exposes too many controls and makes the next action unclear. Entry points, agent routing, and the role of “Make final” are questions to investigate, not confirmed architectural defects.
 
 - [ ] **NOW — Map the actual Output lifecycle.** Identify every entry/view path: top-bar Outputs, originating chat, Canvas, campaign surfaces, and any other existing routes. Trace creation, review, revision, final promotion, downstream consumption, and receipts.
@@ -212,6 +214,18 @@ A page that lets me kinda send alerts to users, or somehow interact with, sell m
 ## Completion record
 
 For each completed slice, append: item number, owner, decision, commit, loaded build, automated checks, live smoke, and remaining limits. No new product implementation is claimed by creation of this document.
+
+### September 15 — Item 2: Output usefulness, Final meaning, and scheduling handoff
+
+- Owner: Codex. Implemented in the canonical main working tree; **uncommitted**.
+- Shared agent instructions and tool descriptions define an Output as a usable result worth reviewing, reusing, or handing off, with explicit exclusions for scratch work. This is agent guidance, not a semantic classifier guaranteeing every artifact meets the threshold.
+- Final means the exact version is finished and ready for use. Shared instructions, serialized Release Kit context, and UI explanations keep approval of finished form separate from scheduling, sending, and publication.
+- Finished image/video Outputs expose a prominent **Schedule Final** action. Campaigns resolve the exact ready Release Kit snapshot and ask when multiple versions exist. HQ chooses a campaign and explicitly approves the exact file into its Release Kit if needed. Existing scheduling/account/rights/approval checks remain authoritative; promotion itself creates no schedule.
+- Removed the misleading universal social-post shortcut for documents/audio/drafts. Those artifacts remain available for ordinary use and agent handoff.
+- Natural-language requests use available connected publishing capabilities in the appropriate campaign. The general agent Calendar tool still does not create native social-post jobs, and delegation does not grant access to another campaign; the shared guidance names those limits and the Release Kit UI route.
+- Verification: focused contract and UI-helper checks, shared/session-tool/Electron typechecks, and a production renderer build in a temporary directory. Independent code review found no remaining blocking issue. Full-suite findings exposed two older registration test fixtures missing the existing HQ model-setup handler; corrected the fixtures without changing product behavior. All six discovery shards and 53 isolated test processes passed, including reruns of the two affected shards after those fixture fixes.
+- Loaded build/live smoke: **not performed**. No app launch/restart, saved-data mutation, commit, push, or external action. Current bundle was preserved. Real provider scheduling and visual acceptance remain open; the wider Outputs detail-view simplification is a separate slice.
+
 
 ---
 
