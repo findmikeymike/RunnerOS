@@ -68,6 +68,10 @@ export function assertGlobalSourceCredentialPermission(originWorkspaceId: string
   }
 
   for (const workspace of getWorkspaces()) {
+    if (sourceSlug === 'monid') {
+      check(workspace)
+      continue
+    }
     const activatedSlugs = readGlobalSourcesManifest(workspace.rootPath).activatedSlugs
     if (!activatedSlugs.includes(sourceSlug)) continue
     check(workspace)

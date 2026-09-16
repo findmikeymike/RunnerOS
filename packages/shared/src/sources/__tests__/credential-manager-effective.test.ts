@@ -237,6 +237,25 @@ describe('SourceCredentialManager runtime credential helpers', () => {
     await expect(credManager.getApiCredential(source)).resolves.toBe('global-api-key');
   });
 
+  test('Monid always saves and loads one app-wide credential across workspaces', async () => {
+    const firstWorkspace = makeSource({ workspaceId: 'ws-A', tier: 'global', slug: 'monid' });
+    const secondWorkspace = makeSource({ workspaceId: 'ws-B', tier: 'global', slug: 'monid' });
+    await fakeCredentialManager.set(
+      { type: 'source_oauth', workspaceId: 'ws-B', sourceId: 'monid' },
+      { value: 'legacy-workspace-token' },
+    );
+
+    await credManager.save(firstWorkspace, { value: 'app-wide-token' });
+
+    expect(await fakeCredentialManager.get({
+      type: 'source_oauth',
+      workspaceId: GLOBAL_WORKSPACE_ID,
+      sourceId: 'monid',
+    })).toEqual({ value: 'app-wide-token' });
+    await expect(credManager.getToken(secondWorkspace)).resolves.toBe('app-wide-token');
+    expect(credManager.getCredentialId(secondWorkspace).workspaceId).toBe(GLOBAL_WORKSPACE_ID);
+  });
+
   test('getToken honors workspace override marker and suppresses global fallback', async () => {
     const source = makeSource({ workspaceId: 'ws-A', tier: 'global' });
     await fakeCredentialManager.set(

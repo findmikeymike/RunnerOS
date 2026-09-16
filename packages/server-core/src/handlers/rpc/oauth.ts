@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId, getWorkspaces } from '@craft-agent/shared/config'
-import { loadAllSources, loadGlobalSource, getSourceCredentialManager, getSourcesBySlugs, materializeBuiltinSource, readGlobalSourcesManifest } from '@craft-agent/shared/sources'
+import { loadAllSources, loadGlobalSource, getSourceCredentialManager, getSourcesBySlugs, materializeBuiltinGlobalSource, materializeBuiltinSource, readGlobalSourcesManifest } from '@craft-agent/shared/sources'
 import { createPendingFlow, revokeGoogleToken } from '@craft-agent/shared/auth'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -137,7 +137,10 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     authRequestId?: string
     credentialScope?: 'workspace' | 'global' | 'workspace-override'
   }) => {
-    const { sourceSlug, callbackPort, callbackUrl, sessionId, authRequestId, credentialScope } = args
+    const { sourceSlug, callbackPort, callbackUrl, sessionId, authRequestId } = args
+    // Monid is an app-level service: HQ, campaigns, and Creative Lab share one
+    // account. Normalize legacy callers that omit a credential scope.
+    const credentialScope = sourceSlug === 'monid' ? 'global' : args.credentialScope
 
     if (!ctx.workspaceId) {
       throw new Error('No workspace bound to this client')
@@ -158,6 +161,9 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     let source = credentialScope === 'global'
       ? loadGlobalSource(sourceSlug)
       : workspaceSource
+    if (!source && credentialScope === 'global' && sourceSlug === 'monid' && workspaceSource) {
+      source = materializeBuiltinGlobalSource(workspaceSource)
+    }
     if (!source) {
       throw new Error(`Source not found: ${sourceSlug}`)
     }
@@ -229,7 +235,7 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
           pushTyped(server, RPC_CHANNELS.sources.CHANGED_GLOBAL, { to: 'all' }, null)
           for (const workspace of getWorkspaces()) {
             const activatedSlugs = readGlobalSourcesManifest(workspace.rootPath).activatedSlugs
-            if (!activatedSlugs.includes(flow.sourceSlug)) continue
+            if (flow.sourceSlug !== 'monid' && !activatedSlugs.includes(flow.sourceSlug)) continue
             await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'OAUTH_GLOBAL_CREDENTIALS_CHANGED')
             pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: workspace.id }, workspace.id, loadAllSources(workspace.rootPath))
           }
@@ -282,7 +288,8 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
     assertTeamPermission(workspace.rootPath, 'secrets.update')
 
-    const [source] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
+    const [workspaceSource] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
+    const source = sourceSlug === 'monid' ? loadGlobalSource(sourceSlug) ?? workspaceSource : workspaceSource
     if (!source) {
       throw new Error(`Source not found: ${sourceSlug}`)
     }
@@ -294,7 +301,7 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
 
     await syncGoogleAdsCredentialCache(source)
     // Shared Google credentials can serve the same source in other workspaces.
-    const affectedWorkspaces = source.config.provider === 'google'
+    const affectedWorkspaces = source.config.provider === 'google' || sourceSlug === 'monid'
       ? [...new Map([workspace, ...getWorkspaces()].map(ws => [ws.id, ws])).values()]
       : [workspace]
     for (const affected of affectedWorkspaces) {

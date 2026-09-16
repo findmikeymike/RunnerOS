@@ -6,11 +6,16 @@ import * as sources from '@craft-agent/shared/sources'
 import * as workspaces from '@craft-agent/shared/workspaces'
 
 const source = { config: { slug: 'fixture', provider: 'generic' }, workspaceId: 'fixture', folderPath: '/tmp/oauth-fixture' } as any
+const monidBuiltin = { config: { slug: 'monid', provider: 'monid', type: 'mcp', mcp: { authType: 'oauth', url: 'https://mcp.monid.ai/v1' } }, workspaceId: 'fixture', folderPath: '', isBuiltin: true, tier: 'project' } as any
+const monidGlobal = { ...monidBuiltin, workspaceId: '__global__', folderPath: '/tmp/global/monid', isBuiltin: undefined, tier: 'global' } as any
+let globalMonidInstalled = false
+const registeredWorkspaces: Array<{ id: string; rootPath: string }> = []
 const exchangeAndStore = mock(async (..._args: any[]) => ({ success: true }))
 const cancelAuthentication = mock(async (..._args: any[]) => true)
+const beginAuthentication = mock(async (..._args: any[]) => { order.push('begin'); return 7 })
 const order: string[] = []
 const manager = {
-  beginAuthentication: async () => { order.push('begin'); return 7 },
+  beginAuthentication,
   prepareOAuth: async () => { order.push('prepare'); return { state: 'state', provider: 'generic', authUrl: 'https://example.invalid' } },
   exchangeAndStore,
   cancelAuthentication,
@@ -22,15 +27,19 @@ const manager = {
 }
 mock.module('@craft-agent/shared/config', () => ({ ...config,
   getWorkspaceByNameOrId: () => ({ id: 'fixture', rootPath: '/tmp/oauth-fixture' }),
+  getWorkspaces: () => registeredWorkspaces,
 }))
 mock.module('@craft-agent/shared/sources', () => ({ ...sources,
-  getSourcesBySlugs: () => [source], loadAllSources: () => [source], getSourceCredentialManager: () => manager,
+  getSourcesBySlugs: (_root: string, slugs: string[]) => slugs[0] === 'monid' ? [globalMonidInstalled ? monidGlobal : monidBuiltin] : [source],
+  loadGlobalSource: (slug: string) => slug === 'monid' && globalMonidInstalled ? monidGlobal : null,
+  materializeBuiltinGlobalSource: () => { globalMonidInstalled = true; return monidGlobal },
+  loadAllSources: () => [source], getSourceCredentialManager: () => manager,
 }))
 mock.module('@craft-agent/shared/workspaces', () => ({ ...workspaces, assertTeamPermission: () => {} }))
 mock.module('@craft-agent/server-core/transport', () => ({ pushTyped: () => {} }))
 const { completeOAuthFlow, registerOAuthHandlers } = await import('./oauth')
 const stores: OAuthFlowStore[] = []
-afterEach(() => { for (const store of stores.splice(0)) store.dispose(); exchangeAndStore.mockClear(); cancelAuthentication.mockClear(); order.length = 0 })
+afterEach(() => { for (const store of stores.splice(0)) store.dispose(); exchangeAndStore.mockClear(); cancelAuthentication.mockClear(); beginAuthentication.mockClear(); globalMonidInstalled = false; registeredWorkspaces.length = 0; order.length = 0 })
 
 function setup() {
   const store = new OAuthFlowStore(); stores.push(store)
@@ -46,6 +55,15 @@ test('OAuth start records the server sign-in intent before provider preparation'
   await handlers.get(RPC_CHANNELS.oauth.START)({ workspaceId: 'fixture', clientId: 'owner' }, { sourceSlug: 'fixture', authIntentRevision: 99 })
   expect(order).toEqual(['begin', 'prepare'])
   expect(store.getByState('state')?.authIntentRevision).toBe(7)
+})
+
+test('Monid OAuth defaults to one global source and credential owner', async () => {
+  const { store, handlers } = setup()
+  await handlers.get(RPC_CHANNELS.oauth.START)({ workspaceId: 'fixture', clientId: 'owner' }, { sourceSlug: 'monid' })
+  expect(globalMonidInstalled).toBe(true)
+  expect(beginAuthentication).toHaveBeenCalledWith(monidGlobal)
+  expect(store.getByState('state')?.source).toBe(monidGlobal)
+  expect(store.getByState('state')?.credentialScope).toBe('global')
 })
 
 test('an exchanging OAuth flow stays cancellable without allowing callback replay', async () => {
@@ -90,6 +108,26 @@ test('revoke detaches runtime before waiting for remote revocation', async () =>
     await revoking
     expect(order.at(-1)).toBe('new-sign-in')
   } finally { release?.(); await revoking; manager.revokeRemote = original }
+})
+
+test('Monid revoke targets the global account and reloads every workspace', async () => {
+  const { handlers } = setup()
+  globalMonidInstalled = true
+  registeredWorkspaces.push({ id: 'campaign', rootPath: '/tmp/campaign' })
+  let revokedSource: unknown
+  const original = manager.disconnectForRevoke
+  manager.disconnectForRevoke = async (target: unknown) => {
+    revokedSource = target
+    order.push('delete')
+    return { superseded: false, deleted: true, credentials: [{ value: 'old-token' }] }
+  }
+  try {
+    await handlers.get(RPC_CHANNELS.oauth.REVOKE)({ workspaceId: 'fixture' }, 'monid')
+    expect(revokedSource).toBe(monidGlobal)
+    expect(order.filter(step => step === 'reload')).toHaveLength(2)
+  } finally {
+    manager.disconnectForRevoke = original
+  }
 })
 
 

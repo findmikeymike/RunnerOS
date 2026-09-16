@@ -66,6 +66,7 @@ const {
   loadAllSources,
   getSourcesBySlugs,
   materializeBuiltinSource,
+  materializeBuiltinGlobalSource,
   isSourceUsable,
   loadSourceConfig,
   createSource,
@@ -659,6 +660,31 @@ describe('loadAllSources', () => {
     expect(reloaded?.tier).toBe('workspace');
     expect(reloaded?.config.connectionStatus).toBe('connected');
     expect(isSourceUsable(reloaded!)).toBe(true);
+  });
+
+  test('materializes Monid once globally and restores it across workspaces without activation manifests', () => {
+    const firstWorkspace = makeWorkspace();
+    const secondWorkspace = makeWorkspace();
+    const builtin = getSourcesBySlugs(firstWorkspace, ['monid'])[0];
+    expect(builtin?.tier).toBe('project');
+
+    const legacyWorkspaceCopy = materializeBuiltinSource(builtin!);
+    expect(legacyWorkspaceCopy.isBuiltin).not.toBe(true);
+
+    const installed = materializeBuiltinGlobalSource(legacyWorkspaceCopy);
+    expect(installed.tier).toBe('global');
+    expect(installed.workspaceId).toBe(GLOBAL_WORKSPACE_ID);
+    expect(markLoadedSourceAuthenticated(installed)).toBe(true);
+
+    const firstReload = getSourcesBySlugs(firstWorkspace, ['monid'])[0];
+    const secondReload = getSourcesBySlugs(secondWorkspace, ['monid'])[0];
+    expect(firstReload?.tier).toBe('global');
+    expect(secondReload?.tier).toBe('global');
+    expect(firstReload?.config.connectionStatus).toBe('connected');
+    expect(secondReload?.config.connectionStatus).toBe('connected');
+    expect(loadAllSources(secondWorkspace).filter((source: LoadedSource) => source.config.slug === 'monid')).toHaveLength(1);
+    expect(readGlobalSourcesManifest(firstWorkspace).activatedSlugs).not.toContain('monid');
+    expect(readGlobalSourcesManifest(secondWorkspace).activatedSlugs).not.toContain('monid');
   });
 
   test('includes printing-press-social as a project local source', () => {

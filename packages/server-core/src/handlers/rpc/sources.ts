@@ -183,10 +183,13 @@ async function buildCredentialScopeResult(source: LoadedSource): Promise<SourceC
     }
   }
 
-  const workspaceCredential = await credManager.load(source)
-  const globalCredential = source.tier === 'global'
-    ? await credManager.load({ ...source, workspaceId: GLOBAL_WORKSPACE_ID })
-    : null
+  const appWideMonid = source.config.slug === 'monid'
+  const workspaceCredential = appWideMonid ? null : await credManager.load(source)
+  const globalCredential = appWideMonid
+    ? await credManager.loadEffective(source)
+    : source.tier === 'global'
+      ? await credManager.load({ ...source, workspaceId: GLOBAL_WORKSPACE_ID })
+      : null
   const effectiveCredential = await credManager.loadEffective(source)
   const hasWorkspaceCredential = Boolean(workspaceCredential?.value)
   const hasGlobalCredential = Boolean(globalCredential?.value)
@@ -196,7 +199,9 @@ async function buildCredentialScopeResult(source: LoadedSource): Promise<SourceC
     : null
 
   let scope: SourceCredentialScopeResult['scope'] = 'none'
-  if (source.tier === 'global' && workspaceCredential?.override === true && !workspaceCredential.value) {
+  if (appWideMonid && hasGlobalCredential) {
+    scope = 'global'
+  } else if (source.tier === 'global' && workspaceCredential?.override === true && !workspaceCredential.value) {
     scope = 'workspace-override-empty'
   } else if (source.tier === 'global' && workspaceCredential) {
     scope = 'workspace-override'
@@ -212,8 +217,8 @@ async function buildCredentialScopeResult(source: LoadedSource): Promise<SourceC
     hasWorkspaceCredential,
     hasGlobalCredential,
     hasEffectiveCredential,
-    canOverride: source.tier === 'global',
-    canRevert: source.tier === 'global' && Boolean(workspaceCredential),
+    canOverride: source.tier === 'global' && !appWideMonid,
+    canRevert: source.tier === 'global' && !appWideMonid && Boolean(workspaceCredential),
     canAuthenticate: true,
     usesOAuth: isOAuthSource(source),
     metadata: googleAdsCredential

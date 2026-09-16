@@ -64,6 +64,7 @@ export {
   // Load operations
   loadSource,
   materializeBuiltinSource,
+  materializeBuiltinGlobalSource,
   loadWorkspaceSources,
   loadAllSources,
   getEnabledSources,
