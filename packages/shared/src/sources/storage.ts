@@ -486,6 +486,38 @@ export function materializeBuiltinSource(source: LoadedSource): LoadedSource {
 }
 
 /**
+ * Persist a built-in source in the app-wide source library before a global
+ * setup flow mutates its connection state. Unlike workspace materialization,
+ * this produces one canonical config and credential owner for every workspace.
+ */
+export function materializeBuiltinGlobalSource(source: LoadedSource): LoadedSource {
+  const existing = loadGlobalSource(source.config.slug);
+  if (existing) return existing;
+
+  // Older releases materialized OAuth sources inside a workspace. Resolve the
+  // canonical built-in definition so an upgrade can move ownership globally
+  // without copying stale workspace config or credentials.
+  const canonicalSource = source.isBuiltin
+    ? source
+    : getBuiltinSources(source.workspaceId, source.workspaceRootPath)
+      .find(candidate => candidate.config.slug === source.config.slug);
+  if (!canonicalSource) {
+    throw new Error(`Only built-in sources can be installed globally: ${source.config.slug}`);
+  }
+
+  saveGlobalSourceConfig(canonicalSource.config);
+  if (canonicalSource.guide?.raw) {
+    writeFileSync(join(getGlobalSourcePath(canonicalSource.config.slug), 'guide.md'), canonicalSource.guide.raw);
+  }
+
+  const materialized = loadGlobalSource(source.config.slug);
+  if (!materialized) {
+    throw new Error(`Failed to install global built-in source: ${source.config.slug}`);
+  }
+  return materialized;
+}
+
+/**
  * Load all sources for a workspace
  */
 export function loadWorkspaceSources(workspaceRootPath: string): LoadedSource[] {
@@ -531,6 +563,17 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
     if (slug === 'computer-use') {
       sources.push({ ...getComputerUseSource(workspaceId, workspaceRootPath), tier: 'project' });
       continue;
+    }
+
+    // Monid is an app-level service. Once connected globally, its canonical
+    // source must win over legacy workspace copies without requiring every
+    // current and future workspace to maintain an activation manifest.
+    if (slug === 'monid') {
+      const globalMonid = loadGlobalSource(slug, workspaceRootPath);
+      if (globalMonid) {
+        sources.push(globalMonid);
+        continue;
+      }
     }
 
     // Priority: workspace > activated global > built-in/project.
@@ -637,6 +680,14 @@ export function loadAllSources(
   const workspaceId = basename(workspaceRootPath);
   const seen = new Set<string>();
   const result: LoadedSource[] = [];
+
+  // Monid is connected once for the whole app, not independently inside HQ,
+  // campaigns, and Creative Lab. Prefer its global record over legacy copies.
+  const globalMonid = loadGlobalSource('monid', workspaceRootPath);
+  if (globalMonid) {
+    seen.add('monid');
+    result.push(globalMonid);
+  }
 
   for (const s of loadWorkspaceSources(workspaceRootPath)) {
     if (s.config.slug === 'computer-use') continue;

@@ -71,6 +71,15 @@ describe('assertGlobalSourceCredentialPermission', () => {
       .toThrow('requires secrets.update in workspace active')
   })
 
+  it('requires owner-level secret access in every workspace for app-wide Monid credentials', () => {
+    assertGlobalSourceCredentialPermission('origin', 'monid')
+
+    expect(assertTeamPermission).toHaveBeenCalledTimes(3)
+    expect(assertTeamPermission).toHaveBeenNthCalledWith(1, '/origin', 'secrets.update')
+    expect(assertTeamPermission).toHaveBeenNthCalledWith(2, '/active', 'secrets.update')
+    expect(assertTeamPermission).toHaveBeenNthCalledWith(3, '/inactive', 'secrets.update')
+  })
+
   it('throws when the origin workspace does not exist', () => {
     expect(() => assertGlobalSourceCredentialPermission('missing', 'github'))
       .toThrow('Workspace not found: missing')

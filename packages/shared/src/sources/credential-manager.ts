@@ -723,7 +723,9 @@ export class SourceCredentialManager {
 
     return {
       type,
-      workspaceId: source.workspaceId,
+      // Monid is the app-wide external tool gateway shown in global Settings.
+      // It must not create a different OAuth grant for every HQ/campaign/lab.
+      workspaceId: source.config.slug === 'monid' ? GLOBAL_WORKSPACE_ID : source.workspaceId,
       sourceId: source.config.slug,
     };
   }

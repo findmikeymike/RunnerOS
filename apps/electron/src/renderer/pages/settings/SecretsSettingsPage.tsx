@@ -1177,7 +1177,7 @@ export default function SecretsSettingsPage() {
 
     setConnectingMonid(true)
     try {
-      const result = await window.electronAPI.performOAuth({ sourceSlug: 'monid' })
+      const result = await window.electronAPI.performOAuth({ sourceSlug: 'monid', credentialScope: 'global' })
       if (!result.success) {
         toast.error(result.error || 'Could not connect Monid')
         return
