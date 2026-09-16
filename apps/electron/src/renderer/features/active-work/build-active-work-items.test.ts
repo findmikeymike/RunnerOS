@@ -36,6 +36,23 @@ const automation = (overrides: Partial<AutomationListItem> = {}): AutomationList
 })
 
 describe('buildActiveWorkItems', () => {
+  test('completed saved worker sessions remain valid linked sources without appearing running', () => {
+      const items = buildActiveWorkItems({
+        workspaceId: 'workspace-1',
+        sessions: [{ id: 'saved-worker', workspaceId: 'workspace-1', isProcessing: false }],
+        workflowRuns: [], automations: [],
+        scheduledWork: [order({ status: 'done', result: { type: 'agent-task', sessionId: 'saved-worker', outputIds: [] } })],
+      })
+      expect(items.some(item => item.statusLabel === 'Missing source')).toBe(false)
+      expect(items.some(item => item.section === 'running')).toBe(false)
+  })
+  test('uninspected foreign workflow history does not turn a running order into Missing source', () => {
+    const items = buildActiveWorkItems({ workspaceId: 'workspace-1', runningWorkspaceIds: new Set(['workspace-2']), sessions: [], workflowRuns: [], automations: [], scheduledWork: [order({
+      status: 'running', owner: { scope: 'hq', workspaceId: 'workspace-2' },
+      runs: [{ id: 'job', jobId: 'job', status: 'running', startedAt: '2026-09-01T00:00:00.000Z', workflowRunId: 'foreign-run' }],
+    })] })
+    expect(items[0]).toMatchObject({ statusLabel: 'Running', section: 'running', openTarget: { kind: 'scheduled-work', id: 'order-1' } })
+  })
   test('classifies current, upcoming, attention, and automated work', () => {
     const items = buildActiveWorkItems({
       workspaceId: 'workspace-1',

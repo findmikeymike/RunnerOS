@@ -1,8 +1,22 @@
 import { describe, expect, test } from 'bun:test'
 import type { ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
-import { activeSessionInfoToActiveSession, mergeActiveSessions, selectGloballyVisibleOrders } from './useGlobalRunningWork'
+import { activeSessionInfoToActiveSession, currentScheduledWorkSnapshot, mergeActiveSessions, selectGloballyVisibleOrders, workflowRunReadWorkspaceIds } from './useGlobalRunningWork'
 
 describe('global running work helpers', () => {
+  test('fresh scheduled-work reads replace stale current docs, including completed or removed orders', () => {
+    const stale = { id: 'job', status: 'needs-setup', owner: { workspaceId: 'hq' } } as ScheduledWorkOrder
+    const completed = { ...stale, status: 'done' } as ScheduledWorkOrder
+    const foreign = { id: 'other', status: 'running', owner: { workspaceId: 'campaign' } } as ScheduledWorkOrder
+    expect(currentScheduledWorkSnapshot('hq', [stale], { orders: [completed, foreign], loadedOrderWorkspaceIds: new Set(['hq', 'campaign']) })).toEqual([completed, foreign])
+    expect(currentScheduledWorkSnapshot('hq', [stale], { orders: [], loadedOrderWorkspaceIds: new Set(['hq']) })).toEqual([])
+    expect(currentScheduledWorkSnapshot('hq', [stale], { orders: [], loadedOrderWorkspaceIds: new Set() })).toEqual([stale])
+  })
+  test('run history reads stay in the authorized current workspace', () => {
+    expect(workflowRunReadWorkspaceIds(['hq', 'campaign'], 'hq')).toEqual(['hq'])
+    expect(workflowRunReadWorkspaceIds(['hq', 'campaign'], 'campaign')).toEqual(['campaign'])
+    expect(workflowRunReadWorkspaceIds(['hq', 'campaign'], null)).toEqual([])
+    expect(workflowRunReadWorkspaceIds(['hq'], 'foreign')).toEqual([])
+  })
   test('keeps an automated processing session visible without renderer hidden metadata', () => {
     const authoritative = activeSessionInfoToActiveSession({
       sessionId: 'pulse-session',

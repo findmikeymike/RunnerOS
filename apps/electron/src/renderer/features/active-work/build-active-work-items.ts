@@ -219,7 +219,7 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
     .filter((run) => run.workspaceId === input.workspaceId || (run.state === 'running' && runningWorkspaceIds.has(run.workspaceId)))
     .map((run) => run.id))
   const availableSessionIds = new Set(input.sessions
-    .filter((session) => (session.workspaceId === input.workspaceId || runningWorkspaceIds.has(session.workspaceId)) && !session.hidden && session.isProcessing)
+    .filter((session) => (session.workspaceId === input.workspaceId || runningWorkspaceIds.has(session.workspaceId)) && !session.hidden)
     .map((session) => session.id))
   for (const order of orders) {
     const links = latestOrderLinks(order)
@@ -286,7 +286,10 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
       || (links.sessionId && availableSessionIds.has(links.sessionId)),
     )
     const hasDurableAttention = ATTENTION_STATUS.has(order.status) && Boolean(order.attention?.message)
-    const missingSource = hasLinkedTarget && !hasAvailableTarget && !hasDurableAttention
+    // Foreign workflow history is not authorized through this workspace's run
+    // endpoint. A missing local projection is unknown, not a deleted run.
+    const uninspectedForeignRun = Boolean(links.workflowRunId && order.owner.workspaceId !== input.workspaceId)
+    const missingSource = hasLinkedTarget && !hasAvailableTarget && !hasDurableAttention && !uninspectedForeignRun
     const section = missingSource ? 'attention' : scheduledSection(order)
     if (!section) continue
     const openTarget = ATTENTION_STATUS.has(order.status)

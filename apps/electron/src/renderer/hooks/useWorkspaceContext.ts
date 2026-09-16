@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react'
 import { useAtom } from 'jotai'
 import { workspaceContextStateAtomFamily, type WorkspaceContextState } from '@/atoms/workspace-context'
 import type { ContextDocDTO, ContextDocMetadata } from '../../shared/types'
+import { WorkspaceContextSubscriptions } from './workspace-context-subscriptions'
 
 export interface UseWorkspaceContextResult {
   docs: ContextDocDTO[]
@@ -13,11 +14,10 @@ export interface UseWorkspaceContextResult {
 }
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
-const loadedWorkspaceKeys = new Set<string>()
+const subscriptions = new WorkspaceContextSubscriptions()
 const inFlightRefreshes = new Map<string, Promise<void>>()
 const invalidatedWorkspaceKeys = new Set<string>()
 const mountedWorkspaceKeys = new Map<string, number>()
-const refreshersByWorkspaceKey = new Map<string, (ensureFresh?: boolean) => Promise<void>>()
 let workspaceContextCleanup: (() => void) | null = null
 
 function getWorkspaceKey(workspaceId: string | null | undefined): string {
@@ -54,7 +54,7 @@ export function useWorkspaceContext(workspaceId: string | null | undefined): Use
               : Promise.resolve([]))
             if (invalidatedWorkspaceKeys.has(workspaceKey)) continue
             setState({ docs: sortDocs(docs), loading: false, error: null })
-            loadedWorkspaceKeys.add(workspaceKey)
+            subscriptions.markLoaded(workspaceKey)
           } catch (err) {
             if (invalidatedWorkspaceKeys.has(workspaceKey)) continue
             setState((prev) => ({
@@ -73,17 +73,10 @@ export function useWorkspaceContext(workspaceId: string | null | undefined): Use
     return run
   }, [setState, workspaceId, workspaceKey])
 
-  useEffect(() => {
-    refreshersByWorkspaceKey.set(workspaceKey, refresh)
-    return () => {
-      if (refreshersByWorkspaceKey.get(workspaceKey) === refresh) {
-        refreshersByWorkspaceKey.delete(workspaceKey)
-      }
-    }
-  }, [refresh, workspaceKey])
+  useEffect(() => subscriptions.subscribe(workspaceKey, refresh), [refresh, workspaceKey])
 
   useEffect(() => {
-    if (shouldRefreshWorkspaceContext(state, loadedWorkspaceKeys.has(workspaceKey))) {
+    if (shouldRefreshWorkspaceContext(state, subscriptions.hasLoaded(workspaceKey))) {
       void refresh()
     }
   }, [refresh, state.loading, workspaceKey])
@@ -93,17 +86,17 @@ export function useWorkspaceContext(workspaceId: string | null | undefined): Use
     if (!workspaceContextCleanup) {
       workspaceContextCleanup = window.electronAPI.onWorkspaceContextChanged((changedWorkspaceId, docs) => {
         const changedKey = getWorkspaceKey(changedWorkspaceId)
-        const refreshChanged = refreshersByWorkspaceKey.get(changedKey)
-        if (refreshChanged) {
-          void refreshChanged(true)
-          return
-        }
+        subscriptions.refreshChanged(changedKey)
         void docs
       })
     }
     return () => {
       const nextCount = (mountedWorkspaceKeys.get(workspaceKey) ?? 1) - 1
-      if (nextCount <= 0) mountedWorkspaceKeys.delete(workspaceKey)
+      if (nextCount <= 0) {
+        mountedWorkspaceKeys.delete(workspaceKey)
+        // This workspace no longer observes mutations. Its cached documents
+        // must be re-read when a page returns after work completes elsewhere.
+      }
       else mountedWorkspaceKeys.set(workspaceKey, nextCount)
 
       if (mountedWorkspaceKeys.size === 0 && workspaceContextCleanup) {

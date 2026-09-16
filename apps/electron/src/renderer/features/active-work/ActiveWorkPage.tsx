@@ -25,7 +25,7 @@ import { ActiveWorkAddMenu } from './ActiveWorkAddMenu'
 import { coerceSupplyValues, type SupplyInputDefinition } from './active-work-inputs'
 import type { ActiveWorkItem, ActiveWorkSection } from './types'
 import type { WorkflowRunDTO } from '../../../shared/types'
-import { mergeActiveSessions, useGlobalRunningWork } from './useGlobalRunningWork'
+import { currentScheduledWorkSnapshot, mergeActiveSessions, useGlobalRunningWork } from './useGlobalRunningWork'
 
 const SECTION_META: Record<ActiveWorkSection, { title: string; icon: React.ComponentType<{ className?: string }> }> = {
   running: { title: 'Running Now', icon: Bot },
@@ -324,7 +324,7 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
     () => workspaces.filter((workspace) => !workspace.remoteServer).map((workspace) => workspace.id).sort(),
     [workspaces],
   )
-  const globalRunning = useGlobalRunningWork(localWorkspaceIds)
+  const globalRunning = useGlobalRunningWork(localWorkspaceIds, activeWorkspaceId)
   const { allWorkflows, loading: workflowsLoading, error: workflowsError } = useWorkflows(activeWorkspaceId)
   const { docs, loading: contextLoading, error: contextError } = useWorkspaceContext(activeWorkspaceId)
   const [timingNow, setTimingNow] = React.useState(Date.now)
@@ -376,10 +376,8 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
   const combinedSessions = React.useMemo(() => {
     return mergeActiveSessions(sessionMeta.values(), globalRunning.sessions)
   }, [globalRunning.sessions, sessionMeta])
-  const combinedScheduledWork = React.useMemo(() => [
-    ...scheduled.work.items,
-    ...globalRunning.orders.filter((order) => order.owner.workspaceId !== activeWorkspaceId),
-  ], [activeWorkspaceId, globalRunning.orders, scheduled.work.items])
+  const combinedScheduledWork = React.useMemo(() => currentScheduledWorkSnapshot(activeWorkspaceId, scheduled.work.items, globalRunning),
+    [activeWorkspaceId, globalRunning.orders, globalRunning.loadedOrderWorkspaceIds, scheduled.work.items])
   const runningWorkspaceIds = React.useMemo(() => new Set(globalRunning.workspaceIds), [globalRunning.workspaceIds])
   const automationsByWorkspace = React.useMemo(() => {
     const byWorkspace = new Map<string, AutomationListItem[]>(globalRunning.automationsByWorkspace)

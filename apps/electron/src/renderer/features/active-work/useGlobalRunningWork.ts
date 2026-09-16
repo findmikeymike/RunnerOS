@@ -9,6 +9,7 @@ export interface GlobalRunningWorkSnapshot {
   sessions: ActiveSessionLike[]
   runs: WorkflowRunDTO[]
   orders: ScheduledWorkOrder[]
+  loadedOrderWorkspaceIds: ReadonlySet<string>
   automationsByWorkspace: Map<string, AutomationListItem[]>
   loading: boolean
   error: string | null
@@ -21,6 +22,7 @@ const emptySnapshot = (workspaceIds: string[]): GlobalRunningWorkSnapshot => ({
   sessions: [],
   runs: [],
   orders: [],
+  loadedOrderWorkspaceIds: new Set(),
   automationsByWorkspace: new Map(),
   loading: true,
   error: null,
@@ -73,12 +75,25 @@ export function selectGloballyVisibleOrders(orders: ScheduledWorkOrder[]): Sched
   ))
 }
 
-export function useGlobalRunningWork(localWorkspaceIds: string[]): GlobalRunningWorkSnapshot {
+export function workflowRunReadWorkspaceIds(localWorkspaceIds: string[], activeWorkspaceId: string | null | undefined): string[] {
+  return activeWorkspaceId && localWorkspaceIds.includes(activeWorkspaceId) ? [activeWorkspaceId] : []
+}
+
+export function currentScheduledWorkSnapshot(workspaceId: string | null | undefined, localOrders: ScheduledWorkOrder[], snapshot: Pick<GlobalRunningWorkSnapshot, 'orders' | 'loadedOrderWorkspaceIds'>): ScheduledWorkOrder[] {
+  return [
+    ...(workspaceId && snapshot.loadedOrderWorkspaceIds.has(workspaceId)
+      ? snapshot.orders.filter(order => order.owner.workspaceId === workspaceId) : localOrders),
+    ...snapshot.orders.filter(order => order.owner.workspaceId !== workspaceId),
+  ]
+}
+
+export function useGlobalRunningWork(localWorkspaceIds: string[], activeWorkspaceId: string | null | undefined): GlobalRunningWorkSnapshot {
   const workspaceKey = [...localWorkspaceIds].sort().join('\u0000')
   const [state, setState] = React.useState<GlobalRunningWorkSnapshot>(() => emptySnapshot(localWorkspaceIds))
 
   React.useEffect(() => {
     const workspaceIds = workspaceKey ? workspaceKey.split('\u0000') : []
+    const runWorkspaceIds = workflowRunReadWorkspaceIds(workspaceIds, activeWorkspaceId)
     const allowed = new Set(workspaceIds)
     let cancelled = false
     let snapshotRequest = 0
@@ -98,7 +113,7 @@ export function useGlobalRunningWork(localWorkspaceIds: string[]): GlobalRunning
       try {
         const [sessionsResult, runsResult, ordersResult, automationsResult] = await Promise.all([
           Promise.allSettled([window.electronAPI.getActiveSessions()]),
-          Promise.allSettled(workspaceIds.map((workspaceId) => window.electronAPI.listWorkflowRuns(workspaceId))),
+          Promise.allSettled(runWorkspaceIds.map((workspaceId) => window.electronAPI.listWorkflowRuns(workspaceId))),
           Promise.allSettled(workspaceIds.map((workspaceId) => window.electronAPI.getScheduledWork(workspaceId))),
           Promise.allSettled(workspaceIds.map((workspaceId) => window.electronAPI.getAutomations(workspaceId))),
         ])
@@ -109,6 +124,7 @@ export function useGlobalRunningWork(localWorkspaceIds: string[]): GlobalRunning
           let sessions = current.sessions
           let runs = current.runs
           let orders = current.orders
+          const loadedOrderWorkspaceIds = new Set(current.loadedOrderWorkspaceIds)
           const automationsByWorkspace = new Map(current.automationsByWorkspace)
 
           const activeSessions = sessionsResult[0]
@@ -122,7 +138,7 @@ export function useGlobalRunningWork(localWorkspaceIds: string[]): GlobalRunning
           }
 
           runsResult.forEach((result, index) => {
-            const workspaceId = workspaceIds[index]!
+            const workspaceId = runWorkspaceIds[index]!
             if (result.status === 'fulfilled') {
               runs = [
                 ...runs.filter((run) => run.workspaceId !== workspaceId),
@@ -139,8 +155,9 @@ export function useGlobalRunningWork(localWorkspaceIds: string[]): GlobalRunning
               orders = replaceWorkspaceOrders(
                 orders,
                 workspaceId,
-                selectGloballyVisibleOrders(result.value.work.items),
+                workspaceId === activeWorkspaceId ? result.value.work.items : selectGloballyVisibleOrders(result.value.work.items),
               )
+              loadedOrderWorkspaceIds.add(workspaceId)
             } else {
               failures.add('scheduled work')
             }
@@ -157,6 +174,7 @@ export function useGlobalRunningWork(localWorkspaceIds: string[]): GlobalRunning
             sessions,
             runs,
             orders,
+            loadedOrderWorkspaceIds,
             automationsByWorkspace,
             loading: false,
             error: failures.size > 0
@@ -216,7 +234,7 @@ export function useGlobalRunningWork(localWorkspaceIds: string[]): GlobalRunning
       clearInterval(poll)
       for (const cleanup of cleanups) cleanup()
     }
-  }, [workspaceKey])
+  }, [workspaceKey, activeWorkspaceId])
 
   return state
 }
