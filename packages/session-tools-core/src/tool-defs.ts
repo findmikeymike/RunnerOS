@@ -64,6 +64,9 @@ import { handleMessageAgent } from './handlers/message-agent.ts';
 import { handleListAgentMessageReceipts } from './handlers/list-agent-message-receipts.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
 import { handleCreateAgent } from './handlers/create-agent.ts';
+import { handleListAutomations } from './handlers/list-automations.ts';
+import { handleGetAutomation } from './handlers/get-automation.ts';
+import { handleUpdateAutomation } from './handlers/update-automation.ts';
 import { handleCreateAutomation } from './handlers/create-automation.ts';
 import { handleCreateWorkflow } from './handlers/create-workflow.ts';
 import { handleCampaignCalendarWrite } from './handlers/campaign-calendar.ts';
@@ -603,7 +606,7 @@ export const CreateAutomationSchema = z.object({
     allowedMethods: z.array(z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])).optional().describe('Allowed HTTP methods for WebhookReceive. Defaults to POST.'),
     cron: z.string().optional().describe('Cron expression in 5-field format (required for SchedulerTick).'),
     timezone: z.string().optional().describe('IANA timezone for cron evaluation (e.g. "America/New_York").'),
-    watchPath: z.string().optional().describe('Path to watch (FileWatch).'),
+    watchPath: z.string().optional().describe('Directory relative to the current workspace root, e.g. "builder-qa-fixtures" or "." for the workspace itself. Do not use absolute paths, ~, or ".."; the directory must remain inside this workspace.'),
     watchGlob: z.string().optional().describe('Glob filter (FileWatch).'),
     watchChangeTypes: z.array(z.enum(['add', 'change', 'remove'])).optional(),
     pollUrl: z.string().optional().describe('URL to poll (PollUrl).'),
@@ -689,11 +692,36 @@ const ScheduleWorkTriggerSchema = z.discriminatedUnion('type', [
     cadence: z.enum(['daily', 'weekly', 'monthly']).optional(),
     timezone: z.string().optional(),
   }),
-  z.object({ type: z.literal('file-change'), watchPath: z.string().min(1), watchGlob: z.string().optional(), changeTypes: z.array(z.enum(['add', 'change', 'remove'])).optional() }),
+  z.object({ type: z.literal('file-change'), watchPath: z.string().min(1).describe('Directory relative to the current workspace root, e.g. "builder-qa-fixtures" or "." for the workspace itself. Do not use absolute paths, ~, or ".."; the directory must remain inside this workspace.'), watchGlob: z.string().optional(), changeTypes: z.array(z.enum(['add', 'change', 'remove'])).optional() }),
   z.object({ type: z.literal('webhook'), slug: z.string().min(1), secretEnv: z.string().optional(), allowUnauthenticated: z.boolean().optional() }),
   z.object({ type: z.literal('url-change'), url: z.string().url(), intervalSeconds: z.number().int().min(30).optional() }),
   z.object({ type: z.literal('message'), matcher: z.string().optional() }),
 ]);
+
+export const ListAutomationsSchema = z.object({ limit: z.number().int().min(1).max(50).optional() }).strict();
+export const GetAutomationSchema = z.object({ automationId: z.string().trim().min(1) }).strict();
+// Maintenance edits preserve an existing schedule; only creation chooses cadence.
+const AutomationMaintenanceTriggerSchema = z.discriminatedUnion('type', [
+  ScheduleWorkTriggerSchema.options[0].omit({ cadence: true }).extend({
+    cron: z.string().trim().min(1).describe('Explicit cron expression for the revised schedule.'),
+  }).strict(),
+  ScheduleWorkTriggerSchema.options[1],
+  ScheduleWorkTriggerSchema.options[2],
+  ScheduleWorkTriggerSchema.options[3],
+  ScheduleWorkTriggerSchema.options[4],
+]);
+export const UpdateAutomationSchema = z.object({
+  automationId: z.string().trim().min(1),
+  expectedRevision: z.string().trim().min(1).describe('Opaque revision returned by get_automation. A conflict requires re-reading; never retry stale edits.'),
+  intent: z.string().trim().min(1).max(2000).describe('The specific user-approved change. Existing approval is sufficient when it covers this exact change.'),
+  patch: z.object({
+    name: z.string().trim().min(1).max(200).optional(),
+    description: z.string().trim().min(1).max(2000).optional(),
+    enabled: z.boolean().optional(),
+    trigger: AutomationMaintenanceTriggerSchema.optional(),
+    execution: ScheduleWorkExecutionSchema.optional(),
+  }).strict().refine(value => Object.keys(value).length > 0, 'Provide at least one change.'),
+}).strict();
 
 export const ScheduleWorkSchema = z.object({
   idempotencyKey: z.string().min(1).max(128).describe('Stable unique key for this user request. Reuse exactly when retrying the same schedule_work call.'),
@@ -1854,7 +1882,7 @@ Runnable job payloads:
 
 After success, tell the user what was scheduled and whether approval is still required.`,
 
-  schedule_work: `Create executable tracked work on the current workspace's Calendar or as an Automation. This tool is available only to HNIC.
+  schedule_work: `Create executable tracked work on the current workspace's Calendar or as an Automation. This tool is available to Artist Manager and Builder.
 
 Use Calendar for one-shot work at an exact start time. Use Automation when the work should repeat or start from a schedule, file change, webhook, URL change, or inbound message.
 
@@ -2316,6 +2344,9 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'unbind_messaging_channel', description: TOOL_DESCRIPTIONS.unbind_messaging_channel, inputSchema: UnbindMessagingChannelSchema, executionMode: 'registry', safeMode: 'block', handler: handleUnbindMessagingChannel },
   // Creator skills — agent-creator structured write tool
   { name: 'create_agent', description: TOOL_DESCRIPTIONS.create_agent, inputSchema: CreateAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAgent },
+  { name: 'list_automations', description: 'Builder: list up to 50 automations in this workspace with stable IDs, trigger, target, enabled state and last outcome. Results are redacted; no secrets or raw internals.', inputSchema: ListAutomationsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAutomations },
+  { name: 'get_automation', description: 'Builder: inspect one existing automation and its opaque revision before editing. Returns redacted editable fields; protected app-owned rules require their existing app control.', inputSchema: GetAutomationSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetAutomation },
+  { name: 'update_automation', description: 'Builder: apply an approved typed patch to the same workspace automation using its expected revision. Only the current trigger family is supported. Pause/resume changes enabled. Conflicts require rereading. A saved change is not proof of execution; running work is reported separately from canceled queued work.', inputSchema: UpdateAutomationSchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateAutomation },
   { name: 'create_automation', description: TOOL_DESCRIPTIONS.create_automation, inputSchema: CreateAutomationSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAutomation },
   { name: 'campaign_calendar_write', description: TOOL_DESCRIPTIONS.campaign_calendar_write, inputSchema: CampaignCalendarWriteSchema, executionMode: 'registry', safeMode: 'block', handler: handleCampaignCalendarWrite },
   { name: 'schedule_work', description: TOOL_DESCRIPTIONS.schedule_work, inputSchema: ScheduleWorkSchema, executionMode: 'registry', safeMode: 'block', handler: handleScheduleWork },
@@ -2393,8 +2424,14 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
 export interface SessionToolFilterOptions {
   /** Include the experimental send_developer_feedback tool. */
   includeDeveloperFeedback?: boolean;
-  /** Include the HNIC-only schedule_work tool. */
+  /** Include schedule_work for Artist Manager and Builder. */
   includeScheduleWork?: boolean;
+  /** Preserve Manager-only goal orchestration independently of Builder scheduling. */
+  includeManageGoalRun?: boolean;
+  /** Hide definition construction for stock Artist OS operating roles. */
+  excludeDefinitionAuthoring?: boolean;
+  /** Builder-only automation inspection and revision tools. */
+  includeAutomationMaintenance?: boolean;
   /** Include input supply for Artist Manager sessions. */
   includeSupplyWorkInput?: boolean;
   /** Include the HNIC-only semantic Manager tools. */
@@ -2434,7 +2471,10 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
       return false;
     }
-    if (!includeScheduleWork && (def.name === 'schedule_work' || def.name === 'manage_goal_run')) return false;
+    if (!includeScheduleWork && def.name === 'schedule_work') return false;
+    if (!(options?.includeManageGoalRun ?? includeScheduleWork) && def.name === 'manage_goal_run') return false;
+    if (options?.excludeDefinitionAuthoring && ['create_agent', 'create_workflow', 'create_automation'].includes(def.name)) return false;
+    if (!options?.includeAutomationMaintenance && ['list_automations', 'get_automation', 'update_automation'].includes(def.name)) return false;
     if (!includeSupplyWorkInput && def.name === 'supply_work_input') return false;
     if (!includeManagerTools && ['get_manager_brief', 'get_artist_context', 'get_campaign_context'].includes(def.name)) return false;
     if (!includeCampaignManagerTools && def.name === 'get_campaign_brief') return false;
@@ -2575,6 +2615,12 @@ export function getToolDefsAsJsonSchema(opts?: {
   prefix?: string;
   includeDeveloperFeedback?: boolean;
   includeScheduleWork?: boolean;
+  /** Preserve Manager-only goal orchestration independently of Builder scheduling. */
+  includeManageGoalRun?: boolean;
+  /** Hide definition construction for stock Artist OS operating roles. */
+  excludeDefinitionAuthoring?: boolean;
+  /** Builder-only automation inspection and revision tools. */
+  includeAutomationMaintenance?: boolean;
   includeSupplyWorkInput?: boolean;
   includeManagedSkillTools?: boolean;
   includeManagerTools?: boolean;
@@ -2588,6 +2634,9 @@ export function getToolDefsAsJsonSchema(opts?: {
   const defs = getSessionToolDefs({
     includeDeveloperFeedback: opts?.includeDeveloperFeedback,
     includeScheduleWork: opts?.includeScheduleWork,
+    includeManageGoalRun: opts?.includeManageGoalRun,
+    excludeDefinitionAuthoring: opts?.excludeDefinitionAuthoring,
+    includeAutomationMaintenance: opts?.includeAutomationMaintenance,
     includeSupplyWorkInput: opts?.includeSupplyWorkInput,
     includeManagedSkillTools: opts?.includeManagedSkillTools,
     includeManagerTools: opts?.includeManagerTools,

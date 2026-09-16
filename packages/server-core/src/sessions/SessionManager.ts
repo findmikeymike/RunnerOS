@@ -28,7 +28,7 @@ import {
 import { withAutomaticSchedulePlacementLock } from '../scheduled-work/AutomaticSchedulePlacementLock'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
 import { basename, dirname, join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, copyFileSync, constants } from 'fs'
 import { readFile, writeFile, mkdir, rename } from 'fs/promises'
 import { createHash, randomUUID } from 'node:crypto'
 import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary, resolveKeepBackgroundTasksAlive, modelFallbackAttentionReason } from '@craft-agent/shared/agent'
@@ -234,6 +234,7 @@ import { WebsiteService, type WebsiteToolResult } from '../website/WebsiteServic
 import { loadWebsiteManifest, type ApprovalBinding } from '@craft-agent/shared/website'
 import { CommunityToolService } from '../community/CommunityToolService'
 import type { CommunityMailResult } from '../community/CommunityMailService'
+import { definitionReferencedByExecution } from './definition-edit-guard'
 import { listSpotifySnapshotPaths, publishLatestSpotifySnapshotContext } from '../pulses/spotify-snapshot-publisher'
 import { collectSpotifyNative, isSpotifyBrowserDraining } from '../pulses/spotify-native-collector'
 import { collectInstagramNative, selectInstagramPulseProfile, isInstagramBrowserDraining } from '../pulses/instagram-native-collector'
@@ -619,7 +620,8 @@ export function canSaveRunnerSecrets(spawnedFromAgent?: SpawnedAgentRef): boolea
 }
 
 export function canScheduleWork(spawnedFromAgent?: SpawnedAgentRef): boolean {
-  return Boolean(spawnedFromAgent?.agentSlug && SCHEDULE_WORK_AGENT_SLUGS.has(spawnedFromAgent.agentSlug))
+  return Boolean(spawnedFromAgent?.agentSlug && (SCHEDULE_WORK_AGENT_SLUGS.has(spawnedFromAgent.agentSlug)
+    || (resolveRuntimeIdentity().variant === 'artist-os' && spawnedFromAgent.agentSlug === 'builder')))
 }
 
 function requireCurrentArtistAnswerForWorkInput(
@@ -924,12 +926,9 @@ async function recordInjectedMemoryFromLaunchReceipt(
   await Promise.all(writes)
 }
 
-const automationConfigMutexes = new Map<string, Promise<void>>()
-function withAutomationConfigMutex<T>(configPath: string, fn: () => Promise<T>): Promise<T> {
-  const prev = automationConfigMutexes.get(configPath) ?? Promise.resolve()
-  const next = prev.then(fn, fn)
-  automationConfigMutexes.set(configPath, next.then(() => {}, () => {}))
-  return next
+async function withAutomationConfigMutex<T>(configPath: string, fn: () => Promise<T>): Promise<T> {
+  const { withConfigMutex } = await import('../handlers/rpc/automations')
+  return withConfigMutex(dirname(configPath), fn)
 }
 
 let workflowDefinitionsLibraryMutex: Promise<void> = Promise.resolve()
@@ -2155,6 +2154,7 @@ export class SessionManager implements ISessionManager {
     sessionId: string
     type?: 'bash' | 'file_write' | 'mcp_mutation' | 'api_mutation' | 'admin_approval'
     commandHash?: string
+    request?: import('@craft-agent/shared/protocol').PermissionRequest
   }> = new Map()
   // Privileged approval binding + audit logger
   private privilegedExecutionBroker = new PrivilegedExecutionBroker(sessionLog)
@@ -2442,6 +2442,13 @@ export class SessionManager implements ISessionManager {
     }
   }
 
+  private getPendingPermissions(sessionId: string): import('@craft-agent/shared/protocol').PermissionRequest[] {
+    if (!this.sessions.get(sessionId)?.isProcessing) return []
+    return Array.from(this.pendingPermissionRequests.values())
+      .filter(entry => entry.sessionId === sessionId && entry.request)
+      .map(entry => ({ ...entry.request! }))
+  }
+
   private clearPendingPermissionRequestsForSession(sessionId: string): void {
     for (const [requestId, metadata] of this.pendingPermissionRequests.entries()) {
       if (metadata.sessionId === sessionId) {
@@ -2548,6 +2555,21 @@ export class SessionManager implements ISessionManager {
       MIGRATING_WORKSPACE_ROOTS.delete(workspace.rootPath)
       this.setupConfigWatcher(workspace.rootPath, workspaceId)
       throw error
+    }
+  }
+
+  private assertDefinitionEditIdle(kind: 'agent' | 'workflow', slug: string): void {
+    if (kind === 'agent' && [...this.sessions.values()].some(session => session.isProcessing && session.spawnedFromAgent?.agentSlug === slug)) {
+      throw new Error('This worker is running. Wait for it to finish before revising its shared definition.')
+    }
+    for (const workspace of getWorkspaces().filter(ws => !ws.remoteServer)) {
+      const work = parseScheduledWorkDocResult(loadContextDoc(workspace.rootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspace.id)
+      if (!work.ok) throw new Error('A workspace schedule cannot be read safely. Repair it before editing shared definitions.')
+      const referenced = work.work.items.some(item => !item.deletedAt && !['done', 'canceled', 'awaiting-review'].includes(item.status)
+        && definitionReferencedByExecution(kind, slug, item.execution, workflowSlug => loadGlobalWorkflow(workflowSlug)?.metadata.steps.map(step => step.agent) ?? []))
+      const running = listWorkflowRuns(workspace.rootPath).some(run => ['created', 'queued', 'running', 'paused', 'interrupted'].includes(run.state)
+        && (kind === 'workflow' ? run.workflowSlug === slug : run.workflowSnapshot.metadata.steps.some(step => step.agent === slug)))
+      if (referenced || running) throw new Error('This shared definition is used by pending or active work. Finish or cancel that work before revising it.')
     }
   }
 
@@ -4382,6 +4404,7 @@ export class SessionManager implements ISessionManager {
         const releaseManagerActivationState = join(dirname(releaseManagerAgentDir), '.migrations', 'release-manager-activation-v1.json')
         const anythingAgentDir = getGlobalAgentDir(ANYTHING_AGENT_SLUG)
         const anythingAgentActivationState = join(dirname(anythingAgentDir), '.migrations', 'anything-agent-activation-v1.json')
+        const builderPreviouslyInstalled = Boolean(loadGlobalAgent('builder'))
         const anythingAgentPreviouslyInstalled = Boolean(loadGlobalAgent(ANYTHING_AGENT_SLUG))
         const marketplaceWorkersPreviouslyInstalled = new Set(
           ['art-director', 'youtube-intelligence-agent'].filter(slug => Boolean(loadGlobalAgent(slug))),
@@ -4389,7 +4412,7 @@ export class SessionManager implements ISessionManager {
         const artistDefaultAgentSlugs = [
           ...HQ_DEFAULT_ACTIVATED_AGENT_SLUGS,
           ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
-          ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS.filter(agentSlug => agentSlug !== ANYTHING_AGENT_SLUG),
+          ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS.filter(agentSlug => agentSlug !== ANYTHING_AGENT_SLUG && agentSlug !== 'builder'),
         ]
         const artistDefaultAgentsPreviouslyInstalled = new Set<string>(
           artistDefaultAgentSlugs.filter(agentSlug => Boolean(loadGlobalAgent(agentSlug))),
@@ -4407,6 +4430,29 @@ export class SessionManager implements ISessionManager {
         const { ensured } = ensureRequiredAgents(required)
         if (ensured > 0) {
           sessionLog.info(`[agent-definitions] Ensured ${ensured} required agent(s)`)
+        }
+        if (resolveRuntimeIdentity().variant === 'artist-os') {
+          const { getWorkspaces } = await import('@craft-agent/shared/config')
+          const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
+          const { getActivatedAgentsManifestPath } = await import('@craft-agent/shared/workspaces')
+          const builderActivation = migrateOrPreserveInitialArtistAgentActivation({
+            stateFile: join(dirname(getGlobalAgentDir('builder')), '.migrations', 'builder-activation-v1.json'),
+            workspaces: getWorkspaces().filter(ws => !ws.remoteServer && (ws.artistWorkspaceScope === 'hq' || ws.artistWorkspaceScope === 'campaign')),
+            agentSlug: 'builder', skillSlugs: [], previouslyInstalled: builderPreviouslyInstalled,
+            isAgentActive: ws => {
+              const manifest = readActivatedAgents(ws.rootPath)
+              return manifest.active.includes('builder') || (manifest.deactivated ?? []).includes('builder')
+            },
+            activateAgent: ws => {
+              const manifestPath = getActivatedAgentsManifestPath(ws.rootPath)
+              const backupPath = `${manifestPath}.before-builder`
+              if (existsSync(manifestPath) && !existsSync(backupPath)) copyFileSync(manifestPath, backupPath, constants.COPYFILE_EXCL)
+              setAgentActive(ws.rootPath, 'builder', true)
+            },
+            enabledSkillSlugs: () => [], enableSkill: () => {},
+            warn: (message, error) => sessionLog.warn(`[builder] ${message}:`, error as Error),
+          })
+          if (builderActivation.updatedWorkspaceIds.length) sessionLog.info('[builder] Activated in existing development workspaces', builderActivation.updatedWorkspaceIds)
         }
         replaceBuiltInAgentMetadata('website-agent', {
           description: {
@@ -4998,12 +5044,13 @@ export class SessionManager implements ISessionManager {
         }
         try {
           const { CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, dedupeBuiltInAgentPromptText, ensureBuiltInAgentMetadataSlugs, ensureBuiltInAgentSkills, ensureBuiltInAgentSkillsForSlug, replaceBuiltInAgentMetadata, replaceBuiltInAgentPromptPattern, replaceBuiltInAgentPromptText } = await import('@craft-agent/shared/agent-definitions')
-          const { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } = await import('@craft-agent/shared/skills/system')
-          const { updated } = ensureBuiltInAgentSkills(CREATOR_SYSTEM_SKILL_SLUGS)
+          const { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS, ARTIST_MANAGER_SYSTEM_SKILL_SLUGS } = await import('@craft-agent/shared/skills/system')
+          const artistBuilderRoles = resolveRuntimeIdentity().variant === 'artist-os'
+          const { updated } = artistBuilderRoles ? { updated: 0 } : ensureBuiltInAgentSkills(CREATOR_SYSTEM_SKILL_SLUGS)
           if (updated > 0) {
             sessionLog.info(`[agent-definitions] Ensured ${updated} built-in agent(s) have system skills`)
           }
-          if (ensureBuiltInAgentSkillsForSlug(CONCIERGE_SLUG, CONCIERGE_SYSTEM_SKILL_SLUGS).updated) {
+          if (ensureBuiltInAgentSkillsForSlug(CONCIERGE_SLUG, artistBuilderRoles ? ARTIST_MANAGER_SYSTEM_SKILL_SLUGS : CONCIERGE_SYSTEM_SKILL_SLUGS).updated) {
             sessionLog.info('[agent-definitions] Ensured Concierge has self-edit system skill')
           }
           const youtubeResearchPromptUpdated = replaceBuiltInAgentPromptText(
@@ -6337,6 +6384,13 @@ user a clickable link to where the thing now lives.`
           if (helperGuideMigration.updatedAgents.length || helperGuideMigration.updatedSkills.length) {
             sessionLog.info('[agent-definitions] Updated app helper guidance', helperGuideMigration)
           }
+          if (artistBuilderRoles) {
+            const { migrateBuilderResponsibility } = await import('@craft-agent/shared/agent-definitions')
+            const transition = migrateBuilderResponsibility()
+            if (transition.updated.length) sessionLog.info('[builder] Updated stock development-profile responsibilities', transition.updated)
+            if (transition.customized.length) sessionLog.info('[builder] Preserved customized definitions; responsibility review needed', transition.customized)
+          }
+
         } catch (err) {
           const detail = err instanceof Error
             ? (err.stack ?? `${err.name}: ${err.message}`)
@@ -7422,7 +7476,7 @@ user a clickable link to where the thing now lives.`
 
     return sessions
       .filter(m => shouldExposeSessionInLists(m, options))
-      .map(m => managedToSession(m))
+      .map(m => ({ ...managedToSession(m), pendingPermissions: this.getPendingPermissions(m.id) }))
       .sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0))
   }
 
@@ -7494,7 +7548,7 @@ user a clickable link to where the thing now lives.`
     // Lazy-load messages from disk if not yet loaded
     await this.ensureMessagesLoaded(m)
 
-    return managedToSession(m, { messages: m.messages })
+    return { ...managedToSession(m, { messages: m.messages }), pendingPermissions: this.getPendingPermissions(m.id) }
   }
 
   /**
@@ -8935,6 +8989,7 @@ user a clickable link to where the thing now lives.`
           sessionId: managed.id,
           type: request.type,
           commandHash: effectiveCommandHash,
+          request: { ...request, ...brokerMetadata, sessionId: managed.id },
         })
 
         if (request.type === 'admin_approval' && effectiveCommandHash && this.hasActiveAdminRememberApproval(managed.id, effectiveCommandHash)) {
@@ -10557,8 +10612,11 @@ user a clickable link to where the thing now lives.`
           }, input)
         },
         createAgentFn: async (input) => {
+          if (resolveRuntimeIdentity().variant === 'artist-os' && ['concierge', 'setup-concierge', 'orchestrator'].includes(managed.spawnedFromAgent?.agentSlug ?? '')) {
+            return { ok: false, error: 'Reusable definition authoring belongs to Builder. Hand off this construction request to Builder.' }
+          }
           const {
-            writeGlobalAgent,
+            writeGlobalAgentToolRevision,
             loadGlobalAgent,
             setAgentActive,
             CONCIERGE_SLUG: CONCIERGE,
@@ -10570,7 +10628,7 @@ user a clickable link to where the thing now lives.`
           if (!isValidAgentSlug(slug)) {
             return { ok: false, error: `Invalid agent slug: "${slug}".` }
           }
-          if (slug === CONCIERGE || slug === ORCHESTRATOR) {
+          if (slug === CONCIERGE || slug === ORCHESTRATOR || (resolveRuntimeIdentity().variant === 'artist-os' && slug === 'builder')) {
             return { ok: false, error: `"${slug}" is a built-in agent and cannot be overwritten.` }
           }
 
@@ -10580,6 +10638,10 @@ user a clickable link to where the thing now lives.`
 
           return withAgentDefinitionsLibraryMutex(async () => {
             const existing = loadGlobalAgent(slug)
+            if (existing && input.overwrite) {
+              try { this.assertDefinitionEditIdle('agent', slug) }
+              catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) } }
+            }
             if (existing && !input.overwrite) {
               // Try `<slug>-v2` through `<slug>-v999`. If every variant in
               // that range is taken (effectively impossible in real use),
@@ -10608,7 +10670,7 @@ user a clickable link to where the thing now lives.`
             }
 
             try {
-              writeGlobalAgent({
+              writeGlobalAgentToolRevision({
                 slug,
                 metadata: input.metadata,
                 systemPrompt: input.systemPrompt,
@@ -10623,6 +10685,8 @@ user a clickable link to where the thing now lives.`
                 setAgentActive(managed.workspace.rootPath, slug, true)
               } catch (err) {
                 sessionLog.warn(`create_agent: failed to activate ${slug} in workspace:`, err as Error)
+                this.broadcastAgentDefinitionsChanged(null)
+                return { ok: false, slug, error: `Saved agent but could not activate it in this workspace: ${err instanceof Error ? err.message : String(err)}` }
               }
             }
 
@@ -10632,7 +10696,31 @@ user a clickable link to where the thing now lives.`
             return { ok: true, slug }
           })
         },
+        listAutomationsFn: async (input) => {
+          if (resolveRuntimeIdentity().variant !== 'artist-os' || managed.spawnedFromAgent?.agentSlug !== 'builder') return { ok: false, error: 'Automation maintenance is only available to Builder.' }
+          try {
+            const { listAutomationMaintenance } = await import('../automations/automation-maintenance')
+            return await listAutomationMaintenance(managed.workspace.id, input)
+          } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) } }
+        },
+        getAutomationFn: async (input) => {
+          if (resolveRuntimeIdentity().variant !== 'artist-os' || managed.spawnedFromAgent?.agentSlug !== 'builder') return { ok: false, error: 'Automation maintenance is only available to Builder.' }
+          try {
+            const { getAutomationMaintenance } = await import('../automations/automation-maintenance')
+            return await getAutomationMaintenance(managed.workspace.id, input.automationId)
+          } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) } }
+        },
+        updateAutomationFn: async (input) => {
+          if (resolveRuntimeIdentity().variant !== 'artist-os' || managed.spawnedFromAgent?.agentSlug !== 'builder') return { ok: false, error: 'Automation maintenance is only available to Builder.' }
+          try {
+            const { updateAutomationMaintenance } = await import('../automations/automation-maintenance')
+            return await updateAutomationMaintenance(managed.workspace.id, input)
+          } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) } }
+        },
         createAutomationFn: async (input) => {
+          if (resolveRuntimeIdentity().variant === 'artist-os' && ['concierge', 'setup-concierge', 'orchestrator'].includes(managed.spawnedFromAgent?.agentSlug ?? '')) {
+            return { ok: false, error: 'Reusable definition authoring belongs to Builder. Hand off this construction request to Builder.' }
+          }
           const targetWorkspaceId = input.workspaceId ?? managed.workspace.id
           const targetWorkspace = getWorkspaceByNameOrId(targetWorkspaceId)
           if (!targetWorkspace) {
@@ -10825,7 +10913,7 @@ user a clickable link to where the thing now lives.`
               }
             }
           : undefined,
-        supplyWorkInputFn: canScheduleWork(managed.spawnedFromAgent)
+        supplyWorkInputFn: managed.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
           ? async (input) => {
               const evidence = requireCurrentArtistAnswerForWorkInput(managed, input)
               const supplied = await supplyScheduledWorkInputs(
@@ -10856,10 +10944,13 @@ user a clickable link to where the thing now lives.`
               return supplied
             }
           : undefined,
-        manageGoalRunFn: canScheduleWork(managed.spawnedFromAgent)
+        manageGoalRunFn: managed.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
           ? async (input) => this.manageGoalRun(managed.workspace.id, managed.workspace.rootPath, input)
           : undefined,
         createWorkflowFn: async (input) => {
+          if (resolveRuntimeIdentity().variant === 'artist-os' && ['concierge', 'setup-concierge', 'orchestrator'].includes(managed.spawnedFromAgent?.agentSlug ?? '')) {
+            return { ok: false, error: 'Reusable definition authoring belongs to Builder. Hand off this construction request to Builder.' }
+          }
           const slug = input.slug
           if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(slug)) {
             return { ok: false, error: `Invalid workflow slug: "${slug}".` }
@@ -10867,6 +10958,10 @@ user a clickable link to where the thing now lives.`
 
           return withWorkflowDefinitionsLibraryMutex(async () => {
             const existing = loadGlobalWorkflow(slug)
+            if (existing && input.overwrite) {
+              try { this.assertDefinitionEditIdle('workflow', slug) }
+              catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) } }
+            }
             if (existing && !input.overwrite) {
               const SUGGEST_MAX = 999
               let suggested: string | undefined
@@ -13840,7 +13935,7 @@ user a clickable link to where the thing now lives.`
           sendSpan.mark('sources.build_failed')
           sendSpan.setMetadata('error', message)
           sendSpan.end()
-          this.onProcessingStopped(sessionId, 'error', myGeneration)
+          await this.onProcessingStopped(sessionId, 'error', myGeneration)
           return
         }
 
@@ -14014,7 +14109,7 @@ user a clickable link to where the thing now lives.`
               sessionLog.warn(`Canvas visual review completed without assistant response for session ${sessionId}`)
               sendSpan.mark('chat.complete.canvas_review_no_response')
               sendSpan.end()
-              this.onProcessingStopped(sessionId, 'complete', myGeneration)
+              await this.onProcessingStopped(sessionId, 'complete', myGeneration)
               return
             }
 
@@ -14063,7 +14158,9 @@ user a clickable link to where the thing now lives.`
 
           sendSpan.mark('chat.complete')
           sendSpan.end()
-          this.onProcessingStopped(sessionId, 'complete', myGeneration)
+          // Hidden workflow sessions may be deleted as soon as sendMessage resolves.
+          // Finish this turn's metadata writes before handing control back to the caller.
+          await this.onProcessingStopped(sessionId, 'complete', myGeneration)
           return  // Exit function, skip finally block (onProcessingStopped handles cleanup)
         }
 
@@ -14080,7 +14177,7 @@ user a clickable link to where the thing now lives.`
         sendSpan.end()
       } else if (managed.stopRequested) {
         sessionLog.info('Chat loop completed after stop request - events drained successfully')
-        this.onProcessingStopped(sessionId, 'interrupted', myGeneration)
+        await this.onProcessingStopped(sessionId, 'interrupted', myGeneration)
       } else {
         sessionLog.info('Chat loop exited unexpectedly')
       }
@@ -14106,7 +14203,7 @@ user a clickable link to where the thing now lives.`
         // by setting isProcessing = false directly. All other abort reasons route
         // through onProcessingStopped for queue draining.
         if (reason === AbortReason.UserStop || reason === AbortReason.Redirect || reason === undefined) {
-          this.onProcessingStopped(sessionId, 'interrupted', myGeneration)
+          await this.onProcessingStopped(sessionId, 'interrupted', myGeneration)
         }
       } else {
         sessionLog.error('Error in chat:', error)
@@ -14125,7 +14222,7 @@ user a clickable link to where the thing now lives.`
           error: error instanceof Error ? error.message : 'Unknown error'
         }, managed.workspace.id)
         // Handle error via centralized handler
-        this.onProcessingStopped(sessionId, 'error', myGeneration)
+        await this.onProcessingStopped(sessionId, 'error', myGeneration)
       }
     } finally {
       // Only handle cleanup for unexpected exits (loop break without complete event)
@@ -14136,7 +14233,7 @@ user a clickable link to where the thing now lives.`
         sessionLog.info('Finally block cleanup - unexpected exit')
         sendSpan.mark('chat.unexpected_exit')
         sendSpan.end()
-        this.onProcessingStopped(sessionId, 'interrupted', myGeneration)
+        await this.onProcessingStopped(sessionId, 'interrupted', myGeneration)
       }
     }
   }
@@ -14228,6 +14325,7 @@ user a clickable link to where the thing now lives.`
   }
 
   private async cancelProcessingAdmitted(sessionId: string, silent: boolean): Promise<void> {
+    this.clearPendingPermissionRequestsForSession(sessionId)
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.pendingSourceRetry = undefined
@@ -14454,6 +14552,7 @@ user a clickable link to where the thing now lives.`
     }
     const settledGeneration = managed.processingGeneration
     managed.lastSettledProcessingGeneration = settledGeneration
+    this.clearPendingPermissionRequestsForSession(sessionId)
     if (reason === 'interrupted') managed.wasInterrupted = true
 
     sessionLog.info(`Processing stopped for session ${sessionId}: ${reason}`)
@@ -15037,6 +15136,7 @@ user a clickable link to where the thing now lives.`
     const managed = this.sessions.get(sessionId)
     if (managed?.agent) {
       const requestMeta = this.pendingPermissionRequests.get(requestId)
+      if (!requestMeta || requestMeta.sessionId !== sessionId) return false
       this.pendingPermissionRequests.delete(requestId)
 
       if (requestMeta?.type === 'admin_approval') {

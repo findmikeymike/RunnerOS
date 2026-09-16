@@ -186,6 +186,64 @@ describe('sendMessage durability', () => {
     }
   })
 
+  for (const outcome of ['complete', 'error', 'unexpected-exit'] as const) {
+    it(`waits for ${outcome} cleanup before callers can delete a hidden workflow session`, async () => {
+      const sessionId = `workflow-cleanup-${outcome}`
+      const managed = buildSession(sessionId)
+      managed.sdkSessionId = 'test-sdk-session'
+      const internals = sm as unknown as {
+        getOrCreateAgent: () => Promise<unknown>
+        onProcessingStopped: (id: string, reason: 'complete' | 'error' | 'interrupted', generation?: number) => Promise<void>
+      }
+      const agent = {
+        setAllSources() {},
+        setSourceServers: async () => {},
+        applyBridgeUpdates: async () => {},
+        getSummarizeCallback: () => async () => null,
+        getModel: () => 'test',
+        dispose() {},
+        async *chat() {
+          if (outcome === 'error') throw new Error('controlled chat failure')
+          yield { type: 'text_complete' as const, text: 'Workflow result' }
+          if (outcome === 'complete') yield { type: 'complete' as const }
+        },
+      }
+      managed.agent = agent as never
+      internals.getOrCreateAgent = async () => agent
+      let releaseCleanup!: () => void
+      const cleanupGate = new Promise<void>(resolve => { releaseCleanup = resolve })
+      let enterCleanup!: () => void
+      const cleanupStarted = new Promise<void>(resolve => { enterCleanup = resolve })
+      const stop = internals.onProcessingStopped.bind(sm)
+      let cleanupFinished = false
+      internals.onProcessingStopped = async (...args) => {
+        enterCleanup()
+        await cleanupGate
+        await stop(...args)
+        cleanupFinished = true
+      }
+      let returned = false
+      const run = sm.sendMessage(sessionId, 'Run hidden step', undefined, undefined, { hidden: true })
+        .then(() => { returned = true })
+      await cleanupStarted
+      try {
+        await new Promise(resolve => setImmediate(resolve))
+        expect(returned).toBe(false)
+        expect(existsSync(getSessionFilePath(tmpRoot, sessionId))).toBe(true)
+      } finally {
+        releaseCleanup()
+        await run
+      }
+      expect(cleanupFinished).toBe(true)
+      if (outcome === 'complete') {
+        const header = JSON.parse(readFileSync(getSessionFilePath(tmpRoot, sessionId), 'utf-8').split('\n')[0]!)
+        expect(header.hasUnread).toBe(true)
+      }
+      await sm.deleteSession(sessionId)
+      expect(existsSync(getSessionFilePath(tmpRoot, sessionId))).toBe(false)
+    })
+  }
+
   it('persists the host-provided origin and defaults internal sends to system', async () => {
     const agentSessionId = 'origin-agent'
     buildSession(agentSessionId)

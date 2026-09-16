@@ -20,6 +20,8 @@ describe('session tool safe-mode classification', () => {
       'mcp__session__call_llm',
       'mcp__session__browser_tool',
       'mcp__session__script_sandbox',
+      'mcp__session__list_automations',
+      'mcp__session__get_automation',
     ] as const;
 
     for (const toolName of allowedTools) {
@@ -31,6 +33,9 @@ describe('session tool safe-mode classification', () => {
   it('blocks mutating/auth session tools in safe mode', () => {
     const blockedTools = [
       'mcp__session__manage_artist_brain',
+      'mcp__session__update_automation',
+      'mcp__session__create_automation',
+      'mcp__session__schedule_work',
       'mcp__session__import_artist_community',
       'mcp__session__import_artist_network',
       'mcp__session__setup_llm_connection',

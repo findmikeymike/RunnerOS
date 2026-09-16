@@ -19,6 +19,17 @@ function render(children: string, props: Partial<MarkdownProps> = {}): string {
 }
 
 describe('real safe Markdown rendering', () => {
+  test('normal chat preserves passive app hrefs through ReactMarkdown while reports and actions remain blocked', () => {
+    const url = 'artistos://workspace/current-workspace/workflows/my-flow'
+    const source = `[Open workflow](${url})\n\n[delete](artistos://action/delete-session/id)\n\n[send](artistos://workspace/ws/agents/agent/a?send=true)`
+    for (const mode of ['terminal', 'minimal', 'full'] as const) {
+      const normal = render(source, { safeMode: false, mode })
+      expect(normal).toContain(`href="${url}"`)
+      expect(normal).not.toContain('href="artistos://action')
+      expect(normal).not.toContain('href="artistos://workspace/ws/')
+      expect(render(source, { safeMode: true, mode })).not.toContain('<a')
+    }
+  })
   for (const mode of ['terminal', 'minimal', 'full'] as const) {
     test(`${mode}: excludes raw iframe srcdoc, global style, active attributes and SVG`, () => {
       const source = [

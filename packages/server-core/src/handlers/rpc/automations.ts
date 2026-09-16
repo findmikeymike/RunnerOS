@@ -1,5 +1,6 @@
 import { getLegacyAuthoredSkillReferences } from '@craft-agent/shared/skills'
-import { readFile, writeFile } from 'fs/promises'
+import { readFile, writeFile, rename, rm } from 'fs/promises'
+import { randomUUID } from 'node:crypto'
 import { join } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
@@ -18,7 +19,7 @@ import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { withAutomaticSchedulePlacementLock } from '../../scheduled-work/AutomaticSchedulePlacementLock'
-import { cancelPendingAutomationWorkForMatcherLocked } from '../../scheduled-work/AutomationWorkQueue'
+import { cancelPendingAutomationWorkForMatcherLocked, preparePendingAutomationWorkCancellation } from '../../scheduled-work/AutomationWorkQueue'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 
 // History file name — matches AUTOMATIONS_HISTORY_FILE from @craft-agent/shared/automations/constants
@@ -217,6 +218,14 @@ export function assertTestAutomationHasQueueWorkEvent(
   }
 }
 
+async function writeAutomationFileAtomic(filePath: string, config: unknown): Promise<void> {
+  const temporaryPath = `${filePath}.${randomUUID()}.tmp`
+  try {
+    await writeFile(temporaryPath, JSON.stringify(config, null, 2) + '\n', { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+    await rename(temporaryPath, filePath)
+  } finally { await rm(temporaryPath, { force: true }) }
+}
+
 // Shared helper: resolve workspace, read automations.json, validate matcher, mutate, write back
 interface AutomationsConfigJson { automations?: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
 async function withAutomationEvent<T>(
@@ -224,6 +233,7 @@ async function withAutomationEvent<T>(
   eventName: string,
   mutate: (matchers: Record<string, unknown>[], config: AutomationsConfigJson, genId: () => string) => T,
   afterWrite?: (result: T, workspaceRootPath: string) => Promise<void>,
+  beforeWrite?: (result: T, workspaceRootPath: string) => void,
 ): Promise<T> {
   const workspace = getWorkspaceByNameOrId(workspaceId)
   if (!workspace) throw new Error('Workspace not found')
@@ -255,14 +265,64 @@ async function withAutomationEvent<T>(
 
     if (afterWrite) {
       await withWorkspaceContextLock(workspace.rootPath, async () => {
-        await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+        beforeWrite?.(result, workspace.rootPath)
+        await writeAutomationFileAtomic(configPath, config)
         await afterWrite(result, workspace.rootPath)
       })
     } else {
-      await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+      await writeAutomationFileAtomic(configPath, config)
     }
     return result
   })
+}
+
+/** Shared UI/agent replacement; revision check, validation and queue invalidation use the same locks. */
+export async function replaceAutomationMatcherGuarded(
+  workspaceId: string, eventName: string, automationId: string,
+  expectedMatcher: Record<string, unknown>, replacement: Record<string, unknown>,
+): Promise<{ changed: boolean; canceledQueuedWork: number; runningWork: number }> {
+  const outcome = { changed: false, canceledQueuedWork: 0, runningWork: 0 }
+  let preserveConfigurationDigests: Set<string> | undefined
+  let cleanupIds: Set<string> | undefined
+  let savedMatcher: Record<string, unknown>
+  let savedConfig: AutomationsConfigJson
+  await withAutomationEvent(workspaceId, eventName, (matchers, _config, generateId) => {
+    const idx = findAutomationMatcherIndexByIdentity(matchers, automationId, expectedMatcher)
+    const next = replacementAutomationMatcher(matchers[idx]!, replacement, generateId)
+    // A model/UI replacement cannot discard a previous interrupted cleanup receipt.
+    if (Array.isArray(matchers[idx]!._pendingWorkCleanup)) next._pendingWorkCleanup = matchers[idx]!._pendingWorkCleanup
+    savedMatcher = next
+    savedConfig = _config
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+    // A broken target must still be pausable. Resuming or changing its execution requires readiness.
+    const { enabled: _oldEnabled, snoozedUntil: _oldSnooze, scheduleWorkDigest: _oldDigest, scheduleWorkIntentDigest: _oldIntent, ...oldDefinition } = matchers[idx]!
+    const { enabled: _newEnabled, snoozedUntil: _newSnooze, scheduleWorkDigest: _newDigest, scheduleWorkIntentDigest: _newIntent, ...newDefinition } = next
+    const pauseOnly = next.enabled === false && JSON.stringify(oldDefinition) === JSON.stringify(newDefinition)
+    if (!pauseOnly) assertAutomationQueueWorkBindings(workspace.rootPath, eventName, next)
+    outcome.changed = JSON.stringify(next) !== JSON.stringify(matchers[idx])
+    if (!outcome.changed && Array.isArray(next._pendingWorkCleanup)) cleanupIds = new Set(next._pendingWorkCleanup.filter((id): id is string => typeof id === 'string'))
+    if (!outcome.changed && !cleanupIds && next.enabled !== false) {
+      const actions = Array.isArray(next.actions) ? next.actions as Record<string, unknown>[] : []
+      preserveConfigurationDigests = new Set(actions.filter(action => action.type === 'queue-work').map((action, actionIndex) => scheduledWorkDefinitionDigest({ matcherId: next.id, actionIndex, event: eventName, action })))
+    }
+    matchers[idx] = next
+    return next.id as string
+  }, async (matcherId, root) => {
+    try {
+      outcome.canceledQueuedWork = cancelPendingAutomationWorkForMatcherLocked(workspaceId, root, matcherId, { onlyOrderIds: cleanupIds }).length
+      if (savedMatcher._pendingWorkCleanup !== undefined) {
+        delete savedMatcher._pendingWorkCleanup
+        await writeAutomationFileAtomic(resolveAutomationsConfigPath(root), savedConfig)
+      }
+    } catch { throw new Error('Automation settings were saved, but pending-work cleanup failed. Review Active work and retry the same change after repair; running work was not stopped.') }
+  }, (matcherId, root) => {
+    const plan = preparePendingAutomationWorkCancellation(workspaceId, root, matcherId, preserveConfigurationDigests, cleanupIds)
+    outcome.runningWork = plan.runningWork
+    cleanupIds = new Set([...(Array.isArray(savedMatcher._pendingWorkCleanup) ? savedMatcher._pendingWorkCleanup.filter((id): id is string => typeof id === 'string') : []), ...plan.orderIds])
+    if (cleanupIds.size) savedMatcher._pendingWorkCleanup = [...cleanupIds]
+  })
+  return outcome
 }
 
 async function withAutomationMatcher<T = void>(
@@ -656,17 +716,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
     expectedMatcher: Record<string, unknown>,
     matcher: Record<string, unknown>,
   ) => {
-    await withAutomationEvent(workspaceId, eventName, (matchers, _config, generateId) => {
-      const idx = findAutomationMatcherIndexByIdentity(matchers, automationId, expectedMatcher)
-      const replacement = replacementAutomationMatcher(matchers[idx]!, matcher, generateId)
-      const workspace = getWorkspaceByNameOrId(workspaceId)
-      if (!workspace) throw new Error('Workspace not found')
-      assertAutomationQueueWorkBindings(workspace.rootPath, eventName, replacement)
-      matchers[idx] = replacement
-      return replacement.id as string
-    }, async (matcherId, workspaceRootPath) => {
-      cancelPendingAutomationWorkForMatcherLocked(workspaceId, workspaceRootPath, matcherId)
-    })
+    await replaceAutomationMatcherGuarded(workspaceId, eventName, automationId, expectedMatcher, matcher)
   })
 
   // Duplicate an automation matcher

@@ -30,7 +30,40 @@ describe('shared session tool role and scope derivation', () => {
     expect(Object.values(deriveSessionToolFilterOptions(undefined, undefined)).every((flag) => !flag)).toBe(true);
   });
 
-  for (const agentSlug of [undefined, 'concierge', 'raw-video-editor', 'social-publisher', 'scriptwriter']) {
+  test('Artist OS Builder schedules without inheriting Manager or goal privileges', () => {
+    const options = deriveSessionToolFilterOptions('builder', 'hq', 'artist-os');
+    const names = getSessionToolDefs(options).map(tool => tool.name);
+    expect(names).toContain('schedule_work');
+    expect(names).toContain('create_agent');
+    expect(names).toContain('list_automations');
+    expect(names).toContain('get_automation');
+    expect(names).toContain('update_automation');
+    expect(names).not.toContain('supply_work_input');
+    expect(names).not.toContain('manage_goal_run');
+    expect(names).not.toContain('get_manager_brief');
+  });
+
+  test('stock Artist OS operating roles route authoring to Builder while custom and generic roles retain it', () => {
+    for (const slug of ['concierge', 'setup-concierge', 'orchestrator']) {
+      const artist = getSessionToolDefs(deriveSessionToolFilterOptions(slug, 'hq', 'artist-os')).map(tool => tool.name);
+      const generic = getSessionToolDefs(deriveSessionToolFilterOptions(slug, 'hq', 'runneros')).map(tool => tool.name);
+      for (const name of ['create_agent', 'create_workflow', 'create_automation']) {
+        expect(artist).not.toContain(name);
+        expect(generic).toContain(name);
+      }
+      expect(artist).not.toContain('update_automation');
+    }
+    const custom = getSessionToolDefs(deriveSessionToolFilterOptions('my-custom-author', 'campaign', 'artist-os')).map(tool => tool.name);
+    expect(custom).toContain('create_agent');
+    expect(custom).toContain('create_workflow');
+    expect(custom).toContain('create_automation');
+    const manager = getSessionToolDefs(deriveSessionToolFilterOptions('concierge', 'hq', 'artist-os')).map(tool => tool.name);
+    expect(manager).toContain('schedule_work');
+    expect(manager).toContain('supply_work_input');
+    expect(manager).toContain('manage_goal_run');
+  });
+
+  for (const agentSlug of [undefined, 'builder', 'setup-concierge', 'orchestrator', 'concierge', 'raw-video-editor', 'social-publisher', 'scriptwriter']) {
     for (const scope of [undefined, 'hq', 'campaign', 'lab']) {
       for (const delegated of [false, true]) {
         test(`Claude/Pi role parity: ${agentSlug ?? 'ordinary'} / ${scope ?? 'unspecified'} / delegated=${delegated}`, () => {

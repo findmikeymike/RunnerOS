@@ -31,6 +31,19 @@ describe('shared launch reference policy', () => {
     expect(() => assertAgentReferences(skillAgent, resolution, 'strict')).toThrow('missing skill @removed')
   })
 
+  test('Builder focuses resolve hidden system recipes in a Campaign without enabling unrelated skills', () => {
+    for (const recipe of ['agent-creator', 'workflow-creator', 'automation-creator', 'legacy:agent-creator']) {
+      const builder = { slug: 'builder', metadata: { name: 'Builder', skills: [recipe] } }
+      const resolution = resolveAgentReferences(builder, [], [])
+      expect(resolution.resolvedSkills).toEqual([recipe])
+      expect(() => assertAgentReferences(builder, resolution, 'strict', 'Agents')).not.toThrow()
+    }
+    const builder = { slug: 'builder', metadata: { name: 'Builder', skills: ['missing-custom-skill'] } }
+    expect(() => assertAgentReferences(builder, resolveAgentReferences(builder, [], []), 'strict')).toThrow('missing-custom-skill')
+    const custom = { slug: 'custom-worker', metadata: { name: 'Custom', skills: ['agent-creator'] } }
+    expect(() => assertAgentReferences(custom, resolveAgentReferences(custom, [], []), 'strict')).toThrow('agent-creator')
+  })
+
   test('activation respects active aliases, retries unavailable descriptors, and writes a declaration only once', () => {
     const checked: string[] = []
     const selected = selectDeclaredSkillsToEnable(['legacy:writer', 'disabled', 'disabled', 'absent'], [{ slug: 'custom', aliases: ['legacy:writer'] }, { slug: 'disabled', available: false }], slug => { checked.push(slug); return slug === 'disabled' })

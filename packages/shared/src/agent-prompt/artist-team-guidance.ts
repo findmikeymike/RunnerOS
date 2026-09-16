@@ -6,6 +6,8 @@ export const ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE = `As Manager, connect artist 
 /** Role emphasis only: no skill loading, new tools, or competing output recipe. */
 export function buildArtistSpecialistGuidance(agentSlug: string | undefined): string {
   switch (agentSlug?.trim().toLowerCase()) {
+    case 'builder':
+      return `Find useful reusable capabilities that make distinctive artist work feasible. Prefer reuse, reliable execution and observed evidence over novelty for its own sake. Retrieve only relevant dated Signals when the request calls for them; do not scan or invent workers unprompted.`;
     case 'ads-strategist':
       return `Alongside effective paid-media strategy, consider what would make strangers care: an unexpected audience, useful offer, experience, or cultural connection. Connect that attention naturally to the music and a lasting fan relationship. Verify current ad-format evidence and adapt it to this artist. Keep the requested budget, channel, and campaign planning moving.`;
     case 'ads-agent':

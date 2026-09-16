@@ -477,3 +477,32 @@ it('adjacent capability host binding resolves late merges and replacements witho
   }
   expect(claude.loadAgentCapability).toBeUndefined();
 });
+
+it('Builder automation callbacks resolve lazily across provider contexts and lose access when unregistered', async () => {
+  const sessionId = 'builder-automation-bindings';
+  const contexts = [createBaseContext(sessionId), createBaseContext(sessionId)];
+  for (const context of contexts) attachSessionSelfManagementBindings(context, sessionId);
+  expect(contexts[0]!.listAutomations).toBeUndefined();
+  try {
+    mergeSessionScopedToolCallbacks(sessionId, {
+      listAutomationsFn: async () => ({ ok: true, automations: [], hasMore: false }),
+      getAutomationFn: async () => ({ ok: false, error: 'Not found' }),
+      updateAutomationFn: async () => ({ ok: false, error: 'Revision conflict' }),
+    });
+    for (const context of contexts) {
+      expect(await context.listAutomations?.({ limit: 5 })).toEqual({ ok: true, automations: [], hasMore: false });
+      expect(await context.getAutomation?.({ automationId: 'missing' })).toEqual({ ok: false, error: 'Not found' });
+      expect(await context.updateAutomation?.({ automationId: 'id', expectedRevision: 'old', intent: 'Pause', patch: { enabled: false } })).toEqual({ ok: false, error: 'Revision conflict' });
+    }
+  } finally { unregisterSessionScopedToolCallbacks(sessionId); }
+  for (const context of contexts) expect(context.updateAutomation).toBeUndefined();
+});
+
+it('Claude/Pi shared tool context carries canonical host workspace identity', () => {
+  const context = createClaudeContext({
+    sessionId: 'result-link-scope-test', workspacePath: '/tmp/legacy-ws-folder',
+    workspaceId: '4584f472-9af3-1985-66ff-73b73efc6afa',
+    onPlanSubmitted: noopPlan, onAuthRequest: noopAuth,
+  });
+  expect(context.workspaceId).toBe('4584f472-9af3-1985-66ff-73b73efc6afa');
+});

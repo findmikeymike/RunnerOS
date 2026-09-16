@@ -269,6 +269,7 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
   // Build context
   const context: SessionToolContext = {
     sessionId,
+    workspaceId,
     workspacePath,
     get sourcesPath() { return join(workspacePath, 'sources'); },
     get skillsPath() { return join(workspacePath, 'skills'); },

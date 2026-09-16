@@ -20,7 +20,6 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { getSessionPlansPath, getSessionPath } from '../sessions/storage.ts';
 import { DOC_REFS } from '../docs/index.ts';
 import { createClaudeContext } from './claude-context.ts';
-import { basename } from 'node:path';
 
 // Import from session-tools-core: registry + schemas + base descriptions
 import {
@@ -237,7 +236,7 @@ export function getSessionScopedTools(
     const ctx = createClaudeContext({
       sessionId,
       workspacePath: workspaceRootPath,
-      workspaceId: workspaceId || basename(workspaceRootPath) || '',
+      workspaceId: workspaceId ?? '',
       onPlanSubmitted: (planPath: string) => {
         setLastPlanFilePath(sessionId, planPath);
         const callbacks = getSessionScopedToolCallbacks(sessionId);

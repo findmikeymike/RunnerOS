@@ -48,14 +48,25 @@ describe('workspace registration lifecycle', () => {
 
 // This architecture gate scans the real startup method. Persisted-off tests alone
 // cannot catch a new bespoke loop that explicitly calls setAgentActive(true).
-test('every startup activation or skill backfill is fenced off from Artist OS', () => {
+test('startup backfills stay legacy-only except the explicit one-time Builder transition', () => {
   const path = join(import.meta.dir, 'SessionManager.ts')
   const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true)
   const writes = new Set(['setAgentActive', 'setGlobalSkillEnabled', 'migrateOrPreserveInitialArtistAgentActivation', 'migrateInitialReleaseManagerActivation', 'preserveReleaseManagerActivationChoices'])
   let checked = 0
   const unguarded: string[] = []
   function isGuarded(node: ts.Node): boolean {
-    for (let parent = node.parent; parent; parent = parent.parent) {
+    let builderTransition = false
+    for (let parent: ts.Node | undefined = node; parent; parent = parent.parent) {
+      if (ts.isCallExpression(parent) && parent.expression.getText(source) === 'migrateOrPreserveInitialArtistAgentActivation') {
+        const options = parent.arguments[0]?.getText(source) ?? ''
+        builderTransition = options.includes("agentSlug: 'builder'")
+          && options.includes("'builder-activation-v1.json'")
+          && options.includes('previouslyInstalled: builderPreviouslyInstalled')
+          && options.includes("manifest.deactivated ?? []")
+      }
+      if (builderTransition && ts.isIfStatement(parent)
+        && parent.expression.getText(source) === "resolveRuntimeIdentity().variant === 'artist-os'"
+        && node.pos >= parent.thenStatement.pos && node.end <= parent.thenStatement.end) return true
       if (ts.isIfStatement(parent) && node.pos >= parent.thenStatement.pos && node.end <= parent.thenStatement.end
         && /^allowLegacyAgentActivation(?:\s*&&|$)/.test(parent.expression.getText(source))) return true
       if (ts.isForOfStatement(parent) && ts.isConditionalExpression(parent.expression)

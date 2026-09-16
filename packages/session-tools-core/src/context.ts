@@ -149,6 +149,9 @@ export interface ValidatorInterface {
  * - Codex: createCodexContext() with callback IPC and limited capabilities
  */
 export interface SessionToolContext {
+  /** Canonical workspace identity supplied by the host; never inferred from a local folder/config. */
+  workspaceId?: string;
+
   // ============================================================
   // Session Info
   // ============================================================
@@ -416,6 +419,11 @@ export interface SessionToolContext {
    * structured result so the handler can format failures cleanly for the LLM.
    */
   createAutomation?(input: import('./handlers/create-automation.ts').CreateAutomationToolInput): Promise<import('./handlers/create-automation.ts').CreateAutomationResult>;
+
+  /** Builder-only, workspace-scoped automation reads and revision-checked updates. */
+  listAutomations?(input: import('./handlers/automation-maintenance-types.ts').ListAutomationsInput): Promise<import('./handlers/automation-maintenance-types.ts').ListAutomationsResult>;
+  getAutomation?(input: import('./handlers/automation-maintenance-types.ts').GetAutomationInput): Promise<import('./handlers/automation-maintenance-types.ts').GetAutomationResult>;
+  updateAutomation?(input: import('./handlers/automation-maintenance-types.ts').UpdateAutomationInput): Promise<import('./handlers/automation-maintenance-types.ts').UpdateAutomationResult>;
 
   /** Write a local campaign calendar item from a structured agent intent. */
   campaignCalendarWrite?(input: import('./handlers/campaign-calendar.ts').CampaignCalendarWriteToolInput): Promise<import('./handlers/campaign-calendar.ts').CampaignCalendarWriteResult>;

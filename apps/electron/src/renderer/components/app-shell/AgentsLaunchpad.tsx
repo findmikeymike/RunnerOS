@@ -1663,7 +1663,7 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     if (slug === 'record-doctor') return 'Song Development'
   }
 
-  if (slug === CONCIERGE_SLUG || slug === 'setup-concierge') {
+  if (slug === CONCIERGE_SLUG || slug === 'setup-concierge' || slug === 'builder') {
     return 'Command'
   }
 
@@ -1833,7 +1833,7 @@ function compareLaunchpadAgents(
   defaultOrder: Map<string, number>,
   getDisplayName: (agent: AgentDefinitionDTO) => string,
 ): number {
-  const foundationalOrder = ['setup-concierge', CONCIERGE_SLUG, 'anything-agent']
+  const foundationalOrder = ['setup-concierge', CONCIERGE_SLUG, 'builder', 'anything-agent']
   const aFoundation = foundationalOrder.indexOf(a.slug)
   const bFoundation = foundationalOrder.indexOf(b.slug)
   if (aFoundation >= 0 || bFoundation >= 0) {
@@ -1867,6 +1867,7 @@ function summarizePrompt(prompt: string) {
 function getFoundationalWorkerDescription(slug: string): string | undefined {
   if (slug === 'setup-concierge') return 'Start here. Get your whole app set up and get help using it.'
   if (slug === CONCIERGE_SLUG) return 'Talk through your artist direction and coordinate the right next work with your team.'
+  if (slug === 'builder') return 'Build and improve agents, workflows, and automations around your needs.'
   if (slug === 'anything-agent') return 'Get help with broader tasks and the external tools you use.'
   return undefined
 }

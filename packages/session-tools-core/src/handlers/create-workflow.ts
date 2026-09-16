@@ -1,3 +1,4 @@
+import { sessionResultLinkText } from '../result-links.ts';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
@@ -104,7 +105,7 @@ export async function handleCreateWorkflow(
         : '';
       return errorResponse(`${result.error ?? 'Failed to create workflow.'}${suggestion}`);
     }
-    return successResponse(`Created workflow ${result.slug}. View at /workflows/${result.slug}.`);
+    return successResponse(`Created workflow ${result.slug}.${sessionResultLinkText(ctx, 'workflow', result.slug)}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return errorResponse(`Failed to create workflow: ${message}`);

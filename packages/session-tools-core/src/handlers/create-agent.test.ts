@@ -7,12 +7,13 @@ function makeCtx(opts?: {
 }): SessionToolContext {
   const ctx: Partial<SessionToolContext> = {
     sessionId: 't',
+    workspaceId: 'workspace-fixture',
     workspacePath: '/tmp',
     plansFolderPath: '/tmp/plans',
     callbacks: { onPlanSubmitted: () => {}, onAuthRequest: () => {} },
     fs: {
       exists: () => false,
-      readFile: () => '',
+      readFile: () => JSON.stringify({ id: 'workspace-fixture' }),
       readFileBuffer: () => Buffer.from(''),
       writeFile: () => {},
       isDirectory: () => false,

@@ -1,4 +1,4 @@
-import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG } from './types.ts'
+import { BUILDER_SLUG, CONCIERGE_SLUG, ORCHESTRATOR_SLUG } from './types.ts'
 import { isSourceUsable } from '../sources/availability.ts'
 import { isSystemGlobalSkillSlug } from '../skills/system.ts'
 import type { LoadedSource } from '../sources/types.ts'
@@ -32,7 +32,9 @@ export function resolveAgentReferences<TSkill extends ReferenceSkill>(
   const declaredSkills = agent.metadata.skills ?? []
   const declaredSources = agent.metadata.sources ?? []
   const declaredOptionalSources = agent.metadata.optionalSources ?? []
-  const canUseSystemSkills = agent.slug === CONCIERGE_SLUG || agent.slug === ORCHESTRATOR_SLUG
+  // System recipes are deliberately hidden from the workspace's global-skill
+  // picker. Foundational workers can still load their assigned system recipes.
+  const canUseSystemSkills = agent.slug === CONCIERGE_SLUG || agent.slug === ORCHESTRATOR_SLUG || agent.slug === BUILDER_SLUG
 
   const resolvedSkills: string[] = []
   const missingSkills: string[] = []

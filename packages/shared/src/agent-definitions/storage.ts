@@ -704,6 +704,27 @@ const SERIALIZED_AGENT_METADATA_KEYS = [
  * version or a user's customization. Merge supported metadata into the
  * original document while retaining every unknown field.
  */
+/** Agent-tool edits preserve metadata the tool cannot express, including custom keys. */
+export function writeGlobalAgentToolRevision(input: CreateAgentInput, options?: AgentStorageOptions): LoadedAgent {
+  if (!isValidAgentSlug(input.slug)) throw new Error('Invalid agent slug');
+  const file = getGlobalAgentFile(input.slug, options);
+  if (!existsSync(file)) return writeGlobalAgent(input, options);
+  const original = matter(readFileSync(file, 'utf8'));
+  const incoming = Object.fromEntries(Object.entries(input.metadata).filter(([, value]) => value !== undefined));
+  const data = { ...original.data, ...incoming };
+  const content = stringifyFrontmatter(input.systemPrompt.trimEnd() + '\n', data);
+  const parsed = parseAgentFile(content);
+  if (!parsed) throw new Error('The revised agent definition is invalid. The previous definition is unchanged.');
+  // A changed skill bundle must not silently invalidate existing focus cards.
+  if (Object.hasOwn(data, 'taskModes') && JSON.stringify(parsed.metadata.taskModes ?? []) !== JSON.stringify(parseAgentFile(readFileSync(file, 'utf8'))?.metadata.taskModes ?? [])) {
+    throw new Error('This change would invalidate saved focus cards. Keep their required skills or explicitly revise the focuses first.');
+  }
+  atomicWriteFileSync(file, content);
+  const loaded = loadGlobalAgent(input.slug, options);
+  if (!loaded) throw new Error('Failed to read revised agent');
+  return loaded;
+}
+
 function writeBuiltInAgentMigration(
   input: CreateAgentInput,
   options?: AgentStorageOptions,
@@ -744,7 +765,7 @@ function migrationFingerprint(value: unknown): string {
 
 /** Upgrade only recognized shipped recipes; explicit removals and edits are owned by the user. */
 export function migrateBuiltInAgentTaskModes(starter: CreateAgentInput, options?: AgentStorageOptions): { updated: boolean } {
-  const baselines = BUILT_IN_TASK_MODE_BASELINES[starter.slug];
+  const baselines = BUILT_IN_TASK_MODE_BASELINES[starter.slug] ?? (starter.slug === 'builder' ? { recipeHashes: [], withoutRecipesHashes: [] } : undefined);
   if (!baselines || !starter.metadata.taskModes?.length) return { updated: false };
   const installed = loadGlobalAgent(starter.slug, options);
   if (!installed) return { updated: false };
@@ -1027,6 +1048,7 @@ export function replaceBuiltInAgentMetadata(
   options?: AgentStorageOptions,
 ): { updated: boolean } {
   const builtIns = new Set([
+    'builder',
     'anything-agent',
     'concierge',
     'orchestrator',

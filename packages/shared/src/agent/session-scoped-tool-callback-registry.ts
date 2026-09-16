@@ -137,6 +137,9 @@ export interface SessionScopedToolCallbacks {
   createAutomationFn?: (
     input: import('@craft-agent/session-tools-core').CreateAutomationToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').CreateAutomationResult>;
+  listAutomationsFn?: import('@craft-agent/session-tools-core').SessionToolContext['listAutomations'];
+  getAutomationFn?: import('@craft-agent/session-tools-core').SessionToolContext['getAutomation'];
+  updateAutomationFn?: import('@craft-agent/session-tools-core').SessionToolContext['updateAutomation'];
   /** Write a local campaign calendar item from structured agent intent. */
   campaignCalendarWriteFn?: (
     input: import('@craft-agent/session-tools-core').CampaignCalendarWriteToolInput,

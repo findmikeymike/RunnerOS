@@ -77,6 +77,19 @@ function parseInternalRunnerDeepLink(parsed: URL): ParsedInternalDeepLink | null
   const pathParts = parsed.pathname.split('/').filter(Boolean)
   const windowMode = parsed.searchParams.get('window')
 
+  // Validate passive result links before any window-mode external fallback.
+  // They only select existing views and never carry queries or action payloads.
+  if (host === 'workspace' && ['agents', 'workflows', 'automations'].includes(pathParts[1] ?? '')) {
+    const workspaceId = pathParts[0]!
+    const view = pathParts.slice(1).join('/')
+    if (parsed.username || parsed.password || parsed.port || parsed.search || parsed.hash
+      || !/^[a-zA-Z0-9_-]+$/.test(workspaceId)
+      || !/^(?:agents(?:\/agent\/[a-zA-Z0-9_-]+)?|workflows(?:\/[a-zA-Z0-9_-]+)?|automations(?:\/automation\/[a-zA-Z0-9_-]+)?)$/.test(view)) {
+      throw new Error('Invalid passive navigation URL')
+    }
+    return { workspaceId, navigation: { view } }
+  }
+
   // Preserve window-specific behavior via OS protocol path.
   if (windowMode === 'focused' || windowMode === 'full') {
     return { requiresExternalOpen: true }

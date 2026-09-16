@@ -44,7 +44,7 @@ describe('shared agent focus rollout', () => {
   })
   test('all installed recipes survive parsing and resolve against their own inventory', () => {
     const focused = STARTER_AGENTS.filter(agent => agent.metadata.taskModes?.length)
-    expect(focused).toHaveLength(28)
+    expect(focused).toHaveLength(29)
     for (const agent of focused) {
       const parsed = parseAgentFile(serializeAgent(agent.metadata, agent.systemPrompt))!
       expect(parsed.metadata.taskModes, agent.slug).toEqual(agent.metadata.taskModes)
@@ -56,10 +56,10 @@ describe('shared agent focus rollout', () => {
       }
     }
   })
-  test('Manager only preloads management, with optional focused creator capabilities', () => {
+  test('Artist Manager focuses retain management and delegate reusable construction', () => {
     for (const mode of MANAGER_TASK_MODES) expect(mode.primarySkillSlugs).toEqual(['artist-manager-operating-system'])
-    expect(MANAGER_TASK_MODES.find(mode => mode.id === 'build-automate')?.adjacentSkills?.map(skill => skill.slug))
-      .toEqual(['agent-creator', 'workflow-creator', 'automation-creator', 'source-recipe'])
+    expect(MANAGER_TASK_MODES.find(mode => mode.id === 'build-automate')).toBeUndefined()
+    expect(MANAGER_TASK_MODES.flatMap(mode => mode.adjacentSkills ?? []).some(skill => ['agent-creator', 'workflow-creator', 'automation-creator'].includes(skill.slug))).toBe(false)
   })
   test('Tier 2 cards describe actual capabilities and meaningful scope', () => {
     expect(TIER_TWO_TASK_MODES['lyric-video-agent']).toHaveLength(2)

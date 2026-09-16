@@ -1,3 +1,4 @@
+import { sessionResultLinkText } from '../result-links.ts';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { errorResponse, successResponse } from '../response.ts';
@@ -140,10 +141,10 @@ export async function handleScheduleWork(ctx: SessionToolContext, args: Schedule
         scheduleLabel: scheduleLabel(args.trigger, result.nextFireAt),
         requestedInputs,
         fixedInputs,
-      }));
+      }) + sessionResultLinkText(ctx, 'automation', result.id));
     }
     const timing = result.nextFireAt ? ` Next run: ${result.nextFireAt}.` : '';
-    return successResponse(`Work scheduled: ${result.title ?? args.title}.${timing}`);
+    return successResponse(`Work scheduled: ${result.title ?? args.title}.${timing}${sessionResultLinkText(ctx, 'work')}`);
   } catch (error) {
     return errorResponse(`Failed to schedule work: ${error instanceof Error ? error.message : String(error)}`);
   }

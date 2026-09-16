@@ -72,6 +72,8 @@ Implementation and live acceptance tracking (spec files retained at their existi
 
 - [51 Artist Profile Enrichment](./todo/51-artist-profile-enrichment/start-here.md) — spec only; sourced career context with separate artist ownership and existing Pulse analytics
 
+- [52 Builder Agent](./todo/52-builder-agent-spec.md) — specified September 15; implementation not started. Reuses creator tools, separates construction from Manager, and preserves the current development profile.
+
 When one ships, move it back up into the numbered list above.
 
 Current V1 implementation notes:

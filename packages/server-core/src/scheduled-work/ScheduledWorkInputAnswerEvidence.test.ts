@@ -54,6 +54,40 @@ describe('findArtistAnswerEvidence', () => {
     )).not.toThrow()
   })
 
+  test('accepts an exact current human answer followed by sentence punctuation', () => {
+    for (const [content, value] of [
+      ['my answer is token = MANAGER_INPUT_OK.', 'MANAGER_INPUT_OK'],
+      ['Use Night Drive. That is the title.', 'Night Drive'],
+      ['Use Night. Drive.', 'Night. Drive'],
+      ['Use /vault/file.pdf.', '/vault/file.pdf'],
+      ['Use https://example.com/file.pdf.', 'https://example.com/file.pdf'],
+      ['The answer is "MANAGER_INPUT_OK."', 'MANAGER_INPUT_OK'],
+    ]) {
+      const evidence = findArtistAnswerValueEvidence([message({ content })], requestedAt, 'artist-answer')
+      expect(() => assertArtistAnswerSupportsValues(evidence.evidenceText, evidence.attachments, { answer: value })).not.toThrow()
+    }
+  })
+
+  test('a terminal period does not permit filename, URL or token prefix matches', () => {
+    for (const [content, value] of [
+      ['Use file.pdf.bak.', 'file.pdf'],
+      ['Use /vault/file.pdf.bak.', '/vault/file.pdf'],
+      ['Use https://example.com.evil/report.', 'https://example.com'],
+      ['Use https://example.com/report/extra.', 'https://example.com/report'],
+      ['Use MANAGER_INPUT_OK_EXTRA.', 'MANAGER_INPUT_OK'],
+      ['Use PREFIX_MANAGER_INPUT_OK.', 'MANAGER_INPUT_OK'],
+      ['Use MANAGER_INPUT_OK.next.', 'MANAGER_INPUT_OK'],
+      ['Use MANAGER_INPUT_OK..', 'MANAGER_INPUT_OK'],
+      ['Use /vault/file.pdf.(backup)', '/vault/file.pdf'],
+      ['Use https://example.com/report.?download=1', 'https://example.com/report'],
+      ['Use https://example.com/report.#section', 'https://example.com/report'],
+      ['Use /vault/file.pdf."backup', '/vault/file.pdf'],
+      ['Use Night. Drive.', 'Night Drive'],
+    ]) {
+      expect(() => assertArtistAnswerSupportsValues(content!, [], { answer: value })).toThrow(/answer/)
+    }
+  })
+
   test('allows string requests but sends numeric and boolean requests to the Needs you form', () => {
     expect(() => assertArtistManagerCanSupplyRequestedInputs([
       { name: 'file', type: 'string', required: true },

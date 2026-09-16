@@ -34,6 +34,7 @@ import { navigate, routes } from './lib/navigate'
 import { attachmentFromContentRef, toDraftRef, restoreMissingDraft } from './lib/drafts'
 import { stripMarkdown } from './utils/text'
 import { coerceInputText } from './lib/input-text'
+import { hydratePendingPermissions } from './lib/pending-permission-hydration'
 import { getSessionsToRefreshAfterStaleReconnect } from './lib/reconnect-recovery'
 import { formatSessionLoadFailure, shouldTreatSessionLoadFailureAsTransportFallback } from './lib/session-load'
 import { extractWorkspaceSlugFromPath } from '@craft-agent/shared/utils/workspace-slug'
@@ -279,6 +280,13 @@ export default function App() {
 
   const [menuNewChatTrigger, setMenuNewChatTrigger] = useState(0)
   // Permission requests per session (queue to handle multiple concurrent requests)
+  const permissionEventVersions = useRef(new Map<string, number>())
+  const permissionWorkspaceRef = useRef(windowWorkspaceId)
+  permissionWorkspaceRef.current = windowWorkspaceId
+  const bumpPermissionEventVersion = (sessionId: string) => {
+    const versions = permissionEventVersions.current
+    versions.set(sessionId, (versions.get(sessionId) ?? 0) + 1)
+  }
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
   // Credential requests per session (queue to handle multiple concurrent requests)
   const [pendingCredentials, setPendingCredentials] = useState<Map<string, CredentialRequest[]>>(new Map())
@@ -419,8 +427,13 @@ export default function App() {
 
   const refreshSessionFromServer = useCallback(async (sessionId: string): Promise<'refreshed' | 'preserved_stale_messages' | 'failed'> => {
     try {
+      const permissionVersions = new Map(permissionEventVersions.current)
+      const requestedWorkspace = permissionWorkspaceRef.current
       const fresh = await window.electronAPI.getSessionMessages(sessionId)
       if (!fresh) return 'failed'
+      if (requestedWorkspace && requestedWorkspace === permissionWorkspaceRef.current) {
+        setPendingPermissions(prev => hydratePendingPermissions(prev, [fresh], requestedWorkspace, permissionVersions, permissionEventVersions.current))
+      }
 
       const prevSession = store.get(sessionAtomFamily(sessionId))
       const preservedStaleMessages = !!prevSession && prevSession.messages.length > 0 && (!fresh.messages || fresh.messages.length === 0)
@@ -445,12 +458,14 @@ export default function App() {
     setSessionLoadError(null)
 
     try {
+      const permissionVersions = new Map(permissionEventVersions.current)
       const loadedSessions = await window.electronAPI.getSessions()
       if (generation !== sessionLoadGenerationRef.current) return
 
       // Initialize per-session atoms and metadata map
       // NOTE: No sessionsAtom used - sessions are only in per-session atoms
       initializeSessions(loadedSessions)
+      if (windowWorkspaceId) setPendingPermissions(prev => hydratePendingPermissions(prev, loadedSessions, windowWorkspaceId, permissionVersions, permissionEventVersions.current))
 
       // Initialize unified sessionOptions from session data
       const optionsMap = new Map<string, SessionOptions>()
@@ -499,7 +514,12 @@ export default function App() {
 
   const refreshSessionListMetadataFromServer = useCallback(async (): Promise<Map<string, SessionMeta> | null> => {
     try {
+      const permissionVersions = new Map(permissionEventVersions.current)
+      const requestedWorkspace = permissionWorkspaceRef.current
       const sessions = await window.electronAPI.getSessions()
+      if (requestedWorkspace && requestedWorkspace === permissionWorkspaceRef.current) {
+        setPendingPermissions(prev => hydratePendingPermissions(prev, sessions, requestedWorkspace, permissionVersions, permissionEventVersions.current))
+      }
       console.info(`[App] getSessions returned ${sessions.length} session(s) for reconnect refresh`)
       const loadedSessionIds = store.get(loadedSessionsAtom)
 
@@ -723,10 +743,11 @@ export default function App() {
       for (const effect of effects) {
         switch (effect.type) {
           case 'permission_request': {
+            bumpPermissionEventVersion(sessionId)
             setPendingPermissions(prevPerms => {
               const next = new Map(prevPerms)
               const existingQueue = next.get(sessionId) || []
-              next.set(sessionId, [...existingQueue, effect.request])
+              next.set(sessionId, [...existingQueue.filter(request => request.requestId !== effect.request.requestId), effect.request])
               return next
             })
 
@@ -818,6 +839,7 @@ export default function App() {
 
       // Clear pending permissions and credentials on complete
       if (eventType === 'complete') {
+        bumpPermissionEventVersion(sessionId)
         setPendingPermissions(prevPerms => {
           if (prevPerms.has(sessionId)) {
             const next = new Map(prevPerms)
@@ -1501,37 +1523,17 @@ export default function App() {
     alwaysAllow: boolean,
     options?: import('../shared/types').PermissionResponseOptions,
   ) => {
-    const success = await window.electronAPI.respondToPermission(sessionId, requestId, allowed, alwaysAllow, options)
-
-    if (success) {
-      // Remove only the first permission from the queue (the one we just responded to)
-      setPendingPermissions(prev => {
-        const next = new Map(prev)
-        const queue = next.get(sessionId) || []
-        const remainingQueue = queue.slice(1) // Remove first item
-        if (remainingQueue.length === 0) {
-          next.delete(sessionId)
-        } else {
-          next.set(sessionId, remainingQueue)
-        }
-        return next
-      })
-      // Note: No need to force session refresh - per-session atoms update automatically
-    } else {
-      // Response failed (agent/session gone) - clear the permission anyway
-      // to avoid UI being stuck with stale permission
-      setPendingPermissions(prev => {
-        const next = new Map(prev)
-        const queue = next.get(sessionId) || []
-        const remainingQueue = queue.slice(1)
-        if (remainingQueue.length === 0) {
-          next.delete(sessionId)
-        } else {
-          next.set(sessionId, remainingQueue)
-        }
-        return next
-      })
-    }
+    bumpPermissionEventVersion(sessionId)
+    await window.electronAPI.respondToPermission(sessionId, requestId, allowed, alwaysAllow, options)
+    bumpPermissionEventVersion(sessionId)
+    // Remove the exact answered request; another approval may arrive during the RPC.
+    setPendingPermissions(prev => {
+      const next = new Map(prev)
+      const remaining = (next.get(sessionId) ?? []).filter(request => request.requestId !== requestId)
+      if (remaining.length) next.set(sessionId, remaining)
+      else next.delete(sessionId)
+      return next
+    })
   }, [])
 
   const handleRespondToCredential = useCallback(async (sessionId: string, requestId: string, response: CredentialResponse) => {

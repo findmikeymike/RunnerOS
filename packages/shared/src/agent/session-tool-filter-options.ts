@@ -1,8 +1,12 @@
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 import type { SessionToolFilterOptions } from '@craft-agent/session-tools-core';
 
 /** Role/scope policy shared by backend adapters; runtime and backend flags stay local. */
 export type SessionRoleToolFilterOptions = Required<Pick<SessionToolFilterOptions,
   | 'includeScheduleWork'
+  | 'includeManageGoalRun'
+  | 'excludeDefinitionAuthoring'
+  | 'includeAutomationMaintenance'
   | 'includeSupplyWorkInput'
   | 'includeManagerTools'
   | 'includeCampaignManagerTools'
@@ -14,10 +18,16 @@ export type SessionRoleToolFilterOptions = Required<Pick<SessionToolFilterOption
 export function deriveSessionToolFilterOptions(
   agentSlug: string | undefined,
   artistWorkspaceScope: string | undefined,
+  variant: string = RUNTIME_IDENTITY.variant,
 ): SessionRoleToolFilterOptions {
   const isManager = agentSlug === 'concierge';
+  const isArtistOS = variant === 'artist-os';
+  const isBuilder = isArtistOS && agentSlug === 'builder';
   return {
-    includeScheduleWork: isManager,
+    includeScheduleWork: isManager || isBuilder,
+    includeManageGoalRun: isManager,
+    excludeDefinitionAuthoring: isArtistOS && ['concierge', 'setup-concierge', 'orchestrator'].includes(agentSlug ?? ''),
+    includeAutomationMaintenance: isBuilder,
     includeSupplyWorkInput: isManager,
     includeManagerTools: isManager && (artistWorkspaceScope === 'hq' || artistWorkspaceScope === 'campaign'),
     includeCampaignManagerTools: isManager && artistWorkspaceScope === 'campaign',

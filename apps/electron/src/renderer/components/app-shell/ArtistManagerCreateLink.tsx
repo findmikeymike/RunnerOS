@@ -4,7 +4,8 @@ import { toast } from 'sonner'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { openAgentSessionComposer } from '@/lib/run-agent'
 import { cn } from '@/lib/utils'
-import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
+import { RENDERER_PRODUCT_VARIANT, type RendererProductVariant } from '@/lib/product-identity'
+import { BUILDER_SLUG, CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 
 export type ArtistManagerCreationKind = 'worker' | 'workflow' | 'automation' | 'skill'
 
@@ -15,8 +16,25 @@ const CREATION_DRAFTS: Record<ArtistManagerCreationKind, string> = {
   skill: 'Help me find the right skill. Ask what capability I need, search Artist OS skills first, and search the external marketplace only if there is no strong local match. Do not install or activate external content from search results.',
 }
 
-export function getArtistManagerCreationDraft(kind: ArtistManagerCreationKind): string {
+export function getArtistManagerCreationDraft(kind: ArtistManagerCreationKind, variant: RendererProductVariant = 'runner'): string {
+  if (variant === 'artist-os' && kind === 'automation') {
+    return 'Help me create or revise reusable automatic work. Reuse the outcome and timing I provide, inspect existing workers, workflows and automations before creating another, and ask only for missing decisions. Bind every required workflow input and show one plain-language review before saving through the supported scheduling or maintenance tools.'
+  }
   return CREATION_DRAFTS[kind]
+}
+
+export function getCreationLinkTarget(kind: ArtistManagerCreationKind, variant: RendererProductVariant, labelOverride?: string) {
+  const builder = variant === 'artist-os'
+  const displayName = builder ? 'Builder' : 'Artist Manager'
+  const taskModeId = builder ? ({ worker: 'agents', workflow: 'workflows', automation: 'automations', skill: 'general' } as const)[kind] : undefined
+  return {
+    slug: builder ? BUILDER_SLUG : CONCIERGE_SLUG,
+    displayName,
+    taskModeId,
+    label: labelOverride
+      ? builder ? labelOverride.replace(/Artist Manager/g, 'Builder') : labelOverride
+      : `${kind === 'skill' ? 'Find' : 'Create'} with ${displayName}`,
+  }
 }
 
 export function ArtistManagerCreateLink({
@@ -42,37 +60,39 @@ export function ArtistManagerCreateLink({
     onInputChange,
   } = useAppShellContext()
   const [opening, setOpening] = React.useState(false)
-  const label = labelOverride ?? (kind === 'skill' ? 'Find with Artist Manager' : 'Create with Artist Manager')
+  const { slug, displayName, taskModeId, label } = getCreationLinkTarget(kind, RENDERER_PRODUCT_VARIANT, labelOverride)
 
   const handleOpen = React.useCallback(async () => {
     if (!workspaceId || opening) return
     setOpening(true)
     try {
-      const manager = activeAgents.find((agent) => agent.slug === CONCIERGE_SLUG)
-        ?? await window.electronAPI.getAgentDefinition(CONCIERGE_SLUG)
-      if (!manager) throw new Error('Artist Manager is not installed')
+      const creator = activeAgents.find((agent) => agent.slug === slug)
+        ?? await window.electronAPI.getAgentDefinition(slug)
+      if (!creator) throw new Error(`${displayName} is not installed`)
       const contextDocs = await window.electronAPI
-        .listWorkspaceContextDocsForAgent(workspaceId, manager.slug)
+        .listWorkspaceContextDocsForAgent(workspaceId, creator.slug)
         .catch(() => [])
       await openAgentSessionComposer({
-        agent: manager,
+        agent: creator,
         workspaceId,
         onCreateSession,
         onInputChange,
         skills,
         sources: enabledSources,
         contextDocs,
-        agentCatalog: activeAgents.filter((agent) => agent.slug !== manager.slug),
-        draftInput: draft ?? getArtistManagerCreationDraft(kind),
+        agentCatalog: activeAgents.filter((agent) => agent.slug !== creator.slug),
+        taskModeId,
+        draftInput: draft ?? getArtistManagerCreationDraft(kind, RENDERER_PRODUCT_VARIANT),
+        autoSendDraft: false,
       })
     } catch (error) {
-      toast.error('Failed to open Artist Manager', {
+      toast.error(`Failed to open ${displayName}`, {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
       setOpening(false)
     }
-  }, [activeAgents, draft, enabledSources, kind, onCreateSession, onInputChange, opening, skills, workspaceId])
+  }, [activeAgents, draft, enabledSources, kind, onCreateSession, onInputChange, opening, skills, workspaceId, slug, displayName, taskModeId])
 
   return (
     <button
@@ -85,10 +105,10 @@ export function ArtistManagerCreateLink({
           : 'group inline-flex items-center gap-1.5 text-[11px] font-medium text-white/38 transition-colors hover:text-orange-200/78 disabled:cursor-not-allowed disabled:opacity-40',
         className,
       )}
-      aria-label={`${label}. Opens a guided Artist Manager chat.`}
+      aria-label={`${label}. Opens an unsent draft in ${displayName}.`}
     >
       <Sparkles className={cn('h-3 w-3 transition-colors', prominent ? 'text-white/90' : 'text-orange-300/48 group-hover:text-orange-300/80')} />
-      {opening ? 'Opening Artist Manager…' : label}
+      {opening ? `Opening ${displayName}…` : label}
     </button>
   )
 }

@@ -117,7 +117,17 @@ function hasValueEvidence(
   if (typeof value === 'string') {
     const target = normalizeComparable(value)
     if (!target) return false
-    if (` ${normalizeComparable(evidenceText)} `.includes(` ${target} `)) return true
+    const comparableEvidence = ` ${normalizeComparable(evidenceText)} `
+    if (comparableEvidence.includes(` ${target} `)) return true
+    // Check the actual character after a period before punctuation normalization:
+    // file.pdf.(backup) and report.?download=1 are continuations, not sentences.
+    // Permit a closing quote only when that quote also ends at whitespace/end.
+    const rawEvidence = normalizeText(evidenceText)
+    for (const period of rawEvidence.matchAll(/\.(?=$|\s|["'”’](?:\s|$))/gu)) {
+      // Remove only this terminal period. Earlier sentence boundaries and dots
+      // within the candidate value must remain part of the exact comparison.
+      if (` ${normalizeComparable(rawEvidence.slice(0, period.index))}`.endsWith(` ${target}`)) return true
+    }
     return attachments.some((attachment) => (
       normalizeComparable(attachment.name) === target
       || normalizeComparable(attachment.storedPath) === target

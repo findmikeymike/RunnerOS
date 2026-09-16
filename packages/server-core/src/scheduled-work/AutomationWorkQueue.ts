@@ -43,6 +43,9 @@ export interface AutomationWorkQueueResult {
 }
 
 export interface AutomationWorkQueueDeps {
+  /** Replacement retries preserve work already queued from the current configuration. */
+  preserveConfigurationDigests?: ReadonlySet<string>
+  onlyOrderIds?: ReadonlySet<string>
   emitContextChanged?(workspaceId: string, docs: ReturnType<typeof loadAllContextDocs>): void
   log?: Pick<Console, 'info'>
 }
@@ -61,12 +64,7 @@ export async function cancelPendingAutomationWorkForMatcher(
   ))
 }
 
-export function cancelPendingAutomationWorkForMatcherLocked(
-  workspaceId: string,
-  workspaceRootPath: string,
-  matcherId: string,
-  deps: AutomationWorkQueueDeps = {},
-): string[] {
+export function preparePendingAutomationWorkCancellation(workspaceId: string, workspaceRootPath: string, matcherId: string, preserveConfigurationDigests?: ReadonlySet<string>, onlyOrderIds?: ReadonlySet<string>) {
     const parsed = parseScheduledWorkDocResult(
       loadContextDoc(workspaceRootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined,
       workspaceId,
@@ -75,6 +73,8 @@ export function cancelPendingAutomationWorkForMatcherLocked(
     const roots = parsed.work.items.filter((order) => (
       !order.deletedAt
       && order.automationRef?.matcherId === matcherId
+      && (!onlyOrderIds || onlyOrderIds.has(order.id))
+      && !preserveConfigurationDigests?.has(order.automationRef.configurationDigest)
       && (order.status === 'needs-setup'
         || order.status === 'scheduled'
         || order.status === 'waiting'
@@ -93,9 +93,19 @@ export function cancelPendingAutomationWorkForMatcherLocked(
           )).map((order) => order.id)
         : [root.id]
     }))
-    if (orderIds.size === 0) return []
-    const canceled = parsed.work.items.filter((order) => orderIds.has(order.id))
+    const canceled = parsed.work.items.filter((order) => orderIds.has(order.id) || (onlyOrderIds?.has(order.id) && order.automationRef?.matcherId === matcherId && order.status === 'canceled'))
     preflightCalendarProjections(workspaceRootPath, workspaceId, canceled)
+    return { parsed, orderIds, canceled, runningWork: parsed.work.items.filter(order => !order.deletedAt && order.automationRef?.matcherId === matcherId && order.status === 'running').length }
+}
+
+export function cancelPendingAutomationWorkForMatcherLocked(
+  workspaceId: string,
+  workspaceRootPath: string,
+  matcherId: string,
+  deps: AutomationWorkQueueDeps = {},
+): string[] {
+    const { parsed, orderIds, canceled } = preparePendingAutomationWorkCancellation(workspaceId, workspaceRootPath, matcherId, deps.preserveConfigurationDigests, deps.onlyOrderIds)
+    if (canceled.length === 0) return []
     const now = new Date().toISOString()
     const work: ScheduledWorkDocument = {
       ...parsed.work,

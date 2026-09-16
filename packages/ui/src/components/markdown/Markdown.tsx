@@ -23,6 +23,7 @@ import { useCollapsibleMarkdown } from './CollapsibleMarkdownContext'
 import { wrapWithSafeProxy } from './safe-components'
 import { MARKDOWN_MATH_OPTIONS } from './math-options'
 import { isSafeMarkdownFence, safeMarkdownUrl } from './safe-mode'
+import { normalMarkdownUrl } from './navigation-url'
 
 /**
  * Render modes for markdown content:
@@ -192,7 +193,9 @@ function createComponents(
         if (resolvedTarget.kind === 'file' && onFileClick) {
           onFileClick(resolvedTarget.path)
         } else if (resolvedTarget.kind === 'url' && onUrlClick) {
-          onUrlClick(resolvedTarget.url)
+          // Empty/stripped hrefs must not regain a blocked app action or scheme
+          // through the fallback label text.
+          if (normalMarkdownUrl(resolvedTarget.url, 'href')) onUrlClick(resolvedTarget.url)
         }
       }
 
@@ -585,7 +588,7 @@ export function Markdown({
         // KaTeX emits its own HAST and does not require raw HTML parsing.
         rehypePlugins={[[rehypeKatex, { trust: false }]]}
         skipHtml
-        urlTransform={safeMode ? (url, key) => safeMarkdownUrl(url, key === 'src') : undefined}
+        urlTransform={safeMode ? (url, key) => safeMarkdownUrl(url, key === 'src') : normalMarkdownUrl}
         components={components}
       >
         {processedContent}

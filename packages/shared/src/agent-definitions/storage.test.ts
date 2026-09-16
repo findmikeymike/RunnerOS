@@ -25,6 +25,7 @@ import {
   replaceBuiltInAgentPromptText,
   removeBuiltInAgentSkills,
 } from './storage.ts'
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts'
 import { STARTER_AGENTS } from './starter-templates.ts'
 import { ANYTHING_AGENT_SLUG, RELEASE_MANAGER_AGENT_SLUG, DEFAULT_ACTIVATED_AGENT_SLUGS, CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS, HQ_DEFAULT_ACTIVATED_AGENT_SLUGS, HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS, LAB_DEFAULT_ACTIVATED_AGENT_SLUGS, initialAgentSlugsForWorkspace, isAgentAllowedInArtistWorkspace, isReleaseManagerDefinition } from './defaults.ts'
 import { SOCIAL_PUBLISHER_SLUG } from './types.ts'
@@ -641,14 +642,20 @@ body
     expect(hnic?.metadata.name).toBe('Artist Manager')
     expect(hnic?.metadata.tags).toContain('routing')
     expect(hnic?.metadata.tags).toContain('workflows')
-    expect(hnic?.metadata.skills).toContain('workflow-creator')
-    expect(hnic?.metadata.skills).toContain('automation-creator')
-    expect(hnic?.metadata.skills).toContain('skill-scout')
+    for (const skill of ['workflow-creator', 'automation-creator', 'skill-scout']) {
+      if (RUNTIME_IDENTITY.variant === 'artist-os') expect(hnic?.metadata.skills).not.toContain(skill)
+      else expect(hnic?.metadata.skills).toContain(skill)
+    }
     expect(hnic?.metadata.skills).toContain('artist-manager-operating-system')
     expect(hnic?.systemPrompt).toContain('current active-agent capability catalog')
     expect(hnic?.systemPrompt).toContain('@setup-concierge')
-    expect(hnic?.systemPrompt).toContain('design it as an automation')
-    expect(hnic?.systemPrompt).toContain('suggest a workflow')
+    if (RUNTIME_IDENTITY.variant === 'artist-os') {
+      expect(hnic?.systemPrompt).toContain('If an existing worker or workflow should repeat, schedule it with')
+      expect(hnic?.systemPrompt).toContain('hand the agreed goal to Builder')
+    } else {
+      expect(hnic?.systemPrompt).toContain('design it as an automation')
+      expect(hnic?.systemPrompt).toContain('suggest a workflow')
+    }
     expect(hnic?.systemPrompt).toContain('Handoff target')
     expect(hnic?.systemPrompt).toContain('compact Manager Brief')
     expect(hnic?.systemPrompt).toContain('one recommendation')
@@ -1014,9 +1021,10 @@ body
     expect(initialAgentSlugsForWorkspace('lab', true)).toEqual([])
     expect(CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['anticipation-director', 'art-director', 'video-director', 'video-editor-agent', 'social-publisher'])
     expect(HQ_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['catalog-royalty-agent', 'legal-agent'])
-    expect(HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual([ANYTHING_AGENT_SLUG, 'scriptwriter', 'site-builder', 'website-agent'])
+    expect(HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['builder', ANYTHING_AGENT_SLUG, 'scriptwriter', 'site-builder', 'website-agent'])
     expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([
       RELEASE_MANAGER_AGENT_SLUG,
+      'builder',
       ANYTHING_AGENT_SLUG,
       'scriptwriter',
       'site-builder',
@@ -1044,6 +1052,7 @@ body
       'industry-hunter',
     ])
     expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([
+      'builder',
       ANYTHING_AGENT_SLUG,
       'scriptwriter',
       'site-builder',

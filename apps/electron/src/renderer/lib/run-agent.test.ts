@@ -1,4 +1,5 @@
 import { STARTER_AGENTS } from '@craft-agent/shared/agent-definitions/starter-templates'
+import { BUILDER_TASK_MODES } from '../../../../../packages/shared/src/agent-definitions/task-mode-recipes/builder'
 import { describe, expect, test } from 'bun:test'
 import { buildAgentCreateSessionOptions, ensureAgentDeclaredSkillsEnabled, openAgentSessionComposer, resolveArtistWorkspaceScope, sendAgentDraft } from './run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
@@ -117,6 +118,33 @@ describe('focused launch dependency enforcement', () => {
     const selectedSources = options.enabledSourceSlugs ?? ['unrelated-workspace-default']
     expect(selectedSources).toEqual([])
   })
+})
+
+test.each(['agents', 'workflows', 'automations'])('Campaign Builder %s opens with system recipes hidden from the picker', async (taskModeId) => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  const agent = { ...makeAgent(), slug: 'builder', metadata: { name: 'Builder', description: 'Build reusable work.', skills: ['agent-creator', 'workflow-creator', 'automation-creator', 'skill-recipe', 'skill-scout', 'source-recipe'], taskModes: BUILDER_TASK_MODES } } as AgentDefinitionDTO
+  const drafts: string[] = []
+  let created: CreateSessionOptions | undefined
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { electronAPI: {
+    listGlobalSkills: async () => [], // System recipes are intentionally absent here.
+    listWorkspaceContextDocsForAgent: async () => [],
+    listUserMemory: async () => [], listAgentMemory: async () => [], listAgentSessions: async () => [],
+    getWorkspaces: async () => [{ id: 'campaign-id', artistWorkspaceScope: 'campaign' }],
+  } } })
+  try {
+    await openAgentSessionComposer({
+      agent, workspaceId: 'campaign-id', taskModeId, skills: [], sources: [], navigateOnCreate: false,
+      draftInput: 'Help me build this.', autoSendDraft: false,
+      onCreateSession: async (workspaceId, options) => { expect(workspaceId).toBe('campaign-id'); created = options; return { id: 'builder-session' } as Session },
+      onInputChange: (_id, draft) => { drafts.push(draft) },
+    })
+    expect(created?.agentSkillSlugs).toEqual(BUILDER_TASK_MODES.find(mode => mode.id === taskModeId)!.primarySkillSlugs)
+    expect(created?.launchReceipt?.taskMode?.id).toBe(taskModeId)
+    expect(drafts).toEqual(['Help me build this.'])
+  } finally {
+    if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow)
+    else Reflect.deleteProperty(globalThis, 'window')
+  }
 })
 
 describe('optional in-chat focus', () => {

@@ -44,7 +44,7 @@ tags: [creator, meta, agents]
 
 # Agent Creator
 
-Use this skill when the user wants to **create a new agent**.
+Use this skill when the user wants to **create or revise a reusable agent**. In Artist OS, Builder owns definition construction; Manager schedules existing work and Assistant owns secure setup. Inspect the relevant catalogs and existing definition before proposing a duplicate.
 
 ## What you're producing
 
@@ -56,7 +56,7 @@ Optional: \`skills\`, \`sources\`, \`optionalSources\`, \`trustedWorkerTools\`,
 
 ## Minimum interview
 
-Don't ask everything at once. Ask the smallest set you need to draft something:
+Reuse supplied facts. Ask all genuinely unresolved design questions together; skip answered questions:
 
 1. **Purpose** — "What's its job?" (one sentence)
 2. **I/O** — "What does it expect as input? What should it produce?"
@@ -69,7 +69,7 @@ That's enough to draft. Ask follow-ups only when ambiguous.
 
 Most fields you can infer:
 
-- **Slug** — kebab-case the name. If the slug already exists, the \`create_agent\` tool will suggest a numbered variant (e.g. \`-v2\`).
+- **Slug** — kebab-case the name. Inspect a collision before saving: it may be the exact definition to revise, not a reason to silently create a numbered duplicate.
 - **Avatar** — pick a single emoji that matches the job. Don't ask.
 - **Permission mode** — default to \`ask\`. Use \`safe\` only for read-only/research roles. Never default to \`allow-all\`; only set it if the user explicitly opts in and understands the risk.
 - **Thinking level** — \`medium\` for most agents; \`high\` for research/critique/planning; \`low\` only when latency matters.
@@ -110,9 +110,7 @@ If the user hasn't activated a relevant skill or source, mention it but don't ad
 
 ## The save
 
-Always show a complete draft before saving. The draft has every field
-you're going to write. After the user confirms with a clear "yes",
-"save it", "looks good", or similar, call:
+Present a reviewable draft before saving: important behavior first, complete fields available. Honor existing specific approval; ask only about newly undecided behavior, destination, replacement scope, permissions or external effects. Once the exact save is authorized, call:
 
     create_agent({
       slug: "...",
@@ -122,8 +120,12 @@ you're going to write. After the user confirms with a clear "yes",
       activateInWorkspace: true
     })
 
+For an authorized revision, inspect the exact definition and known references first. Explain that agent definitions are global while activation belongs to the current workspace. Use overwrite only for that reviewed target; preserve unexposed focuses, routing, custom fields and permissions. If the supported tool cannot preserve them or dependent running work makes revision unsafe, return the blocker. Never edit internal files as a bypass.
+
 After the tool returns success, post a one-line confirmation with a
 clickable route link: \`/agents/<slug>\`.
+
+Saving is not execution: distinguish saved, enabled, validated, test passed and executed. A saved definition needs no redundant Output. Validation must not send, publish, spend or operate external accounts.
 
 ## Refusals / sanity checks
 
@@ -152,7 +154,7 @@ tags: [creator, meta, automations]
 # Automation Creator
 
 Use this skill when the user wants to **automate something** — a scheduled
-job, a reaction to an external event, or a recurring task.
+job, a reaction to an external event, or a recurring task. Inspect existing automations first when tools permit. In Artist OS, Builder owns construction and maintenance; Manager may schedule an existing worker or workflow. Do not claim list/edit/pause/resume support unless those tools are currently exposed. If unavailable, explain the existing app control instead of replacing or duplicating the automation.
 
 ## What an automation IS
 
@@ -245,7 +247,7 @@ Always show a complete draft before saving:
 - Permission mode for spawned sessions (default \`ask\`)
 - Whether it's enabled (default true)
 
-After explicit user confirmation, call:
+Honor existing specific approval for the reviewed arrangement; ask only about newly undecided scope, permissions, destination or external effects. For supported raw actions, call:
 
     create_automation({
       eventName: "SchedulerTick",
@@ -263,6 +265,8 @@ After explicit user confirmation, call:
 
 After success, post a one-line confirmation. For SchedulerTick triggers,
 include the next-fire timestamp returned by the tool.
+
+For incoming webhooks, preserve the existing authentication policy; never default to unauthenticated or expose a local endpoint publicly. Saving or enabling is not proof a trigger fired. Never test external effects without exact authorization.
 
 ## Refusals
 
@@ -301,8 +305,7 @@ UI.
 ## What you're producing
 
 A complete \`WORKFLOW.md\` file for \`${PORTABLE_WORKFLOWS_ROOT}/<slug>/WORKFLOW.md\`.
-Use \`create_workflow\` to save it only after showing the complete source draft
-and receiving explicit user confirmation. Use \`list_agents\` to verify agent
+Present a reviewable draft before saving, with complete source available. Honor existing specific approval; ask only when material behavior, scope, replacement, destination or external effects remain undecided. Use \`create_workflow\` to save once the exact save is authorized. Use \`list_agents\` to verify agent
 slugs and \`list_workflows\` / \`get_workflow\` to avoid duplicating an existing
 workflow.
 
@@ -435,7 +438,7 @@ or separately inspectable artifact.
 
 ## Draft format
 
-Always show a complete source draft:
+Show the key behavior first and make the complete source draft available:
 
 \`\`\`markdown
 ---
@@ -499,15 +502,13 @@ Run this when you have raw customer feedback and want a clean action plan.
 
 ## Confirmation and handoff
 
-After showing the draft, ask "Use this as the workflow source?" If the user
-confirms, call \`create_workflow\` with:
+After showing the reviewable draft, honor an existing specific approval or resolve only undecided material choices. Call \`create_workflow\` with:
 
 - \`slug\`: inferred kebab-case slug.
 - \`metadata\`: the frontmatter object from the confirmed draft.
 - \`body\`: markdown body below the frontmatter.
 - \`activateInWorkspace: true\` unless the user says otherwise.
-- \`overwrite: true\` only if the tool reports a slug conflict and the user
-  explicitly confirms replacing the existing workflow.
+- \`overwrite: true\` only for an inspected exact existing workflow whose replacement is specifically authorized. Explain global scope, inspect known references, and preserve queued/running work; return a blocker if safe replacement is unsupported.
 
 After success, post a one-line confirmation with \`/workflows/<slug>\`.
 `;

@@ -1,3 +1,4 @@
+import { sessionResultLinkText } from '../result-links.ts';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
@@ -75,7 +76,7 @@ export async function handleCreateAgent(
         : '';
       return errorResponse(`${result.error ?? 'Failed to create agent.'}${suggestion}`);
     }
-    return successResponse(`Created agent @${result.slug}. View at /agents/agent/${result.slug}.`);
+    return successResponse(`Created agent @${result.slug}.${sessionResultLinkText(ctx, 'agent', result.slug)}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return errorResponse(`Failed to create agent: ${message}`);

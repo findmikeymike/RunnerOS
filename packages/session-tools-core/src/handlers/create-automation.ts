@@ -1,3 +1,4 @@
+import { sessionResultLinkText } from '../result-links.ts';
 import { Cron } from 'croner';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
@@ -260,7 +261,7 @@ export async function handleCreateAutomation(
     }
     const nextLine = result.nextFireAt ? ` Next fire: ${result.nextFireAt}.` : '';
     return successResponse(
-      `Created automation in event ${result.eventName ?? args.eventName}.${nextLine}`,
+      `Created automation in event ${result.eventName ?? args.eventName}.${nextLine}${sessionResultLinkText(ctx, 'work')}`,
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';

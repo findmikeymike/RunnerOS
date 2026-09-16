@@ -265,6 +265,18 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  for (const [property, callback] of [
+    ['listAutomations', 'listAutomationsFn'],
+    ['getAutomation', 'getAutomationFn'],
+    ['updateAutomation', 'updateAutomationFn'],
+  ] as const) {
+    Object.defineProperty(context, property, {
+      get() { return getSessionScopedToolCallbacks(sessionId)?.[callback]; },
+      configurable: true,
+      enumerable: true,
+    });
+  }
+
   Object.defineProperty(context, 'campaignCalendarWrite', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.campaignCalendarWriteFn;

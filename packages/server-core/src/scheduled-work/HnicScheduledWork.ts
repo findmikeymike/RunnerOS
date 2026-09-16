@@ -85,7 +85,7 @@ export function inferScheduledWorkScope(workspace: { artistWorkspaceScope?: Work
   return workspace.artistWorkspaceScope
 }
 
-function resolveExecution(rootPath: string, request: ScheduleWorkToolInput): ScheduledWorkExecution {
+export function resolveExecution(rootPath: string, request: ScheduleWorkToolInput): ScheduledWorkExecution {
   const input = request.execution
   if (input.type === 'agent-task') {
     if ('inputBindings' in input && input.inputBindings) {

@@ -885,8 +885,9 @@ function buildProxyTools(): ToolDefinition<any, any>[] {
 
       const inputObj = params as Record<string, unknown>;
 
-      // Permission checking via main process
-      const approvedInput = await requestPreToolUseApproval(def.name, inputObj, toolCallId);
+      // Every proxy is registered through wrapToolsWithHooks, which already
+      // authorizes this invocation and forwards transformed, metadata-free input.
+      // Asking here again would require two approvals for the same mutation.
 
       // Execute via main process
       const requestId = `proxy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -895,7 +896,7 @@ function buildProxyTools(): ToolDefinition<any, any>[] {
         type: 'tool_execute_request',
         requestId,
         toolName: def.name,
-        args: approvedInput,
+        args: inputObj,
       });
 
       const result = await new Promise<{ content: string; isError: boolean }>((resolve) => {

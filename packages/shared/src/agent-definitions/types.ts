@@ -219,6 +219,9 @@ export const AGENT_SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 /** Built-in coordinator agent slug. */
 export const ORCHESTRATOR_SLUG = 'orchestrator';
 
+/** Artist OS reusable capability author. */
+export const BUILDER_SLUG = 'builder';
+
 /**
  * Built-in concierge agent slug.
  *

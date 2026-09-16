@@ -9,7 +9,7 @@ const focus = (id: string, label: string, description: string, topics: string[],
 })
 
 /** Optional management lenses. Specialist execution stays with the owning worker. */
-export const MANAGER_TASK_MODES: AgentTaskModeDefinition[] = [
+export const LEGACY_MANAGER_TASK_MODES: AgentTaskModeDefinition[] = [
   focus('this-week', 'Today & This Week', 'Choose what matters next and make the week manageable.', ['Current priorities, open work and deadlines'], 'Use the current Manager Brief to choose the next useful move and resolve competing priorities.'),
   focus('current-release', 'Current Release', 'Keep your release ready, realistic, and moving forward.', ['Current campaign, Release Kit essentials, readiness and release timing'], 'Check the actual release essentials, identify blockers, and coordinate the right specialists.'),
   focus('brand', 'Build My Brand', 'Find the identity work that will make the biggest difference.', ['Artist identity summary, approved branding and audience fit'], 'Clarify the need, then hand off to the right Branding or Art focus with useful context.'),
@@ -32,3 +32,8 @@ export const MANAGER_TASK_MODES: AgentTaskModeDefinition[] = [
     { slug: 'runneros-self-edit', when: 'The artist explicitly asks to change the app itself.', expansion: 'same-session' },
   ]),
 ]
+
+/** Artist OS management coordinates existing work; Builder owns reusable construction. */
+export const MANAGER_TASK_MODES = LEGACY_MANAGER_TASK_MODES
+  .filter(mode => mode.id !== 'build-automate')
+  .map(mode => ({ ...mode, ...(mode.adjacentSkills ? { adjacentSkills: mode.adjacentSkills.filter(skill => !['agent-creator', 'workflow-creator', 'automation-creator', 'skill-scout', 'source-recipe'].includes(skill.slug)) } : {}) }))

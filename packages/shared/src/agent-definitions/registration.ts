@@ -15,6 +15,7 @@ export interface BuiltinAgentRegistration {
 }
 
 export const BUILTIN_AGENT_REGISTRATIONS: readonly BuiltinAgentRegistration[] = [
+  { slug: 'builder', required: true, activationGroup: 'hq-campaign', activationOrder: -1 },
   { slug: 'anything-agent', required: true, activationGroup: 'hq-campaign', activationOrder: 0 },
   { slug: 'concierge', required: true, labAllowed: true },
   { slug: 'setup-concierge', required: true, labAllowed: true },

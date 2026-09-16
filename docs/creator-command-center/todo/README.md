@@ -22,6 +22,7 @@ an implementing agent as-is.
 | [44 State-Aware First-Use Guide](./44-state-aware-first-use-guide-spec.md) | Extends the existing question-mark Guide with an optional first-use setup path whose progress comes from real AI, Brain, Vault, and first-work state | no `ArtistSetupSnapshot`, onboarding presentation state, setup mode, or coach-mark target contract |
 | [45 HQ / Campaign Scope Clarity](./45-hq-campaign-scope-clarity-spec.md) | One stated rule for where shared work lives, the unified timeline shown inside campaigns, and cross-owner channel-collision warnings — no new space, no new store | `collectArtistTimeline` has no RPC and only `manager-tools.ts` calls it; no `TimelineCollision` or `channel` on `TimelineEntry` |
 | [51 Artist Profile Enrichment](./51-artist-profile-enrichment/start-here.md) | Adds sourced career research below artist inputs using Deep Research; reuses existing Spotify analytics | no `artist-career-research` or profile-enrichment host service in baseline; spec only |
+| [52 Builder Agent](./52-builder-agent-spec.md) | Dedicated reusable agent/workflow/automation author with scoped tools and minimal development-profile transition | no built-in `builder` registration/template or agent-facing automation maintenance tools at `48cd4e1a4`; existing creator infrastructure is reused |
 
 Specs 38 and 41 remain at their existing paths for cross-reference stability,
 and their core workflows are implemented; full live loop acceptance remains open. Spec 48 also stays here for stable links: its

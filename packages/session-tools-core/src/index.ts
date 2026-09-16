@@ -558,3 +558,9 @@ export type { ManageArtistBrainInput } from './handlers/manage-artist-brain.ts';
 
 export { importArtistCommunitySchema } from './handlers/import-artist-community.ts';
 export type { ImportArtistCommunityInput } from './handlers/import-artist-community.ts';
+
+export type { AutomationMaintenanceSummary, AutomationMaintenanceDetail, ListAutomationsInput, GetAutomationInput, UpdateAutomationInput, ListAutomationsResult, GetAutomationResult, UpdateAutomationResult } from './handlers/automation-maintenance-types.ts';
+export { handleListAutomations } from './handlers/list-automations.ts';
+export { handleGetAutomation } from './handlers/get-automation.ts';
+export { handleUpdateAutomation } from './handlers/update-automation.ts';
+export { ListAutomationsSchema, GetAutomationSchema, UpdateAutomationSchema } from './tool-defs.ts';

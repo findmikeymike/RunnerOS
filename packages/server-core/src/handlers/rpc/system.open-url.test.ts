@@ -63,6 +63,31 @@ function createTestHarness(overrides?: { workspaceId?: string | null }) {
 }
 
 describe('registerSystemCoreHandlers OPEN_URL', () => {
+  it('routes passive Builder result links to navigation without invoking external URL capabilities', async () => {
+    for (const view of ['agents', 'agents/agent/my-worker', 'workflows', 'workflows/my-flow', 'automations', 'automations/automation/9f1fe4']) {
+      const { openUrl, ctx, invokeClientCalls, pushCalls } = createTestHarness()
+      await openUrl(ctx, `${RUNTIME_IDENTITY.deeplinkScheme}://workspace/ws-1/${view}`)
+      expect(invokeClientCalls).toHaveLength(0)
+      expect(pushCalls).toEqual([{ channel: RPC_CHANNELS.deeplink.NAVIGATE, target: { to: 'client', clientId: 'client-1' }, args: [{ view }] }])
+    }
+  })
+
+  it('targets the requested workspace for passive result navigation', async () => {
+    const { openUrl, ctx, invokeClientCalls, pushCalls } = createTestHarness()
+    await openUrl(ctx, `${RUNTIME_IDENTITY.deeplinkScheme}://workspace/ws-2/workflows/my-flow`)
+    expect(invokeClientCalls).toHaveLength(0)
+    expect(pushCalls[0]).toEqual({ channel: RPC_CHANNELS.deeplink.NAVIGATE, target: { to: 'workspace', workspaceId: 'ws-2' }, args: [{ view: 'workflows/my-flow' }] })
+  })
+
+  it('rejects malformed, query-bearing or editing variants of passive result links', async () => {
+    for (const suffix of ['agents/agent/a?send=true', 'automations#secret', 'workflows/flow/edit', 'agents/action/delete-session', 'automations/automation/%2fsecret', 'workflows/flow/edit?window=focused', 'agents/agent/a?window=full&send=true', 'automations?window=focused']) {
+      const { openUrl, ctx, invokeClientCalls, pushCalls } = createTestHarness()
+      await expect(openUrl(ctx, `${RUNTIME_IDENTITY.deeplinkScheme}://workspace/ws-1/${suffix}`)).rejects.toThrow('Invalid passive navigation URL')
+      expect(pushCalls).toHaveLength(0)
+      expect(invokeClientCalls).toHaveLength(0)
+    }
+  })
+
   it('routes product action links internally via deeplink:navigate', async () => {
     const { openUrl, ctx, invokeClientCalls, pushCalls } = createTestHarness()
 

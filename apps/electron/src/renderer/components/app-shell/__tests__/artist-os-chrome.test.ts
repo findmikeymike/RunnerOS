@@ -301,7 +301,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(workers).toContain("!labOnly && domain === 'Command'")
     expect(workers).toContain('const directoryAgents = labOnly ? activeAgents : [')
     expect(workers).toContain('...allAgents.filter((agent) => agent.slug === CONCIERGE_SLUG)')
-    expect(workers).toContain("const foundationalOrder = ['setup-concierge', CONCIERGE_SLUG, 'anything-agent']")
+    expect(workers).toContain("const foundationalOrder = ['setup-concierge', CONCIERGE_SLUG, 'builder', 'anything-agent']")
     const managerLaunch = workers.slice(workers.indexOf('if (agent.slug === CONCIERGE_SLUG)'), workers.indexOf('const sourceWorkspace = workspaces.find'))
     expect(managerLaunch).toContain('await onOpenCommand()')
     expect(managerLaunch).toContain('return')

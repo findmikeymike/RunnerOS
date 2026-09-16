@@ -236,6 +236,7 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
   // Build context
   return {
     sessionId,
+    workspaceId: config.workspaceId,
     workspacePath: workspaceRootPath,
     get sourcesPath() { return join(workspaceRootPath, 'sources'); },
     get skillsPath() { return join(workspaceRootPath, 'skills'); },

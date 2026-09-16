@@ -58,6 +58,8 @@ export interface Session {
   lastMessageAt: number
   messages: Message[]
   isProcessing: boolean
+  /** Live host approvals only; never persisted to session files. */
+  pendingPermissions?: PermissionRequest[]
   isFlagged?: boolean
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode
