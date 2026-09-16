@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SignalMode, SignalState, SignalTrack, SignalTrackConfig } from '@craft-agent/shared/shared-intel'
 import { parseAutomationsConfig } from '../components/automations/types'
 import type { AutomationListItem } from '../components/automations/types'
-import { assertSignalScheduleCanRewrite, legacySignalSchedule, saveSignalSettingsTransaction, signalScheduleMatches, signalWeeklyMatcher } from '../lib/signal-tracks'
+import { assertSignalScheduleCanRewrite, legacySignalSchedule, signalManualScanRoute, saveSignalSettingsTransaction, signalScheduleMatches, signalWeeklyMatcher } from '../lib/signal-tracks'
 
 export function useSignalTracks(workspaceId: string, ensureWorkflow: (track: SignalTrack, mode: SignalMode) => Promise<string>) {
   const [snapshot, setSnapshot] = useState<{ workspaceId: string; state: SignalState; automations: AutomationListItem[] } | null>(null)
@@ -74,6 +74,8 @@ export function useSignalTracks(workspaceId: string, ensureWorkflow: (track: Sig
 
   const start = useCallback(async (track: SignalTrack, mode: SignalMode, idempotencyKey: string, links?: string[]) => {
     if (mutation.current) throw new Error('Save your settings before starting research.')
+    if (!state || error) throw new Error(error || 'Signals settings are still loading.')
+    if (mode === 'scan' && signalManualScanRoute(state, error, track).route !== 'native') throw new Error('Review and save Channels & schedule before scanning.')
     const owner = workspaceId
     mutation.current = true; setBusy(true); generation.current++
     try {
@@ -83,7 +85,7 @@ export function useSignalTracks(workspaceId: string, ensureWorkflow: (track: Sig
       mutation.current = false
       if (scope.current === owner) { setBusy(false); await refresh() }
     }
-  }, [workspaceId, ensureWorkflow, refresh])
+  }, [workspaceId, state, error, ensureWorkflow, refresh])
   // Pausing must work without a metadata provider or adopting a new workflow.
   const pauseLegacy = useCallback(async () => {
     if (mutation.current) throw new Error('Signals settings are busy. Try again after refresh.')

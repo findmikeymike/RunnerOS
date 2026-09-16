@@ -564,3 +564,6 @@ export { handleListAutomations } from './handlers/list-automations.ts';
 export { handleGetAutomation } from './handlers/get-automation.ts';
 export { handleUpdateAutomation } from './handlers/update-automation.ts';
 export { ListAutomationsSchema, GetAutomationSchema, UpdateAutomationSchema } from './tool-defs.ts';
+
+export { handleGetCustomSkill, handleCreateSkill, handleUpdateSkill } from './handlers/custom-skills.ts';
+export type { CustomSkillIdentity, CreateCustomSkillInput, UpdateCustomSkillInput, CustomSkillResult } from './handlers/custom-skills.ts';

@@ -67,7 +67,7 @@ export interface ScheduledWorkRunnerDeps {
     agentSlug: string
     taskModeId?: string
     brief: string
-    permissionMode: 'safe' | 'ask'
+    permissionMode: 'safe' | 'ask' | 'allow-all'
     expectedOutput: ExpectedOutputContract
     inputRefs: ScheduledWorkInputRef[]
     onStarted: (sessionId: string) => void | Promise<void>
@@ -80,6 +80,7 @@ export interface ScheduledWorkRunnerDeps {
     workspace: { id: string; rootPath: string }
     workflowSlug: string
     workflowDigest: string
+    permissionMode?: 'safe' | 'ask' | 'allow-all'
     triggerInputs: Record<string, unknown>
     untrustedTriggerInputs?: string[]
   }): Promise<{ runId: string }>
@@ -873,6 +874,7 @@ export class ScheduledWorkRunner {
         workflowSlug: execution.workflowSlug,
         workflowDigest: execution.workflowDigest,
         triggerInputs: execution.triggerInputs,
+        permissionMode: execution.permissionMode,
         untrustedTriggerInputs: execution.untrustedTriggerInputs,
       })
       const cleanedRunId = clean(runId)

@@ -43,6 +43,9 @@ export interface AutomationWorkQueueResult {
 }
 
 export interface AutomationWorkQueueDeps {
+  /** Recheck native consumer eligibility under the same lock as admission and pause cleanup. */
+  canAdmit?: () => boolean
+
   /** Replacement retries preserve work already queued from the current configuration. */
   preserveConfigurationDigests?: ReadonlySet<string>
   onlyOrderIds?: ReadonlySet<string>
@@ -170,7 +173,7 @@ export async function queueAutomationWork(
   deps: AutomationWorkQueueDeps = {},
 ): Promise<AutomationWorkQueueResult> {
   return withWorkspaceContextLock(workspaceRootPath, async () => {
-    if (!runtimeConfigAllowsAction(workspaceRootPath, pending)) {
+    if (deps.canAdmit?.() === false || !runtimeConfigAllowsAction(workspaceRootPath, pending)) {
       return { orderIds: [], calendarItemIds: [] }
     }
     validateAction(workspaceRootPath, pending.action)

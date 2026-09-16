@@ -234,6 +234,19 @@ describe('scheduled work composer drafts', () => {
     expect(result.order.execution).toMatchObject({ type: 'agent-task', permissionMode: 'ask' })
   })
 
+  for (const permissionMode of ['safe', 'ask', 'allow-all'] as const) {
+    test(`preserves selected ${permissionMode} for scheduled workflow execution`, () => {
+      const initial = createScheduledWorkComposerDraft({ ...defaults, suggestedType: 'workflow-run' })
+      if (initial.type !== 'workflow-run') throw new Error('Expected workflow draft')
+      const result = buildCampaignScheduleFromComposer({
+        ...initial, title: 'Run workflow', time: '10:00', workflowSlug: 'test-workflow',
+        workflowDigest: 'digest', triggerInputs: {}, permissionMode,
+      }, '2026-07-10T00:00:00.000Z')
+      expect(result.order.execution).toMatchObject({ type: 'workflow-run', permissionMode })
+      expect(result.order.status).toBe('scheduled')
+    })
+  }
+
   test('builds a stable Agent to Review chain with a waiting exact-output child', () => {
     const initial = createScheduledWorkComposerDraft({ ...defaults, suggestedType: 'agent-task' })
     if (initial.type !== 'agent-task') throw new Error('Expected agent draft')

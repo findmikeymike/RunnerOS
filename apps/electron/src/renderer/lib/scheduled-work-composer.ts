@@ -50,12 +50,13 @@ export interface AgentTaskComposerDraft extends WorkComposerBase {
   agentName: string
   taskModeId?: string
   brief: string
-  permissionMode: 'safe' | 'ask'
+  permissionMode: 'safe' | 'ask' | 'allow-all'
   expectedOutput: ExpectedOutputContract
 }
 
 export interface WorkflowRunComposerDraft extends WorkComposerBase {
   type: 'workflow-run'
+  permissionMode?: 'safe' | 'ask' | 'allow-all'
   workflowSlug: string
   workflowName: string
   workflowDigest: string
@@ -613,6 +614,7 @@ function executionFromDraft(draft: Exclude<ScheduledWorkComposerDraft, EventComp
       type: draft.type,
       workflowSlug: draft.workflowSlug,
       workflowDigest: draft.workflowDigest,
+      ...(draft.permissionMode !== undefined ? { permissionMode: draft.permissionMode } : {}),
       triggerInputs: draft.triggerInputs,
     }
   }

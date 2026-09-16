@@ -1225,6 +1225,25 @@ describe('WorkflowRunner', () => {
     expect(lastCompleted(h.events)!.steps[0]!.executionReceipt?.config.permissionMode).toBe('safe');
   });
 
+  for (const permissionMode of ['safe', 'ask', 'allow-all'] as const) {
+    test(`explicit scheduled workflow ${permissionMode} survives into sessions and receipts`, async () => {
+      const h = makeHarness({ stepOutputs: ['DONE'], permissionMode: 'ask' });
+      const runner = new WorkflowRunner(h.deps);
+      await runner.start({
+        workflow: makeWorkflow({ steps: [{ id: 'first', agent: 'writer', input: 'Write {{trigger.topic}}' }] }),
+        workspaceId: WORKSPACE_ID,
+        triggerInputs: { topic: 'permission checks' },
+        permissionMode,
+      });
+      await waitFor(() => lastCompleted(h.events) !== undefined);
+      expect(h.sessions.get('sess-1')!.options).toMatchObject({ permissionMode });
+      const completed = lastCompleted(h.events)!;
+      expect(completed.trigger.permissionMode).toBe(permissionMode);
+      expect(completed.steps[0]!.executionReceipt?.config.permissionMode).toBe(permissionMode);
+      expect(readRun(workspaceRoot, completed.id)?.trigger.permissionMode).toBe(permissionMode);
+    });
+  }
+
   test('cancel mid-run: run is cancelled and active session is aborted exactly once', async () => {
     const h = makeHarness();
     const runner = new WorkflowRunner(h.deps);

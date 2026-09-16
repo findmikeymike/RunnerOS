@@ -3,7 +3,7 @@ import type { SignalState, SignalTrackConfig } from '@craft-agent/shared/shared-
 import type { OutputSummaryDTO } from '../hooks/useOutputs'
 import { parseAutomationsConfig } from '../components/automations/types'
 import { emptyArtistIntelConfig } from './artist-intel'
-import { assertSignalScheduleCanRewrite, legacySignalSources, saveSignalSettingsTransaction, signalDefaultKey, signalDocumentInTrack, signalLibraryLabels, signalNextRun, signalNuggetsKey, signalOutputRun, signalScheduleMatches, signalWeeklyMatcher, signalWeeklyReadiness } from './signal-tracks'
+import { assertSignalScheduleCanRewrite, legacySignalSources, signalManualScanRoute, saveSignalSettingsTransaction, signalDefaultKey, signalDocumentInTrack, signalLibraryLabels, signalNextRun, signalNuggetsKey, signalOutputRun, signalScheduleMatches, signalWeeklyMatcher, signalWeeklyReadiness } from './signal-tracks'
 import { appendSignalNugget } from './artist-signals'
 
 const config: SignalTrackConfig = { version: 1, track: 'industry', enabled: false, cadence: 'manual', sinceDays: 7, maxPerChannel: 1, sources: [], revision: 'r1', updatedAt: '2026-09-07T00:00:00Z' }
@@ -121,5 +121,23 @@ describe('Signals track UI contracts', () => {
     expect(body).toContain('Artist-written opening.\n\nExisting nugget.')
     expect(body).toContain('signal-track: your-world; output: out')
     expect(body).toContain('signal-source: output:out')
+  })
+})
+
+
+describe('manual Signals scan routing', () => {
+  test('first-launch defaults require saving setup instead of executing the legacy scan', () => {
+    expect(emptyArtistIntelConfig().sources).toHaveLength(5)
+    expect(signalManualScanRoute({ ...state, tracks: { ...state.tracks, industry: { ...config, revision: 'initial' } } }, null, 'industry')).toEqual({ route: 'setup' })
+  })
+  test('loading and failed refresh block execution even with a stale saved state', () => {
+    expect(signalManualScanRoute(null, null, 'industry').route).toBe('blocked')
+    expect(signalManualScanRoute(null, 'RPC failed', 'industry').route).toBe('blocked')
+    expect(signalManualScanRoute(state, 'RPC failed', 'industry').route).toBe('blocked')
+  })
+  test('native configured industry is runnable independently of leftover legacy scheduling', () => {
+    // Schedule adoption is separate from manual execution; the saved track owns its sources.
+    expect(signalManualScanRoute(state, null, 'industry')).toEqual({ route: 'native' })
+    expect(signalManualScanRoute(state, null, 'your-world')).toEqual({ route: 'setup' })
   })
 })

@@ -266,6 +266,9 @@ export function attachSessionSelfManagementBindings(
   });
 
   for (const [property, callback] of [
+    ['getCustomSkill', 'getCustomSkillFn'],
+    ['createSkill', 'createSkillFn'],
+    ['updateSkill', 'updateSkillFn'],
     ['listAutomations', 'listAutomationsFn'],
     ['getAutomation', 'getAutomationFn'],
     ['updateAutomation', 'updateAutomationFn'],

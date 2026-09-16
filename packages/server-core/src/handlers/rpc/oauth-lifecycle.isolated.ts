@@ -116,7 +116,7 @@ test('Monid revoke targets the global account and reloads every workspace', asyn
   registeredWorkspaces.push({ id: 'campaign', rootPath: '/tmp/campaign' })
   let revokedSource: unknown
   const original = manager.disconnectForRevoke
-  manager.disconnectForRevoke = async (target: unknown) => {
+  manager.disconnectForRevoke = async (target?: unknown) => {
     revokedSource = target
     order.push('delete')
     return { superseded: false, deleted: true, credentials: [{ value: 'old-token' }] }

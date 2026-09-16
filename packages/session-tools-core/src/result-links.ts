@@ -1,6 +1,6 @@
 import type { SessionToolContext } from './context.ts';
 
-export type ResultLinkTarget = 'agent' | 'workflow' | 'automation' | 'work';
+export type ResultLinkTarget = 'agent' | 'skill' | 'workflow' | 'automation' | 'work';
 
 /** Desktop compound routes, scoped to the canonical identity supplied by the host. */
 export function buildSessionResultLink(
@@ -14,6 +14,7 @@ export function buildSessionResultLink(
   if (typeof workspaceId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(workspaceId)) return undefined;
   if (target !== 'work' && (typeof id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(id))) return undefined;
   const route = target === 'agent' ? `agents/agent/${id}`
+    : target === 'skill' ? `skills/skill/${id}`
     : target === 'workflow' ? `workflows/${id}`
     : target === 'automation' ? `automations/automation/${id}` : 'automations';
   return `${variant === 'artist-os' ? 'artistos' : 'craftagents'}://workspace/${workspaceId}/${route}`;

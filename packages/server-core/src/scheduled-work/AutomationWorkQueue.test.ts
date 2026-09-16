@@ -1124,3 +1124,17 @@ describe('queueAutomationWork', () => {
     expect(loadContextDoc(workspaceRoot, SCHEDULED_WORK_CONTEXT_SLUG)).toBeNull()
   })
 })
+
+test('native admission condition is evaluated after acquiring the pause cleanup lock', async () => {
+  const workspaceRoot = root(); let enabled = true; let release!: () => void; let entered!: () => void;
+  const ready = new Promise<void>(resolve => { entered = resolve });
+  const gate = new Promise<void>(resolve => { release = resolve });
+  const pause = withWorkspaceContextLock(workspaceRoot, async () => { entered(); await gate; enabled = false });
+  await ready;
+  const condition = mock(() => enabled);
+  const queued = queueAutomationWork(workspaceId, workspaceRoot, reviewToSocial(), { canAdmit: condition });
+  expect(condition).not.toHaveBeenCalled(); release(); await pause;
+  expect(await queued).toEqual({ orderIds: [], calendarItemIds: [] });
+  expect(condition).toHaveBeenCalledTimes(1);
+  expect(loadContextDoc(workspaceRoot, SCHEDULED_WORK_CONTEXT_SLUG)).toBeNull();
+});

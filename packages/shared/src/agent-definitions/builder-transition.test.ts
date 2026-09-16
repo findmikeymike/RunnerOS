@@ -62,3 +62,43 @@ test('old routing with additional custom instructions remains untouched', () => 
     expect(readFileSync(file, 'utf8')).toBe(original)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
+
+import builderV1 from './__fixtures__/builder-v1.json'
+import { STARTER_AGENTS } from './starter-templates'
+
+test('Builder skill upgrade preserves custom metadata, backs up and is idempotent', () => {
+  const root = mkdtempSync(join(tmpdir(), 'builder-skills-upgrade-'))
+  try {
+    mkdirSync(join(root, 'builder'))
+    const file = join(root, 'builder', 'AGENT.md')
+    const original = stringifyFrontmatter(builderV1.systemPrompt, { ...builderV1.metadata, model: 'my-model', custom: 'keep' })
+    writeFileSync(file, original)
+    expect(migrateBuilderResponsibility({ globalAgentsDir: root }).updated).toEqual(['builder'])
+    const next = matter(readFileSync(file, 'utf8'))
+    const stock = STARTER_AGENTS.find(agent => agent.slug === 'builder')!
+    expect(next.data.skills).toEqual(stock.metadata.skills)
+    expect(next.data.taskModes).toEqual(stock.metadata.taskModes)
+    expect(next.data.model).toBe('my-model')
+    expect(next.data.custom).toBe('keep')
+    expect(next.content.trim()).toBe(stock.systemPrompt.trim())
+    expect(readFileSync(join(root, '.builder-transition-backup/builder-v1.md'), 'utf8')).toBe(original)
+    expect(migrateBuilderResponsibility({ globalAgentsDir: root }).updated).toEqual([])
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test('Builder upgrade leaves customized body and deliberately changed skills/focuses intact', () => {
+  const root = mkdtempSync(join(tmpdir(), 'builder-skills-custom-'))
+  try {
+    mkdirSync(join(root, 'builder'))
+    const file = join(root, 'builder', 'AGENT.md')
+    const custom = stringifyFrontmatter(builderV1.systemPrompt + '\nKeep my special direction.', builderV1.metadata)
+    writeFileSync(file, custom)
+    expect(migrateBuilderResponsibility({ globalAgentsDir: root }).customized).toEqual(['builder'])
+    expect(readFileSync(file, 'utf8')).toBe(custom)
+    writeFileSync(file, stringifyFrontmatter(builderV1.systemPrompt, { ...builderV1.metadata, skills: [], taskModes: [] }))
+    migrateBuilderResponsibility({ globalAgentsDir: root })
+    const next = matter(readFileSync(file, 'utf8'))
+    expect(next.data.skills).toEqual([])
+    expect(next.data.taskModes).toEqual([])
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})

@@ -183,6 +183,35 @@ describe('persistHnicScheduleWork', () => {
     expect(parsed.work.items[0]?.execution).toMatchObject({ type: 'agent-task', permissionMode: 'safe' })
   })
 
+  for (const permissionMode of ['safe', 'ask', 'allow-all'] as const) {
+    test(`persists explicit ${permissionMode} agent permissions without marking work approved`, async () => {
+      const root = createRoot()
+      await persistHnicScheduleWork(options(root, input({ execution: {
+        type: 'agent-task', agentSlug: 'youtube-intel', brief: 'Create the report.', permissionMode,
+      } })))
+      const parsed = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+      if (!parsed.ok) throw new Error(parsed.error)
+      expect(parsed.work.items[0]?.execution).toMatchObject({ permissionMode })
+      expect(parsed.work.items[0]?.approvals).toEqual([])
+    })
+  }
+
+  for (const permissionMode of ['ask', 'allow-all'] as const) {
+    test(`restricted continuation rejects ${permissionMode} despite standard schedule support`, async () => {
+      const root = createRoot()
+      upsertContextDoc(root, {
+        slug: 'launch-goal',
+        metadata: { name: 'Launch Goal', routing: { mode: 'broadcast' }, enabled: true, status: 'active' },
+        body: 'Finish the launch plan.',
+      })
+      await expect(persistHnicScheduleWork(options(root, input({
+        execution: { type: 'agent-task', agentSlug: 'youtube-intel', brief: 'Create the report.', permissionMode,
+          expectedOutput: { requirement: 'required', kind: 'report' } },
+        continuation: { goalSlug: 'launch-goal', objective: 'Finish the launch plan.', maxRounds: 3 },
+      })))).rejects.toThrow('draft-only')
+    })
+  }
+
   test('creates one visible coordinator and one hidden first round for confirmed continuation', async () => {
     const root = createRoot()
     upsertContextDoc(root, {

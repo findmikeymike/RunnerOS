@@ -143,6 +143,8 @@ export interface WorkflowRunSnapshot {
     inputs: Record<string, unknown>;
     /** Inputs originating in external event payloads; prompt rendering encloses these as data. */
     untrustedInputNames?: string[];
+    /** Explicit saved job choice; absent retains historical workflow defaults. */
+    permissionMode?: PermissionMode;
     firedAt: string;
   };
   /**

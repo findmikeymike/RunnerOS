@@ -101,6 +101,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
   const [pollUrl, setPollUrl] = React.useState('')
   const [pollIntervalSec, setPollIntervalSec] = React.useState(300)
   const [messageMatcher, setMessageMatcher] = React.useState('')
+  const [permissionMode, setPermissionMode] = React.useState<'safe' | 'ask' | 'allow-all'>('safe')
   const [showOnCalendar, setShowOnCalendar] = React.useState(true)
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -119,6 +120,8 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
     ...activeWorkflows.map((workflow): SetupTarget => ({ kind: 'workflow', workflow })),
   ], [activeAgents, activeWorkflows])
   const selected = React.useMemo(() => targets.find((target) => targetId(target) === selectedId), [selectedId, targets])
+  const restrictedWorkflow = selected?.kind === 'workflow' && selected.workflow.metadata.execution === 'durable-local-read'
+  React.useEffect(() => { if (restrictedWorkflow) setPermissionMode('safe') }, [restrictedWorkflow])
   const workflowInputs = selected?.kind === 'workflow' ? selected.workflow.metadata.trigger.inputs ?? [] : []
   const requestedInputs = selected?.kind === 'workflow' ? requestedInputNames(bindings) : []
   const isFed = requestedInputs.length > 0
@@ -138,6 +141,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
     setQuery('')
     setBrief('')
     setWhen('weekly')
+    setPermissionMode('safe')
     setCron(INITIAL_SCHEDULE.cron)
     setAssignedScheduleLabel(INITIAL_SCHEDULE.label)
     setScheduleError(null)
@@ -245,7 +249,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
         ? { scope: 'hq' as const, workspaceId: workspace.id }
         : { scope: 'campaign' as const, workspaceId: workspace.id, campaignId: workspace.id }
       let resolvedLabel = assignedScheduleLabel
-      const draft = buildDraft({ selected, taskModeId, owner, name, brief, bindings, date: onceDate, time: onceTime, timezone })
+      const draft = buildDraft({ permissionMode, selected, taskModeId, owner, name, brief, bindings, date: onceDate, time: onceTime, timezone })
       if (when === 'once') {
         if (draft.owner.scope === 'hq') {
           await window.electronAPI.scheduleHqWork(workspace.id, buildHqSchedulePlanFromComposer(draft))
@@ -288,7 +292,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
     } finally {
       setBusy(false)
     }
-  }, [assignedScheduleLabel, bindings, brief, cron, loadAutomaticSchedule, messageMatcher, name, onCreated, onceDate, onceTime, pollIntervalSec, pollUrl, requestedInputs, secretEnv, selected, taskModeId, setDialogOpen, showOnCalendar, timezone, watchGlob, watchPath, webhookSlug, when, workflowInputs, workspace, workspaces])
+  }, [permissionMode, assignedScheduleLabel, bindings, brief, cron, loadAutomaticSchedule, messageMatcher, name, onCreated, onceDate, onceTime, pollIntervalSec, pollUrl, requestedInputs, secretEnv, selected, taskModeId, setDialogOpen, showOnCalendar, timezone, watchGlob, watchPath, webhookSlug, when, workflowInputs, workspace, workspaces])
 
   const review = selected ? automationReviewSentence({
     title: name,
@@ -330,6 +334,8 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
               ) : workflowInputs.length ? (
                 <WorkflowBindings inputs={workflowInputs} bindings={bindings} when={when} onChange={setBindings} />
               ) : <p className="text-[12px] text-white/38">This workflow is ready to run without extra input.</p>}
+              <Field label="Permissions"><select className={INPUT_CLASS} value={permissionMode} onChange={(event) => setPermissionMode(event.target.value as typeof permissionMode)}><option value="safe">Explore</option><option value="ask" disabled={restrictedWorkflow}>Ask</option><option value="allow-all" disabled={restrictedWorkflow}>Execute (YOLO)</option></select></Field>
+              <p className="text-[11px] text-white/38">{permissionMode === 'safe' ? 'Read-only exploration. Changes are blocked.' : permissionMode === 'ask' ? 'Ask before actions that need approval.' : 'Run this job without permission prompts.'}</p>
             </SetupSection>
           ) : null}
 
@@ -423,15 +429,15 @@ function targetName(target: SetupTarget): string { return target.kind === 'agent
 function targetDescription(target: SetupTarget): string { return target.kind === 'agent' ? target.agent.metadata.description : target.workflow.metadata.description }
 function targetSearchText(target: SetupTarget): string { return target.kind === 'agent' ? `${target.agent.metadata.name} ${target.agent.metadata.description} ${(target.agent.metadata.tags ?? []).join(' ')}`.toLowerCase() : `${target.workflow.metadata.name} ${target.workflow.metadata.description}`.toLowerCase() }
 
-function buildDraft(input: { selected: SetupTarget; taskModeId?: string; owner: { scope: 'hq'; workspaceId: string } | { scope: 'campaign'; workspaceId: string; campaignId: string }; name: string; brief: string; bindings: Record<string, WorkflowInputBinding>; date: string; time: string; timezone: string }): Exclude<ScheduledWorkComposerDraft, { type: 'event' }> {
+function buildDraft(input: { permissionMode: 'safe' | 'ask' | 'allow-all'; selected: SetupTarget; taskModeId?: string; owner: { scope: 'hq'; workspaceId: string } | { scope: 'campaign'; workspaceId: string; campaignId: string }; name: string; brief: string; bindings: Record<string, WorkflowInputBinding>; date: string; time: string; timezone: string }): Exclude<ScheduledWorkComposerDraft, { type: 'event' }> {
   if (input.selected.kind === 'agent') {
     const draft = createScheduledWorkComposerDraft({ owner: input.owner, date: input.date, timezone: input.timezone, title: input.name, suggestedType: 'agent-task' })
     if (draft.type !== 'agent-task') throw new Error('Could not prepare the worker task.')
-    return { ...draft, time: input.time, agentSlug: input.selected.agent.slug, agentName: input.selected.agent.metadata.name, taskModeId: input.taskModeId, brief: input.brief, permissionMode: 'safe' }
+    return { ...draft, time: input.time, agentSlug: input.selected.agent.slug, agentName: input.selected.agent.metadata.name, taskModeId: input.taskModeId, brief: input.brief, permissionMode: input.permissionMode }
   }
   const draft = createScheduledWorkComposerDraft({ owner: input.owner, date: input.date, timezone: input.timezone, title: input.name, suggestedType: 'workflow-run' })
   if (draft.type !== 'workflow-run') throw new Error('Could not prepare the workflow.')
-  return { ...draft, time: input.time, workflowSlug: input.selected.workflow.slug, workflowName: input.selected.workflow.metadata.name, workflowDigest: composerDefinitionDigest({ metadata: input.selected.workflow.metadata, body: input.selected.workflow.body }), triggerInputs: fixedTriggerInputs(input.bindings) }
+  return { ...draft, time: input.time, permissionMode: input.permissionMode, workflowSlug: input.selected.workflow.slug, workflowName: input.selected.workflow.metadata.name, workflowDigest: composerDefinitionDigest({ metadata: input.selected.workflow.metadata, body: input.selected.workflow.body }), triggerInputs: fixedTriggerInputs(input.bindings) }
 }
 
 function validateSetup(input: { selected: SetupTarget; taskModeId?: string; name: string; brief: string; bindings: Record<string, WorkflowInputBinding>; workflowInputs: WorkflowTriggerInput[]; when: AutomationWhen; cron: string; onceDate: string; onceTime: string; watchPath: string; watchGlob: string; webhookSlug: string; secretEnv: string; pollUrl: string; pollIntervalSec: number; messageMatcher: string }): string | undefined {

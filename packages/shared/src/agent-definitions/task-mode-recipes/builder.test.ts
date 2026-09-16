@@ -11,7 +11,7 @@ test('Builder has optional General, narrow recipes, no strategic preload and def
   expect(builder.metadata.permissionMode).toBe('ask')
   expect(builder.metadata.trustedWorkerTools).toBeUndefined()
   expect(builder.metadata.skills).toEqual([...BUILDER_SYSTEM_SKILL_SLUGS])
-  expect(builder.metadata.taskModes?.map(mode => mode.id)).toEqual(['general', 'agents', 'workflows', 'automations'])
+  expect(builder.metadata.taskModes?.map(mode => mode.id)).toEqual(['general', 'skills', 'intel-review', 'agents', 'workflows', 'automations'])
   expect(parseAgentFile(serializeAgent(builder.metadata, builder.systemPrompt))?.metadata.taskModes).toEqual(BUILDER_TASK_MODES)
   for (const mode of BUILDER_TASK_MODES) expect(mode.context?.preloadTopics).toEqual([])
   expect(BUILDER_TASK_MODES[0]!.primarySkillSlugs).toEqual([])

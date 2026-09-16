@@ -410,6 +410,9 @@ export interface SessionToolContext {
    * Returns a structured result rather than throwing so the handler can format
    * conflict suggestions cleanly for the calling LLM.
    */
+  getCustomSkill?(input: import('./handlers/custom-skills.ts').CustomSkillIdentity): Promise<import('./handlers/custom-skills.ts').CustomSkillResult>;
+  createSkill?(input: import('./handlers/custom-skills.ts').CreateCustomSkillInput): Promise<import('./handlers/custom-skills.ts').CustomSkillResult>;
+  updateSkill?(input: import('./handlers/custom-skills.ts').UpdateCustomSkillInput): Promise<import('./handlers/custom-skills.ts').CustomSkillResult>;
   createAgent?(input: import('./handlers/create-agent.ts').CreateAgentToolInput): Promise<import('./handlers/create-agent.ts').CreateAgentResult>;
 
   /**

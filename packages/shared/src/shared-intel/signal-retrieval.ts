@@ -3,7 +3,7 @@ import type { SignalFinding, SignalIdea, SignalReportSource } from './signal-rep
 import type { SignalMode, SignalTrack } from './signal-contracts.ts';
 
 export const SIGNAL_RETRIEVAL_LIMITS = { entries: 5, characters: 4000, query: 500, reports: 200 } as const;
-export const SIGNAL_RETRIEVAL_WORKERS = ['content-genius', 'x-editorial', 'world-builder', 'branding-agent', 'community-agent', 'concierge', 'content-director'] as const;
+export const SIGNAL_RETRIEVAL_WORKERS = ['content-genius', 'x-editorial', 'world-builder', 'branding-agent', 'community-agent', 'concierge', 'content-director', 'builder'] as const;
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/);
 export const signalEntryReferenceSchema = z.object({
   hqWorkspaceId: identifier, outputId: identifier, contentHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -14,6 +14,8 @@ export const findSignalIdeasSchema = z.object({
   query: z.string().trim().max(SIGNAL_RETRIEVAL_LIMITS.query).optional(),
   track: z.enum(['industry', 'your-world']).optional(),
   freshness: z.enum(['recent', 'evergreen']).optional(),
+  /** Explicit bounded history also requires dated, in-window supporting sources. */
+  lookbackDays: z.number().int().min(1).max(60).optional(),
   kind: z.enum(['finding', 'idea']).optional(),
   reference: signalEntryReferenceSchema.extend({ entryId: signalEntryReferenceSchema.shape.entryId.optional() }).optional(),
 }).strict();

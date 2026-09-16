@@ -7,7 +7,7 @@ export const CREATOR_SYSTEM_SKILL_SLUGS = [
 ] as const;
 
 /** Artist OS construction ownership; registration remains independent of recipients. */
-export const BUILDER_SYSTEM_SKILL_SLUGS = [...CREATOR_SYSTEM_SKILL_SLUGS, 'skill-recipe'] as const;
+export const BUILDER_SYSTEM_SKILL_SLUGS = [...CREATOR_SYSTEM_SKILL_SLUGS, 'skill-recipe', 'skill-creator', 'builder-intel-review'] as const;
 export const ARTIST_MANAGER_SYSTEM_SKILL_SLUGS = ['artist-manager-operating-system', 'artist-os-guide', 'runneros-self-edit'] as const;
 
 /** Generic RunnerOS retains its established concierge capabilities. */

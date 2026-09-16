@@ -10,7 +10,7 @@ import { parseArtistIntelReportDocResult } from '@/lib/artist-intel'
 import { useSignalTracks } from '@/hooks/useSignalTracks'
 import { useSignalReportContent } from '@/hooks/useSignalReportContent'
 import { formatSignalDate, readableSignalBody, signalDocumentDate, signalPreviewText } from '@/lib/artist-signals'
-import { legacySignalSchedule, legacySignalSources, signalDefaultKey, signalDocumentInTrack, signalLibraryLabels, signalNextRun, signalNuggetsKey, signalOutputRun, signalScheduleMatches, signalTrackName, signalWeeklyReadiness } from '@/lib/signal-tracks'
+import { legacySignalSchedule, legacySignalSources, signalManualScanRoute, signalDefaultKey, signalDocumentInTrack, signalLibraryLabels, signalNextRun, signalNuggetsKey, signalOutputRun, signalScheduleMatches, signalTrackName, signalWeeklyReadiness } from '@/lib/signal-tracks'
 import { Info_Markdown } from '@/components/info'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { navigate, routes } from '@/lib/navigate'
@@ -55,8 +55,10 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
   React.useEffect(() => { setSelections({ industry: null, 'your-world': null }); setPendingReviews({}); setTrack('industry'); setSetup(null); setLinksOpen(false); setActionError(null); requests.current = {} }, [workspaceId])
   const changeTrack = (next: SignalTrack) => { setSetup(null); setLinksOpen(false); setTrack(next) }
   const legacySchedules = tracks.automations.filter(legacySignalSchedule)
-  const legacyMode = !tracks.state || tracks.state.tracks.industry.revision === 'initial' || legacySchedules.length > 0
-  const currentLegacy = track === 'industry' && legacyMode
+  const needsIndustrySetup = !!tracks.state && tracks.state.tracks.industry.revision === 'initial'
+  const legacyMode = needsIndustrySetup || legacySchedules.length > 0
+  const scanRoute = signalManualScanRoute(tracks.state, tracks.error, track)
+  const currentLegacy = track === 'industry' && needsIndustrySetup
   const config = tracks.state?.tracks[track]
   const schedule = tracks.automations.find(item => tracks.state && signalScheduleMatches(item, tracks.state.hqWorkspaceId, track))
   const readiness = signalWeeklyReadiness(config, schedule)
@@ -131,13 +133,14 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
   const reportError = (cause: unknown, target = track) => setActionError({ track: target, message: cause instanceof Error ? cause.message : String(cause) })
   const runScan = async () => {
     const target = track; setActionError(null)
-    if (currentLegacy) { await legacy.onRun(); return }
+    if (scanRoute.route === 'blocked') { reportError(new Error(scanRoute.reason), target); return }
+    if (scanRoute.route === 'setup') { openSettings(); return }
     const key = requests.current[target] ?? crypto.randomUUID(); requests.current[target] = key
     try { await tracks.start(target, 'scan', key); delete requests.current[target] }
     catch (cause) { reportError(cause, target) }
   }
   const openSettings = () => {
-    if (!tracks.state) return
+    if (!tracks.state || tracks.error) return
     try {
       const configs = { ...tracks.state.tracks }
       for (const kind of ['industry', 'your-world'] as const) {
@@ -146,7 +149,7 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
         configs[kind] = { ...configs[kind], enabled, cadence: enabled ? 'weekly' : 'manual' }
       }
       let industryError: string | undefined
-      if (legacyMode) {
+      if (needsIndustrySetup) {
         try {
         const body = tracks.state.legacyIndustry?.configBody ?? documents.find(doc => doc.slug === 'artist-intel-config')?.body
         const sources = legacySignalSources(body, legacy.config).map((source, index) => ({
@@ -158,6 +161,9 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
           industryError = cause instanceof Error ? cause.message : String(cause)
           configs.industry = { ...configs.industry, enabled: legacy.weeklyEnabled, cadence: legacy.weeklyEnabled ? 'weekly' : 'manual' }
         }
+      }
+      if (!needsIndustrySetup && legacySchedules.length && !tracks.automations.some(item => signalScheduleMatches(item, tracks.state!.hqWorkspaceId, 'industry'))) {
+        configs.industry = { ...configs.industry, enabled: legacy.weeklyEnabled, cadence: legacy.weeklyEnabled ? 'weekly' : 'manual' }
       }
       setActionError(null)
       setSetup({ configs, adoptIndustry: legacyMode, industryError })
@@ -214,16 +220,17 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
         </Popover>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <button className={control} disabled={busy || !tracks.state} onClick={openSettings}><SlidersHorizontal size={15} />Channels &amp; schedule</button>
-        <button className={control} disabled={busy || !tracks.state} onClick={() => setLinksOpen(true)}><Link2 size={15} />Review videos</button>
-        <button className={`${control} !border-transparent !bg-white/90 !text-black`} aria-label="Scan now" title={currentLegacy ? legacy.runDisabledReason ?? 'Scan now' : 'Scan saved sources now'} disabled={busy || active || (currentLegacy ? !!legacy.runDisabledReason : !config || (track === 'your-world' && !config.sources.length))} onClick={() => { void runScan() }}><Play size={15} /><span>Scan now</span></button>
+        <button className={control} disabled={busy || !tracks.state || !!tracks.error} onClick={openSettings}><SlidersHorizontal size={15} />Channels &amp; schedule</button>
+        <button className={control} disabled={busy || !tracks.state || !!tracks.error} onClick={() => setLinksOpen(true)}><Link2 size={15} />Review videos</button>
+        <button className={`${control} !border-transparent !bg-white/90 !text-black`} aria-label="Scan now" title={scanRoute.route === 'blocked' ? scanRoute.reason : scanRoute.route === 'setup' ? 'Review and save channels before scanning' : 'Scan saved sources now'} disabled={busy || active || scanRoute.route === 'blocked'} onClick={() => { void runScan() }}><Play size={15} /><span>Scan now</span></button>
       </div>
     </div>
     <div className="flex flex-wrap items-center gap-2 text-xs text-white/45">
-      <span>{channelCount} {channelCount === 1 ? 'channel' : 'channels'}</span><span aria-hidden="true">&middot;</span>
+      <span>{channelCount} {currentLegacy ? 'channels to review · setup needed' : channelCount === 1 ? 'channel' : 'channels'}</span><span aria-hidden="true">&middot;</span>
       <span>Weekly {snoozed ? 'snoozed' : weekly ? 'on' : 'off'}</span>{snoozed ? <span>Until {formatSignalDate(schedule!.snoozedUntil!)}</span> : null}{nextRun ? <span>Next {nextRun.toLocaleString()}</span> : null}
     </div>
-    {!currentLegacy && readiness.needsRepair ? <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-amber-200"><span>Weekly schedule needs attention.</span><button className={control} disabled={busy || !tracks.state} onClick={openSettings}>Review schedule</button></div> : null}
+    {!tracks.state && !tracks.error ? <p role="status" className="text-xs text-white/50">Loading Signals settings…</p> : null}
+    {!currentLegacy && (readiness.needsRepair || (track === 'industry' && legacySchedules.length > 0)) ? <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-amber-200"><span>Weekly schedule needs attention.</span><button className={control} disabled={busy || !tracks.state || !!tracks.error} onClick={openSettings}>Review schedule</button></div> : null}
     {tracks.error || actionError?.track === track || status ? <div aria-live="polite" className="border-l-2 border-white/20 px-3 py-1 text-sm text-white/70">
       {tracks.error ? <p role="alert">{tracks.error}</p> : null}{actionError?.track === track ? <p role="alert" className="text-red-300">{actionError.message}</p> : null}{status ? <p>{status}</p> : null}{detail ? <p className="text-xs text-white/50">{detail}</p> : null}</div> : null}
     <div className="border-t border-white/10">
@@ -248,7 +255,7 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
       {!loading && selected?.output && props.onDevelopIdea ? <SignalIdeasActions key={`ideas:${workspaceId}:${selected.output.id}`} workspaceId={workspaceId} outputId={selected.output.id} revision={content} onDevelop={props.onDevelopIdea} /> : null}
       <div ref={reader} className={`px-4 py-4 selection:bg-orange-400/30 ${selected?.output ? '' : 'max-h-[420px] overflow-y-auto'}`}>
         {loading ? <div role="status" className="flex h-24 items-center justify-center gap-2 text-xs text-white/50"><RefreshCw size={18} className="animate-spin" />Loading report</div> : boardContent ? selected?.output ? <p className="mx-auto max-w-[900px] break-words text-sm leading-6 text-white/75">{boardContent}</p> : <Info_Markdown safeMode className="mx-auto max-w-[900px] break-words text-sm leading-7 text-white/75">{boardContent}</Info_Markdown> : <div className="flex min-h-48 flex-col items-center justify-center gap-3 py-6 text-white/55"><Radio size={22} className="text-white/30" /><p className="text-sm">{selectedKey === signalNuggetsKey ? 'No saved insights yet' : contentError ? 'No preview available' : `No ${signalTrackName(track)} reports yet`}</p>
-          {selectedKey === signalNuggetsKey ? <p className="text-xs text-white/40">Select a passage in a report to save it here.</p> : !contentError ? currentLegacy || (track === 'your-world' && !channelCount) ? <button className={control} disabled={busy || !tracks.state} onClick={openSettings}><Plus size={15} />Choose channels</button> : <button className={control} disabled={busy || active || !config} onClick={() => { void runScan() }}><Play size={15} />Create first report</button> : null}</div>}
+          {selectedKey === signalNuggetsKey ? <p className="text-xs text-white/40">Select a passage in a report to save it here.</p> : !contentError ? currentLegacy || (track === 'your-world' && !channelCount) ? <button className={control} disabled={busy || !tracks.state || !!tracks.error} onClick={openSettings}><Plus size={15} />Choose channels</button> : <button className={control} disabled={busy || active || scanRoute.route === 'blocked'} onClick={() => { void runScan() }}><Play size={15} />Create first report</button> : null}</div>}
       </div>
     </div>
     {nuggetSaved ? <p role="status" className="px-4 text-xs text-white/60">Saved to insights</p> : null}

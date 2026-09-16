@@ -199,10 +199,10 @@ export function buildAutomationMaintenanceReplacement(
     const executionInput = patch.execution
     const executionKeys = executionInput.type === 'agent-task'
       ? ['type', 'agentSlug', 'taskModeId', 'brief', 'permissionMode', 'expectedOutput']
-      : executionInput.type === 'workflow-run' ? ['type', 'workflowSlug', 'triggerInputs', 'inputBindings'] : []
+      : executionInput.type === 'workflow-run' ? ['type', 'workflowSlug', 'triggerInputs', 'inputBindings', 'permissionMode'] : []
     if (!executionKeys.length || Object.keys(executionInput).some(key => !executionKeys.includes(key))) throw new Error('Unsupported execution fields.')
     if (executionInput.type === 'agent-task' && (typeof executionInput.brief !== 'string' || !executionInput.brief.trim()
-      || (executionInput.permissionMode !== undefined && !['safe', 'ask'].includes(executionInput.permissionMode)))) throw new Error('Tracked agent execution requires a brief and safe or ask permissions.')
+      || (executionInput.permissionMode !== undefined && !['safe', 'ask', 'allow-all'].includes(executionInput.permissionMode)))) throw new Error('Tracked agent execution requires a brief and valid Explore, Ask, or Execute permissions.')
     const actions = actionsOf(next)
     if (actions.length !== 1 || actions[0]?.type !== 'queue-work') throw new Error('Execution edits currently require one tracked worker/workflow action. Raw prompt and webhook actions remain unchanged.')
     if (actions[0].followUp) throw new Error('This tracked job has a follow-up; use its existing control to revise execution.')

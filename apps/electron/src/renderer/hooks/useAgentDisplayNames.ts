@@ -29,7 +29,9 @@ export function useAgentDisplayNames() {
   }, [])
 
   const getDisplayName = React.useCallback((agent: AgentDefinitionDTO) => {
-    return names[agent.slug]?.trim() || agent.metadata.name
+    const name = names[agent.slug]?.trim() || agent.metadata.name
+    // Render the renamed default even while a saved definition still has its legacy name.
+    return agent.slug === 'setup-concierge' && name === 'Setup Concierge' ? 'App Assistant' : name
   }, [names])
 
   const setDisplayName = React.useCallback((agent: AgentDefinitionDTO, nextName: string) => {

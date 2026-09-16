@@ -120,9 +120,9 @@ describe('focused launch dependency enforcement', () => {
   })
 })
 
-test.each(['agents', 'workflows', 'automations'])('Campaign Builder %s opens with system recipes hidden from the picker', async (taskModeId) => {
+test.each(['agents', 'workflows', 'automations', 'skills', 'intel-review'])('Campaign Builder %s opens with system recipes hidden from the picker', async (taskModeId) => {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
-  const agent = { ...makeAgent(), slug: 'builder', metadata: { name: 'Builder', description: 'Build reusable work.', skills: ['agent-creator', 'workflow-creator', 'automation-creator', 'skill-recipe', 'skill-scout', 'source-recipe'], taskModes: BUILDER_TASK_MODES } } as AgentDefinitionDTO
+  const agent = { ...makeAgent(), slug: 'builder', metadata: { name: 'Builder', description: 'Build reusable work.', skills: ['agent-creator', 'workflow-creator', 'automation-creator', 'skill-recipe', 'skill-scout', 'source-recipe', 'skill-creator', 'builder-intel-review'], taskModes: BUILDER_TASK_MODES } } as AgentDefinitionDTO
   const drafts: string[] = []
   let created: CreateSessionOptions | undefined
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { electronAPI: {

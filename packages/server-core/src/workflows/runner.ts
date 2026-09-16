@@ -104,6 +104,7 @@ export interface WorkflowStartInput {
   workspaceId: string;
   triggerInputs: Record<string, unknown>;
   untrustedTriggerInputs?: string[];
+  permissionMode?: 'safe' | 'ask' | 'allow-all';
   runId?: string;
   /** Set by trusted UI transport or the tracked-work scheduler; other callers omit this. */
   invocation?: 'manual-ui' | 'scheduled-work';
@@ -232,17 +233,18 @@ const MAX_WORKFLOW_RUN_SECONDS = 2 * 60 * 60;
 const RETRY_BACKOFF_BASE_MS = 1000;
 const MAX_RETRY_BACKOFF_MS = 10_000;
 
-function normalizeWorkflowPermissionMode(options: Partial<CreateSessionOptions>): Partial<CreateSessionOptions> {
-  if (options.permissionMode !== 'ask') return options;
+function normalizeWorkflowPermissionMode(options: Partial<CreateSessionOptions>, explicitMode?: 'safe' | 'ask' | 'allow-all'): Partial<CreateSessionOptions> {
+  if (explicitMode === undefined && options.permissionMode !== 'ask') return options;
+  const permissionMode = explicitMode ?? 'safe';
   return {
     ...options,
-    permissionMode: 'safe',
+    permissionMode,
     launchReceipt: options.launchReceipt
       ? {
           ...options.launchReceipt,
           config: {
             ...options.launchReceipt.config,
-            permissionMode: 'safe',
+            permissionMode,
           },
         }
       : options.launchReceipt,
@@ -386,6 +388,8 @@ export class WorkflowRunner {
    * (workspaceId, workflowSlug) pair.
    */
   async start(input: WorkflowStartInput): Promise<WorkflowRunSnapshot> {
+    if (input.permissionMode !== undefined && !['safe', 'ask', 'allow-all'].includes(input.permissionMode)) throw new Error('Invalid workflow permission mode.');
+    if (input.workflow.metadata.execution === 'durable-local-read' && input.permissionMode !== undefined && input.permissionMode !== 'safe') throw new Error('Local-read workflows require Explore permission mode.');
     // Pin before the first await so UI/config mutations cannot change the selected execution.
     input = input.workflow.metadata.execution === 'durable-local-read' ? structuredClone(input) : this.cloneJson(input);
     const admissionKey = concurrencyKey(input.workspaceId, input.workflow.slug);
@@ -437,6 +441,7 @@ export class WorkflowRunner {
         trigger: {
           type: 'manual',
           inputs: triggerInputs,
+          ...(input.permissionMode !== undefined ? { permissionMode: input.permissionMode } : {}),
           ...(input.untrustedTriggerInputs?.length ? { untrustedInputNames: [...new Set(input.untrustedTriggerInputs)] } : {}),
           firedAt: now,
         },
@@ -945,7 +950,7 @@ export class WorkflowRunner {
     ) ?? {};
     this.assertBackgroundOwnership(active);
     const agentOptionsWithMode = normalizeWorkflowPermissionMode({ ...resolvedAgentOptions,
-      ...(stepDef.modelRole ? { modelFallbackRole: stepDef.modelRole } : {}) });
+      ...(stepDef.modelRole ? { modelFallbackRole: stepDef.modelRole } : {}) }, active.snapshot.trigger.permissionMode);
     // R5: Per-run toolset override (Hermes MIT — cron/scheduler.py:60-88,
     // cron/jobs.py:523/662). Trigger inputs may carry an `enabled_source_slugs`
     // override; if present, the agent's allow-list is replaced by the override

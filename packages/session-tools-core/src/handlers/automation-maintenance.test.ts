@@ -54,9 +54,15 @@ describe('Builder automation maintenance tools', () => {
     }
     expect(calls).toBe(0);
   });
-  test('schemas accept typed schedule execution and reject escalation or raw patches', () => {
+  test('schemas accept typed schedule execution and reject invalid modes or raw patches', () => {
     expect(UpdateAutomationSchema.safeParse({ ...update, patch: { trigger: { type: 'schedule', cron: '0 9 * * 5', timezone: 'America/Chicago' }, execution: { type: 'workflow-run', workflowSlug: 'weekly-report', inputBindings: { topic: { mode: 'ask' } } } } }).success).toBe(true);
-    expect(UpdateAutomationSchema.safeParse({ ...update, patch: { execution: { type: 'agent-task', agentSlug: 'reporter', brief: 'Report', permissionMode: 'allow-all' } } }).success).toBe(false);
+    expect(UpdateAutomationSchema.safeParse({ ...update, patch: { execution: { type: 'agent-task', agentSlug: 'reporter', brief: 'Report', permissionMode: 'admin' } } }).success).toBe(false);
+    for (const permissionMode of ['safe', 'ask', 'allow-all']) {
+      for (const execution of [
+        { type: 'agent-task', agentSlug: 'reporter', brief: 'Report', permissionMode },
+        { type: 'workflow-run', workflowSlug: 'weekly-report', permissionMode },
+      ]) expect(UpdateAutomationSchema.safeParse({ ...update, patch: { execution } }).success).toBe(true);
+    }
     expect(UpdateAutomationSchema.safeParse({ ...update, patch: { actions: [] } }).success).toBe(false);
     expect(ListAutomationsSchema.safeParse({ limit: 1000 }).success).toBe(false);
     expect(GetAutomationSchema.safeParse({ automationId: 'id', workspaceId: 'other' }).success).toBe(false);

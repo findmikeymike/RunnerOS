@@ -18,6 +18,18 @@ const unavailable = (mode: SignalLookupResult['mode']): SignalLookupResult => ({
 const stopwords = new Set(['the', 'and', 'for', 'with', 'from', 'ideas', 'idea', 'content', 'non', 'music', 'some', 'give', 'about', 'please', 'make', 'recent', 'new']);
 function terms(value: string): string[] { return [...new Set(value.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(term => term.length > 2 && !stopwords.has(term)))]; }
 
+/** Builder review requires a dated report and dated supporting sources inside the same window. */
+export function isSignalEntryWithinWindow(entry: SignalRetrievedEntry, now: number, days = 60): boolean {
+  const cutoff = now - days * 86400_000;
+  const within = (date: string | undefined) => {
+    const time = date ? Date.parse(date) : NaN;
+    return Number.isFinite(time) && time >= cutoff && time <= now;
+  };
+  return within(entry.createdAt) && entry.sources.length > 0
+    && entry.sources.every(source => within(source.sourcePublishedAt))
+    && (!entry.eventDate || within(entry.eventDate));
+}
+
 /** Live read-only lookup. No reconciliation, publication, network, or paid generation. */
 export class SignalReader {
   constructor(private readonly deps: SignalReaderDeps = {}) {}
@@ -27,7 +39,7 @@ export class SignalReader {
       if (!workspace || workspace.remoteServer || !slug || !(SIGNAL_RETRIEVAL_WORKERS as readonly string[]).includes(slug)
         || !isAgentAllowedInArtistWorkspace(slug, workspace.artistWorkspaceScope)
         || !(this.deps.activeAgents ?? (root => loadActivatedAgents(root).map(agent => agent.slug)))(workspace.rootPath).includes(slug)) throw new Error();
-      return await this.find(workspaceId, input);
+      return await this.find(workspaceId, slug === 'builder' ? { ...input, lookbackDays: input.lookbackDays ?? 60 } : input);
     } catch { return unavailable('search'); }
   }
   private scope(workspaceId: string): Workspace {
@@ -113,11 +125,12 @@ export class SignalReader {
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(item => item.outputId!))];
       let failed = candidates.length > SIGNAL_RETRIEVAL_LIMITS.reports;
       const ranked: Array<{ entry: SignalRetrievedEntry; score: number; date: number; reportDate: number }> = [];
-      const now = (this.deps.now ?? Date.now)(); const cutoff = now - 30 * 86400_000;
+      const now = (this.deps.now ?? Date.now)(); const cutoff = now - (args.lookbackDays ?? 30) * 86400_000;
       for (const id of candidates.slice(0, SIGNAL_RETRIEVAL_LIMITS.reports)) {
         let entries: SignalRetrievedEntry[];
         try { entries = readValidatedSignalEntries(hq, id, journal); } catch { failed = true; continue; }
         for (const entry of entries) {
+          if (args.lookbackDays !== undefined && !isSignalEntryWithinWindow(entry, now, args.lookbackDays)) continue;
           if (args.kind && entry.kind !== args.kind || args.track && entry.track !== args.track) continue;
           if (args.reference && (entry.reference.contentHash !== args.reference.contentHash || args.reference.entryId && entry.id !== args.reference.entryId)) continue;
           const sourceDates = entry.sources.flatMap(source => source.sourcePublishedAt ? [Date.parse(source.sourcePublishedAt)] : []);

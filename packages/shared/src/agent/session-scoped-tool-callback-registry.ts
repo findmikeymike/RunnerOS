@@ -130,6 +130,9 @@ export interface SessionScopedToolCallbacks {
   /** Unbind messaging channels from a session. Returns count of removed bindings. */
   unbindMessagingChannelFn?: (sessionId: string, platform?: string) => number;
   /** Create an agent in the global library (used by the agent-creator skill's create_agent tool). */
+  getCustomSkillFn?: (input: import('@craft-agent/session-tools-core').CustomSkillIdentity) => Promise<import('@craft-agent/session-tools-core').CustomSkillResult>;
+  createSkillFn?: (input: import('@craft-agent/session-tools-core').CreateCustomSkillInput) => Promise<import('@craft-agent/session-tools-core').CustomSkillResult>;
+  updateSkillFn?: (input: import('@craft-agent/session-tools-core').UpdateCustomSkillInput) => Promise<import('@craft-agent/session-tools-core').CustomSkillResult>;
   createAgentFn?: (
     input: import('@craft-agent/session-tools-core').CreateAgentToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').CreateAgentResult>;

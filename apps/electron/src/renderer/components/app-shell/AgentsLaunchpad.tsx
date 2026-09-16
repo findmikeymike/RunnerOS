@@ -387,16 +387,17 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
               const collapsed = collapsedDomains.has(domain)
 
               return (
-                <section key={domain} className={cn(
-                  !labOnly && domain === 'Command' && 'rounded-[14px] border border-orange-200/[0.10] bg-orange-300/[0.035] p-3',
-                )}>
+                <section key={domain}>
                   <button
                     type="button"
                     onClick={() => toggleDomain(domain)}
                     className="group/category mb-4 flex w-full items-center gap-3 text-left"
                     aria-expanded={!collapsed}
                   >
-                    <span className="inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-full bg-white/92 px-2 transition-colors group-hover/category:bg-white">
+                    <span className={cn(
+                      "inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-full bg-white/92 px-2 transition-colors group-hover/category:bg-white",
+                      !labOnly && domain === 'Command' && 'ring-1 ring-orange-500',
+                    )}>
                       {collapsed ? (
                         <ChevronRight className="h-2.5 w-2.5 shrink-0 text-black/55 transition-colors group-hover/category:text-black/80" />
                       ) : (
@@ -405,9 +406,6 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                       <h2 className="text-[9px] font-semibold uppercase tracking-[0.14em] text-black/85">{domain}</h2>
                       <span className="text-[9px] font-medium text-black/45">{agents.length}</span>
                     </span>
-                    {!labOnly && domain === 'Command' && (
-                      <span className="text-[11px] font-medium text-orange-100/65">Start here</span>
-                    )}
                     <div className="h-px flex-1 bg-white/[0.07]" />
                   </button>
                   {!collapsed && (
@@ -516,6 +514,7 @@ function AgentCard({
             )}
           </div>
           <span className="mt-1 block line-clamp-2 text-[11.5px] leading-[17px] text-neutral-300/76">
+            {slug === 'setup-concierge' && <span className="font-medium text-orange-400">Start here. </span>}
             {description}
           </span>
         </span>
@@ -1865,7 +1864,7 @@ function summarizePrompt(prompt: string) {
 }
 
 function getFoundationalWorkerDescription(slug: string): string | undefined {
-  if (slug === 'setup-concierge') return 'Start here. Get your whole app set up and get help using it.'
+  if (slug === 'setup-concierge') return 'Get your whole app set up and get help using it.'
   if (slug === CONCIERGE_SLUG) return 'Talk through your artist direction and coordinate the right next work with your team.'
   if (slug === 'builder') return 'Build and improve agents, workflows, and automations around your needs.'
   if (slug === 'anything-agent') return 'Get help with broader tasks and the external tools you use.'

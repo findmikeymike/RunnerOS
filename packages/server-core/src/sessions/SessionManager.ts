@@ -191,10 +191,12 @@ import { findExactWorkflowStepOutput } from '../workflows/step-output'
 import { ScheduledWorkRunner, type ScheduledSocialExecutor, type ScheduledSocialPreparer } from '../scheduled-work/ScheduledWorkRunner'
 import { queueAutomationWork } from '../scheduled-work/AutomationWorkQueue'
 import { SignalService } from '../signals/SignalService'
+import { BuilderIntelReviewService } from '../signals/BuilderIntelReviewService'
 import { acceptSignalHandoff, hasSignalHandoff, readSignalHandoffState, readSignalHandoff, writeSignalHandoff, clearSignalHandoff as clearStoredSignalHandoff, signalHandoffKey } from '../signals/handoff-store'
 import type { SignalEntryReference } from '@craft-agent/shared/shared-intel'
 import { SignalReader } from '../signals/SignalReader'
 import { seedSignalWorkflows } from '../signals/seed-workflows'
+import { assertLegacySignalScanSetup } from '../signals/legacy-scan-preflight'
 import {
   ChatGoalDriver,
   buildChatGoalContinuationPrompt,
@@ -2903,7 +2905,9 @@ export class SessionManager implements ISessionManager {
           const failures: unknown[] = []
           for (const pending of pendingWork) {
             try {
-              const queued = pending.action.execution.type === 'workflow-run' && pending.action.execution.triggerInputs?.signalContract === 'signals-v1'
+              const queued = RUNTIME_IDENTITY.variant === 'artist-os' && this.getBuilderIntelReviewService().handlesPending(workspaceId, pending)
+                ? await this.getBuilderIntelReviewService().queueScheduled(workspaceId, pending)
+                : pending.action.execution.type === 'workflow-run' && pending.action.execution.triggerInputs?.signalContract === 'signals-v1'
                 ? await this.getSignalService().queueScheduled(workspaceId, pending)
                 : await queueAutomationWork(workspaceId, workspaceRootPath, pending, {
                 log: sessionLog,
@@ -3604,6 +3608,21 @@ export class SessionManager implements ISessionManager {
     })
   }
 
+  private builderIntelReviewService?: BuilderIntelReviewService
+  private getBuilderIntelReviewService(): BuilderIntelReviewService {
+    return this.builderIntelReviewService ??= new BuilderIntelReviewService({
+      withAutomationLock: withAutomationConfigMutex,
+      wake: workspace => {
+        void this.getScheduledWorkRunner().scanWorkspace(workspace.id, workspace.rootPath)
+          .catch(error => sessionLog.warn('[Builder] Review scan failed:', error))
+      },
+      changed: workspaceId => {
+        const workspace = getWorkspaceByNameOrId(workspaceId)
+        if (workspace) this.refreshManagerStateAndBroadcast(workspace.rootPath)
+      },
+    })
+  }
+
   private signalService?: SignalService
   private signalReader?: SignalReader
   getSignalReader(): SignalReader {
@@ -3611,7 +3630,13 @@ export class SessionManager implements ISessionManager {
   }
   getSignalService(): SignalService {
     return this.signalService ??= new SignalService({
-      reportPublished: workspace => this.refreshManagerStateAndBroadcast(workspace.rootPath),
+      reportPublished: workspace => {
+        this.refreshManagerStateAndBroadcast(workspace.rootPath)
+        if (RUNTIME_IDENTITY.variant === 'artist-os' && this.isPaidExecutionAuthorized()) {
+          void this.getBuilderIntelReviewService().reconcile(workspace.id)
+            .catch(error => sessionLog.warn('[Builder] Report review admission failed:', error))
+        }
+      },
       admitRetry: (original, retry, orderIds) => this.getScheduledWorkRunner().admitSignalWorkflowRetry(getWorkspaceByNameOrId(original.workspaceId)!.rootPath, original, retry, orderIds),
       wake: workspace => { void this.getScheduledWorkRunner().scanWorkspace(workspace.id, workspace.rootPath).catch(() => {}) },
       changed: workspaceId => { this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId) },
@@ -3630,6 +3655,19 @@ export class SessionManager implements ISessionManager {
     eventTimestamp?: number
   }): Promise<{ orderIds: string[] }> {
     const eventTimestamp = input.eventTimestamp ?? Date.now()
+    const pending = {
+      matcherId: input.matcherId,
+      actionIndex: input.actionIndex,
+      automationName: input.automationName,
+      event: input.event ?? 'SchedulerTick' as const,
+      eventTimestamp,
+      eventKey: `test:${eventTimestamp}`,
+      configuredAction: input.configuredAction ?? input.action,
+      action: input.action,
+    }
+    if (RUNTIME_IDENTITY.variant === 'artist-os' && this.getBuilderIntelReviewService().handlesPending(input.workspaceId, pending)) {
+      return this.getBuilderIntelReviewService().queueScheduled(input.workspaceId, pending)
+    }
     const queued = await queueAutomationWork(input.workspaceId, input.workspaceRootPath, {
       matcherId: input.matcherId,
       actionIndex: input.actionIndex,
@@ -3693,7 +3731,7 @@ export class SessionManager implements ISessionManager {
             onSessionCreated: input.onStarted,
           })
         },
-        startWorkflow: async ({ workOrderId, attemptId, workspace, workflowSlug, workflowDigest, triggerInputs, untrustedTriggerInputs, backgroundFence }) => {
+        startWorkflow: async ({ workOrderId, attemptId, workspace, workflowSlug, workflowDigest, triggerInputs, untrustedTriggerInputs, backgroundFence, permissionMode }) => {
           if (triggerInputs.signalContract === 'signals-v1') {
             return this.getSignalService().startAdmitted(workspace.id, workOrderId, workflowSlug, workflowDigest, triggerInputs,
               (workflow, request) => this.workflowRunner.start({ workflow, workspaceId: workspace.id, backgroundFence, runId: request.identity.workflowRunId,
@@ -3715,6 +3753,7 @@ export class SessionManager implements ISessionManager {
           const run = await this.workflowRunner.start({
             workflow,
             backgroundFence,
+            permissionMode,
             workspaceId: workspace.id,
             triggerInputs: workflow.metadata.execution === 'durable-local-read' ? triggerInputs : normalizeWorkflowTriggerInputs(workflow, triggerInputs),
             untrustedTriggerInputs,
@@ -4805,6 +4844,9 @@ export class SessionManager implements ISessionManager {
           }
           const brandingAgent = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')
           const brandingSkillSlugs = brandingAgent?.metadata.skills ?? []
+          replaceBuiltInAgentMetadata('setup-concierge', {
+            name: { from: 'Setup Concierge', to: 'App Assistant' },
+          })
           const { migrateBuiltInAgentTaskModes } = await import('@craft-agent/shared/agent-definitions')
           for (const starter of STARTER_AGENTS) {
             if (migrateBuiltInAgentTaskModes(starter).updated) sessionLog.info(`[agent-definitions] Updated stock focus recipes for ${starter.slug}`)
@@ -6647,6 +6689,10 @@ user a clickable link to where the thing now lives.`
         durableStart: input => this.durableWorkflowStart?.(input) ?? null,
         assertWorkflowAdmissionAvailable: (workspaceId, workflowSlug) => {
           this.scheduledWorkflowStartup.assertAdmissionAvailable()
+          if (RUNTIME_IDENTITY.variant === 'artist-os' && workflowSlug === 'weekly-signal-scan') {
+            const workspace = getWorkspaceByNameOrId(workspaceId)
+            assertLegacySignalScanSetup(workflowSlug, workspace ? loadContextDoc(workspace.rootPath, 'artist-intel-config')?.body : undefined)
+          }
           return this.durableWorkflowAdmissionGuard?.(workspaceId, workflowSlug)
         },
         createSession: (wsId, opts) => this.createSession(wsId, opts).then((s) => ({ id: s.id })),
@@ -6702,6 +6748,11 @@ user a clickable link to where the thing now lives.`
         sessionLog.info(`Recovered ${recoveredWorkflowRuns.length} interrupted workflow run(s)`)
       }
       for (const workspace of workspaces) {
+        if (RUNTIME_IDENTITY.variant === 'artist-os' && workspace.artistWorkspaceScope === 'hq' && !workspace.remoteServer) {
+          void this.getBuilderIntelReviewService().ensureControl(workspace.id)
+            .then(() => this.isPaidExecutionAuthorized() ? this.getBuilderIntelReviewService().reconcile(workspace.id) : undefined)
+            .catch(error => sessionLog.warn('[Builder] Intel review setup failed:', error))
+        }
         this.getScheduledWorkRunner()
           .scanWorkspace(workspace.id, workspace.rootPath)
           .catch((err) => sessionLog.error(`[ScheduledWork] Startup scan failed for workspace "${workspace.id}":`, err))
@@ -10610,6 +10661,32 @@ user a clickable link to where the thing now lives.`
             automatedAncestry: hasAutomatedSessionAncestry(managed.launchReceipt),
             depth: getAgentMessageDepth(managed.labels),
           }, input)
+        },
+        getCustomSkillFn: async (input) => {
+          const { getCustomSkill } = await import('../skills/custom-skill-authoring')
+          return getCustomSkill({ workspaceRoot: managed.workspace.rootPath }, input)
+        },
+        createSkillFn: async (input) => {
+          if (resolveRuntimeIdentity().variant === 'artist-os' && ['concierge', 'setup-concierge', 'orchestrator'].includes(managed.spawnedFromAgent?.agentSlug ?? '')) {
+            return { ok: false, error: 'Reusable skill authoring belongs to Builder.' }
+          }
+          const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+          assertTeamPermission(managed.workspace.rootPath, 'team.settings.update')
+          const { createCustomSkill } = await import('../skills/custom-skill-authoring')
+          const result = createCustomSkill({ workspaceRoot: managed.workspace.rootPath }, input)
+          this.broadcastSkillsChanged(managed.workspace.id, loadAllSkills(managed.workspace.rootPath))
+          return result
+        },
+        updateSkillFn: async (input) => {
+          if (resolveRuntimeIdentity().variant === 'artist-os' && ['concierge', 'setup-concierge', 'orchestrator'].includes(managed.spawnedFromAgent?.agentSlug ?? '')) {
+            return { ok: false, error: 'Reusable skill authoring belongs to Builder.' }
+          }
+          const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+          assertTeamPermission(managed.workspace.rootPath, 'team.settings.update')
+          const { updateCustomSkill } = await import('../skills/custom-skill-authoring')
+          const result = updateCustomSkill({ workspaceRoot: managed.workspace.rootPath }, input)
+          this.broadcastSkillsChanged(managed.workspace.id, loadAllSkills(managed.workspace.rootPath))
+          return result
         },
         createAgentFn: async (input) => {
           if (resolveRuntimeIdentity().variant === 'artist-os' && ['concierge', 'setup-concierge', 'orchestrator'].includes(managed.spawnedFromAgent?.agentSlug ?? '')) {

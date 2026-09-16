@@ -625,12 +625,12 @@ function TimePicker({ value, onChange }: { value: string; onChange: (value: stri
 
 function SafeguardsSection({ draft, onChange }: { draft: Exclude<ScheduledWorkComposerDraft, { type: 'event' }>; onChange: React.Dispatch<React.SetStateAction<ScheduledWorkComposerDraft>> }) {
   if (draft.type === 'social-publish') return <EmptyLine icon={ShieldCheck}>Exact approval will be required near publish time.</EmptyLine>
-  if (draft.type === 'agent-task') {
+  if (draft.type === 'agent-task' || draft.type === 'workflow-run') {
     return (
-      <div className="grid grid-cols-2 gap-2">
-        {(['safe', 'ask'] as const).map((mode) => (
+      <div className="grid grid-cols-3 gap-2">
+        {(['safe', 'ask', 'allow-all'] as const).map((mode) => (
           <button key={mode} type="button" onClick={() => onChange({ ...draft, permissionMode: mode })} className={cn('h-10 rounded-[6px] border text-xs', draft.permissionMode === mode ? 'border-white/25 bg-white/10 text-white/80' : 'border-white/[0.07] text-white/42')}>
-            {mode === 'safe' ? 'Run automatically' : 'Ask before starting'}
+            {mode === 'safe' ? 'Explore' : mode === 'ask' ? 'Ask' : 'Execute (YOLO)'}
           </button>
         ))}
       </div>

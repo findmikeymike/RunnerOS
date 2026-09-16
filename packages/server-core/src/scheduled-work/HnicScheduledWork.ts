@@ -87,6 +87,7 @@ export function inferScheduledWorkScope(workspace: { artistWorkspaceScope?: Work
 
 export function resolveExecution(rootPath: string, request: ScheduleWorkToolInput): ScheduledWorkExecution {
   const input = request.execution
+  if (input.permissionMode !== undefined && !['safe', 'ask', 'allow-all'].includes(input.permissionMode)) throw new Error('Invalid execution permission mode.')
   if (input.type === 'agent-task') {
     if ('inputBindings' in input && input.inputBindings) {
       throw new Error('Workflow input bindings are available only for workflow work.')
@@ -122,6 +123,7 @@ export function resolveExecution(rootPath: string, request: ScheduleWorkToolInpu
   }
   const workflow = loadGlobalWorkflow(input.workflowSlug)
   if (!workflow) throw new Error(`Workflow definition was not found: ${input.workflowSlug}`)
+  if (workflow.metadata.execution === 'durable-local-read' && input.permissionMode !== undefined && input.permissionMode !== 'safe') throw new Error('Local-read workflows require Explore permission mode.')
   const supplied = input.triggerInputs ?? {}
   let triggerInputs: Record<string, unknown>
   if (!input.inputBindings) {
@@ -156,6 +158,7 @@ export function resolveExecution(rootPath: string, request: ScheduleWorkToolInpu
     type: 'workflow-run',
     workflowSlug: workflow.slug,
     workflowDigest: scheduledWorkDefinitionDigest({ metadata: workflow.metadata, body: workflow.body }),
+    ...(input.permissionMode !== undefined ? { permissionMode: input.permissionMode } : {}),
     triggerInputs,
   }
 }
@@ -235,7 +238,7 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
       maxRounds: continuationInput.maxRounds,
       runtimeId: runtimeId!,
       runnerFence: runnerFence!,
-      permissionCeiling: execution.permissionMode,
+      permissionCeiling: 'safe',
     } : undefined,
     createdAt: now,
     updatedAt: now,

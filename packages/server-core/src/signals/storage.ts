@@ -14,9 +14,11 @@ export interface SignalRequest extends SignalRunSummary {
   collectionComplete?: boolean; workflowDigest: string; outputHash?: string; reportMetadataHash?: string; examinedVideoIds?: string[];
   attempts?: Array<{ fromRunId: string; runId: string }>;
   refusedAttempts?: Array<{ fromRunId: string; runId: string }>;
+  /** Admission receipt only: execution/retry state remains owned by scheduled work. */
+  builderReview?: { contentHash: string; batchKey: string; entryIds: string[]; brief: string; queuedAt: string; orderIds: string[]; skipped?: boolean };
   queueEvent?: { matcherId: string; eventTimestamp: number; eventKey: string };
 }
-export interface SignalStore { version: 1; hqWorkspaceId: string; tracks: Record<SignalTrack, SignalTrackConfig>; requests: SignalRequest[]; ledger: SignalLedgerEntry[]; latestScan: Partial<Record<SignalTrack, string>> }
+export interface SignalStore { builderReviewControlInitialized?: boolean; version: 1; hqWorkspaceId: string; tracks: Record<SignalTrack, SignalTrackConfig>; requests: SignalRequest[]; ledger: SignalLedgerEntry[]; latestScan: Partial<Record<SignalTrack, string>> }
 export const MAX_SIGNALS_STATE_BYTES = 64 * 1024 * 1024;
 export class SignalStorageLimitError extends Error {
   constructor() {

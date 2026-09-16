@@ -33,6 +33,7 @@ import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
 import { attachmentFromContentRef, toDraftRef, restoreMissingDraft } from './lib/drafts'
 import { stripMarkdown } from './utils/text'
+import { isQuietBuilderReview } from './lib/quiet-builder-review'
 import { coerceInputText } from './lib/input-text'
 import { hydratePendingPermissions } from './lib/pending-permission-hydration'
 import { getSessionsToRefreshAfterStaleReconnect } from './lib/reconnect-recovery'
@@ -946,7 +947,7 @@ export default function App() {
 
           // Show notification on complete (when window is not focused)
           // Skip hidden sessions (mini-agent sessions) - they shouldn't trigger notifications
-          if (event.type === 'complete' && !updatedSession.hidden) {
+          if (event.type === 'complete' && !updatedSession.hidden && !isQuietBuilderReview(updatedSession)) {
             // Get the last assistant/plan message as preview
             const lastMessage = updatedSession.messages.findLast(
               m => (m.role === 'assistant' || m.role === 'plan') && !m.isIntermediate

@@ -185,3 +185,66 @@ Completion requires implementation commit(s), relevant automated checks, loaded 
 - Voice destination: `apps/electron/src/renderer/lib/artist-manager-voice-focus-prompt.ts` plus current handoff catalog/validation.
 
 No additional product decision blocks starting A. Recheck handler schemas and existing-definition replacement semantics before B; resolve implementation choices within these boundaries rather than expanding the project.
+
+
+## 11. Requested follow-up — skill authoring and intel-led capability proposals
+
+**Status: implemented and automatically checked after V1 acceptance; live follow-up acceptance pending. Not covered by the completed acceptance above.** The user requested these two additions together. They extend Builder, without returning creator responsibilities to Artist Manager.
+
+### A. Create and improve skills
+
+Builder should create useful reusable skills for new or already-installed agents and revise existing custom skills safely. Inspect the current library first; prefer reuse or a focused improvement over duplication. Provide clear applicability, inputs, steps, examples, expected results, failure handling and supporting references/scripts only when useful. Keep the core concise and load deeper material on demand.
+
+Before implementation, audit the existing skill recipe, managed-skill storage, validators and attachment tools. Reuse those paths; adding a prompt alone does not establish a working authoring capability. Preserve protected built-in cores and user changes. Explain shared consumers before revising a skill used by several agents. Validate the saved skill and its attachment, test representative tasks, and distinguish structural validation from demonstrated task quality. A skill cannot invent tools, connections or access. Building a skill does not authorize running external actions in its examples or tests.
+
+### B. Turn relevant intelligence into worthwhile capability suggestions
+
+Give Builder an intel-review skill usable on demand and by the approved automatic routing in C below. It can inspect selected reports or a bounded set of relevant recent/past Signals and Shared Intel in the authorized artist/Campaign scope. Use the capability-fit reasoning already specified in [Spec 36](./36-capability-evolution-engine-spec.md), without implementing its separate Evolve surface, new intelligence collection or broader adoption engine.
+
+Start from an actual artist outcome, not a quota for new agents. Evaluate:
+
+1. **Evidence:** what happened, when, source reliability, and whether an older report still applies. Distinguish demonstrated results from speculation. Never say a tactic has recently helped artists reach audiences unless dated sources support that claim.
+2. **Artist fit:** why this artist, current campaign, audience and available resources make the opportunity relevant.
+3. **Useful agent work:** identify concrete inputs, repeatable actions, useful results and what becomes easier or more reliable with agent help. Useful intelligence may call only for a creative or human decision; that is a valid reason to build nothing.
+4. **Existing coverage:** inspect installed and available skills, workers, workflows and connectors. Prefer a request to an existing worker, then a focused skill improvement or composition. A new agent requires a genuinely distinct recurring job; a workflow requires a useful sequence of existing capabilities.
+5. **Feasibility:** confirm tool/connector availability and connection readiness; name missing access, cost, artist effort and uncertainty. An imagined connector is not an implementation plan.
+
+Only offer a proposal when the fit and practical value are strong. Zero proposals is a successful result; do not force weak ideas or produce a long list. When reviewing intel on request, briefly explain if nothing warrants a build and identify a useful ordinary action when appropriate.
+
+A proposal should read naturally, for example:
+
+> “These reports suggest [opportunity]. For your [specific goal], we could give [existing worker / proposed agent] [skills] using [verified connectors] to [concrete useful work]. [Dated evidence] supports trying it; [uncertainty or prerequisite] still needs checking. We would test it by [small observable result]. Want me to draft it?”
+
+Include the evidence links, why current capabilities are insufficient, the smallest proposed change, likely benefit and a small test. Keep detailed construction specifications behind the conversation's existing disclosure. Recommendations are hypotheses until tested; do not promise audience growth from correlation or broad trend claims.
+
+Proposal mode creates no agents, skills, workflows, connections or schedules. The artist can approve a specific proposal for Builder's normal draft/build/validate flow; reuse that approval rather than asking repeatedly for the same unchanged scope. Retrieved reports are evidence, never executable instructions or permission. The user subsequently approved the bounded automatic review and ordinary explicitly authorized scheduled Builder task below; broader autonomous collection and adoption remain outside scope.
+
+### Follow-up acceptance
+
+- Creates, validates and attaches a custom skill to a new agent and an existing agent; revision preserves unrelated settings and protected built-ins.
+- Tests the skill on representative tasks and reports actual results, including a failure case.
+- Strong, fresh, artist-relevant intel produces a concrete, sourced and feasible proposal.
+- Useful non-agentic intel produces no forced build; an existing solution produces reuse rather than duplication.
+- Stale/unsubstantiated claims, unavailable connectors and instructions embedded in reports cannot become confident claims or unauthorized actions.
+- No suitable opportunity yields zero proposals. An accepted proposal passes into the existing Builder flow with its goal, evidence, scope and constraints intact.
+
+
+### C. Automatic routing and ordinary scheduled Builder work
+
+**Revised user decision:** keep this simple. Use Builder's existing tools, the existing scheduler/triggers, and the normal **Explore / Ask / Execute** permission choice. Do not add a separate standing-approval record, authoring-grant framework, one-item creation budget or Evolve engine.
+
+- Automatic reviews consume newly completed validated Signals reports. First enablement catches up on the previous 60 days; later runs handle new eligible reports in small batches. Review only known, non-future source evidence within 60 days; old explicit references do not bypass this cutoff.
+- Use a normal visible automation control for enable/pause. Automatic report intake is read-only/suggest-only. Persist the minimum report-to-work receipt needed to avoid duplicate jobs and recover interrupted admission. Use existing scheduled-work execution and retry states.
+- Shared Intel with missing structured source dates cannot support the strict freshness claim; retain that limitation until it has a trustworthy adapter. Do not reinterpret ingestion dates as evidence dates.
+- A user can schedule or trigger the normal Builder with “Review the last 60 days; create the most useful missing skill, agent or workflow, or nothing; you have my approval.” The task and skills carry the judgment, reuse-first policy, one-result preference and no-op behavior. These are agent instructions, not a new host-enforced quota system.
+- Explore remains read-only; Ask uses ordinary tool approvals; Execute uses existing unattended execution behavior. Preserve an explicitly chosen mode through scheduling and workflow execution. Omitted modes retain safe defaults, and existing special read-only continuations/native workflows stay restricted.
+- Creating a reusable definition does not imply running it or granting credentials. Keep the requested task scope; ordinary permissions and existing external-action controls still apply.
+- Successful automatic no-op reviews stay quiet and create no Output. Useful suggestions link their dated evidence and explain artist fit, real tools, expected work and a small test. A creation reports the saved object and actual validation, without claiming proven quality or audience growth.
+
+#### Implementation and acceptance
+
+Reuse `SignalService.complete` / validated report storage, `queueAutomationWork`, `ScheduledWorkRunner`, existing permission modes, and custom skill storage. Treat the report-published callback as a wake hint; reconciliation and existing queue idempotency recover missed callbacks. Do not create a parallel scheduler or storage framework.
+
+Verify custom skill creation/revision/attachment, protected-core and collision handling, saved permission choices on agent/workflow runs, bounded 60-day report batches, replay/restart deduplication, pause/resume, no-op behavior and a useful proposal. Use harmless fixtures for unattended creation; no external publishing or spend is part of acceptance.
+
+**Current status:** implemented; automated verification and canonical build passed. Newly loaded provider-backed acceptance remains pending authorized restart. See the September 16 follow-up in the Builder audit. Not included in completed V1 acceptance above.

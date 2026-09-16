@@ -506,3 +506,23 @@ it('Claude/Pi shared tool context carries canonical host workspace identity', ()
   });
   expect(context.workspaceId).toBe('4584f472-9af3-1985-66ff-73b73efc6afa');
 });
+
+it('custom skill callbacks bind lazily for both provider contexts and clear on teardown', async () => {
+  const sessionId = 'custom-skill-bindings';
+  const contexts = [createBaseContext(sessionId), createBaseContext(sessionId)];
+  for (const context of contexts) attachSessionSelfManagementBindings(context, sessionId);
+  expect(contexts[0]!.createSkill).toBeUndefined();
+  try {
+    mergeSessionScopedToolCallbacks(sessionId, {
+      getCustomSkillFn: async input => ({ ok: true, slug: input.slug, content: 'custom source', revision: 'current' }),
+      createSkillFn: async input => ({ ok: true, slug: input.slug, saved: true }),
+      updateSkillFn: async () => ({ ok: false, error: 'Revision conflict' }),
+    });
+    for (const context of contexts) {
+      expect(await context.getCustomSkill?.({ slug: 'custom' })).toMatchObject({ content: 'custom source', revision: 'current' });
+      expect(await context.createSkill?.({ slug: 'custom', content: 'new' })).toMatchObject({ saved: true });
+      expect(await context.updateSkill?.({ slug: 'custom', content: 'revised', expectedRevision: '0'.repeat(64) })).toMatchObject({ ok: false, error: 'Revision conflict' });
+    }
+  } finally { unregisterSessionScopedToolCallbacks(sessionId); }
+  for (const context of contexts) expect(context.createSkill).toBeUndefined();
+});

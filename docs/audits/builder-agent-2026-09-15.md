@@ -118,3 +118,28 @@ Status: implementation on canonical `main`; bounded development-profile live acc
 - **Automated only:** broader invalid-input/auth/conflict/recovery cases, trigger mappings/prerequisites, fresh-profile defaults and voice handoff routing.
 - **Not certified:** physical voice/microphone flow, external webhook/message/URL event delivery, external publishing/spend, packaged/licensed builds or public-release readiness.
 - **Parked:** shared HQ/Campaign destination coordination, V2 enrichment, conversational background proposals, automatic capability-opportunity scanning and unsupported workflow branching.
+
+
+## September 16 follow-up: skill authoring and recent-intel review
+
+Separate from the completed V1 acceptance above. Implemented in canonical `main`; these follow-up changes are included in the next combined Builder/Signals development commit.
+
+- Builder gains Skills and Intel focuses and concise on-demand skills. Artist Manager does not receive the added creator instructions. Exact stock Builder definitions upgrade with a recovery copy; customized bodies, skill inventories, focuses and unrelated metadata remain intact.
+- Typed custom-skill read/create/update tools validate saved content, protect built-ins and symlinks, preserve companion files and require the current content revision for updates. Skills attach through the existing agent revision tool. The tools save SKILL.md, not arbitrary companion scripts. Workspace skill folders retain the existing library-mirroring behavior; they are not a new privacy boundary.
+- Completed validated Signals reports wake an ordinary visible Builder review automation. First startup catches up within 60 days; reconciliation admits at most five reports per job and records report/work receipts. Old, unknown-date and future source evidence cannot qualify. Paused, deleted and already-reviewed controls/reports are preserved across restart. Review admission rechecks pause under the queue lock.
+- Automatic report intake is safe/suggest-only, with no required Output. Exact final `NO_USEFUL_CAPABILITY` suppresses the completion notification; the saved session remains in normal history. Useful results still notify normally. Undated legacy Shared Intel is excluded from strict automatic review.
+- Ordinary scheduled/triggered Builder tasks use the existing Explore/Ask/Execute setting. Agent and workflow runs preserve explicitly chosen modes; continuations and native read-only workflows keep their restrictions. No separate approval record, quota engine or Evolve page. Explicitly authorized creation does not repeat an interactive interview.
+- Independent review covered custom-skill preservation, stale revisions, report freshness/deduplication, pause races and host routing. Focused tests passed; all-package typecheck and Electron lint passed (existing warnings, no lint errors). Full-suite result: 58/60 processes initially passed; the two failures were obsolete Builder-focus fixture expectations. After updating them to include Skills and Intel, both complete affected shards passed independently (1,889 and 1,579 tests). Effective final coverage: all 60 processes pass. Main/preload/renderer/resources/assets build and asset validation passed. The currently running app still contains V1; this build has not been loaded.
+
+**Remaining acceptance:** provider-backed Builder creation/revision and useful/no-op intel judgment in the newly loaded app. Restart requires the user's authorization. Automated checks do not establish generated-skill quality or release readiness; no public-release claim.
+
+
+### September 16 Signals launch repair
+
+Live run `ed2d9540-ab17-4be9-a50a-afc750e693a9` was cancelled through the app after reproducing the legacy `weekly-signal-scan` path. The UI showed five default channels but no saved `artist-intel-config`; the old YouTube step searched files, hit seven tool errors and produced an empty packet rather than collecting videos.
+
+The manual scan now exclusively uses native Signals. First-time Industry setup retains all five bundled default channels for editing/saving; loading or failed native state cannot silently execute the old workflow. Existing native channel lists and legacy schedule timing remain preserved. A host preflight rejects old saved scans with missing channel setup before starting a model. Sixteen focused tests and server/Electron typechecks passed; main/preload/renderer builds passed.
+
+Live channel saving was blocked by the unavailable Monid connection. Another agent landed `0725ce202` to repair app-wide connection persistence. End-to-end collection/report/Builder acceptance remains pending reconnect and a fresh scan in the combined build. Existing canceled-run outputs/history are preserved. No claim of successful live collection.
+
+Command styling now matches other worker categories, with the orange outline only on its badge. App Assistant replaces the old default display name; orange Start here appears in its description. Custom names remain intact.

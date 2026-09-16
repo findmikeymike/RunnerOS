@@ -15,7 +15,7 @@ export type ScheduleWorkExecutionInput =
       agentSlug: string;
       taskModeId?: string;
       brief: string;
-      permissionMode?: 'safe' | 'ask';
+      permissionMode?: 'safe' | 'ask' | 'allow-all';
       expectedOutput?: {
         requirement: 'none' | 'optional' | 'required';
         kind?: 'report' | 'document' | 'image' | 'video' | 'audio' | 'dataset' | 'code' | 'receipt' | 'other';
@@ -25,6 +25,7 @@ export type ScheduleWorkExecutionInput =
   | {
       type: 'workflow-run';
       workflowSlug: string;
+      permissionMode?: 'safe' | 'ask' | 'allow-all';
       triggerInputs?: Record<string, unknown>;
       inputBindings?: Record<string, ScheduleWorkInputBinding>;
     };

@@ -1,13 +1,40 @@
+import { createHash } from 'node:crypto'
 import { copyFileSync, constants, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { matter, stringifyFrontmatter } from '../config/frontmatter'
 import { atomicWriteFileSync } from '../utils/files'
-import { STOCK_BUILDER_ROLE_BASELINES, applyArtistBuilderResponsibility } from './starter-templates'
+import { STOCK_BUILDER_ROLE_BASELINES, STARTER_AGENTS, applyArtistBuilderResponsibility } from './starter-templates'
 import { MANAGER_TASK_MODES, LEGACY_MANAGER_TASK_MODES } from './task-mode-recipes/manager'
 import { getGlobalAgentFile, type AgentStorageOptions } from './storage'
 
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item)
 const skillIds = (value: unknown) => Array.isArray(value) ? value.map(item => typeof item === 'string' ? item.replace(/^legacy:/, '') : item) : value
+
+
+/** Update only the exact shipped V1 Builder, preserving custom fields and overrides. */
+function migrateBuilderSkills(options?: AgentStorageOptions): 'updated' | 'customized' | null {
+  const file = getGlobalAgentFile('builder', options)
+  if (!existsSync(file)) return null
+  const original = readFileSync(file, 'utf8')
+  const parsed = matter(original)
+  const next = STARTER_AGENTS.find(agent => agent.slug === 'builder')!
+  const body = parsed.content.trim()
+  if (body === next.systemPrompt.trim()) return null
+  if (createHash('sha256').update(body).digest('hex') !== 'b7256bb7ce10809cbc4071c238f682c282774b94dd641ff8c361c9394d79162a') return 'customized'
+  const data = { ...parsed.data }
+  const priorSkills = ["agent-creator", "automation-creator", "workflow-creator", "skill-scout", "source-recipe", "skill-recipe"]
+  const priorModesHash = '8c28867f6b0d3fd1351c6c149ce9289be5d40e9dc3e0f0a270c6914ee1b9b215'
+  if (canonical(skillIds(data.skills)) === canonical(priorSkills)) data.skills = next.metadata.skills
+  // Preserve deliberate focus or inventory changes rather than attaching unusable recipes.
+  if (createHash('sha256').update(canonical(data.taskModes)).digest('hex') === priorModesHash && canonical(skillIds(data.skills)) === canonical(next.metadata.skills)) data.taskModes = next.metadata.taskModes
+  if (data.description === "Create and maintain reusable workers, sequential workflows, and supported automations.") data.description = next.metadata.description
+  const backupDir = join(dirname(dirname(file)), '.builder-transition-backup')
+  mkdirSync(backupDir, { recursive: true })
+  const backup = join(backupDir, 'builder-v1.md')
+  if (!existsSync(backup)) copyFileSync(file, backup, constants.COPYFILE_EXCL)
+  atomicWriteFileSync(file, stringifyFrontmatter(parsed.content.replace(body, () => next.systemPrompt.trim()), data))
+  return 'updated'
+}
 
 /** One development-profile transition. Never replaces customized agent bodies. */
 export function migrateBuilderResponsibility(options?: AgentStorageOptions): { updated: string[]; customized: string[] } {
@@ -58,5 +85,7 @@ export function migrateBuilderResponsibility(options?: AgentStorageOptions): { u
     atomicWriteFileSync(file, stringifyFrontmatter(nextBody, data))
     result.updated.push(prior.slug)
   }
+  const builder = migrateBuilderSkills(options)
+  if (builder) result[builder].push('builder')
   return result
 }

@@ -110,3 +110,13 @@ export async function saveSignalSettingsTransaction(input: {
     throw error
   }
 }
+
+/** Manual scans never fall back to the legacy model-led workflow. */
+export function signalManualScanRoute(state: SignalState | null, error: string | null, track: SignalTrack):
+  { route: 'blocked'; reason: string } | { route: 'setup' | 'native' } {
+  if (error) return { route: 'blocked', reason: 'Signals settings could not be loaded. Retry before scanning.' }
+  if (!state) return { route: 'blocked', reason: 'Loading Signals settings…' }
+  const config = state.tracks[track]
+  if (config.revision === 'initial' || (track === 'your-world' && !config.sources.length)) return { route: 'setup' }
+  return { route: 'native' }
+}

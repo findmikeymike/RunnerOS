@@ -171,7 +171,7 @@ export type ScheduledWorkExecution =
       agentSlug: string
       taskModeId?: string
       brief: string
-      permissionMode: 'safe' | 'ask'
+      permissionMode: 'safe' | 'ask' | 'allow-all'
       expectedOutput: ExpectedOutputContract
       postProcess?: 'youtube-intelligence'
     }
@@ -179,6 +179,7 @@ export type ScheduledWorkExecution =
       type: 'workflow-run'
       workflowSlug: string
       workflowDigest: string
+      permissionMode?: 'safe' | 'ask' | 'allow-all'
       triggerInputs: Record<string, unknown>
       /** Trigger-fed strings that must be escaped and data-wrapped when rendered into agent prompts. */
       untrustedTriggerInputs?: string[]
@@ -844,6 +845,8 @@ function executionFromCampaignItem(
       workflowSlug,
       workflowDigest,
       triggerInputs: readRecord(job.payload, 'triggerInputs') ?? {},
+      ...(['safe', 'ask', 'allow-all'].includes(String(job.payload.permissionMode))
+        ? { permissionMode: readPermissionMode(job.payload) } : {}),
     }
   }
   if (job.actionType === 'post-asset') {
@@ -1003,7 +1006,7 @@ function isScheduledWorkExecution(value: unknown, type: ScheduledWorkType): valu
     return Boolean(clean(execution.agentSlug))
       && (execution.taskModeId === undefined || (typeof execution.taskModeId === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(execution.taskModeId)))
       && Boolean(clean(execution.brief))
-      && (execution.permissionMode === 'safe' || execution.permissionMode === 'ask')
+      && (execution.permissionMode === 'safe' || execution.permissionMode === 'ask' || execution.permissionMode === 'allow-all')
       && (execution.postProcess === undefined || execution.postProcess === 'youtube-intelligence')
       && Boolean(execution.expectedOutput
         && (execution.expectedOutput.requirement === 'none'
@@ -1011,7 +1014,8 @@ function isScheduledWorkExecution(value: unknown, type: ScheduledWorkType): valu
           || execution.expectedOutput.requirement === 'required'))
   }
   if (execution.type === 'workflow-run') {
-    return Boolean(clean(execution.workflowSlug))
+    return (execution.permissionMode === undefined || ['safe', 'ask', 'allow-all'].includes(execution.permissionMode))
+      && Boolean(clean(execution.workflowSlug))
       && Boolean(clean(execution.workflowDigest))
       && Boolean(execution.triggerInputs && typeof execution.triggerInputs === 'object' && !Array.isArray(execution.triggerInputs))
       && (execution.untrustedTriggerInputs === undefined || (
@@ -1318,8 +1322,8 @@ function readRecord(value: Record<string, unknown>, key: string): Record<string,
   return child && typeof child === 'object' && !Array.isArray(child) ? child as Record<string, unknown> : undefined
 }
 
-function readPermissionMode(payload: Record<string, unknown>): 'safe' | 'ask' {
-  return payload.permissionMode === 'safe' ? 'safe' : 'ask'
+function readPermissionMode(payload: Record<string, unknown>): 'safe' | 'ask' | 'allow-all' {
+  return payload.permissionMode === 'allow-all' ? 'allow-all' : payload.permissionMode === 'safe' ? 'safe' : 'ask'
 }
 
 function extractJson(body: string): string | undefined {

@@ -664,11 +664,11 @@ body
     expect(hnic?.systemPrompt).not.toContain('EVERY workspace-context doc')
   })
 
-  test('starter library includes Setup Concierge for app setup and help', () => {
+  test('starter library includes App Assistant for app setup and help', () => {
     const setupConcierge = STARTER_AGENTS.find((agent) => agent.slug === 'setup-concierge')
 
     expect(setupConcierge).toBeDefined()
-    expect(setupConcierge?.metadata.name).toBe('Setup Concierge')
+    expect(setupConcierge?.metadata.name).toBe('App Assistant')
     expect(setupConcierge?.metadata.skills).toContain('artist-os-guide')
     expect(setupConcierge?.metadata.skills).toContain('source-recipe')
     expect(setupConcierge?.metadata.tags).toContain('setup')

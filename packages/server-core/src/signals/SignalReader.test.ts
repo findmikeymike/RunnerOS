@@ -293,3 +293,14 @@ test('omitting redundant support never drops its original source dates or identi
   expect(entry.sources).toEqual(f.metadata.sources);
   expect(JSON.stringify(result).length).toBeLessThanOrEqual(4000);
 });
+
+test('Builder gets bounded sixty-day dated history including reference lookups', async () => {
+  const f = publish({ age: 45, sourceAge: 45 });
+  const builder = new SignalReader({ workspaces: () => workspaces, permission, now: () => now, activeAgents: () => ['builder'] });
+  expect((await builder.findForWorker('hq', 'builder', {})).entries.length).toBeGreaterThan(0);
+  expect((await reader.find('hq')).entries).toHaveLength(0);
+  f.metadata.sources[0]!.sourcePublishedAt = new Date(now - 61 * 86400_000).toISOString(); f.persist();
+  expect((await builder.findForWorker('hq', 'builder', { reference: f.reference })).entries).toHaveLength(0);
+  delete f.metadata.sources[0]!.sourcePublishedAt; f.persist();
+  expect((await builder.findForWorker('hq', 'builder', { freshness: 'evergreen' })).entries).toHaveLength(0);
+});
