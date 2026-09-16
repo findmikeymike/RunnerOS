@@ -1,0 +1,103 @@
+[
+  {
+    "name": "monid_inspect",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspaceId": {
+          "description": "Workspace ID or slug. Optional \u2014 ignored when your credential is already workspace-scoped (OAuth org token or API key).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "endpoint"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    }
+  },
+  {
+    "name": "monid_run",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "Provider slug (from inspect's `provider`)."
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "Endpoint id (from inspect's `endpoint`)."
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "body": {
+              "description": "Request body fields.",
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "queryParams": {
+              "description": "URL query string parameters.",
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "pathParams": {
+              "description": "URL path placeholder substitutions (e.g. {id} in `/users/{id}`).",
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "additionalProperties": false,
+          "description": "Composite endpoint input \u2014 body + URL query + URL path. All sub-fields optional."
+        },
+        "workspaceId": {
+          "description": "Workspace ID or slug. Optional \u2014 ignored when your credential is already workspace-scoped (OAuth org token or API key).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "endpoint"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    }
+  },
+  {
+    "name": "monid_get_run",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string",
+          "description": "Run ID returned from monid_run"
+        },
+        "workspaceId": {
+          "description": "Workspace ID or slug. Optional \u2014 ignored when your credential is already workspace-scoped (OAuth org token or API key).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    }
+  }
+]

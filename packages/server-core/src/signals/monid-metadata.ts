@@ -7,7 +7,7 @@ const ENDPOINT = '/streamers/youtube-scraper';
 const RECENT_LIMIT = 50;
 const SINGLE_CAP_USD = 0.02;
 const LIST_CAP_USD = 0.25;
-interface MetadataDeps { run?: typeof runMonidSignalOperation; attemptScope?: string }
+interface MetadataDeps { run?: typeof runMonidSignalOperation; attemptScope?: string; signal?: AbortSignal }
 type Row = Record<string, unknown>;
 function fail(): never { throw new Error('Monid YouTube metadata could not be verified. Use a canonical channel URL or check the source in Connections > Services.'); }
 function record(value: unknown): Row {
@@ -56,11 +56,19 @@ function rows(value: unknown, maximum: number): Row[] {
 }
 function actorInput(url: string, maximum: number): Row {
   return { startUrls: [{ url }], maxResults: maximum, maxResultsShorts: 0, maxResultStreams: 0,
-    sortVideosBy: 'NEWEST', downloadSubtitles: false, aiVideoDescription: false, aiVideoSummary: false };
+    sortVideosBy: 'NEWEST', transcriptionAndSubtitle: 'NONE', aiVideoDescription: false, aiVideoSummary: false };
 }
 
 /** Fail closed if the live actor contract can no longer enforce this request. */
 export function validateMonidMetadataInspection(inspection: Row, input: Row): void {
+  if (Object.keys(input).length !== 8 || input.sortVideosBy !== 'NEWEST'
+    || !Array.isArray(input.startUrls) || input.startUrls.length !== 1
+    || !Number.isInteger(input.maxResults) || (input.maxResults as number) < 1 || (input.maxResults as number) > RECENT_LIMIT
+    || input.maxResultsShorts !== 0 || input.maxResultStreams !== 0
+    || input.transcriptionAndSubtitle !== 'NONE' || input.aiVideoDescription !== false || input.aiVideoSummary !== false) return fail();
+  const start = record(input.startUrls[0]);
+  if (Object.keys(start).length !== 1 || typeof start.url !== 'string'
+    || !(normalizeSignalChannelUrl(start.url) || normalizeSignalVideoUrl(start.url))) return fail();
   const schema = record(record(inspection.input).body);
   const properties = record(schema.properties);
   if (schema.type !== 'object') return fail();
@@ -74,11 +82,21 @@ export function validateMonidMetadataInspection(inspection: Row, input: Row): vo
   }
   const sort = record(properties.sortVideosBy);
   if (!Array.isArray(sort.enum) || !sort.enum.includes('NEWEST')) return fail();
-  const items = record(record(properties.startUrls).items);
-  if (items.type !== 'object' || record(record(items.properties).url).type !== 'string') return fail();
+  const transcription = record(properties.transcriptionAndSubtitle);
+  if (!Array.isArray(transcription.enum) || !transcription.enum.includes('NONE')) return fail();
+  const urls = record(properties.startUrls);
+  // Apify's live actor schema uses this editor instead of JSON Schema items.
+  // The request above still allows exactly one literal URL, never an imported list.
+  if (urls.items === undefined) {
+    if (urls.editor !== 'requestListSources') return fail();
+  } else {
+    const items = record(urls.items);
+    if (items.type !== 'object' || record(record(items.properties).url).type !== 'string') return fail();
+  }
 }
 
 export async function monidResolveChannel(root: string, url: string, deps: MetadataDeps = {}): Promise<SignalChannel> {
+  deps.signal?.throwIfAborted();
   const normalized = channelUrl(url);
   const input = actorInput(`${normalized}/videos`, 1);
   return (deps.run ?? runMonidSignalOperation)(root, {
@@ -93,7 +111,7 @@ export async function monidResolveChannel(root: string, url: string, deps: Metad
         .some(value => { try { return typeof value === 'string' && channelUrl(value).toLowerCase() === normalized.toLowerCase(); } catch { return false; } })) return fail();
       return { channelId: resolved.id, url: `https://www.youtube.com/channel/${resolved.id}`, name: text(row.channelName, 200), priority: 'medium' as const };
     },
-  });
+  }, deps.signal);
 }
 
 export async function monidRecentVideos(root: string, channelId: string, signal?: AbortSignal, deps: MetadataDeps = {}): Promise<{ videos: SignalVideoMetadata[]; complete: boolean }> {

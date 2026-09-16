@@ -14,7 +14,7 @@ import { resolveSignalToolPath, SignalToolPathError } from './tool-path';
 
 export interface SignalTranscript { videoId: string; segments: Array<{ start: number; end: number; text: string }>; provider: string }
 export interface SignalProvider {
-  resolveChannel(url: string, root?: string, attemptScope?: string): Promise<SignalChannel>;
+  resolveChannel(url: string, root?: string, attemptScope?: string, signal?: AbortSignal): Promise<SignalChannel>;
   recent(channelId: string, signal?: AbortSignal, root?: string, attemptScope?: string): Promise<{ videos: SignalVideoMetadata[]; complete: boolean }>;
   video(videoId: string, signal?: AbortSignal, root?: string, attemptScope?: string): Promise<SignalVideoMetadata>;
   transcript(root: string, videoId: string, signal?: AbortSignal, attemptScope?: string): Promise<SignalTranscript>;
@@ -69,7 +69,7 @@ export class LocalSignalProvider implements SignalProvider {
       ? 'Native YouTube metadata is unavailable. Configure a YouTube Data API source in Connections > Services and retry.'
       : 'YouTube transcript evidence is unavailable. Check transcript access and retry.'); }
   }
-  async resolveChannel(input: string, root?: string, attemptScope?: string): Promise<SignalChannel> {
+  async resolveChannel(input: string, root?: string, attemptScope?: string, signal?: AbortSignal): Promise<SignalChannel> {
     const url = normalizeSignalChannelUrl(input.startsWith('@') ? `https://www.youtube.com/${input}` : input);
     if (!url) throw new Error('Enter a YouTube channel URL or handle.');
     const path = new URL(url).pathname;
@@ -77,13 +77,14 @@ export class LocalSignalProvider implements SignalProvider {
     if (!flag) throw new Error('Use this channel\'s @handle or canonical channel URL.');
     const value = path.startsWith('/@') ? path.slice(1) : path.split('/')[2]!;
     try {
-      const item = rows(await this.call('youtube-research', ['youtube', 'channels-list', flag, value, '--part', 'snippet', '--json', '--no-input', '--data-source', 'live']))[0];
+      const item = rows(await this.call('youtube-research', ['youtube', 'channels-list', flag, value, '--part', 'snippet', '--json', '--no-input', '--data-source', 'live'], signal))[0];
       if (!item || !SIGNAL_CHANNEL_ID.test(item.id)) throw new Error('YouTube channel could not be resolved.');
       if (flag === '--id' && item.id !== value) throw new Error('Channel evidence identity mismatch.');
       return { channelId: item.id, url: `https://www.youtube.com/channel/${item.id}`, name: String(item.snippet?.title ?? item.name ?? item.id).slice(0, 200), priority: 'medium' };
     } catch (error) {
+      signal?.throwIfAborted();
       if (!root) throw error;
-      return (this.deps.monidResolveChannel ?? monidResolveChannel)(root, url, { attemptScope });
+      return (this.deps.monidResolveChannel ?? monidResolveChannel)(root, url, { attemptScope, signal });
     }
   }
   async recent(channelId: string, signal?: AbortSignal, root?: string, attemptScope?: string): Promise<{ videos: SignalVideoMetadata[]; complete: boolean }> {

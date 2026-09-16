@@ -38,6 +38,7 @@ export interface SignalServiceDeps {
   reportPublished?: (workspace: Workspace) => void;
   now?: () => string;
   preparationTimeoutMs?: number;
+  channelResolutionTimeoutMs?: number;
   admitRetry?: (original: WorkflowRunSnapshot, retry: WorkflowRunSnapshot, orderIds: string[]) => Promise<void>;
 }
 
@@ -70,7 +71,21 @@ export class SignalService {
     const workspace = this.scope(workspaceId); this.permission(workspace, 'records.write');
     if (typeof url !== 'string' || url.length > 2048) throw new Error('Invalid YouTube channel.');
     this.permission(workspace, 'automation.external.execute');
-    return this.provider.resolveChannel(url, workspace.rootPath, randomUUID());
+    return this.withChannelDeadline(signal => this.provider.resolveChannel(url, workspace.rootPath, randomUUID(), signal));
+  }
+  private async withChannelDeadline<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const controller = new AbortController();
+    const timeoutMs = Math.min(45_000, Math.max(1, this.deps.channelResolutionTimeoutMs ?? 45_000));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const error = new Error('Channel lookup is taking longer than expected. Retry to resume any submitted work. This does not mean Monid is disconnected.');
+        reject(error);
+        controller.abort(error);
+      }, timeoutMs);
+    });
+    try { return await Promise.race([work(controller.signal), deadline]); }
+    finally { clearTimeout(timer); }
   }
   async saveConfig(workspaceId: string, track: SignalTrack, config: SignalTrackConfig, expectedRevision: string): Promise<SignalState> {
     const workspace = this.scope(workspaceId); this.permission(workspace, 'records.write');
@@ -79,14 +94,18 @@ export class SignalService {
     const previous = this.state(workspace).tracks[track];
     if (previous.revision !== expectedRevision) throw new Error('Signals settings changed. Reload before saving.');
     const sources: SignalChannel[] = [];
-    for (const source of parsed.sources) {
-      const known = previous.sources.some(item => item.channelId === source.channelId && item.url === source.url);
-      if (known || source.url === `https://www.youtube.com/channel/${source.channelId}`) { sources.push(source); continue; }
-      this.permission(workspace, 'automation.external.execute');
-      const resolved = await this.provider.resolveChannel(source.url, workspace.rootPath, randomUUID());
-      if (resolved.channelId !== source.channelId) throw new Error('Channel identity changed. Resolve the channel again.');
-      sources.push({ ...source, url: resolved.url, channelId: resolved.channelId });
-    }
+    await this.withChannelDeadline(async signal => {
+      for (const source of parsed.sources) {
+        signal.throwIfAborted();
+        const known = previous.sources.some(item => item.channelId === source.channelId && item.url === source.url);
+        if (known || source.url === `https://www.youtube.com/channel/${source.channelId}`) { sources.push(source); continue; }
+        this.permission(workspace, 'automation.external.execute');
+        const resolved = await this.provider.resolveChannel(source.url, workspace.rootPath, randomUUID(), signal);
+        signal.throwIfAborted();
+        if (resolved.channelId !== source.channelId) throw new Error('Channel identity changed. Resolve the channel again.');
+        sources.push({ ...source, url: resolved.url, channelId: resolved.channelId });
+      }
+    });
     return withSignalsLock(workspace.rootPath, async () => {
       const state = this.state(workspace);
       if (state.tracks[track].revision !== expectedRevision) throw new Error('Signals settings changed. Reload before saving.');

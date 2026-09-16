@@ -770,6 +770,7 @@ export default function SecretsSettingsPage() {
         window.electronAPI.getMonidBudget(activeWorkspaceId),
       ])
       setSecrets(secretRows)
+      setMonid(monidStatus)
       if (secretRows.some((secret) => secret.name === 'INWORLD_API_KEY')) {
         setInworldValidation('checking')
         const validation = await window.electronAPI.testInworldTts(activeWorkspaceId).catch(() => ({
@@ -778,7 +779,6 @@ export default function SecretsSettingsPage() {
         }))
         setInworldValidation(validation.success ? 'connected' : validation.kind === 'invalid' ? 'invalid' : 'unavailable')
       }
-      setMonid(monidStatus)
       setMonidBudget(monidBudgetStatus)
       setMonidSingleCap(monidBudgetStatus.singleCallCapUsd.toFixed(2))
       setMonidWeeklyCap(monidBudgetStatus.weeklyCapUsd.toFixed(2))
@@ -1286,9 +1286,13 @@ export default function SecretsSettingsPage() {
                           <div className="flex items-center gap-2">
                             <Globe2 className="h-4 w-4 text-[#f68245]" />
                             <h3 className="text-sm font-semibold text-white/90">Monid</h3>
-                            {monid?.hasEffectiveCredential
-                              ? <CheckCircle2 className="h-4 w-4 text-emerald-400/80" />
-                              : <XCircle className="h-4 w-4 text-white/22" />}
+                            {monid === null
+                              ? loading
+                                ? <Loader2 className="h-4 w-4 animate-spin text-white/38" aria-label="Checking Monid connection" />
+                                : <Info className="h-4 w-4 text-white/38" aria-label="Monid connection status unavailable" />
+                              : monid.hasEffectiveCredential
+                                ? <CheckCircle2 className="h-4 w-4 text-emerald-400/80" aria-label="Monid connected" />
+                                : <XCircle className="h-4 w-4 text-white/22" aria-label="Monid not connected" />}
                             <span className="rounded-full bg-[#f05a28]/12 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#ff9a62]">Primary agent tool</span>
                           </div>
                           <p className="mt-1 max-w-3xl text-xs leading-4 text-white/38">
@@ -1299,7 +1303,11 @@ export default function SecretsSettingsPage() {
                           <button type="button" className={serviceControlClass} aria-expanded={monidLimitsOpen} aria-controls="monid-limits" onClick={() => setMonidLimitsOpen(open => !open)}>
                             Limits <ChevronDown className={`h-3.5 w-3.5 transition-transform ${monidLimitsOpen ? 'rotate-180' : ''}`} />
                           </button>
-                          {monid?.hasEffectiveCredential ? (
+                          {monid === null ? (
+                            <Button variant="ghost" size="sm" className={serviceControlClass} onClick={load} disabled={loading || connectingMonid || disconnectingMonid}>
+                              {loading ? 'Checking connection…' : 'Retry connection check'}
+                            </Button>
+                          ) : monid.hasEffectiveCredential ? (
                             <>
                               <Button variant="ghost" size="sm" className={serviceControlClass} onClick={connectMonid} disabled={connectingMonid || disconnectingMonid}>
                                 {connectingMonid ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}

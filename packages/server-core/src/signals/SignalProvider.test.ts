@@ -171,10 +171,19 @@ test('cancelled native metadata work does not start Monid', async () => {
   const controller = new AbortController();
   const fallback = mock(async () => { throw new Error('must not pay'); });
   const provider = new LocalSignalProvider(undefined, { command: async () => { controller.abort(); throw new Error('cancelled'); },
-    monidRecentVideos: fallback, monidVideoMetadata: fallback });
+    monidRecentVideos: fallback, monidVideoMetadata: fallback, monidResolveChannel: fallback });
+  await expect(provider.resolveChannel('@fixture', '/fixture/hq', 'test', controller.signal)).rejects.toThrow();
   await expect(provider.recent(channelId, controller.signal, '/fixture/hq')).rejects.toThrow();
   await expect(provider.video(videoId, controller.signal, '/fixture/hq')).rejects.toThrow();
   expect(fallback).toHaveBeenCalledTimes(0);
+});
+test('channel resolution forwards its deadline signal to native work and Monid fallback', async () => {
+  const signal = new AbortController().signal;
+  const provider = new LocalSignalProvider(undefined, {
+    command: async (_name, _args, received) => { expect(received).toBe(signal); throw new Error('native unavailable'); },
+    monidResolveChannel: async (_root, _url, deps) => { expect(deps?.signal).toBe(signal); throw new Error('provider slow'); },
+  });
+  await expect(provider.resolveChannel('@fixture', '/fixture/hq', 'test', signal)).rejects.toThrow('provider slow');
 });
 
 

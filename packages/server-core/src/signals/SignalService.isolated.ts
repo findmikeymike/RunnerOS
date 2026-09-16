@@ -79,6 +79,29 @@ test('GET is read-only and offline canonical settings support pause, notes and r
   expect(provider.resolveChannel).toHaveBeenCalledTimes(0);
   await expect(service.saveConfig('hq', 'your-world', config, config.revision)).rejects.toThrow('changed');
 });
+test('interactive channel lookup aborts stalled collection before the RPC deadline', async () => {
+  let received: AbortSignal | undefined;
+  provider.resolveChannel = mock(async (_url, _root, _scope, signal) => {
+    received = signal;
+    return new Promise<never>(() => {});
+  });
+  const bounded = new SignalService({ workspaces: () => [workspace], provider, permission, channelResolutionTimeoutMs: 10 });
+  await expect(bounded.resolveChannel('hq', '@fixture')).rejects.toThrow('Retry to resume any submitted work');
+  expect(received?.aborted).toBe(true);
+  expect(provider.resolveChannel).toHaveBeenCalledTimes(1);
+});
+test('saving unresolved channels shares one deadline and never writes a timed-out config', async () => {
+  let received: AbortSignal | undefined;
+  provider.resolveChannel = mock(async (_url, _root, _scope, signal) => {
+    received = signal;
+    return new Promise<never>(() => {});
+  });
+  const bounded = new SignalService({ workspaces: () => [workspace], provider, permission, channelResolutionTimeoutMs: 10 });
+  const initial = (await bounded.getState('hq')).tracks['your-world'];
+  await expect(bounded.saveConfig('hq', 'your-world', { ...initial, sources: [{ channelId, url: 'https://www.youtube.com/@fixture', name: 'Fixture', priority: 'medium' }] }, initial.revision)).rejects.toThrow('This does not mean Monid is disconnected');
+  expect(received?.aborted).toBe(true);
+  expect((await bounded.getState('hq')).tracks['your-world'].revision).toBe(initial.revision);
+});
 test('real queue persists admitted order with internal inputs, deduplicates and snapshots config', async () => {
   const state = await configure();
   const input = { track: 'your-world' as const, mode: 'scan' as const, idempotencyKey: 'same' };
@@ -602,8 +625,8 @@ test('provider entry points receive the HQ root and deliberate host attempt scop
   await service.resolveChannel('hq', '@fixture');
   const initial = readSignals(root, 'hq').tracks['your-world'];
   await service.saveConfig('hq', 'your-world', { ...initial, sources: [{ channelId, url: 'https://www.youtube.com/@fixture', name: 'Fixture', priority: 'medium' }] }, initial.revision);
-  expect(provider.resolveChannel).toHaveBeenNthCalledWith(1, '@fixture', root, expect.stringMatching(/^[a-f0-9-]{36}$/));
-  expect(provider.resolveChannel).toHaveBeenNthCalledWith(2, 'https://www.youtube.com/@fixture', root, expect.stringMatching(/^[a-f0-9-]{36}$/));
+  expect(provider.resolveChannel).toHaveBeenNthCalledWith(1, '@fixture', root, expect.stringMatching(/^[a-f0-9-]{36}$/), expect.any(AbortSignal));
+  expect(provider.resolveChannel).toHaveBeenNthCalledWith(2, 'https://www.youtube.com/@fixture', root, expect.stringMatching(/^[a-f0-9-]{36}$/), expect.any(AbortSignal));
   expect(scopes[0]).not.toBe(scopes[1]);
   const queued = await service.start('hq', { track: 'your-world', mode: 'scan', idempotencyKey: 'scoped' });
   const request = readSignals(root, 'hq').requests[0]!;

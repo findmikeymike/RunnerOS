@@ -155,6 +155,7 @@ export async function runMonidSignalOperation<T>(root: string, operation: MonidS
     let runId: string | undefined;
     let terminal = false;
     let projectedMaxUsd = 0;
+    let failureContext = 'Saved Monid collection data could not be read.';
     try {
       await mkdir(directory, { recursive: true });
       const cache = await readJson(cachePath);
@@ -182,12 +183,14 @@ export async function runMonidSignalOperation<T>(root: string, operation: MonidS
         projectedMaxUsd = prior.projectedMaxUsd;
       }
       signal?.throwIfAborted();
+      failureContext = 'Monid could not be reached. Check the service connection and try again.';
       client = await (deps.createClient ?? createMonidSignalClient)(root);
       const tools = await abortable(client.listTools(), signal);
       const call = (name: string, args: Record<string, unknown>) => abortable(client!.callTool(name, args), signal);
-      const inspect = tools.find(tool => tool.name === 'inspect');
-      const run = tools.find(tool => tool.name === 'run');
-      const polls = tools.filter(tool => /^(get_run|runs_get|run_get|getRun)$/.test(tool.name)
+      failureContext = 'Monid is connected, but its collection tools are incompatible with Signals. No scan was started.';
+      const inspect = tools.find(tool => tool.name === 'monid_inspect');
+      const run = tools.find(tool => tool.name === 'monid_run');
+      const polls = tools.filter(tool => /^monid_get_run$/.test(tool.name)
         && requiredOnly(tool.inputSchema as Json, ['runId']) && (tool.inputSchema as Json).properties?.runId?.type === 'string');
       if (polls.length !== 1 || !prior && (!inspect || !run || !requiredOnly(inspect.inputSchema as Json, ['provider', 'endpoint'])
         || !requiredOnly(run.inputSchema as Json, ['provider', 'endpoint', 'input']))) throw new Error('Monid MCP contract is unavailable.');
@@ -196,8 +199,10 @@ export async function runMonidSignalOperation<T>(root: string, operation: MonidS
       if (prior) {
         result = jsonResult(await call(polls[0]!.name, { runId }));
       } else {
-      const inspection = jsonResult(await call('inspect', { provider: 'apify', endpoint: operation.endpoint }));
+      failureContext = 'Monid is connected, but the YouTube collection contract could not be verified. No scan was started.';
+      const inspection = jsonResult(await call(inspect!.name, { provider: 'apify', endpoint: operation.endpoint }));
       validateInspection(inspection, operation);
+      failureContext = 'Monid is connected, but this collection exceeds its allowance or its price could not be verified. Check Monid Limits.';
       const status = budget.getStatus();
       const cap = Math.min(operation.maxCostUsd, status.singleCallCapUsd);
       const decision = evaluateMonidSpendLimit(inspection, args, cap);
@@ -212,7 +217,7 @@ export async function runMonidSignalOperation<T>(root: string, operation: MonidS
       await atomicJson(attemptPath, { identity, attemptScope, status: 'PENDING_REVIEW', reservation, projectedMaxUsd: decision.projectedMaxUsd, attemptedAt: now() });
       signal?.throwIfAborted();
       started = true;
-      result = jsonResult(await call('run', args));
+      result = jsonResult(await call(run!.name, { ...args, input: { body: operation.input } }));
       }
       for (let poll = 0; ; poll++) {
         if (result.provider !== 'apify' || result.endpoint !== operation.endpoint || typeof result.runId !== 'string' || !result.runId
@@ -234,7 +239,8 @@ export async function runMonidSignalOperation<T>(root: string, operation: MonidS
         runId, reservation, projectedMaxUsd, actualCostUsd: charged, settled: charged !== undefined, attemptedAt: now() });
       reservation = undefined;
       signal?.throwIfAborted();
-      if (result.status !== 'COMPLETED') throw new MonidSignalError(`Monid transcript run ended ${result.status}.`, false, runId);
+      if (result.status !== 'COMPLETED') throw new MonidSignalError(`Monid collection run ended ${result.status}.`, false, runId);
+      failureContext = 'Monid finished, but returned data that Signals could not verify.';
       if (result.providerResponse?.httpStatus !== undefined && (!Number.isInteger(result.providerResponse.httpStatus)
         || result.providerResponse.httpStatus < 200 || result.providerResponse.httpStatus >= 300)) throw new Error('Monid provider returned no usable data.');
       if (!Array.isArray(result.output) || result.output.length > operation.maxOutputRows) throw new Error('Monid output exceeded the single-operation result bound.');
@@ -252,7 +258,7 @@ export async function runMonidSignalOperation<T>(root: string, operation: MonidS
         throw error;
       }
       throw new MonidSignalError(started && !terminal ? 'Monid run is pending or unverified. Retry to resume known work; no new paid run was started.'
-        : 'Monid data unavailable: connection, endpoint contract, allowance, or returned data could not be verified.', false, runId);
+        : failureContext, false, runId);
     } finally {
       if (client) {
         let timer: ReturnType<typeof setTimeout> | undefined;
