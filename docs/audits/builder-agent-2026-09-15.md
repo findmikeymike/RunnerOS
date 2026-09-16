@@ -1,6 +1,8 @@
 # Builder ownership audit — September 15, 2026
 
-Baseline: canonical Artist OS `main`, `48cd4e1a4`, synchronized with origin. Read-only code and installed-definition audit; no new Builder, app behavior changes, or live Builder acceptance. This document records findings and a proposed implementation boundary, not implementation approval.
+**Current result, September 16:** Spec 52 is implemented and bounded development acceptance passed on canonical `main` (`5a98c0a58`, `3d8cdc250`). See [final verification](#final-loaded-build-verification) for evidence and limits.
+
+Historical audit baseline: canonical Artist OS `main`, `48cd4e1a4`, then synchronized with origin. The sections before “Implementation and acceptance” record the original read-only findings and proposed boundary, not current missing implementation.
 
 ## Conclusion
 
@@ -55,7 +57,7 @@ Broader HQ/Campaign shared-destination coordination, V2 enrichment and conversat
 
 ## Implementation and acceptance — September 16, 2026
 
-Status: implementation present on canonical `main`; live acceptance in progress. The original audit above is historical. The user explicitly invoked `$goal` to implement Spec 52 and `$rival` plus fixes at key slices.
+Status: implementation on canonical `main`; bounded development-profile live acceptance passed. The original audit above is historical. The user explicitly invoked `$goal` to implement Spec 52 and `$rival` plus fixes at key slices.
 
 ### Implemented
 
@@ -70,9 +72,9 @@ Status: implementation present on canonical `main`; live acceptance in progress.
 - Rival slice A found older stock Manager transition and late startup ordering gaps; fixed and regression-tested.
 - Rival slice B found pause-readiness and interrupted-cleanup retry holes (including trigger-only edits); fixed. Independent 71 backend checks passed.
 - Independent final slice review passed proxy approval, permission classification and transition checks (79 tests). Result-link review verified actual navigation parsers and passed 56 checks.
-- Full suite passed 60/60 test processes before live-discovered fixes. A fresh full run after the initial live fixes also passed 60/60 processes; final checks include the later cleanup, link, and schema fixes. Full typecheck and canonical build succeeded; final runtime checks continue.
+- Full suite passed 60/60 test processes before live-discovered fixes. A fresh full run after the initial live fixes also passed 60/60 processes; final checks include the later cleanup, link, and schema fixes. Full typecheck and canonical build succeeded; final runtime checks are recorded below.
 
-### Live evidence so far
+### Live evidence and fixes
 
 - Canonical unpackaged Electron, Artist OS variant, existing `~/.artist-os` profile, durable host enabled.
 - Builder visible in HQ; General/Agents/Workflows/Automations displayed; normal chat works without a wizard.
@@ -97,4 +99,22 @@ Status: implementation present on canonical `main`; live acceptance in progress.
 - Main, preload and renderer build identities all match code commit `5a98c0a586abd67ab9872fc73144d4d291312892`, source hash `858c0c53ae9a929ebbf70ae0799677b7bb5045296507342e4738d96f79c0ad54`, Artist OS, clean source at build. Another 71-file restart comparison remained unchanged.
 - Final UI inspection found Active work incorrectly classifying completed sessions as missing and retaining cached pre-answer context. Foreign workflow-run queries also conflict with the existing durable workspace boundary. The reviewed correction uses fresh scheduled-work snapshots, counts saved completed sessions as existing, and reads workflow history only for the authorized active workspace. Subscription refresh survives remounts and multiple consumers, discarding superseded reads. Independent review passed 35 tests / 78 assertions; Electron typecheck passed. Internal execution itself is proved above.
 - Cleanup verified through Builder supported tools: `8b0947` and `9f1fe4` are both disabled; the file trigger retained `token: ask` and change-only filtering. The pause reported zero queued/running work affected. Readback exposes binding modes without fixed values or prompts.
-- Remaining live gates: corrected Active work display and final preservation.
+- The final loaded-build checks below close the remaining Active work and preservation gates.
+
+### Final loaded-build verification
+
+- Reviewed Active work correction committed as `3d8cdc2501beeab2ff16aa4b2f554198394ca967`. Canonical build, lint and bundled-asset validation passed. Main/preload/renderer all embed that commit, Artist OS, clean source, and source hash `ce3fbf9aaa19b30ed86b79c25e03fb3650ef409bd0193a60c73a72f75e116672`.
+- Relaunched the canonical unpackaged app with the existing profile and durable host. Active shows both QA rules paused, with completed work absent from pending/attention; no false Missing source, stale token request, or foreign-workspace workflow-read banner. All 71 preservation hashes still match after restart.
+- A final internal one-shot, **Builder QA Live Status**, was scheduled through Manager for 01:40 America/Chicago. Active visibly showed it under Up next while remaining mounted; order `hq-work-6bc250366e1928ce30599d4a` ran once on the next scheduler tick (06:40:59Z), completed at 06:41:12Z, and session `260916-steady-thunder` returned exactly `ACTIVE_REFRESH_OK`. The Up next row disappeared automatically from the still-mounted page, without navigation or refresh. No false attention row replaced it.
+
+- Final full regression suite: **60 test processes passed, 0 failed, 0 not run** (`/tmp/builder-active-final-suite.log`). All-package typecheck passed for the main implementation; the final renderer-only correction passed Electron typecheck and independent 35-test review. Canonical build includes lint and asset validation (`/tmp/builder-3d8cdc250-build.log`).
+- Final readback: QA rules `8b0947` and `9f1fe4` remain disabled; all six tracked QA orders are terminal. The two clearly named QA workers and one workflow remain saved as reproducible fixtures; no scheduled test activity remains. Final 71-file preservation comparison has zero changes.
+- Final rival/truth review found no additional required implementation gap. Earlier review findings were repaired and rechecked; historical pending-test language above was reconciled with the observed passes.
+
+### Acceptance boundaries
+
+- **Implemented:** Builder ownership, supported-tool enforcement, safe same-object edits, development-profile transition and reusable-work handoffs. No broad production migration framework.
+- **Live-tested:** HQ creation/revision, two-step workflows, timed worker/workflow runs, one local file-change trigger, same-ID pause/resume/edit, Manager scheduling and human input, Campaign focus shortcut, approval restoration, deep-link navigation, Active work refresh and restart preservation.
+- **Automated only:** broader invalid-input/auth/conflict/recovery cases, trigger mappings/prerequisites, fresh-profile defaults and voice handoff routing.
+- **Not certified:** physical voice/microphone flow, external webhook/message/URL event delivery, external publishing/spend, packaged/licensed builds or public-release readiness.
+- **Parked:** shared HQ/Campaign destination coordination, V2 enrichment, conversational background proposals, automatic capability-opportunity scanning and unsupported workflow branching.

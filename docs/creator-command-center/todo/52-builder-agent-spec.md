@@ -1,6 +1,6 @@
 ---
-status: verification-in-progress
-implementation_status: implemented-live-acceptance-in-progress
+status: implemented
+implementation_status: development-acceptance-verified
 owner: codex
 created: 2026-09-15
 last_verified: 2026-09-16
@@ -15,7 +15,7 @@ Give the artist one clear worker for creating and maintaining reusable agents, w
 
 **Development-stage constraint:** Artist OS is still in development. Implement the current source of truth and a small, repeatable transition for the existing development profile. Do not build a released-version compatibility framework, support speculative historic versions, or create a parallel legacy Builder system. Preserve Michael's saved agents, custom instructions, chats, workflows, schedules, files, and connections. Development status is not permission to reset data.
 
-Implementation and live acceptance are underway under the user’s explicit September 16 goal instruction. Completion evidence is tracked in the audit; this specification alone is not a release-readiness claim. External publishing and spending remain outside acceptance. Evidence baseline: [Builder audit](../../audits/builder-agent-2026-09-15.md). Current finishing tracker: [September 14, item 3](../../backlog/to-do-sept14.md#3-command-agents-and-division-of-responsibility).
+Implemented on canonical `main` in `5a98c0a58`, with live-discovered Active work corrections in `3d8cdc250`. Automated checks and bounded development-profile acceptance passed September 16 under the user’s explicit goal instruction. Exact evidence and verification limits are tracked in the audit; this is not packaged/public-release certification. External publishing and spending remain outside acceptance. Evidence baseline: [Builder audit](../../audits/builder-agent-2026-09-15.md). Current finishing tracker: [September 14, item 3](../../backlog/to-do-sept14.md#3-command-agents-and-division-of-responsibility).
 
 ### In this slice
 
