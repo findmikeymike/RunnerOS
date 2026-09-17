@@ -104,18 +104,28 @@ export function createDurableConnectedReadBindingResolver(deps = defaults) {
       || current(workspaceId, sourceSlug, urls).sourceIdentity !== before.sourceIdentity) throw failure();
     const binding: DurableConnectedReadBinding = { revision: 'workspace-bearer-read-1', workspaceId, sourceSlug,
       sourceIdentity: before.sourceIdentity, credentialIdentity, urls };
-    return binding;
+    return { binding, token };
   }
   return {
     async capture(workspaceId: string, sourceSlug: string, urls: string[]): Promise<DurableConnectedReadBinding> {
-      try { return await resolveBinding(workspaceId, sourceSlug, urls); } catch { throw failure(); }
+      try { return (await resolveBinding(workspaceId, sourceSlug, urls)).binding; } catch { throw failure(); }
+    },
+    /** Host transport only. Invoke synchronously after revalidation; never serialize the token. */
+    async withCurrentCredential<T>(binding: DurableConnectedReadBinding, dispatch: (token: string) => T): Promise<T> {
+      let resolved: Awaited<ReturnType<typeof resolveBinding>>;
+      try {
+        const pinned = structuredClone(binding);
+        resolved = await resolveBinding(pinned.workspaceId, pinned.sourceSlug, pinned.urls);
+        if (canonical(resolved.binding) !== canonical(pinned)) throw failure();
+      } catch { throw failure(); }
+      return dispatch(resolved.token);
     },
     /** Recheck a persisted host-owned binding. Never accept a renderer-supplied binding. */
     async assertCurrent(binding: DurableConnectedReadBinding): Promise<void> {
       try {
         const pinned = structuredClone(binding);
         const current = await resolveBinding(pinned.workspaceId, pinned.sourceSlug, pinned.urls);
-        if (canonical(current) !== canonical(pinned)) throw failure();
+        if (canonical(current.binding) !== canonical(pinned)) throw failure();
       } catch { throw failure(); }
     },
   };

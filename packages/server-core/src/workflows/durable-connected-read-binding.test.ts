@@ -129,3 +129,12 @@ test('an absent guide and an empty guide have different saved identities', async
   writeFileSync(join(f.directory, 'guide.md'), '');
   await expect(f.resolver.assertCurrent(saved)).rejects.toThrow('binding-unavailable');
 });
+
+test('transport callback receives only the matching current credential and never runs after rotation', async () => {
+  const f = fixture(), saved = await f.resolver.capture('workspace', 'account', f.urls);
+  let dispatched = 0;
+  await f.resolver.withCurrentCredential(saved, token => { expect(token).toBe('synthetic-account-secret'); dispatched++; });
+  f.setCredential({ value: 'rotated-secret' });
+  await expect(f.resolver.withCurrentCredential(saved, () => { dispatched++; })).rejects.toThrow('binding-unavailable');
+  expect(dispatched).toBe(1);
+});
