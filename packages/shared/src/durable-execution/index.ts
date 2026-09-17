@@ -799,6 +799,18 @@ export class DurableJournal {
       return { operation, dispatch: true, attempt };
     });
   }
+  /** Recheck the issued attempt immediately before an awaited adapter dispatches I/O. */
+  assertOperationDispatch(claim: DurableClaim, token: DurableOperationAttemptToken): void {
+    const state = this.fenced(claim);
+    this.operationDispatch(state, claim);
+    const operation = this.operation(state, token.slotId), attempt = operation.attempts.at(-1);
+    if (operation.status !== 'inflight' || !attempt || attempt.outcome
+      || token.ownerId !== claim.ownerId || token.epoch !== claim.epoch
+      || digest({ operationId: attempt.operationId, slotId: attempt.slotId, commandId: attempt.commandId,
+        attempt: attempt.attempt, ownerId: attempt.ownerId, epoch: attempt.epoch }) !== digest(token)) {
+      throw new Error('durable-operation-attempt-mismatch');
+    }
+  }
   private operationOutcome(operation: DurableOperation, input: DurableOperationOutcome, validator?: DurableOperationValidator): DurableOperationOutcome {
     const outcome = JSON.parse(canonical(input)) as DurableOperationOutcome;
     if (!outcome || Array.isArray(outcome) || !['succeeded','not-applied','unknown','failed'].includes(outcome.kind) ||
