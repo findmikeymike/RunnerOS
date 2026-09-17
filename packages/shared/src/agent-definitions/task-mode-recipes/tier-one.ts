@@ -1,3 +1,4 @@
+import { WORLD_BUILDER_AGENT } from '../artist-direction.ts'
 import type { AgentTaskModeDefinition } from '../types.ts'
 
 // Presentation belongs to the saved recipe; the renderer only supplies the icon glyph.
@@ -104,7 +105,6 @@ const marketplace = {
   zero: 'Load only for an explicit Zero choice or a confirmed missing Monid capability. Connection, balance, budget, outage, failed calls, and uncertain paid submissions do not justify switching.',
 }
 const artSkills = ['artist-art-direction', 'artist-typography-taste', 'artist-visual-world-director', 'ad-creative']
-const worldSkills = ['world-immersion', 'artist-narrative-universe', 'artist-campaign-angle-builder']
 const releaseSkills = ['artist-os-release-operations', 'artist-os-rights-and-credits', 'artist-os-dsp-editorial-pitch', 'artist-os-release-package-qa']
 const strategySkills = ['artist-ad-dna', 'ad-library-intel', 'ads-strategy', 'music-ad-conversion-protocol']
 const creativeSkills = ['artist-ad-dna', 'ad-library-intel', 'music-ad-visual-hooks', 'ads-creative-development', 'ad-creative', 'artist-campaign-angle-builder']
@@ -158,19 +158,7 @@ export const TIER_ONE_TASK_MODES: Record<string, AgentTaskModeDefinition[]> = {
     'ad-creative': 'Use when the chosen artwork also needs ad copy or platform-specific creative variants.',
     ...marketplace,
   }),
-  'world-builder': withAdjacency([
-    mode('story-world', 'Story World', 'Define the world and rules behind the music.', ['artist-narrative-universe'], campaign,
-      { retrieve: ['Selected lyrics, demos, themes, and references'] }),
-    mode('fan-experience', 'Fan Experience', 'Build one memorable experience fans can enter.', ['world-immersion'], campaign,
-      { retrieve: ['Selected song world, audience size, artist willingness, budget, and release timing'] }),
-    mode('campaign-rollout', 'Campaign Rollout', 'Turn your established world into release moments.', ['artist-campaign-angle-builder'], [...campaign, 'artist-release-horizon'],
-      { retrieve: ['Established world summary, approved assets, channels, and release milestones; delegate content production and release logistics'] }),
-    mode('full-world', 'Full World', 'Connect the story, fan experience, and rollout in one complete release world.', worldSkills, [...campaign, 'artist-release-horizon'], { fullMode: true }),
-  ], {
-    'artist-narrative-universe': 'Use when the song mythology or world rules are undefined.',
-    'world-immersion': 'Use when the world needs one concrete experience fans can enter.',
-    'artist-campaign-angle-builder': 'Use when the established world needs rollout touchpoints.',
-  }),
+  'world-builder': WORLD_BUILDER_AGENT.metadata.taskModes!,
   'artist-os-release-manager': withAdjacency([
     mode('delivery-metadata', 'Delivery & Metadata', 'Prepare distributor details, files, and pre-save handoffs.', [releaseSkills[0]!], release,
       { optionalSourceSlugs: ['google-drive', 'printing-press-social'], retrieve: ['Exact Release Kit delivery items, master, artwork, metadata, and relevant provider status'] }),

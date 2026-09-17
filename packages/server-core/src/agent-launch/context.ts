@@ -13,7 +13,7 @@ export function selectContextDocsForAgentLaunch(
   docs: LoadedContextDoc[], agentSlug: string | null, taskMode?: ResolvedAgentTaskMode,
 ): LoadedContextDoc[] {
   const authorized = docs.filter(doc => canAgentAccessContextDoc(doc, agentSlug))
-  return taskMode ? filterContextDocsForTaskMode(authorized, taskMode)
+  return taskMode ? filterContextDocsForTaskMode(authorized, taskMode, agentSlug)
     : authorized.filter(doc => shouldInjectContextDoc(doc, agentSlug))
 }
 
@@ -90,5 +90,5 @@ export function prepareAgentLaunchContext(
     metadata: { name: 'Artist OS Workspace', description: 'Compact product-scope marker used for shared Artist OS operating rules.', routing: { mode: 'broadcast' }, delivery: 'always', enabled: true },
     body: `Artist OS workspace scope: ${scope}.`, path: workspace.rootPath, workspaceRootPath: workspace.rootPath,
   }
-  return filterContextDocsForTaskMode([marker, ...docs.filter(doc => doc.slug !== marker.slug)], taskMode)
+  return filterContextDocsForTaskMode([marker, ...docs.filter(doc => doc.slug !== marker.slug)], taskMode, agentSlug)
 }

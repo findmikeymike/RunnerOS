@@ -17,6 +17,7 @@ import { loadActiveAgentsForWorkspace } from '../../sessions/agent-registration'
 
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
+  resolveArtistDirectionForScope,
   loadAllGlobalAgents,
   loadGlobalAgent,
   readActivatedAgents,
@@ -78,8 +79,10 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
   // Reads (no mutex needed; storage layer is read-only safe)
   // -------------------------------------------------------------------------
 
-  server.handle(RPC_CHANNELS.agentDefinitions.LIST_ALL, async (): Promise<LoadedAgent[]> => {
-    return loadAllGlobalAgents()
+  server.handle(RPC_CHANNELS.agentDefinitions.LIST_ALL, async (_ctx, workspaceId?: string): Promise<LoadedAgent[]> => {
+    const workspace = workspaceId ? getWorkspaceByNameOrId(workspaceId) : undefined
+    if (workspaceId && !workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    return loadAllGlobalAgents().map(agent => resolveArtistDirectionForScope(agent, workspace?.artistWorkspaceScope))
   })
 
   server.handle(RPC_CHANNELS.agentDefinitions.LIST_ACTIVE_IN_WORKSPACE, async (_ctx, workspaceId: string): Promise<string[]> => {
@@ -88,8 +91,11 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
     return loadActiveAgentsForWorkspace(workspace).map(agent => agent.slug)
   })
 
-  server.handle(RPC_CHANNELS.agentDefinitions.GET, async (_ctx, slug: string): Promise<LoadedAgent | null> => {
-    return loadGlobalAgent(slug)
+  server.handle(RPC_CHANNELS.agentDefinitions.GET, async (_ctx, slug: string, workspaceId?: string): Promise<LoadedAgent | null> => {
+    const workspace = workspaceId ? getWorkspaceByNameOrId(workspaceId) : undefined
+    if (workspaceId && !workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const agent = loadGlobalAgent(slug)
+    return agent ? resolveArtistDirectionForScope(agent, workspace?.artistWorkspaceScope) : null
   })
 
   // -------------------------------------------------------------------------

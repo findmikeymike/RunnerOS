@@ -308,7 +308,7 @@ import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntr
 import type { PulseAction } from '@craft-agent/shared/pulses'
 import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
-import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, isAgentAllowedInArtistWorkspace, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, isAgentAllowedInArtistWorkspace, loadAllGlobalAgents, loadGlobalAgent, resolveArtistDirectionForScope } from '@craft-agent/shared/agent-definitions'
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@craft-agent/shared/agent-prompt'
 import { GENERAL_AGENT_TASK_MODE_ID, isGeneralAgentTaskMode, buildAgentTaskModeStarterPrompt, resolveAgentSessionTaskMode, selectTaskModeSourceSlugs } from '@craft-agent/shared/agent-definitions/task-modes'
 import { filterAttachmentsForModelInput } from './runtime-config'
@@ -3197,8 +3197,9 @@ export class SessionManager implements ISessionManager {
     if (!isAgentAllowedInArtistWorkspace(agentSlug, ws.artistWorkspaceScope)) {
       throw new Error(`Agent "${agentSlug}" is not available in this workspace.`)
     }
-    const agent = loadGlobalAgent(agentSlug)
-    if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
+    const storedAgent = loadGlobalAgent(agentSlug)
+    if (!storedAgent) throw new Error(`Agent not found: ${agentSlug}`)
+    const agent = resolveArtistDirectionForScope(storedAgent, ws.artistWorkspaceScope)
     const taskMode = resolveAgentSessionTaskMode(agent, options.taskModeId, options.taskModeSelectionSource)
     const launchAgent = taskMode
       ? {
@@ -3586,8 +3587,9 @@ export class SessionManager implements ISessionManager {
         return workspace.rootPath
       },
       resolveBundle: async (workspaceId, agentSlug, taskModeId) => {
-        const agent = loadGlobalAgent(agentSlug)
-        if (!agent) return null
+        const storedAgent = loadGlobalAgent(agentSlug)
+        if (!storedAgent) return null
+        const agent = resolveArtistDirectionForScope(storedAgent, getWorkspaceByNameOrId(workspaceId)?.artistWorkspaceScope)
         try {
           assertDurableWorkflowAgentMetadata(agent.metadata, taskModeId)
           const workspace = getWorkspaceByNameOrId(workspaceId)
@@ -4472,6 +4474,10 @@ export class SessionManager implements ISessionManager {
         const artistDefaultAgentsPreviouslyInstalled = new Set<string>(
           artistDefaultAgentSlugs.filter(agentSlug => Boolean(loadGlobalAgent(agentSlug))),
         )
+        if (resolveRuntimeIdentity().variant === 'artist-os') {
+          const { migrateArtistDirection } = await import('@craft-agent/shared/agent-definitions')
+          migrateArtistDirection()
+        }
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
         if (seeded > 0) {
           sessionLog.info(`[agent-definitions] Seeded ${seeded} starter agent(s) into global library`)
@@ -9465,6 +9471,29 @@ user a clickable link to where the thing now lives.`
           managed.spawnedFromAgent?.agentSlug ?? null,
           input,
         ),
+        proposeBrandingUpdateFn: async (input) => {
+          if (managed.workspace.artistWorkspaceScope !== 'hq' || managed.spawnedFromAgent?.agentSlug !== 'branding-agent') {
+            throw new Error('Only Artist Direction in Artist HQ can propose shared branding changes.')
+          }
+          if (managed.permissionMode === 'safe') throw new Error('Preparing a branding proposal requires write permission.')
+          assertTeamPermission(managed.workspace.rootPath, 'files.write')
+          const { getBrandingState, proposeBrandingUpdate } = await import('../handlers/rpc/branding-state')
+          const state = await getBrandingState(managed.workspace.id)
+          const result = await proposeBrandingUpdate(managed.workspace.id, { ...input, sourceSessionId: managed.id, expectedRevision: state.revision })
+          this.eventSink?.(RPC_CHANNELS.brandingState.CHANGED, { to: 'all' }, managed.workspace.id, result)
+          return { pending: result.proposals.filter(proposal => proposal.status === 'pending').map(proposal => ({ id: proposal.id, title: proposal.title })), applied: false, nextStep: 'Review the specific changes in Brain → Branding and click Apply to Branding. Pending proposals are not shared artist context.' }
+        },
+        saveReleaseCreativeBriefFn: async (input) => {
+          if (managed.permissionMode === 'safe') throw new Error('Saving creative direction requires write permission.')
+          assertTeamPermission(managed.workspace.rootPath, 'files.write')
+          const { saveReleaseCreativeBrief } = await import('../hq-state/release-creative-brief')
+          const result = await saveReleaseCreativeBrief(managed.workspace.rootPath, input, {
+            agentSlug: managed.spawnedFromAgent?.agentSlug ?? null,
+            workspaceScope: managed.workspace.artistWorkspaceScope,
+          })
+          this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, managed.workspace.id, loadAllContextDocs(managed.workspace.rootPath))
+          return result
+        },
         findSignalIdeasFn: async (input) => {
           return this.getSignalReader().findForWorker(managed.workspace.id, managed.spawnedFromAgent?.agentSlug, input)
         },
@@ -10259,6 +10288,7 @@ user a clickable link to where the thing now lives.`
             usable: isSourceUsable(source),
           }))
           let agents = loadAllGlobalAgents()
+            .map(agent => resolveArtistDirectionForScope(agent, managed.workspace.artistWorkspaceScope))
             .filter(agent => isAgentAllowedInArtistWorkspace(agent.slug, managed.workspace.artistWorkspaceScope))
             .map(agent => {
             const sources = agent.metadata.sources ?? []
@@ -10575,7 +10605,8 @@ user a clickable link to where the thing now lives.`
             const inputMessageId = managed.lastSentInputMessageId
             if (!managed.isProcessing || !admitted || !inputMessageId) throw new Error('An active focused response is required.')
             const agentSlug = admitted.launchReceipt?.agent?.slug ?? managed.spawnedFromAgent?.agentSlug
-            const definition = agentSlug ? loadGlobalAgent(agentSlug) : null
+            const storedDefinition = agentSlug ? loadGlobalAgent(agentSlug) : null
+            const definition = storedDefinition ? resolveArtistDirectionForScope(storedDefinition, managed.workspace.artistWorkspaceScope) : null
             if (!definition) throw new Error('The saved worker is unavailable.')
             const availableSkill = loadAllSkills(managed.workspace.rootPath).find(skill => skill.slug === input.skillSlug || skill.aliases?.includes(input.skillSlug))
             // Registration is limited to installed, worker-declared global instructions.
@@ -10622,6 +10653,15 @@ user a clickable link to where the thing now lives.`
           const service = new AgentMessageService({
             createSession: (wsId, opts) => this.createSession(wsId, opts).then((session) => ({ id: session.id })),
             resolveAgentSessionOptions: (wsId, agentSlug, options) => this.resolveAgentSessionOptions(wsId, agentSlug, options),
+            resolveTaskModeId: (wsId, agentSlug, taskModeId) => {
+              const workspace = getWorkspaceByNameOrId(wsId)
+              const stored = loadGlobalAgent(agentSlug)
+              if (!workspace || !stored) throw new Error('The delegated worker is unavailable.')
+              const scoped = resolveArtistDirectionForScope(stored, workspace.artistWorkspaceScope)
+              const mode = resolveAgentSessionTaskMode(scoped, taskModeId, 'handoff')
+              if (!mode) throw new Error('The delegated focus is unavailable.')
+              return mode.id
+            },
             sendMessage: (sessionId, prompt, options) => this.sendMessage(
               sessionId,
               prompt,
@@ -16804,7 +16844,8 @@ user a clickable link to where the thing now lives.`
     const intent = parseAgentFocusTransferIntent(rawIntent)
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace || !isAgentAllowedInArtistWorkspace(intent.agentSlug, workspace.artistWorkspaceScope)) throw new Error('Transferred worker is unavailable in this workspace.')
-    const agent = loadGlobalAgent(intent.agentSlug)
+    const storedAgent = loadGlobalAgent(intent.agentSlug)
+    const agent = storedAgent ? resolveArtistDirectionForScope(storedAgent, workspace.artistWorkspaceScope) : null
     const validated = validateTransferredAgentFocus(intent, agent ?? undefined, {
       installedSkillSlugs: new Set(loadAllSkills(workspace.rootPath).flatMap(skill => [skill.slug, ...(skill.aliases ?? [])])),
       readySourceSlugs: new Set(loadAllSources(workspace.rootPath).filter(isSourceUsable).map(source => source.config.slug)),

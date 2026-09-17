@@ -2,9 +2,9 @@
 
 ## Core thesis
 
-Music without narrative context is a soundtrack with no movie. The audience needs a world to inhabit. The brand world should reduce cognitive dissonance between sound, visuals, character, and story.
+Narrative context can connect sound, visuals, behavior and meaning. Music can also stand on its own. Use this house as an optional lens for approved artist direction, not a requirement to create fiction or make every public moment part of a movie.
 
-## The eight-step house
+## Optional house framework
 
 1. Land: genre and style
    Choose the universe that houses the music. Action, horror, romance, sci-fi, documentary, street realism, comedy, western, noir, fantasy.
@@ -16,7 +16,7 @@ Music without narrative context is a soundtrack with no movie. The audience need
    Define what can and cannot happen. A raw-authentic artist should not suddenly use hyper-rendered robot visuals unless there is a narrative reason. A futuristic avatar world should not randomly switch into handheld confessional realism unless it is part of the rules.
 
 4. Framing: character archetypes
-   Decide the primary motivation and secondary spice. Keep an 80/20 split.
+   Explore motivations or archetypal associations only when they clarify audience feeling. No fixed split or persona label is required.
 
 5. Walls: sandbox
    Define the ongoing show. Is the artist a documentary, a road movie, a luxury revenge drama, a haunted motel diary, a future-city rebellion?
@@ -32,7 +32,7 @@ Music without narrative context is a soundtrack with no movie. The audience need
 
 ## Pattern break rule
 
-The brain filters out average. Use surprise inside structure: familiar enough to understand, strange enough to remember.
+Surprise can make a specific detail memorable. Keep it connected to the music; a direct, familiar form with emotional conviction can work just as well.
 
 ## Halloween Test
 

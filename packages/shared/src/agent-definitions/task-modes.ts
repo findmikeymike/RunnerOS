@@ -1,3 +1,5 @@
+import { CAMPAIGN_CREATIVE_DIRECTION_AGENT_SLUGS } from '../workspace-context/types.ts';
+import { ARTIST_DIRECTION_AGENT, CAMPAIGN_CREATIVE_DIRECTION, WORLD_BUILDER_AGENT } from './artist-direction.ts';
 import type { AgentTaskModeDefinition, LoadedAgent } from './types.ts';
 
 export const GENERAL_AGENT_TASK_MODE_ID = 'general';
@@ -44,12 +46,35 @@ export interface ResolvedAgentTaskMode {
 
 /** Resolve host-approved recipes against the worker inventory, including on-demand General. */
 export function resolveAgentTaskMode(
-  agent: Pick<LoadedAgent, 'slug' | 'metadata'>,
+  agent: Pick<LoadedAgent, 'slug' | 'metadata'> & Partial<Pick<LoadedAgent, 'systemPrompt'>>,
   taskModeId: string | undefined,
 ): ResolvedAgentTaskMode | undefined {
   if (!taskModeId) return undefined;
   if (agent.slug === 'concierge' && taskModeId === 'just-talk') taskModeId = GENERAL_AGENT_TASK_MODE_ID;
   const modes = consolidateManagerGeneralModes(agent.metadata.taskModes ?? []);
+  const canonical = (value: unknown) => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item).filter(([, value]) => value !== undefined).sort(([a], [b]) => a.localeCompare(b))) : item);
+  const hasStockRole = (role: typeof CAMPAIGN_CREATIVE_DIRECTION) => agent.systemPrompt?.trim() === role.systemPrompt.trim()
+    && canonical(agent.metadata.skills) === canonical(role.metadata.skills)
+    && canonical(agent.metadata.taskModes) === canonical(role.metadata.taskModes);
+  // Resume shipped focus IDs through the scope upgrade; customized recipes keep
+  // their exact behavior and arbitrary invalid IDs still fail validation.
+  if (agent.slug === 'branding-agent' && !modes.some(mode => mode.id === taskModeId)) {
+    const stockCampaign = hasStockRole(CAMPAIGN_CREATIVE_DIRECTION);
+    const stockHq = hasStockRole(ARTIST_DIRECTION_AGENT);
+    const legacyCampaign: Record<string, string> = {
+      'brand-audit': 'audience-connection', 'artist-world': 'release-direction',
+      'voice-beliefs': 'audience-connection', 'campaign-angles': 'campaign-expression',
+      'full-brand-system': 'creative-brief',
+    };
+    if (stockCampaign && Object.prototype.hasOwnProperty.call(legacyCampaign, taskModeId)) taskModeId = legacyCampaign[taskModeId];
+    else if (stockHq && taskModeId === 'campaign-angles') taskModeId = 'public-expression';
+  }
+  if (agent.slug === 'world-builder' && !modes.some(mode => mode.id === taskModeId)
+    && hasStockRole(WORLD_BUILDER_AGENT)) {
+    if (taskModeId === 'story-world' || taskModeId === 'full-world') taskModeId = 'fan-experience';
+    else if (taskModeId === 'campaign-rollout') taskModeId = 'world-touchpoints';
+  }
   // Preserve saved setup conversations after the shipped domain cards upgrade.
   if (agent.slug === 'setup-concierge' && !modes.some(mode => mode.id === taskModeId)
     && modes.some(mode => mode.id === 'models' && mode.primarySkillSlugs.includes('setup-models'))) {
@@ -75,7 +100,7 @@ export function resolveAgentTaskMode(
     optionalSourceSlugs: [...new Set([...(agent.metadata.sources ?? []), ...(agent.metadata.optionalSources ?? [])])],
     fullMode: false,
     context: {
-      preloadTopics: ['artist-profile', 'artist-voice', 'artist-branding', 'artist-release-horizon', 'mission-brief'],
+      preloadTopics: ['artist-profile', 'artist-voice', 'artist-branding', 'artist-release-horizon', 'mission-brief', 'campaign-creative-direction'],
       retrieveOnDemandTopics: ['relevant campaign details', 'approved outputs and Vault references', 'audience evidence', 'specialist domain context'],
     },
   } : undefined);
@@ -117,7 +142,7 @@ export function resolveAgentTaskMode(
 
 /** Interactive workers default to General; unattended launches retain explicit-focus policy. */
 export function resolveAgentSessionTaskMode(
-  agent: Pick<LoadedAgent, 'slug' | 'metadata'>,
+  agent: Pick<LoadedAgent, 'slug' | 'metadata'> & Partial<Pick<LoadedAgent, 'systemPrompt'>>,
   taskModeId?: string,
   selectionSource?: 'user' | 'manager' | 'workflow' | 'automation' | 'handoff',
 ): ResolvedAgentTaskMode | undefined {
@@ -152,10 +177,16 @@ export function selectTaskModeSourceSlugs(
 export function filterContextDocsForTaskMode<T extends { slug: string; body?: string }>(
   docs: T[],
   mode: ResolvedAgentTaskMode | undefined,
+  agentSlug?: string | null,
 ): T[] {
   const topics = mode?.context?.preloadTopics;
   const allowed = topics ? new Set(topics) : undefined;
-  const selected = allowed ? docs.filter((doc) => allowed.has(doc.slug)) : docs;
+  // Callers supply authorized documents. A focus narrows task context, but must
+  // not discard the saved direction that its production work is implementing.
+  const receivesCreativeBrief = Boolean(agentSlug && (CAMPAIGN_CREATIVE_DIRECTION_AGENT_SLUGS as readonly string[]).includes(agentSlug));
+  const selected = allowed ? docs.filter((doc) => allowed.has(doc.slug)
+    || (doc.slug === 'branding-support-index' && allowed.has('artist-branding') && docs.some(candidate => candidate.slug === 'artist-branding'))
+    || (receivesCreativeBrief && doc.slug === 'campaign-creative-direction')) : docs;
   return selected;
 }
 

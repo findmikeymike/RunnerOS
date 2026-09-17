@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import ts from 'typescript'
 import { ensureRequiredAgents, readActivatedAgents, setAgentActive, writeActivatedAgents, writeGlobalAgent, STARTER_AGENTS, type AgentStorageOptions } from '@craft-agent/shared/agent-definitions'
+import { ARTIST_DIRECTION_AGENT } from '@craft-agent/shared/agent-definitions/artist-direction'
 import { REQUIRED_BUILTIN_AGENT_SLUGS } from '@craft-agent/shared/agent-definitions/registration'
 import { loadActiveAgentsForWorkspace, shouldBackfillLegacyAgentActivation } from './agent-registration'
 
@@ -89,4 +90,17 @@ test('startup backfills stay legacy-only except the explicit one-time Builder tr
   find(source)
   expect(checked).toBeGreaterThan(10)
   expect(unguarded).toEqual([])
+})
+
+ test('one activated identity exposes the scope-specific role without rewriting its definition', () => {
+  const f = fixture()
+  writeGlobalAgent(ARTIST_DIRECTION_AGENT, f.options)
+  setAgentActive(f.workspace.rootPath, 'branding-agent', true)
+  const campaign = loadActiveAgentsForWorkspace(f.workspace, f.options).find(agent => agent.slug === 'branding-agent')!
+  const hq = loadActiveAgentsForWorkspace({ ...f.workspace, artistWorkspaceScope: 'hq' }, f.options).find(agent => agent.slug === 'branding-agent')!
+  expect(campaign.metadata.name).toBe('Creative Direction')
+  expect(campaign.metadata.skills).toContain('release-creative-direction')
+  expect(campaign.metadata.skills).not.toContain('artist-brand-dna-audit')
+  expect(hq.metadata.name).toBe('Artist Direction')
+  expect(hq.metadata.skills).toContain('artist-brand-dna-audit')
 })

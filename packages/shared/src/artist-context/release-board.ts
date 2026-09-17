@@ -60,8 +60,8 @@ const DEFAULT_ITEMS: Record<ReleaseBoardCategory['id'], ReleaseBoardItem[]> = {
   music: [
     { id: 'master', label: 'Master File', status: 'needed', tier: 'core', assetKinds: ['master'] },
     { id: 'lyrics', label: 'Lyrics', status: 'needed', tier: 'core', assetKinds: ['lyrics'] },
-    { id: 'song-world', label: 'Creative World', status: 'needed', tier: 'core' },
-    { id: 'release-identity', label: 'Branding', status: 'needed', tier: 'core' },
+    { id: 'release-identity', label: 'Creative Direction', status: 'needed', tier: 'core' },
+    { id: 'song-world', label: 'Fan Experience', status: 'needed', tier: 'optional', included: false },
     { id: 'clean-version', label: 'Clean Version', status: 'needed', tier: 'conditional', included: false },
     { id: 'instrumental', label: 'Instrumental', status: 'needed', tier: 'optional', included: false },
     { id: 'stems', label: 'Stems', status: 'needed', tier: 'optional', included: false },
@@ -120,13 +120,13 @@ const ITEM_ACTIONS: Record<string, ReleaseBoardItemAction> = {
     kind: 'agent',
     targetSlug: 'world-builder',
     targetName: 'World Builder',
-    instruction: 'I want to discover the song-specific creative world: its central premise, setting, emotional logic, recurring motifs, characters or forces, scenes, and practical campaign spokes. I want to focus on the universe itself before turning it into a graphic-design system.',
+    instruction: 'I want to use the saved Release Creative Direction and artist context to develop one distinctive fan experience, committed act, or world for this release. Preserve the chosen meaning and idea. Explain how people encounter it, how it works, and what is practical. If an experience adds nothing useful, say so; do not force lore or mystery.',
   },
   'music:release-identity': {
     kind: 'agent',
     targetSlug: 'branding-agent',
-    targetName: 'Branding Agent',
-    instruction: 'I want to turn the song and its creative world into a memorable campaign branding system: colors, typography, symbols, tagline, language, audience signal, and repeatable asset rules. This should package the existing world rather than invent a second one.',
+    targetName: 'Creative Direction',
+    instruction: 'I want to use who I am, what I stand for, and this release to find the strongest campaign idea and the people who will feel it most. Explore the words, images, behaviors, and release moments that express my message and deepen connection. Build a useful Release Creative Brief from the direction we choose; keep World Builder optional and production styling downstream.',
   },
   'music:record-doctor': {
     kind: 'agent',

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { loadGlobalAgent, readActivatedAgents, resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions'
+import { getWorkspaces } from '@craft-agent/shared/config'
+import { resolveArtistDirectionForScope, loadGlobalAgent, readActivatedAgents, resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions'
 import {
   ARTIST_CALENDAR_CONTEXT_SLUG,
   artistCalendarMetadata,
@@ -815,7 +816,8 @@ function validateAction(rootPath: string, action: QueueWorkAction): void {
   }
   for (const execution of executions) {
     if (execution.type === 'agent-task') {
-      const agent = loadGlobalAgent(execution.agentSlug)
+      const storedAgent = loadGlobalAgent(execution.agentSlug)
+      const agent = storedAgent ? resolveArtistDirectionForScope(storedAgent, getWorkspaces().find(workspace => workspace.rootPath === rootPath)?.artistWorkspaceScope) : null
       if (!readActivatedAgents(rootPath).active.includes(execution.agentSlug) || !agent) {
         throw new Error(`Automation agent is not active: ${execution.agentSlug}`)
       }

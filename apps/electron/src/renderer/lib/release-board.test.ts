@@ -34,13 +34,13 @@ describe('release board utilities', () => {
       'setup',
       'promotion',
     ])
-    expect(getBoardTotals(board)).toEqual({ done: 0, total: 21 })
+    expect(getBoardTotals(board)).toEqual({ done: 0, total: 20 })
     expect(board.categories.find((category) => category.id === 'music')?.label).toBe('Foundation')
     expect(board.categories.find((category) => category.id === 'music')?.items.map((item) => item.label)).toEqual([
       'Master File',
       'Lyrics',
-      'Creative World',
-      'Branding',
+      'Creative Direction',
+      'Fan Experience',
       'Clean Version',
       'Instrumental',
       'Stems',
@@ -73,9 +73,22 @@ describe('release board utilities', () => {
     const withUgc = setReleaseBoardItemIncluded(board, 'content', 'ugc-clips', true)
     const withoutUgc = setReleaseBoardItemIncluded(withUgc, 'content', 'ugc-clips', false)
 
-    expect(getBoardTotals(board)).toEqual({ done: 0, total: 21 })
-    expect(getBoardTotals(withUgc)).toEqual({ done: 0, total: 22 })
-    expect(getBoardTotals(withoutUgc)).toEqual({ done: 0, total: 21 })
+    expect(getBoardTotals(board)).toEqual({ done: 0, total: 20 })
+    expect(getBoardTotals(withUgc)).toEqual({ done: 0, total: 21 })
+    expect(getBoardTotals(withoutUgc)).toEqual({ done: 0, total: 20 })
+  })
+
+  test('keeps existing fan-experience work when making that lane optional', () => {
+    const board = buildDefaultReleaseBoard('workspace-1')
+    const item = board.categories.find(category => category.id === 'music')!.items.find(item => item.id === 'song-world')!
+    Object.assign(item, { label: 'Creative World', tier: 'core', status: 'done', linkedSessionId: 'saved-world-chat' })
+    const parsed = parseReleaseBoardDoc({ body: serializeReleaseBoardBody(board) })!
+    const restored = parsed.categories.find(category => category.id === 'music')!.items.find(item => item.id === 'song-world')!
+    expect(restored.tier).toBe('optional')
+    expect(restored.included).toBe(true)
+    expect(restored.status).toBe('done')
+    expect(restored.linkedSessionId).toBe('saved-world-chat')
+    expect(getReleaseBoardItemAction('music', 'release-identity')?.targetSlug).toBe('branding-agent')
   })
 
   test('round-trips through a workspace context doc body', () => {
@@ -141,7 +154,7 @@ describe('release board utilities', () => {
     expect(itemStatus(parsed!, 'content', 'performance-clips')).toBe('needed')
     expect(itemStatus(parsed!, 'setup', 'rights-splits')).toBe('needed')
     expect(itemStatus(parsed!, 'setup', 'release-qa')).toBe('needed')
-    expect(getBoardTotals(parsed!)).toEqual({ done: 1, total: 22 })
+    expect(getBoardTotals(parsed!)).toEqual({ done: 1, total: 21 })
   })
 
   test('preserves an explicit timestamped N/A decision during migration', () => {

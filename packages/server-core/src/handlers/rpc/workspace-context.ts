@@ -13,7 +13,7 @@ import {
   type LoadedContextDoc,
 } from '@craft-agent/shared/workspace-context'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { loadGlobalAgent, resolveAgentTaskMode, isAgentAllowedInArtistWorkspace, type ResolvedAgentTaskMode } from '@craft-agent/shared/agent-definitions'
+import { resolveArtistDirectionForScope, loadGlobalAgent, resolveAgentTaskMode, isAgentAllowedInArtistWorkspace, type ResolvedAgentTaskMode } from '@craft-agent/shared/agent-definitions'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { prepareAgentLaunchContext } from '../../agent-launch/context'
@@ -110,7 +110,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
       if (!isAgentAllowedInArtistWorkspace(agentSlug, workspace.artistWorkspaceScope)) throw new Error('This worker is unavailable in this workspace.')
       const agent = loadGlobalAgent(agentSlug)
       if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
-      taskMode = resolveAgentTaskMode(agent, taskModeId)
+      taskMode = resolveAgentTaskMode(resolveArtistDirectionForScope(agent, workspace.artistWorkspaceScope), taskModeId)
     }
     return prepareAgentLaunchContext(workspace, agentSlug, taskMode)
   })

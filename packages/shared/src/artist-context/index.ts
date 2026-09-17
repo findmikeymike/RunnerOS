@@ -27,3 +27,5 @@ export * from './release-board.ts';
 export * from './campaign-worker-context.ts';
 export * from './release-horizon.ts';
 export * from './career-research.ts';
+
+export * from './branding-state.ts';

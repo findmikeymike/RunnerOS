@@ -709,7 +709,7 @@ export function NavigationProvider({
           }
           const agentSelection = parseAgentDeepLinkSelection(parsed.params)
           const session = agentSelection ? await (async () => {
-            const agent = await window.electronAPI.getAgentDefinition(agentSelection.agentSlug)
+            const agent = await window.electronAPI.getAgentDefinition(agentSelection.agentSlug, workspaceId)
             if (!agent) throw new Error(`Agent not found: ${agentSelection.agentSlug}`)
             const [skills, sources, contextDocs] = await Promise.all([
               window.electronAPI.getSkills(workspaceId),

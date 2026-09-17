@@ -82,3 +82,15 @@ describe('registered agent activation RPC lifecycle', () => {
     expect(definitions.readActivatedAgents(workspaces[0]!.rootPath).active).toEqual([])
   })
 })
+
+ it('projects workspace reads while keeping canonical library editing unscoped', async () => {
+  const { ARTIST_DIRECTION_AGENT } = await import('@craft-agent/shared/agent-definitions/artist-direction')
+  definitions.writeGlobalAgent(ARTIST_DIRECTION_AGENT, options)
+  const campaign = await call(channels.GET, 'branding-agent', 'campaign')
+  expect(campaign.metadata.name).toBe('Creative Direction')
+  expect(campaign.metadata.skills).toContain('release-creative-direction')
+  expect((await call(channels.LIST_ALL, 'campaign')).find((agent: any) => agent.slug === 'branding-agent').metadata.name).toBe('Creative Direction')
+  expect((await call(channels.GET, 'branding-agent')).metadata.name).toBe('Artist Direction')
+  expect(definitions.loadGlobalAgent('branding-agent', options)?.metadata.name).toBe('Artist Direction')
+  await expect(call(channels.LIST_ALL, 'missing')).rejects.toThrow('Workspace not found')
+})

@@ -328,6 +328,8 @@ export interface SessionScopedToolCallbacks {
   getVisualSurfaceStateFn?: () => Promise<import('@craft-agent/session-tools-core').VisualSurfaceStateToolResult>;
   /** Save an encrypted RunnerOS secret or source credential. */
   manageArtistBrainFn?: (input: import('@craft-agent/session-tools-core').ManageArtistBrainInput) => Promise<unknown>;
+  proposeBrandingUpdateFn?: (input: import('@craft-agent/session-tools-core').ProposeBrandingUpdateInput) => Promise<unknown>;
+  saveReleaseCreativeBriefFn?: (input: import('@craft-agent/session-tools-core').SaveReleaseCreativeBriefInput) => Promise<unknown>;
   importArtistCommunityFn?: (input: import('@craft-agent/session-tools-core').ImportArtistCommunityInput) => Promise<unknown>;
   importArtistNetworkFn?: (input: import('@craft-agent/session-tools-core').ImportArtistNetworkInput) => Promise<unknown>;
   setupLlmConnectionFn?: (input: import('@craft-agent/session-tools-core').SetupLlmConnectionInput) => Promise<unknown>;

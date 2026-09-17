@@ -103,7 +103,8 @@ export interface ContextDocMetadata {
  *
  * Mirrors `visualAgent: true` in the agent definitions — the existing signal
  * for "produces something the audience looks at" — plus `branding-agent`,
- * which owns the doc without being a visual agent itself. A new visual agent
+ * which owns the doc without being a visual agent itself, and `world-builder`,
+ * which develops experiences from the artist's direction. A new visual agent
  * should be added here too.
  *
  * Lives in this module rather than beside the doc definition so
@@ -122,6 +123,17 @@ export const ARTIST_BRANDING_ALWAYS_AGENT_SLUGS = [
   'shopify-agent',
   'print-agent',
   'branding-agent',
+  'world-builder',
+] as const;
+
+/** Campaign direction is shared with its author and the specialists developing it. */
+export const CAMPAIGN_CREATIVE_DIRECTION_AGENT_SLUGS = [
+  'branding-agent',
+  'world-builder',
+  'art-director',
+  'scriptwriter',
+  'video-director',
+  'content-genius',
 ] as const;
 
 /**
@@ -153,6 +165,7 @@ export const SYSTEM_CONTEXT_DOC_DELIVERY: Readonly<Record<string, {
   // Brand DNA: in front of the agents that make audience-facing artifacts,
   // readable by everyone else.
   'artist-branding': { delivery: 'on-demand', alwaysFor: ARTIST_BRANDING_ALWAYS_AGENT_SLUGS },
+  'campaign-creative-direction': { delivery: 'on-demand', alwaysFor: CAMPAIGN_CREATIVE_DIRECTION_AGENT_SLUGS },
   // A contact library is a lookup surface, never prompt furniture.
   'artist-network': { delivery: 'on-demand' },
 };

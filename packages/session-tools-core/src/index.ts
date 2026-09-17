@@ -555,6 +555,8 @@ export type { ImportArtistNetworkInput } from './handlers/import-artist-network.
 
 export { BRAIN_FIELDS, validatedManageArtistBrainSchema } from './handlers/manage-artist-brain.ts';
 export type { ManageArtistBrainInput } from './handlers/manage-artist-brain.ts';
+export { saveReleaseCreativeBriefSchema } from './handlers/save-release-creative-brief.ts';
+export type { SaveReleaseCreativeBriefInput } from './handlers/save-release-creative-brief.ts';
 
 export { importArtistCommunitySchema } from './handlers/import-artist-community.ts';
 export type { ImportArtistCommunityInput } from './handlers/import-artist-community.ts';
@@ -567,3 +569,6 @@ export { ListAutomationsSchema, GetAutomationSchema, UpdateAutomationSchema } fr
 
 export { handleGetCustomSkill, handleCreateSkill, handleUpdateSkill } from './handlers/custom-skills.ts';
 export type { CustomSkillIdentity, CreateCustomSkillInput, UpdateCustomSkillInput, CustomSkillResult } from './handlers/custom-skills.ts';
+
+export { proposeBrandingUpdateSchema } from './handlers/propose-branding-update.ts';
+export type { ProposeBrandingUpdateInput } from './handlers/propose-branding-update.ts';

@@ -494,6 +494,15 @@ export const RPC_CHANNELS = {
     REPLACE: 'automations:replace',
     GET_TRIGGER_SERVER_INFO: 'automations:getTriggerServerInfo',
   },
+  brandingState: {
+    GET: 'brandingState:get',
+    PROPOSE: 'brandingState:propose',
+    APPLY: 'brandingState:apply',
+    DISMISS: 'brandingState:dismiss',
+    ADD_ATTACHMENT: 'brandingState:addAttachment',
+    REMOVE_ATTACHMENT: 'brandingState:removeAttachment',
+    CHANGED: 'brandingState:changed',
+  },
   workspaceContext: {
     /** List every context doc in a workspace. */
     LIST: 'workspaceContext:list',

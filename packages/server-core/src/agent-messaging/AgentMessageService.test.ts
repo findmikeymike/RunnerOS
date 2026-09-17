@@ -503,3 +503,24 @@ describe('mode-aware delegation', () => {
     expect(creates).toBe(0);
   });
 });
+
+ test('delegation canonicalizes a host-approved legacy focus before composing and verifying receipt', async () => {
+  const { ARTIST_DIRECTION_AGENT, resolveArtistDirectionForScope } = await import('@craft-agent/shared/agent-definitions/artist-direction')
+  const { resolveAgentTaskMode } = await import('@craft-agent/shared/agent-definitions/task-modes')
+  const campaign = resolveArtistDirectionForScope(ARTIST_DIRECTION_AGENT, 'campaign')
+  const service = new AgentMessageService(deps({
+    resolveTaskModeId: (workspaceId, slug, modeId) => {
+      expect([workspaceId, slug]).toEqual(['ws', 'branding-agent'])
+      return resolveAgentTaskMode(campaign, modeId)!.id
+    },
+    resolveAgentSessionOptions: async (_workspaceId, _slug, options) => {
+      expect(options?.taskModeId).toBe('audience-connection')
+      const mode = resolveAgentTaskMode(campaign, options?.taskModeId)!
+      return { permissionMode: 'safe', agentSkillSlugs: mode.primarySkillSlugs,
+        launchReceipt: { createdAt: 1, origin: 'agent', config: {}, injected: { skills: mode.primarySkillSlugs, sources: [], contextDocs: [] },
+          taskMode: { schemaVersion: 1, id: mode.id, label: mode.label, definitionRevision: mode.definitionRevision, selectionSource: 'handoff', primarySkills: mode.primarySkillSlugs, adjacentSkills: [], fullMode: false } } }
+    },
+  }))
+  const result = await service.messageAgent({ workspaceId: 'ws', parentPermissionMode: 'ask' }, { agentSlug: 'branding-agent', task: 'Develop release direction', taskModeId: 'brand-audit' })
+  expect(result.ok).toBe(true)
+})

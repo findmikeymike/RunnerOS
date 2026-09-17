@@ -74,7 +74,7 @@ export function useAgents(activeWorkspaceId: string | null | undefined, _options
         // Available definitions do not imply activation. The server owns defaults
         // and scope policy; every renderer surface consumes the saved manifest.
         const [libraryRaw, activeSlugs] = await Promise.all([
-          window.electronAPI.listAllAgentDefinitions(),
+          window.electronAPI.listAllAgentDefinitions(activeWorkspaceId ?? undefined),
           activeWorkspaceId
             ? window.electronAPI.listActiveAgentDefinitions(activeWorkspaceId)
             : Promise.resolve([] as string[]),
@@ -150,11 +150,14 @@ export function useAgents(activeWorkspaceId: string | null | undefined, _options
       ...input,
       activateInWorkspaceId: activeWorkspaceId ?? undefined,
     })
+    const displayed = activeWorkspaceId
+      ? await window.electronAPI.getAgentDefinition(created.slug, activeWorkspaceId).catch(() => created) ?? created
+      : created
     // Optimistic update — the broadcast will refresh too, but updating
     // immediately removes the latency before a freshly-saved agent shows up.
     setState((prev) => {
       const next = prev.allAgents.filter((a) => a.slug !== created.slug)
-      next.push(created)
+      next.push(displayed)
       next.sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
       return { ...prev, allAgents: next }
     })

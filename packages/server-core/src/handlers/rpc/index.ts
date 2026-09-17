@@ -1,3 +1,4 @@
+import { registerBrandingStateHandlers } from './branding-state'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { FEATURE_FLAGS } from '@craft-agent/shared/feature-flags'
@@ -60,6 +61,7 @@ export function registerCoreRpcHandlers(
   registerCommunityHandlers(server, deps)
   registerWebsiteHandlers(server, deps)
   registerWorkspaceContextHandlers(server, deps)
+  registerBrandingStateHandlers(server, deps)
   registerHqStateHandlers(server, deps)
   registerScheduledWorkHandlers(server, deps)
   registerGoogleWorkspaceHandlers(server, deps)

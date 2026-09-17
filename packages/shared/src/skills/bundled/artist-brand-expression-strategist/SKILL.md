@@ -11,13 +11,15 @@ Use this skill to make brand strategy show up in behavior. The output should fee
 
 Brand is not only what the artist says. It is what they repeatedly do, notice, avoid, reward, wear, photograph, revisit, joke about, defend, and refuse to explain.
 
-Think like a myth architect:
+Think about how small choices accumulate meaning; mythology is one possible form:
 - subtle enough to feel real
 - repeated enough to become memory
 - clever enough to create insider recognition
 - restrained enough to avoid cringe
 
 ## Inputs
+
+In HQ, develop enduring expression from approved artist identity. In a Campaign, read the Release Creative Brief (`campaign-creative-direction`) and develop its selected cues and placements; do not invent a competing career identity or central campaign idea.
 
 Use:
 - `artist-profile`
@@ -39,15 +41,17 @@ If the context is thin, create hypotheses and ask for one concrete source: recen
    Choose recurring objects, locations, phrases, formats, gestures, wardrobe details, camera habits, rituals, or timing patterns.
 
 4. Build reactive rules.
-   Define how the artist responds to trends, comments, conflict, praise, wins, losses, memes, fan edits, and platform moments while staying in-world.
+   Choose relevant responses to trends, comments, conflict, praise, wins, losses or fan edits while remaining true to the artist. Ordinary honest reactions need no theatrical framing.
 
-5. Add cult mechanics.
-   Create insider language, fan rituals, initiation moments, shared symbols, identity cues, and belonging loops.
+5. Make recognition and belonging possible.
+   Consider shared language, symbols, recurring encounters or voluntary rituals only where they emerge naturally from this artist and audience. A sincere public act or a phrase that makes people feel seen can be enough. Do not require initiation, exclusivity or manufactured opposition.
 
 6. Run the restraint filter.
-   Remove anything that is overexplained, fake deep, too mysterious, too costume-like, copied, manipulative without taste, or impossible to repeat.
+   Remove anything that is overexplained, fake deep, too mysterious, too costume-like, copied, manipulative, or impossible to repeat.
 
 ## Output
+
+Use the applicable fields below, not a compulsory worksheet. Omit rituals, insider language or life-as-brand moves when they add performance without meaning.
 
 ```markdown
 Brand behavior thesis:

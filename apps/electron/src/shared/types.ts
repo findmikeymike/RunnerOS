@@ -1248,9 +1248,9 @@ export interface ElectronAPI {
   getTriggerServerInfo(): Promise<{ enabled: boolean; url: string | null }>
 
   // Agent definitions (saved personas)
-  listAllAgentDefinitions(): Promise<AgentDefinitionDTO[]>
+  listAllAgentDefinitions(workspaceId?: string): Promise<AgentDefinitionDTO[]>
   listActiveAgentDefinitions(workspaceId: string): Promise<string[]>
-  getAgentDefinition(slug: string): Promise<AgentDefinitionDTO | null>
+  getAgentDefinition(slug: string, workspaceId?: string): Promise<AgentDefinitionDTO | null>
   upsertAgentDefinition(payload: {
     slug: string
     metadata: AgentDefinitionMetadataDTO
@@ -1260,6 +1260,14 @@ export interface ElectronAPI {
   deleteAgentDefinition(slug: string): Promise<boolean>
   setAgentDefinitionActive(workspaceId: string, slug: string, active: boolean): Promise<{ active: string[] }>
   onAgentDefinitionsChanged(callback: (workspaceId: string | null) => void): () => void
+
+  // Approved artist direction and supporting Branding context (HQ only).
+  getBrandingState(workspaceId: string): Promise<import('@craft-agent/shared/artist-context').BrandingState>
+  applyBrandingProposal(workspaceId: string, input: { proposalId: string; expectedRevision: string }): Promise<import('@craft-agent/shared/artist-context').BrandingState>
+  dismissBrandingProposal(workspaceId: string, input: { proposalId: string; expectedRevision: string }): Promise<import('@craft-agent/shared/artist-context').BrandingState>
+  addBrandingAttachment(workspaceId: string, input: { title: string; body: string; sourceOutputId?: string; expectedRevision: string }): Promise<import('@craft-agent/shared/artist-context').BrandingState>
+  removeBrandingAttachment(workspaceId: string, input: { attachmentId: string; expectedRevision: string }): Promise<import('@craft-agent/shared/artist-context').BrandingState>
+  onBrandingStateChanged(callback: (workspaceId: string, state: import('@craft-agent/shared/artist-context').BrandingState) => void): () => void
 
   // Workspace context docs (per-workspace markdown injected into agent prompts)
   listWorkspaceContextDocs(workspaceId: string): Promise<ContextDocDTO[]>

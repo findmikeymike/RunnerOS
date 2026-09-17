@@ -564,3 +564,31 @@ test('unfocused launch excludes disconnected required sources from prompt and re
   expect(options.launchReceipt?.injected.sources).toEqual([])
   expect(options.customSystemPrompt).not.toContain('https://example.com')
 })
+
+ test('campaign chat projects the stock role before resolving its focus and skill inventory', async () => {
+  const { ARTIST_DIRECTION_AGENT } = await import('@craft-agent/shared/agent-definitions/artist-direction')
+  const agent = { ...makeAgent(), ...ARTIST_DIRECTION_AGENT } as AgentDefinitionDTO
+  const options = buildAgentCreateSessionOptions(agent, {
+    artistWorkspaceScope: 'campaign',
+    skills: [{ slug: 'release-creative-direction', metadata: { name: 'Release Creative Direction' } }] as any,
+    sources: [],
+  }, 'release-direction')
+  expect(options.spawnedFromAgent?.agentName).toBe('Creative Direction')
+  expect(options.agentSkillSlugs).toEqual(['release-creative-direction'])
+  expect(options.customSystemPrompt).toContain('You are Creative Direction')
+  expect(agent.metadata.name).toBe('Artist Direction')
+})
+
+ test.each([['art-director', 'cover-art'], ['scriptwriter', 'short-form'], ['video-director', 'create-video'], ['content-genius', 'ideas']])('focused %s/%s keeps saved campaign direction in the actual prompt', (slug, focusId) => {
+  const definition = STARTER_AGENTS.find(agent => agent.slug === slug)!
+  const mode = definition.metadata.taskModes!.find(mode => mode.id === focusId)!
+  expect(mode).toBeDefined()
+  const agent = { ...makeAgent(), ...definition } as AgentDefinitionDTO
+  const options = buildAgentCreateSessionOptions(agent, {
+    artistWorkspaceScope: 'campaign',
+    skills: definition.metadata.skills!.map(slug => ({ slug, metadata: { name: slug } })) as any,
+    sources: (definition.metadata.sources ?? []).map(slug => makeSource(slug)),
+    contextDocs: [{ slug: 'campaign-creative-direction', metadata: { name: 'Release Creative Direction', enabled: true }, body: 'Direction status: accepted\nFans recognize the brave outsider through small public acts.', path: '/tmp/brief', workspaceRootPath: '/tmp/campaign' }] as any,
+  }, focusId)
+  expect(options.customSystemPrompt).toContain('Fans recognize the brave outsider through small public acts.')
+})

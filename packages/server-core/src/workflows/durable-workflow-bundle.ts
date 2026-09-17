@@ -1,3 +1,4 @@
+import { resolveArtistDirectionForScope } from '../../../shared/src/agent-definitions/artist-direction';
 import { resolveAgentTaskMode, selectTaskModeSourceSlugs } from '../../../shared/src/agent-definitions/task-modes';
 import { getSourcesBySlugs } from '../../../shared/src/sources/storage';
 import { isSourceUsable } from '../../../shared/src/sources/availability';
@@ -27,7 +28,8 @@ const defaults = { getWorkspaceByNameOrId, loadWorkspaceConfig, loadGlobalAgent,
 
 export function createDurableWorkflowBundleResolver(deps: typeof defaults = defaults) {
   return (workspaceId: string, agentSlug: string, options: Partial<CreateSessionOptions>, taskModeId?: string): DurableStartBundle => {
-    const workspace = deps.getWorkspaceByNameOrId(workspaceId), agent = deps.loadGlobalAgent(agentSlug);
+    const workspace = deps.getWorkspaceByNameOrId(workspaceId), storedAgent = deps.loadGlobalAgent(agentSlug);
+    const agent = storedAgent ? resolveArtistDirectionForScope(storedAgent, workspace?.artistWorkspaceScope) : null;
     if (!workspace || workspace.id !== workspaceId || workspace.remoteServer || !agent || agent.slug !== agentSlug) throw unsupported();
     const mode = assertDurableWorkflowAgentMetadata(agent.metadata, taskModeId);
     const skillSlugs = mode?.primarySkillSlugs ?? agent.metadata.skills ?? [];

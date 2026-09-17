@@ -15,13 +15,13 @@ function testAgent(metadata: AgentMetadata): LoadedAgent {
 }
 
 describe('agent task modes', () => {
-  test('Branding pilot defines four focused choices and one explicit full bundle', () => {
+  test('Artist Direction defines four focused choices and one explicit full bundle', () => {
     const branding = STARTER_AGENTS.find((agent) => agent.slug === 'branding-agent');
     expect(branding?.metadata.taskModes?.map((mode) => mode.id)).toEqual([
       'brand-audit',
-      'artist-world',
       'voice-beliefs',
-      'campaign-angles',
+      'artist-world',
+      'public-expression',
       'full-brand-system',
     ]);
     expect(branding?.metadata.taskModes?.find((mode) => mode.id === 'artist-world')?.primarySkillSlugs)
@@ -32,7 +32,8 @@ describe('agent task modes', () => {
 
   test('resolves both primary skills while keeping related skills on-demand', () => {
     const branding = STARTER_AGENTS.find((agent) => agent.slug === 'branding-agent')! as LoadedAgent;
-    const mode = resolveAgentTaskMode(branding, 'artist-world')!;
+    const withAdjacent = { ...branding, metadata: { ...branding.metadata, taskModes: branding.metadata.taskModes!.map(mode => mode.id === 'artist-world' ? { ...mode, adjacentSkills: [{ slug: 'artist-brand-dna-audit', when: 'When identity needs clarification.', expansion: 'same-session' as const }] } : mode) } };
+    const mode = resolveAgentTaskMode(withAdjacent, 'artist-world')!;
 
     expect(mode.primarySkillSlugs).toEqual(['artist-narrative-universe', 'artist-visual-world-director']);
     expect(mode.adjacentSkills.map((skill) => skill.slug)).toContain('artist-brand-dna-audit');
@@ -76,7 +77,7 @@ describe('agent task modes', () => {
     expect(mode.primarySkillSlugs).toEqual(['artist-belief-system', 'artist-brand-expression-strategist']);
     expect(mode.fullMode).toBe(false);
     expect(mode.adjacentSkills.some(skill => mode.primarySkillSlugs.includes(skill.slug))).toBe(false);
-    expect(buildAgentTaskModeStarterPrompt(mode)).toContain('selected Voice & Beliefs');
+    expect(buildAgentTaskModeStarterPrompt(mode)).toContain('selected Voice & Convictions');
   });
 
   test('parser accepts focused bundles but still rejects multiple skills declared as a single focus', () => {
@@ -198,3 +199,23 @@ test('HQ helper General stays lean and old saved setup focuses still resolve', (
   const custom = { ...helper, metadata: { ...helper.metadata, taskModes: [...helper.metadata.taskModes!, { id: 'connect', kind: 'focus' as const, label: 'Custom', description: 'Saved custom recipe', primarySkillSlugs: ['setup-tools'] }] } };
   expect(resolveAgentTaskMode(custom, 'connect')?.label).toBe('Custom');
 });
+
+ test('legacy stock campaign focus resumes in release direction without exposing identity audits', async () => {
+  const { ARTIST_DIRECTION_AGENT, resolveArtistDirectionForScope } = await import('./artist-direction')
+  const campaign = resolveArtistDirectionForScope(ARTIST_DIRECTION_AGENT, 'campaign')
+  expect(resolveAgentTaskMode(campaign, 'brand-audit')?.id).toBe('audience-connection')
+  expect(resolveAgentTaskMode(campaign, 'brand-audit')?.primarySkillSlugs).toEqual(['release-creative-direction'])
+  expect(resolveAgentTaskMode(campaign, 'full-brand-system')?.id).toBe('creative-brief')
+  expect(resolveAgentTaskMode(ARTIST_DIRECTION_AGENT, 'campaign-angles')?.id).toBe('public-expression')
+  expect(() => resolveAgentTaskMode(campaign, 'made-up-focus')).toThrow()
+  const custom = { ...campaign, metadata: { ...campaign.metadata, taskModes: campaign.metadata.taskModes!.slice(0, 1) } }
+  expect(() => resolveAgentTaskMode(custom, 'brand-audit')).toThrow()
+  expect(resolveAgentTaskMode(campaign, 'general')?.context?.preloadTopics).toContain('campaign-creative-direction')
+})
+
+ test('stock World Builder resumes older world recipes in the experience role', async () => {
+  const { WORLD_BUILDER_AGENT } = await import('./artist-direction')
+  expect(resolveAgentTaskMode(WORLD_BUILDER_AGENT, 'story-world')?.id).toBe('fan-experience')
+  expect(resolveAgentTaskMode(WORLD_BUILDER_AGENT, 'full-world')?.id).toBe('fan-experience')
+  expect(resolveAgentTaskMode(WORLD_BUILDER_AGENT, 'campaign-rollout')?.id).toBe('world-touchpoints')
+})

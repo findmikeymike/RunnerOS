@@ -597,7 +597,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
         return
       } else {
         const agent = allAgents.find((candidate) => candidate.slug === action.targetSlug)
-          ?? (await window.electronAPI.listAllAgentDefinitions())
+          ?? (await window.electronAPI.listAllAgentDefinitions(workspaceId))
             .find((candidate) => candidate.slug === action.targetSlug)
         if (!agent) {
           throw new Error(`${action.targetName} is not installed in the worker library.`)

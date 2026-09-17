@@ -1,4 +1,4 @@
-import { loadActivatedAgents, isAgentAllowedInArtistWorkspace, type AgentStorageOptions } from '@craft-agent/shared/agent-definitions'
+import { resolveArtistDirectionForScope, loadActivatedAgents, isAgentAllowedInArtistWorkspace, type AgentStorageOptions } from '@craft-agent/shared/agent-definitions'
 
 /** Artist OS defaults belong to workspace creation, never recurring startup. */
 export function shouldBackfillLegacyAgentActivation(variant: string): boolean {
@@ -12,4 +12,5 @@ export function loadActiveAgentsForWorkspace(
 ) {
   return loadActivatedAgents(workspace.rootPath, options)
     .filter(agent => isAgentAllowedInArtistWorkspace(agent.slug, workspace.artistWorkspaceScope))
+    .map(agent => resolveArtistDirectionForScope(agent, workspace.artistWorkspaceScope))
 }

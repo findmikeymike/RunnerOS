@@ -43,7 +43,7 @@ const source = (slug: string, name: string, tagline?: string) => ({
 
 describe('Artist OS team mission routing', () => {
   test('delivers only the matching specialist emphasis and never leaks it into general sessions', () => {
-    const slugs = ['ads-strategist', 'ads-agent', 'content-genius', 'scriptwriter'];
+    const slugs = ['ads-strategist', 'ads-agent', 'content-genius', 'scriptwriter', 'world-builder'];
     for (const slug of slugs) {
       const guidance = buildArtistSpecialistGuidance(slug);
       expect(guidance.length).toBeGreaterThan(0);
@@ -59,8 +59,28 @@ describe('Artist OS team mission routing', () => {
         expect(composeAgentSystemPrompt({ ...agent(), slug }, [], [], [], [], { artistWorkspaceScope })).not.toContain(guidance);
       }
     }
-    for (const slug of [undefined, 'concierge', 'world-builder', 'custom-worker', 'constructor', '__proto__']) {
+    for (const slug of [undefined, 'concierge', 'custom-worker', 'constructor', '__proto__']) {
       expect(buildArtistSpecialistGuidance(slug)).toBe('');
+    }
+  });
+
+  test('routes enduring artist guidance and release guidance by workspace without mixing them', () => {
+    const hq = buildArtistSpecialistGuidance('branding-agent', 'hq');
+    const campaign = buildArtistSpecialistGuidance('branding-agent', 'campaign');
+    expect(hq).not.toBe(campaign);
+    for (const scope of ['hq', 'campaign', 'lab', 'general', undefined] as const) {
+      const worker = { ...agent({}, 'Preserve my approved direction.'), slug: 'branding-agent' };
+      const result = composeAgentSystemPrompt(worker, [], [], [], [], { artistWorkspaceScope: scope });
+      expect(result.startsWith(worker.systemPrompt!)).toBe(true);
+      if (scope === 'general' || scope === undefined) {
+        expect(result).not.toContain(hq);
+        expect(result).not.toContain(campaign);
+      } else {
+        expect(result.split(scope === 'campaign' ? campaign : hq)).toHaveLength(2);
+        expect(result).not.toContain(scope === 'campaign' ? hq : campaign);
+        expect(result.split(ARTIST_OS_TEAM_MISSION)).toHaveLength(2);
+        expect(result).not.toContain(SKILLS_HEADER);
+      }
     }
   });
 

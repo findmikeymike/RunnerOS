@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { Cron } from 'croner'
 import type { ScheduleWorkToolInput } from '@craft-agent/session-tools-core'
-import { loadGlobalAgent, readActivatedAgents, resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions'
+import { getWorkspaces } from '@craft-agent/shared/config'
+import { resolveArtistDirectionForScope, loadGlobalAgent, readActivatedAgents, resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions'
 import {
   ARTIST_CALENDAR_CONTEXT_SLUG,
   artistCalendarMetadata,
@@ -95,7 +96,8 @@ export function resolveExecution(rootPath: string, request: ScheduleWorkToolInpu
     if (!readActivatedAgents(rootPath).active.includes(input.agentSlug)) {
       throw new Error(`Agent is not active in this workspace: ${input.agentSlug}`)
     }
-    const agent = loadGlobalAgent(input.agentSlug)
+    const storedAgent = loadGlobalAgent(input.agentSlug)
+    const agent = storedAgent ? resolveArtistDirectionForScope(storedAgent, getWorkspaces().find(workspace => workspace.rootPath === rootPath)?.artistWorkspaceScope) : null
     if (!agent) throw new Error(`Agent definition was not found: ${input.agentSlug}`)
     if ((agent.metadata.taskModes?.length ?? 0) > 1 && !input.taskModeId) {
       throw new Error(`Choose a focus for ${agent.metadata.name} before scheduling: ${agent.metadata.taskModes!.map(mode => mode.id).join(', ')}.`)

@@ -39,6 +39,8 @@ export interface AgentMessageServiceDeps {
     agentSlug: string,
     options?: { taskModeId?: string; taskModeSelectionSource?: 'handoff' },
   ) => Promise<Partial<CreateSessionOptions>>;
+  /** Resolve only host-approved aliases against the current scoped definition. */
+  resolveTaskModeId?: (workspaceId: string, agentSlug: string, taskModeId: string) => string;
   sendMessage: (sessionId: string, prompt: string, options?: {
     skillSlugs?: string[];
     displayIntent?: 'agent-delegation-task';
@@ -247,12 +249,15 @@ export class AgentMessageService {
     }
 
     try {
+      const taskModeId = input.taskModeId
+        ? this.deps.resolveTaskModeId?.(runtime.workspaceId, input.agentSlug, input.taskModeId) ?? input.taskModeId
+        : undefined;
       const agentOptions = await this.deps.resolveAgentSessionOptions(
         runtime.workspaceId,
         input.agentSlug,
-        input.taskModeId ? { taskModeId: input.taskModeId, taskModeSelectionSource: 'handoff' } : undefined,
+        taskModeId ? { taskModeId, taskModeSelectionSource: 'handoff' } : undefined,
       );
-      if (input.taskModeId && agentOptions.launchReceipt?.taskMode?.id !== input.taskModeId) {
+      if (taskModeId && agentOptions.launchReceipt?.taskMode?.id !== taskModeId) {
         throw new Error(`Task mode "${input.taskModeId}" was not resolved for the target agent.`);
       }
       // A delegate must stay within both the caller and the specialist's defaults.

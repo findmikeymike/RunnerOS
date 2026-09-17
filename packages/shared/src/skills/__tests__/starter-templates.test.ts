@@ -451,9 +451,9 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     const parsed = matter(getSkillMd(skill!));
     expect(parsed.data.name).toBe('world-immersion');
     expect(parsed.content).toContain('The artist builds; the fan enters');
-    expect(parsed.content).toContain('one central, psychologically-grounded immersive mechanic');
-    expect(parsed.content).toContain('The four anti-corny laws');
-    expect(parsed.content).toContain('needy-prompt check');
+    expect(parsed.content).toContain('Release Creative Brief');
+    expect(parsed.content).toContain('A separate immersive experience is optional');
+    expect(parsed.content).toContain('Never require hidden clues');
     expect(parsed.content).toContain('reskin test');
     expect(parsed.content).toContain('failure modes');
   });

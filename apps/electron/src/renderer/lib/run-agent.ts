@@ -1,3 +1,4 @@
+import { resolveArtistDirectionForScope } from '@craft-agent/shared/agent-definitions/artist-direction'
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
@@ -98,6 +99,7 @@ export function buildAgentCreateSessionOptions(
   },
   taskModeId?: string,
 ): CreateSessionOptions {
+  agent = resolveArtistDirectionForScope(agent, context?.artistWorkspaceScope)
   const taskMode = resolveAgentTaskMode(agent, taskModeId ?? (agent.slug === CONCIERGE_SLUG ? GENERAL_AGENT_TASK_MODE_ID : undefined))
   const promptAgent = taskMode
     ? {
@@ -116,7 +118,7 @@ export function buildAgentCreateSessionOptions(
     if (!context) throw new Error(`Load current Skills and Connections before starting ${agent.metadata.name} — ${taskMode.label}.`)
     assertFocusedAgentReferences(promptAgent, taskMode.label, context.skills, context.sources)
   }
-  const contextDocs = filterContextDocsForTaskMode(context?.contextDocs ?? [], taskMode)
+  const contextDocs = filterContextDocsForTaskMode(context?.contextDocs ?? [], taskMode, agent.slug)
   let skillSlugs = promptAgent.metadata.skills ?? []
   let sourceSlugs = [
     ...(promptAgent.metadata.sources ?? []),
@@ -308,6 +310,8 @@ export async function openAgentSessionComposer(params: {
 }): Promise<Session> {
   const assertCurrent = () => { if (params.shouldContinue && !params.shouldContinue()) throw new Error('Command handoff was cancelled.') }
   assertCurrent()
+  const artistWorkspaceScope = await resolveArtistWorkspaceScope(params.workspaceId)
+  params = { ...params, agent: resolveArtistDirectionForScope(params.agent, artistWorkspaceScope) }
   // Chat always has a usable default. Explicit presets remain optional shortcuts.
   const taskModeId = params.taskModeId ?? GENERAL_AGENT_TASK_MODE_ID
   const taskMode = resolveAgentTaskMode(params.agent, taskModeId)
@@ -361,10 +365,6 @@ export async function openAgentSessionComposer(params: {
     }
   }
 
-  // Resolve the workspace kind so the composed prompt matches what the server
-  // builds for the same agent. A lookup failure degrades to the old heuristic
-  // rather than blocking the launch.
-  const artistWorkspaceScope = await resolveArtistWorkspaceScope(params.workspaceId)
 
   // When live skills/sources are available, pass them through so the session
   // gets a composed system prompt (persona body + bundle footer) and any

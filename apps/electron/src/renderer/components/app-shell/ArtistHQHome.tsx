@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { BrandingSupportingContext } from './BrandingSupportingContext'
 import { reconcileDocumentDraft } from '@/lib/document-draft-sync'
 import { SignalsTracksPanel, type SignalNuggetInput } from './SignalsTracksPanel'
 import { SignalIdeaHandoff } from './SignalIdeaHandoff'
@@ -2609,7 +2610,7 @@ export function ArtistHQHome({
               <div>
                 <SectionTitle icon={Sparkles} title="Branding" meta={`${brandingPercent}% complete`} compact bright />
                 <p className="mt-2 max-w-2xl text-xs leading-5 text-white/42">
-                  Brand DNA for positioning, mythology, campaign ideas, creative direction, and future branding workers.
+                  Your approved artist identity, ethos, and audience connection. Relevant agents use this as their foundation.
                 </p>
               </div>
               <button
@@ -2642,6 +2643,7 @@ export function ArtistHQHome({
             ) : null}
 
             <ArtistBrandingForm draft={brandingDraft} onChange={setBrandingDraft} />
+            <BrandingSupportingContext key={workspaceId} workspaceId={workspaceId} />
           </HQCard>
         )}
 

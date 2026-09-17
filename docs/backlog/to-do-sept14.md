@@ -79,6 +79,8 @@ Acceptance: fewer understandable options, clear Manager ownership, and no regres
 
 ## 5. Branding and World Builder: audit scope and context
 
+**September 16 approved upgrade — implemented, acceptance pending:** One stable worker presents Artist Direction in HQ and Creative Direction in Campaigns. World Builder develops an optional experience from the chosen release direction. Shared campaign brief persistence, scoped runtime/catalogs, safe stock migrations and supporting-skill changes are in progress toward live acceptance. See [upgrade record](../audits/artist-creative-direction-upgrade-2026-09-16.md). The proposal list below records the original audit scope; merging these agents is no longer the selected approach.
+
 **User observations to reproduce:** overlapping world-building work; unclear career branding versus campaign-specific branding; and overly prescriptive rules for typography, colors, or video execution that may unnecessarily narrow other specialists.
 
 - [ ] **NOW — Audit both agents' prompts, focus cards, skills, and saved context.** Identify exact overlaps and where directives are produced or injected downstream. Separate artist-approved canon from agent suggestions and accidental hard rules.

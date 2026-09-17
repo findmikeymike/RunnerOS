@@ -496,6 +496,12 @@ export const CHANNEL_MAP = {
   onAgentDefinitionsChanged: listener(RPC_CHANNELS.agentDefinitions.CHANGED),
 
   // Workspace context docs (per-workspace markdown context injected into agents)
+  getBrandingState: invoke(RPC_CHANNELS.brandingState.GET),
+  applyBrandingProposal: invoke(RPC_CHANNELS.brandingState.APPLY),
+  dismissBrandingProposal: invoke(RPC_CHANNELS.brandingState.DISMISS),
+  addBrandingAttachment: invoke(RPC_CHANNELS.brandingState.ADD_ATTACHMENT),
+  removeBrandingAttachment: invoke(RPC_CHANNELS.brandingState.REMOVE_ATTACHMENT),
+  onBrandingStateChanged: listener(RPC_CHANNELS.brandingState.CHANGED),
   listWorkspaceContextDocs: invoke(RPC_CHANNELS.workspaceContext.LIST),
   getWorkspaceContextDoc: invoke(RPC_CHANNELS.workspaceContext.GET),
   listWorkspaceContextDocsForAgent: invoke(RPC_CHANNELS.workspaceContext.LIST_FOR_AGENT),

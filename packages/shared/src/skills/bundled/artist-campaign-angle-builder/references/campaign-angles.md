@@ -2,7 +2,7 @@
 
 ## Core thesis
 
-Campaigns work when they dramatize the brand world. Do not promote a song as content inventory. Turn the release into a scene, ritual, argument, mystery, or identity marker.
+Build on the chosen Release Creative Brief and help the artist's meaning come through in concrete campaign moments. A scene, act, direct performance, shared feeling or identity cue can work. Ritual and mystery are optional; the music remains central.
 
 ## Angle sources
 
@@ -22,11 +22,11 @@ An angle is strong if a fan can explain it in one sentence:
 - "She never shows her face, but every video has the same red motel room."
 - "Every song is a chapter from the same doomed road trip."
 - "He only samples machines from places he has worked."
-- "The whole rollout is fans confessing what they had to leave behind."
+- "She returned to the places she had to leave behind and performed a song in each."
 
 ## Memory hooks
 
-Stack at least two:
+Select only what serves the chosen idea; one strong cue may be enough:
 - visual anchor: mask, mustache, color, object, uniform, setting
 - sonic anchor: tag, texture, sample source, recurring sound
 - physical anchor: movement, ritual, live behavior
@@ -41,10 +41,10 @@ Reject ideas that:
 - require budget or access the artist does not have
 - contradict the artist voice
 - feel like a borrowed aesthetic with no personal evidence
-- create reaction but cannot be repeated
+- chase reaction without a meaningful connection to the music or artist
 
 Prefer ideas that:
 - can start this week
 - produce multiple content formats
-- build a repeatable symbol or ritual
+- make a meaningful act or cue memorable; repetition is useful only when it helps
 - make the artist easier to describe

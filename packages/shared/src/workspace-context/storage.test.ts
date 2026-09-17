@@ -314,6 +314,35 @@ describe('loadActiveContextDocsForAgent', () => {
 // ---------------------------------------------------------------------------
 
 describe('delivery-aware context routing', () => {
+  test('campaign creative direction reaches creative specialists without broadcasting or overriding access', () => {
+    const write = (metadata: Partial<ContextDocMetadata> = {}) => upsertContextDoc(workspace, {
+      slug: 'campaign-creative-direction',
+      metadata: { name: 'Release Creative Brief', enabled: true, routing: { mode: 'broadcast' }, ...metadata },
+      body: 'Proposal: a real-world performance, not yet approved.',
+    });
+    write();
+    let brief = loadContextDoc(workspace, 'campaign-creative-direction')!;
+    for (const slug of ['branding-agent', 'world-builder', 'art-director', 'scriptwriter', 'video-director', 'content-genius']) {
+      expect(shouldInjectContextDoc(brief, slug)).toBe(true);
+    }
+    expect(canAgentAccessContextDoc(brief, 'accountant')).toBe(true);
+    expect(shouldInjectContextDoc(brief, 'accountant')).toBe(false);
+    write({ private: true, routing: { mode: 'targeted', agents: ['branding-agent'] } });
+    brief = loadContextDoc(workspace, 'campaign-creative-direction')!;
+    expect(shouldInjectContextDoc(brief, 'branding-agent')).toBe(true);
+    expect(shouldInjectContextDoc(brief, 'world-builder')).toBe(false);
+    write({ enabled: false });
+    expect(shouldInjectContextDoc(loadContextDoc(workspace, 'campaign-creative-direction')!, 'branding-agent')).toBe(false);
+  });
+
+  test('world builder receives artist identity under the existing access policy', () => {
+    upsertContextDoc(workspace, {
+      slug: 'artist-branding',
+      metadata: { name: 'Artist Direction', enabled: true, routing: { mode: 'broadcast' } },
+      body: 'Approved identity',
+    });
+    expect(shouldInjectContextDoc(loadContextDoc(workspace, 'artist-branding')!, 'world-builder')).toBe(true);
+  });
   beforeEach(() => {
     upsertContextDoc(workspace, {
       slug: 'legacy-broadcast',

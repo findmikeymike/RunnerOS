@@ -4274,11 +4274,11 @@ Approval needed before generation:
 
 ## Core thesis
 
-Fans become loyal when the artist helps them say "I am this." The belief system converts attention into belonging.
+A clear conviction can help listeners recognize themselves and feel a connection. This is an opportunity, not a formula or promise of loyalty. Use only the exercises that illuminate the artist's real work.
 
-## Define the enemy
+## Optional opposition
 
-The enemy gives the tribe a boundary. It can be:
+When the artist already expresses resistance, naming the opposing force can clarify a shared conviction. Tenderness, humor and joy need no enemy. Possible forces include:
 - mediocrity
 - fake perfection
 - the old guard
@@ -4301,9 +4301,11 @@ Write belief statements as:
 - "We choose..."
 - "We refuse..."
 
-Good beliefs are specific enough that someone could disagree.
+Good beliefs are specific and recognizable. Disagreement can sharpen a stance but is not required; a tender observation can be equally distinctive.
 
-## Stress tests
+## Optional stress tests
+
+Select relevant tests rather than requiring every belief to pass each one. No enemy, pledge, merch slogan or lifetime doctrine is required.
 
 Hater Test:
 Would someone be clearly opposed to this?
@@ -4342,34 +4344,36 @@ Stronger:
         path: "SKILL.md",
         content: `---
 name: artist-belief-system
-description: Create or audit an artist's brand belief system. Use when defining the enemy, values, fan pledge, tribe language, community identity, 5 billboards, belief stress tests, and the shift from "I like this artist" to "I am this kind of person."
+description: Create or audit an artist's brand belief system. Use when clarifying convictions, values, emotional tensions and language that makes listeners recognize themselves in an artist. Explore opposition, shared symbols or fan identity only when they genuinely fit.
 ---
 
 # Artist Belief System
 
-Use this skill to turn an artist brand into a flag fans can carry. Do not write vague mission statements. Build identity-level beliefs with opposition, specificity, and staying power.
+Use this skill to turn an artist brand into a flag fans can carry. Do not write vague mission statements. Build specific convictions with emotional truth and staying power. Read approved HQ direction first; distinguish established beliefs from proposals. Opposition can sharpen meaning, but tenderness, humor, joy and shared experience can be equally powerful. Do not invent an enemy or require fans to adopt an identity.
 
 ## Workflow
 
 1. Read the artist context.
    Use profile, voice, branding, lyrics, interviews, posts, audience notes, and campaign goals.
 
-2. Define the enemy.
-   The enemy can be cultural, emotional, aesthetic, social, or personal. It should not require cruelty toward a group of people.
+2. Find the meaningful tension or conviction.
+   What does this artist embrace, protect, refuse or find funny, and who feels seen by it? If opposition is already true to the work, name the cultural, emotional or personal force involved. An enemy is optional; never manufacture hostility.
 
 3. Extract shared values.
    Write what the artist and fans believe, reject, protect, chase, mourn, or refuse.
 
-4. Write the five billboards.
-   Create 6 to 12 belief statements that could stand for years.
+4. Find memorable language.
+   Write a few precise phrases that could express these convictions naturally. The billboard exercise is optional; avoid slogans the artist would never say.
 
 5. Stress test.
-   Apply hater, flip, t-shirt, time, pledge, and uniqueness tests.
+   Use the relevant specificity, recognition, time and uniqueness checks. Disagreement, merch slogans or fan pledges are not required proof of a meaningful belief.
 
-6. Translate into fan identity.
-   Describe who the fan becomes by joining the world.
+6. Connect to the listener.
+   Describe the lived feeling or private conviction that could make someone feel understood and want to support this artist. Belonging does not require initiation or a named tribe.
 
 ## Output
+
+Use only the fields that help the current question. Enemy, initiation and community language are optional; leave them out when unsupported. A narrow question does not need a doctrine document.
 
 \`\`\`markdown
 Enemy:
@@ -4547,16 +4551,16 @@ Read \`references/framework.md\` when doing a serious audit or when the output n
 
 ## What this skill solves
 
-Brand docs often die because they never become behavior. This skill turns brand DNA into small public choices that build myth through repetition.
+Brand docs often die because they never become behavior. This skill turns brand DNA into small public choices that accumulate meaning through repetition. Use approved identity and, for release work, the selected Release Creative Brief. Myth is one option; sincere ordinary behavior can carry the idea.
 
 ## The subtle signal stack
 
-Use signals that can recur naturally:
+Choose a few signals that can recur naturally; these are options, not a required stack:
 - one object: motel key, lighter, flower, receipt, book, machine part
 - one place type: diner, parking lot, church basement, studio floor, highway shoulder
 - one phrase shape: short confession, rule, threat, prayer, joke, refusal
 - one visual habit: flash photo, no face, mirror crop, wide empty frame, hand detail
-- one response pattern: reward fan theories, never explain symbols, answer praise with understatement
+- one response pattern: reward thoughtful responses, explain a meaningful choice, answer praise with understatement
 - one ritual: weekly voice note, post-show object photo, handwritten lyric, fan confession prompt
 
 Signals should feel like the artist would do them anyway.
@@ -4569,12 +4573,12 @@ For trends:
 - never chase a trend that makes the artist look like a fan of their own brand
 
 For criticism:
-- decide if the brand ignores, jokes, sharpens, reframes, or weaponizes it
-- never over-defend unless vulnerability itself is the brand
+- decide whether an honest response, humor, reframing or no response serves the situation
+- respond honestly; do not suppress vulnerability to protect a persona
 
 For wins:
-- celebrate in-world, not generically
-- use the mythology: same object, same phrase, same place, same emotional tone
+- celebrate in a way that feels natural to the artist
+- use a recurring object, phrase or place only when it adds real meaning
 
 For losses:
 - turn setbacks into lore only if true to the brand
@@ -4584,24 +4588,24 @@ For fan behavior:
 - notice and reward the behavior you want repeated
 - give fans symbols and language they can use without needing permission
 
-## Cult-building mechanics
+## Optional ways people recognize each other
 
-Use ethically: the goal is belonging and identity, not cheap manipulation.
+Support voluntary belonging without requiring initiation, confession, spending or an enemy. These options apply only when they fit the artist and audience; shared joy or recognition may be enough. Never engineer dependence or hostility.
 
-Mechanics:
+Possibilities:
 - initiation: first show, first merch item, first confession, first fan-made symbol
 - insider language: phrases fans can repeat to signal they get it
 - ritual: recurring fan action around release nights, live shows, comments, or stories
 - artifact: object fans can photograph, wear, recreate, or hunt for
-- enemy: a vague cultural force the tribe rejects
+- shared stance: a specific conviction already present in the music or artist's behavior
 - badge: a visual or verbal marker fans use to identify each other
 
-## Machiavellian cleverness filter
+## Restraint and emotional truth
 
 Good clever:
 - layered
 - plausible
-- deniable
+- honest
 - repeatable
 - emotionally coherent
 - makes fans feel smart for noticing
@@ -4617,9 +4621,9 @@ Bad clever:
 
 ## Try-hard detector
 
-Kill the idea if:
-- it requires an explanation caption
-- it uses words like "era," "lore," or "universe" too directly
+Reconsider the idea if:
+- explanation is compensating for an empty idea; clear context itself is welcome
+- "era," "lore," or "universe" language feels imposed on the artist
 - it makes the artist behave unlike themselves
 - it turns daily life into a stage play
 - it asks fans to care before they have a reason
@@ -4631,13 +4635,13 @@ Weak:
 "Use more mysterious visuals."
 
 Stronger:
-"Never explain the motel key. Put it in one frame per release week: on the dashboard, beside the mic, in a fan package. Let fans name it before the artist does."
+"If the chosen idea makes discovery meaningful, let the motel key recur without explaining every appearance. Put it in one frame per release week: on the dashboard, beside the mic, in a fan package. Let fans name it before the artist does."
 
 Weak:
 "Build community."
 
 Stronger:
-"Every Friday, repost one fan's 'thing I had to leave behind' note. No design template. Just a screenshot and the same three-word reply. Turn leaving into the tribe's ritual."
+"Every Friday, repost one fan's 'thing I had to leave behind' note. No design template. Just a screenshot and the same three-word reply. Only use willing contributions with permission; the artist should offer their own meaningful work before asking fans to share."
 `,
       },
       {
@@ -4655,13 +4659,15 @@ Use this skill to make brand strategy show up in behavior. The output should fee
 
 Brand is not only what the artist says. It is what they repeatedly do, notice, avoid, reward, wear, photograph, revisit, joke about, defend, and refuse to explain.
 
-Think like a myth architect:
+Think about how small choices accumulate meaning; mythology is one possible form:
 - subtle enough to feel real
 - repeated enough to become memory
 - clever enough to create insider recognition
 - restrained enough to avoid cringe
 
 ## Inputs
+
+In HQ, develop enduring expression from approved artist identity. In a Campaign, read the Release Creative Brief (\`campaign-creative-direction\`) and develop its selected cues and placements; do not invent a competing career identity or central campaign idea.
 
 Use:
 - \`artist-profile\`
@@ -4683,15 +4689,17 @@ If the context is thin, create hypotheses and ask for one concrete source: recen
    Choose recurring objects, locations, phrases, formats, gestures, wardrobe details, camera habits, rituals, or timing patterns.
 
 4. Build reactive rules.
-   Define how the artist responds to trends, comments, conflict, praise, wins, losses, memes, fan edits, and platform moments while staying in-world.
+   Choose relevant responses to trends, comments, conflict, praise, wins, losses or fan edits while remaining true to the artist. Ordinary honest reactions need no theatrical framing.
 
-5. Add cult mechanics.
-   Create insider language, fan rituals, initiation moments, shared symbols, identity cues, and belonging loops.
+5. Make recognition and belonging possible.
+   Consider shared language, symbols, recurring encounters or voluntary rituals only where they emerge naturally from this artist and audience. A sincere public act or a phrase that makes people feel seen can be enough. Do not require initiation, exclusivity or manufactured opposition.
 
 6. Run the restraint filter.
-   Remove anything that is overexplained, fake deep, too mysterious, too costume-like, copied, manipulative without taste, or impossible to repeat.
+   Remove anything that is overexplained, fake deep, too mysterious, too costume-like, copied, manipulative, or impossible to repeat.
 
 ## Output
+
+Use the applicable fields below, not a compulsory worksheet. Omit rituals, insider language or life-as-brand moves when they add performance without meaning.
 
 \`\`\`markdown
 Brand behavior thesis:
@@ -4722,7 +4730,7 @@ Read \`references/expression-strategy.md\` for the full operating lens.
 
 ## Core thesis
 
-Campaigns work when they dramatize the brand world. Do not promote a song as content inventory. Turn the release into a scene, ritual, argument, mystery, or identity marker.
+Build on the chosen Release Creative Brief and help the artist's meaning come through in concrete campaign moments. A scene, act, direct performance, shared feeling or identity cue can work. Ritual and mystery are optional; the music remains central.
 
 ## Angle sources
 
@@ -4742,11 +4750,11 @@ An angle is strong if a fan can explain it in one sentence:
 - "She never shows her face, but every video has the same red motel room."
 - "Every song is a chapter from the same doomed road trip."
 - "He only samples machines from places he has worked."
-- "The whole rollout is fans confessing what they had to leave behind."
+- "She returned to the places she had to leave behind and performed a song in each."
 
 ## Memory hooks
 
-Stack at least two:
+Select only what serves the chosen idea; one strong cue may be enough:
 - visual anchor: mask, mustache, color, object, uniform, setting
 - sonic anchor: tag, texture, sample source, recurring sound
 - physical anchor: movement, ritual, live behavior
@@ -4761,12 +4769,12 @@ Reject ideas that:
 - require budget or access the artist does not have
 - contradict the artist voice
 - feel like a borrowed aesthetic with no personal evidence
-- create reaction but cannot be repeated
+- chase reaction without a meaningful connection to the music or artist
 
 Prefer ideas that:
 - can start this week
 - produce multiple content formats
-- build a repeatable symbol or ritual
+- make a meaningful act or cue memorable; repetition is useful only when it helps
 - make the artist easier to describe
 `,
       },
@@ -4779,29 +4787,31 @@ description: Turn artist brand DNA into campaign angles, rollout concepts, conte
 
 # Artist Campaign Angle Builder
 
-Use this skill to turn brand strategy into campaign ideas people can talk about. Campaigns should feel like scenes from the artist's movie, not disconnected promo tasks.
+Use this skill to turn brand strategy into campaign ideas people can talk about. Campaigns should express a coherent idea through meaningful choices. A cinematic world is one possible expression, not the default.
 
 ## Workflow
 
-1. Anchor in brand DNA.
-   Pull tensions, mythology, emotional territory, audience gravity, belief system, visual rules, and voice.
+1. Anchor in the chosen direction.
+   Read the Release Creative Brief (\`campaign-creative-direction\`) alongside approved HQ identity and song material. Develop the selected central idea, emotional pull, cues and constraints. If no idea is chosen, use release-creative-direction to resolve that first; do not silently replace an approved idea. Draw on mythology or visual rules only when they already fit.
 
 2. Choose the campaign job.
    Awareness, release narrative, fan activation, visual world launch, community ritual, controversy/reaction, conversion, or retention.
 
 3. Create angles from tension.
-   Campaign angles should dramatize a contradiction or belief.
+   Campaign angles can express a contradiction, belief, feeling, shared experience or committed act. Choose what is true to this music and meaningful to its listeners.
 
 4. Stack memory hooks.
-   Include at least two: visual symbol, sonic cue, physical action, recurring phrase, fan ritual, environmental trigger, public constraint.
+   Choose only useful cues: a visual symbol, sonic detail, physical act, phrase, voluntary ritual, setting or public constraint. One strong cue can be enough; a quota adds noise.
 
 5. Make it executable.
-   Convert each angle into posts, videos, visuals, captions, rollout beats, and fan participation.
+   Place the strongest angle where it will matter most: a post, video, public act, performance, release moment or optional fan encounter. Do not require every format or audience participation.
 
 6. Filter.
    Remove ideas that do not match the universe, voice, audience, or resources.
 
 ## Output
+
+Answer the current question with the applicable fields. Present the strongest angle and only useful alternatives. Participation, rituals and exhaustive rollout plans are optional. Preserve the source brief and distinguish new proposals from artist-approved decisions.
 
 \`\`\`markdown
 Campaign thesis:
@@ -5469,9 +5479,9 @@ When approval is required, state the exact action and target. Do not treat broad
 
 ## Core thesis
 
-Music without narrative context is a soundtrack with no movie. The audience needs a world to inhabit. The brand world should reduce cognitive dissonance between sound, visuals, character, and story.
+Narrative context can connect sound, visuals, behavior and meaning. Music can also stand on its own. Use this house as an optional lens for approved artist direction, not a requirement to create fiction or make every public moment part of a movie.
 
-## The eight-step house
+## Optional house framework
 
 1. Land: genre and style
    Choose the universe that houses the music. Action, horror, romance, sci-fi, documentary, street realism, comedy, western, noir, fantasy.
@@ -5483,7 +5493,7 @@ Music without narrative context is a soundtrack with no movie. The audience need
    Define what can and cannot happen. A raw-authentic artist should not suddenly use hyper-rendered robot visuals unless there is a narrative reason. A futuristic avatar world should not randomly switch into handheld confessional realism unless it is part of the rules.
 
 4. Framing: character archetypes
-   Decide the primary motivation and secondary spice. Keep an 80/20 split.
+   Explore motivations or archetypal associations only when they clarify audience feeling. No fixed split or persona label is required.
 
 5. Walls: sandbox
    Define the ongoing show. Is the artist a documentary, a road movie, a luxury revenge drama, a haunted motel diary, a future-city rebellion?
@@ -5499,7 +5509,7 @@ Music without narrative context is a soundtrack with no movie. The audience need
 
 ## Pattern break rule
 
-The brain filters out average. Use surprise inside structure: familiar enough to understand, strange enough to remember.
+Surprise can make a specific detail memorable. Keep it connected to the music; a direct, familiar form with emotional conviction can work just as well.
 
 ## Halloween Test
 
@@ -5516,7 +5526,7 @@ Sentence 3: How it appears in sound, visuals, content, and fan identity.
         path: "SKILL.md",
         content: `---
 name: artist-narrative-universe
-description: Build the narrative world around an artist's music. Use when turning sound, taste, references, profile, voice, branding cards, lyrics, visuals, or campaign notes into a cinematic universe, brand house, rules of the world, archetype, setting, sandbox, and elevator pitch.
+description: Build the narrative world around an artist's music. Use when connecting recurring themes, atmosphere, imagery and behavior from music, profile, voice, lyrics and references into a coherent artistic world. Cinematic structure, archetypes and fiction are optional lenses.
 ---
 
 # Artist Narrative Universe
@@ -5525,11 +5535,13 @@ Use this skill to build "the movie" around the soundtrack. The goal is not lore 
 
 ## Workflow
 
+Use this lens when narrative coherence answers the artist's question. Begin with approved HQ identity and, in a campaign, its Release Creative Brief. Preserve those decisions. A world can be a lived sensibility rather than fictional lore; the artist can remain themselves. World Builder separately develops an optional concrete experience. Use only the steps that sharpen meaning, without requiring a movie metaphor or complete worksheet.
+
 1. Match sound to land.
    Choose the narrative land: action, horror, romance, tragedy, sci-fi, documentary, street realism, western, noir, fantasy, luxury drama, road movie, etc.
 
 2. Build the foundation.
-   Add the twist that breaks the pattern. Mix one familiar story structure with one unexpected aesthetic or setting.
+   Find a specific combination or tension already suggested by the work. A familiar story structure with an unexpected setting can help, but never force a twist for novelty alone.
 
 3. Write rules of the universe.
    Define what belongs and what violates the world. Use positive constraints.
@@ -5538,15 +5550,17 @@ Use this skill to build "the movie" around the soundtrack. The goal is not lore 
    Decide whether the artist is playing the person, playing the brand, or balancing both.
 
 5. Define the sandbox.
-   Name the recurring "show" the audience is watching. Every post, video, song, cover, and flyer should feel like a scene.
+   Name the recurring emotional territory, situations or motifs. Related work should feel connected without requiring every post, video or ordinary moment to act as a scene.
 
 6. Make the setting specific.
    Move from generic to concrete: not "city," but "a laundromat in Queens at 2 AM"; not "future," but "wet chrome gas station in 2041."
 
 7. Produce the pitch.
-   Give a clear 3-sentence brand movie pitch.
+   Summarize the world in a few clear sentences when useful. A film pitch is optional.
 
 ## Output
+
+Choose relevant fields only. Archetype splits, character modes and invented settings are optional and should never override the artist's actual identity.
 
 \`\`\`markdown
 Narrative land:
@@ -35940,6 +35954,71 @@ never verbatim copyrighted lyrics.
     ],
   },
   {
+    slug: "release-creative-direction",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: release-creative-direction
+description: Find the strongest ways for an artist's ethos, message and stance to come through a particular release and its campaign. Use artist context, lyrics, sound and campaign notes to identify audience emotional pull, a central creative idea, meaningful recurring cues and where to express them; hand useful direction to World Builder and production agents.
+---
+
+# Release Creative Direction
+
+Make the right listeners feel: "This artist gets something about me. I'm with them."
+
+Your job is to find what deserves emphasis in this campaign and how to express it. Start with the artist and the music, then choose a few meaningful moves that can deepen interest, recognition and support. A palette, font or mood board alone does not answer that job.
+
+## Establish the starting point
+
+Read the available artist profile, ethos, voice and approved HQ direction alongside the specific release's lyrics, campaign board, onboarding notes, references and practical constraints. Use relevant fan reactions or existing intel when available; do not launch a research project by default.
+
+- Separate established artist identity, artist-approved release decisions and your new interpretations. HQ identity remains authoritative; a campaign experiment does not silently rewrite it.
+- Use audio observations only if you actually heard or analyzed the audio with an available tool. Otherwise attribute sound descriptions to the artist's notes or references. Lyrics alone do not establish how a track sounds.
+- Missing context should change your confidence, not trigger a full career audit. Ask only for the missing material that changes the direction; offer clearly marked possibilities when useful.
+- If the music complicates the established identity, explore that tension with the artist. Do not force a song into an old slogan or invent a new career identity to explain it.
+
+## Find the emotional opportunity
+
+1. **Who will recognize themselves here?** Describe a lived feeling, desire, frustration, private belief or contradiction. Go beyond age, genre and vague labels such as "outsiders." What would make a particular listener feel seen?
+2. **What does this artist express that matters to those people?** Connect an actual lyric, release theme, delivery described in the available material, or artist behavior to a stance. Consider what the artist embraces, refuses, protects or finds funny. An implicit us-versus-them feeling can fit; an enemy is never required. Tenderness, humor and shared experience can create equally strong allegiance.
+3. **What is the strongest campaign idea?** Look for one focus, committed act, premise or recurring behavior that makes that connection tangible. It can be a real-world action, a content premise, a performance choice or a deliberate way of showing up. An immersive world is one option, not the expected answer.
+4. **Which signals carry it?** Select a few words, phrases, images, settings, gestures, objects or sonic cues people could recognize and feel. Familiar archetypal associations can help, but explain the specific emotional connection rather than assigning a stock archetype. Each cue needs a reason rooted in this artist and release.
+5. **Where will it work best?** Choose the highest-value places across the actual campaign: a reveal, video premise, live moment, recurring content, public behavior, fan encounter or follow-through after release. Show how the idea develops rather than stamping the same symbol on everything. Leave room for direct, unthemed music content and restraint.
+
+Think broadly before recommending, but present one strongest direction and only a meaningfully different alternative when it helps the artist choose. Avoid a pile of interchangeable campaign ideas.
+
+## Make the direction usable
+
+For each important move, explain the intended feeling, what the artist would actually do, where it belongs and why it serves the central idea. Account for resources, comfort, timing and the artist's real behavior. Recommend a smaller convincing act over a grand concept they cannot sustain.
+
+Use taste and judgment, not a loyalty formula. Never manufacture hostility, shame outsiders, exploit vulnerability or promise that an idea will create devotion. Do not turn belonging into mandatory fan rituals, insider jargon or a fictional mythology. Remove cues that feel copied, performative, overexplained or detached from the song. Typography and color may support a chosen direction when relevant; they should not substitute for it.
+
+## Release Creative Brief
+
+When the direction is developed enough to be useful, produce one concise **Release Creative Brief** containing the applicable essentials:
+
+- **Audience pull:** who is most likely to feel recognized, and the emotional reason.
+- **Artist stance and release connection:** what established ethos comes through, and how this particular music supports or complicates it.
+- **Central idea:** the strongest focus or committed act, and why it could make people care more.
+- **Emotional cues:** a selective set of language, images, gestures or other signals, with their intended meaning.
+- **Campaign expression:** the most valuable placements and development before, during and after release, adapted to the actual timeline.
+- **Boundaries and decisions:** what to avoid, practical constraints, what is approved and what still needs the artist's choice.
+
+This is a flexible handoff, not a mandatory worksheet. Answer a narrow question directly. During exploration, discuss only the choices at hand; do not regenerate the entire brief every turn.
+
+Save useful direction with \`save_release_creative_brief\` in the current campaign. First read \`campaign-creative-direction\` using \`get_workspace_context\` with \`maxChars: 12000\`. Pass its exact full body as \`expectedBody\`; use null only when no brief exists, never when a read is denied or fails. Reconcile existing artist decisions before replacing the brief. Keep the new Markdown \`body\` concise and omit the stored Direction status header. Set \`status: proposed\` unless the artist explicitly accepted that direction; saving is not acceptance or permission to execute. If another edit wins first, read and reconcile again. The saved context reaches World Builder and the relevant production agents without rewriting HQ identity. Never claim it was saved or shared without a successful tool result.
+
+## Handoff without duplicating the job
+
+World Builder receives the audience pull, stance, central idea, cues and constraints. If an experience would strengthen the campaign, it develops how people enter or participate: the encounter, mechanics and supporting details. It should preserve the approved meaning rather than independently reinventing the artist or release. Many strong campaigns need no separate world-building work.
+
+Production agents turn the approved direction into specific scripts, visuals, content and execution plans. Leave room for their craft while keeping the reason behind each choice clear. Creative direction itself does not authorize publishing, spending, scheduling or changes to HQ identity.
+`,
+      },
+    ],
+  },
+  {
     slug: "reverse-cowboy",
     files: [
       {
@@ -48320,116 +48399,73 @@ Write high-performing X/Twitter posts using research-backed, algorithm-optimized
         path: "SKILL.md",
         content: `---
 name: world-immersion
-description: Design a psychologically compelling, low-budget immersive release campaign that pulls fans inside the WORLD of a song, not its marketing. Use when an artist, manager, or creative wants a release to feel like an experience fans can enter and be part of, rather than a promo cycle of lyric clips and countdown posts. Trigger on requests like design a campaign for this song, how do we make this release immersive, build a world around this track, make fans feel part of this, or any ask for creative rollout, fan activation, or experiential release ideas that must avoid corny generic engagement tactics. Takes rich song and campaign context (voice, ethos, theme, lyrics) as input. Assumes near-zero budget (roughly 0 to a couple hundred dollars) and pure-creativity solutions unless the artist states a real budget. Produces one central immersive mechanic grounded in the song's world plus honest feasibility, not a checklist of tactics. This is an experience-design engine, not an idea generator.
+description: Develop an artist's chosen release direction into a distinctive fan experience, committed act or built artifact, with clear entry, meaningful details and realistic execution. Use when an artist wants people to encounter, inhabit or participate in something beyond ordinary release content. Start from the Release Creative Brief when available; an immersive world, mystery or fictional mythology is optional. Favor convincing low-budget ideas unless a real budget is supplied.
 ---
 
 # World Immersion
 
-Design a release campaign that makes fans feel they've entered the *world* of a song. The output is one central, psychologically-grounded immersive mechanic that could only exist for this specific song — scaled honestly to a near-zero budget — not a list of activation tactics.
+Make the chosen creative direction something people can encounter and feel. Design one central experience, committed act or built artifact that belongs to this artist and release. Let its strongest details carry meaning; scale it honestly to the artist's resources.
 
-## Read this first: why most fan campaigns are corny
+## Start from the direction already chosen
 
-The failure mode is singular and it has one root cause: **the activation is decoration bolted onto a finished song instead of an extension of the song's actual world.** Everything corny flows from this — lyric-clip countdowns, "drop an emoji," unlock-at-100k-likes, dead Discords, filters no one uses. They're generic engagement mechanics wearing the song's cover art. They'd work identically for any other release. That interchangeability *is* the corniness.
+Read the campaign's **Release Creative Brief** (\`campaign-creative-direction\`), artist identity and voice, song material and practical constraints. Distinguish artist-approved decisions from proposals. Artist Direction in HQ owns the enduring identity; Creative Direction in the Campaign finds the release's central idea, emotional cues and expression opportunities. Your job is to develop how a chosen idea lives as an experience, preserving its meaning rather than producing a competing identity or campaign thesis.
 
-You cannot fix this by generating better activation ideas. The average of all activation ideas *is* the corny stuff — it's what everyone already does, which is why it reads as corny. So this skill does not generate activations. It reasons from **the song's specific world** and **documented psychological mechanisms** down to the one activation where they intersect. The order is the whole method. Skipping to "here are some ideas" is the thing that produces fluff.
+If there is no brief, a clear idea supplied directly by the artist is enough. Read available context and ask only for a missing decision that changes the work. Offer explicitly provisional interpretations when useful; never require a separate agent appointment just to proceed. Do not claim to have heard audio from lyrics or written descriptions.
 
-## The generative ethos (imagine from this — it comes before any judging)
+A separate immersive experience is optional. A direct performance, real gesture or strong piece of content may already express the idea fully. Say so when additional world-building would add machinery without emotional value. Answer a narrow question narrowly instead of delivering a complete campaign design every time.
 
-Before the laws, which only *reject*, hold the spirit that generates. The laws are subtractive gates applied at the end; this is the pull applied at the start. Get this backwards — lead with the filters — and you'll strangle the best ideas before they form.
+## The creative pull
 
-**Imagine things that excite people with surprise, curiosity, emotion, or experience outside the mundane.** Reach for wonder. The strongest release moments make someone feel they've stumbled onto something alive and unexpected — a form nobody saw coming from a song (a pirate radio station, not a music video), a gesture that stirs curiosity or feeling, a door into an experience outside the ordinary scroll. Let that pull shape what you dream up.
+Imagine things that excite people through surprise, curiosity, emotion or an encounter outside the ordinary scroll. A radio broadcast, a small physical object, an artist's committed action or an intimate performance can give the music another dimension. Reach beyond interchangeable engagement tactics.
 
-But hold two honest balances, because this is a pull, not a mandate:
+Hold two balances:
 
-- **Unexpected, yet connected.** Surprise earns attention; connection earns belief. A surprising form whose every detail snaps back to *this* song feels inevitable in hindsight — that's the sweet spot. The twin dangers are the on-the-nose obvious (surprising nothing) and the weird-for-its-own-sake stunt with no root in the song (which fans smell instantly as hollow). Aim between them.
-- **Simple is allowed — sometimes simple wins.** Do NOT mistake "unexpected" for a requirement that every idea be elaborate or novel in form. Some of the strongest moves are simple, even familiar in shape, and land entirely on execution, conviction, and emotional truth. A quiet, ordinary-looking gesture done with total commitment can beat a baroque concept. Never reject or steer away from a strong idea merely because it isn't surprising enough. Novelty is a pull, never a gate. If the emotional truth is there and the connection is real, that can be the best idea in the room even if its form is plain.
+- **Unexpected, yet connected.** A surprising form whose details return to this artist and song feels convincing. Avoid both literal illustration of every lyric and a clever stunt with no emotional connection.
+- **Simple is allowed — sometimes simple wins.** A plain gesture performed with conviction can beat an elaborate fictional universe. Novelty is an invitation, never a gate. Directness, warmth, humor, joy and shared recognition are as legitimate as intrigue.
 
-This ethos generates candidates. The four laws below then remove the ones that are actually corny, needy, or disconnected — but they never remove an idea for being *simple*, because simplicity isn't a failure mode.
+Aesthetic coherence includes behavior, atmosphere, timing and meaning. Colors and fonts can support the experience, but do not supply its reason to exist.
 
-## The four anti-corny laws (hard rejection criteria)
+## Build something worth encountering
 
-Every proposed activation must pass all four. If it fails one, it's rejected — no exceptions. (These are genuine pass/fail tests. "Is it surprising enough" is deliberately NOT among them — that's a matter of degree handled by the ethos above, not a gate, precisely so a strong simple idea is never filtered out.)
+**The artist builds; the fan enters.** The artist should offer something with value before asking people to contribute. A blank submission prompt, dead community or request to manufacture the campaign is not a compelling experience. Optional fan contributions can enrich a real foundation when participation itself fits the artist's direction; do not reject sincere collaboration just because people contribute.
 
-1. **Discovered, not shown.** The FedEx-arrow principle: people love the hidden arrow because they *find* it; being shown it does nothing. Corny campaigns hand everything over and beg for engagement. Immersive ones hide something in plain sight and let curiosity do the pulling. If the activation announces itself, it fails.
-2. **Never wink at the fan.** The world is treated as real and continuous — it existed before the fan arrived and continues past what they can see. The instant the campaign winks, nudges, or says "isn't this fun marketing," the spell breaks and it's corny. (Reznor on Year Zero: it's "not some kind of gimmick to get you to buy a record — it IS the art form." That posture is the mechanism, not the budget.)
-3. **The artist builds; the fan enters.** This is the most important law and the one most campaigns get backwards. The artist constructs a world — a real, made thing — and the fan's role is to *step into it, follow it, witness it, or map it*. The fan is NEVER asked to supply the world's content. Any activation whose engine is "fans submit / fans share their story / fans tell us their ___" is REJECTED. That is a prompt, not a world — it's needy, it's labor disguised as participation, and it's an admission the artist built nothing. **The test: if the activation would collapse into nothing without fan submissions, it fails.** The world must fully stand on its own whether or not a single fan shows up. Participation, when it exists at all, is stepping into something already built and already moving (see the "evolving built artifact" pattern below) — not filling an empty room the artist left blank.
-4. **Withhold more than you reveal.** The world must have edges the fan can't immediately see past. Mystery, incompleteness, a detail implying a larger structure — deliberate "gaps and excesses" that hint at more than is shown (Jenkins). A world that explains itself fully has nothing to pull anyone in. But withholding is not the same as absence: hide the depths of a world that visibly *exists*, don't just gesture at a void.
+Useful forms include:
 
+- **A committed real-world action.** The artist actually does something that makes the stance tangible: hosts an intimate encounter, makes an object available, performs in a meaningful setting or sustains a distinctive behavior. Fans can witness it without having to decode fiction.
+- **Another medium carrying the same meaning.** A short film, broadcast, zine, field guide, series or performance extends the release into a form whose details earn their place. Fiction is one possibility, not a prerequisite.
+- **An evolving artifact.** A recording, physical object, story or place develops over time under a clear creative intention. It remains rewarding to witness even if nobody participates.
+- **A persistent object or place.** Something small continues beyond one post: a phone recording, gathering place, recurring encounter or object with emotional significance. Include the ongoing upkeep in the cost.
 
+Use these as possibilities, not a menu every answer must cover. Build from the selected direction, not from a favorite technology or the default idea of a secret website.
 
-## The psychological engine (reason from these mechanisms)
+## Choose the human reason to care
 
-Immersion on no budget is bought with *attention and curiosity*, not spectacle. These are the documented mechanisms that make a human lean in. Select the one(s) the song's world naturally activates — don't apply all of them.
+Name the specific feeling or opportunity the experience offers: recognition, delight, witnessing conviction, shared memory, belonging, discovery or a new way to hear the music. Explain it in ordinary language tied to this artist. Avoid unsupported psychological or neuroscience claims and promises of devotion.
 
-- **Curiosity gap.** The space between what someone knows and wants to know drives action. Hint at something valuable without revealing it. A partial reveal is more powerful than a full one.
-- **Zeigarnik effect / open loops.** The brain remembers and keeps chewing on *unfinished* things far more than finished ones. An unresolved question, a story cut off mid-arc, a countdown to something unnamed — creates a "mental itch that demands scratching." Unresolved questions measurably raise dopamine and make the eventual resolution more rewarding.
-- **Apophenia / pattern-finding.** The brain compulsively finds patterns in noise. Minimal, coded, abstract, or fragmented signals *invite* the fan to construct meaning — and the meaning they build themselves is stickier than any you hand them. Leave connectable dots; don't connect them.
-- **Earned discovery.** Discovery triggers a dopamine hit that being told does not. Anything the fan *works* to find (a hidden layer in the audio, a coded detail in the artwork, a URL spelled in something they already own) is worth more than the same thing handed over.
-- **Insider / outsider line.** Participation that confers membership — "I'm one of the few who noticed / got in / understood" — converts a listener into an inhabitant. The line between those inside the world and those outside is a powerful, free engine.
-- **Collective sense-making.** People pool effort to *map and master* a world that already exists — producing theories, timelines, charts about a thing the artist built. Community forms as a *byproduct* of a rich world, never as a forced "join our Discord" or "submit yours."
+Discovery, open questions, patterns and insider recognition can help when the material calls for them. They are optional devices. Never require hidden clues, fictional continuity, a withheld explanation, an enemy or a fan ritual. A fully explained act can still be moving. If mystery is useful, provide a satisfying payoff and a visible way in; do not confuse obscurity with depth.
 
-## The forms a built world can take (reason toward these, not toward prompts)
+## Develop the experience
 
-The output is a *creative act the artist commits*, at a scale of effort that proves the world is real. These are the families of that act. Pick the one the song's world implies; combine sparingly. None of these ask the fan to supply content.
+1. **Anchor it.** Briefly restate the accepted idea, intended audience feeling and relevant constraints. Reference the brief or supplied direction so other workers know what you are extending. Reopen a decision only when a concrete conflict needs the artist's choice.
+2. **Describe the actual encounter.** What does the artist make or do? What will a person first see, hear or receive? What happens next? What is rewarding if they simply watch? What, if anything, can they choose to do? Make the experience understandable without specialist language.
+3. **Make the details necessary.** Tie important language, images, objects, gestures and timing to the approved emotional cues. Apply the **reskin test**: if swapping the artist and cover art changes nothing, make the meaning more specific. A familiar form is fine when the execution belongs unmistakably to this release.
+4. **Scale it.** Use the known time, skills, audience size, artist comfort and budget. If budget is unknown, start with a modest version around $0–$200 and mark the estimate as an assumption. Prefer writing, performance, timing and accessible tools over an undeclared developer team. Ask about a constraint only if it changes the recommendation.
+5. **Connect only useful touchpoints.** Show how the same experience can develop across the actual release timeline. Two or three extensions may be enough; a single act may need none. Leave room for ordinary song announcements, direct music content and clear listening links.
+6. **Check failure modes.** Identify the realistic weak point: nobody sees the entry, too much effort is required, the gesture feels performative, the payoff is thin, or upkeep is unsustainable. Suggest the smallest practical correction. Do not invent a full risk report for a simple idea.
 
-- **Non-musical media in the song's world.** Express the world through a medium that is *not* "artist sings at camera." A short web series, a fake documentary or news broadcast, an in-world radio show or podcast, a faux corporate/institutional website, a printed object (a zine, a field guide, a classified ad, a missing-person flyer) that behaves as if the world is real. The music becomes the *soundtrack to a world* rather than the content. (Gorillaz's fictional band histories; Spinal Tap existing as a "real" touring band; Blair Witch's fake documents.) Cheapest and often strongest on no budget — it's made of writing, a camera, and commitment.
-- **A committed real-world action.** The artist *does a real thing in the world* that dramatizes the song's ethos at full, un-winking commitment — the more absurd-yet-sincere, the better. Runs for local office. Opens a one-day storefront for a business that only exists in the song. Stages a real event the song's character would stage. The power is that it's *actually happening*, not depicted. Fans witness or encounter it; they don't build it. (This is the highest-risk, highest-reward form; commitment is everything — the instant it winks, it dies.)
-- **An evolving built artifact.** The artist builds a *structure* that grows or changes across the campaign — and this is the ONE place fans may be involved, because they're stepping into a machine that's already running, not supplying the idea. A version of the song that visibly blossoms over weeks (layers, verses, or voices added on a schedule the artist controls). A map that fills in. A site that changes daily. A story told in serialized drops. The artist built the vessel and the rules; fans enter an ongoing thing. Involvement is optional and additive — the artifact is compelling to *watch* even if you never touch it.
-- **A persistent world-object or place.** A single artifact treated as real and continuous: a phone number that's always answerable in-world, a location that accrues meaning, a character's social presence that lives independently of the artist's, an address people can send things to or visit. Small, cheap, and durable — it deepens by simply *continuing to exist* in character.
+Check privately for empty participation bait, generic reskins and unnecessary complexity. Do not print a mandatory scorecard or four-law checklist into the artist's response.
 
-Cross-check every candidate against Law 3: does the world stand on its own if no fan participates? If the answer is no, it's a prompt wearing a world's costume — discard it.
+## Useful handoff
 
-## Workflow
+For a developed concept, give a concise experience brief: the chosen direction it extends, what the artist commits to, the first encounter and payoff, meaningful details, the smallest credible execution, useful timing and unresolved choices. Include only the sections that help this task. A rough possibility stays labeled as a proposal.
 
-Do these in order. Do not jump to step 3.
+Save substantive useful work through the available Output/context tools, preserving the campaign association and source brief reference. Never claim it was saved or handed off without a successful tool result. Do not overwrite the approved Release Creative Brief or HQ identity with the experience design. Production specialists can turn the accepted experience into scripts, visuals, video or a site; identify the concrete work needed without silently launching an entire team.
 
-### Step 1: Map the song's world
+Planning an experience does not authorize publishing, spending, scheduling, account changes or public commitments. Follow the run's actual authorization and artist decisions.
 
-Before proposing anything, interrogate the material you were given (voice, ethos, theme, lyrics). Establish:
+## Keep the music accessible
 
-- **The central tension.** Every song worth releasing has one unresolved thing at its core. Name it. (This becomes the open loop.)
-- **The emotional weather.** Not the topic — the *feeling-state*. Paranoid? Euphoric-then-hollow? Defiant? Nostalgic in a specific decade? Tender and claustrophobic?
-- **What the listener becomes inside it.** When someone is fully inside this song, who do they feel they are? (This is what the activation lets them inhabit.)
-- **Sensory and temporal texture.** If this song were a place: what time is it, what does it smell like, who else is there, what year, what light?
-- **What it withholds.** What does the song *not* say, leave ambiguous, or only imply? This is the raw material for the curiosity gap — the edge of the world.
-
-If the provided context is too thin to answer these, ask 2–3 sharp questions before continuing. Do not invent a world the artist didn't imply.
-
-### Step 2: Select the mechanism
-
-Given the world you mapped, which psychological mechanism does it *naturally* activate? A paranoid surveillance song wants apophenia and hidden-layer discovery. A song about a love that's already over wants the Zeigarnik open loop — a story cut off. A defiant outsider anthem wants the insider/outsider line. Choose the mechanism the world *implies*, not the one that's flashiest. Name why this song calls for this mechanism and not another.
-
-### Step 3: Design the single central activation
-
-Design **one** central creative act — a built thing the artist commits — where the world (step 1) and the mechanism (step 2) meet, drawn from one of the built-world forms above. Not a campaign checklist, not a prompt to fans: one true world-object that everything else hangs off. Requirements:
-
-- It must pass all four anti-corny laws. State how it passes each — especially Law 3 (state plainly what the artist *builds*, and confirm the world stands on its own with zero fan participation). Then, separately from the laws, note how the idea honors the generative ethos: where its surprise/curiosity/emotion lives and how it stays connected to this specific song — while remembering a strong simple idea is valid and is never rejected for being unsurprising.
-- **The needy-prompt check:** does the core mechanic depend on fans submitting, sharing, or supplying content? If yes, it's rejected — redesign it as something the artist builds and the fan enters. (An evolving built artifact fans can *join* is allowed; a blank prompt asking fans to *fill it* is not. The difference: is the machine already running before anyone arrives?)
-- **The reskin test:** could this exact act be reused for a *different* song by swapping the art? If yes, it's rejected — go back. A world for a paranoid track and a world for a warm nostalgic track should be unrecognizable as the same category of thing. Weld it to *this* song's specific world — ideally to specific images or lines in the lyric.
-- Budget $0–$200 unless the artist stated otherwise. Favor things made of writing, performance, commitment, timing, and free/cheap tools (a camera, a domain, a phone line, the artist's own audio and channels). Non-musical media and committed real-world action are usually the cheapest *and* the least corny, because they're made of creativity and nerve, not spend. If an idea needs real money or a dev team, find the version made of pure creativity.
-
-Then, briefly, the **spokes**: 2–4 smaller extensions of the same built world — additional touchpoints in the same universe (an in-world artifact, a timed reveal, a second medium). Not separate ideas; each deepens the one world and each must pass the laws, including Law 3.
-
-### Step 4: Feasibility, sequence, and honest failure modes
-
-- **Scale to the real artist.** A bedroom artist with 2,000 real fans needs a fundamentally different execution than someone with a label push. If you don't know the fanbase size and the artist's own willingness (to be cryptic, to not explain, to hold the line for weeks), ask. Pretending an activation will land at a scale the artist doesn't have is the dishonest failure this skill must avoid.
-- **Sequence it.** Immersion is usually a slow reveal, not a single drop. Rough timeline from first planted seed to release to resolution.
-- **Name what makes it fall flat.** Every immersive campaign has failure modes: fans don't notice the seed (too subtle), fans feel tricked (winked wrong), the mystery outlasts patience (open loop held too long), the reveal disappoints (resolution weaker than the buildup), or the artist breaks character and explains it (kills the world). State the specific risks for *this* design and how to de-risk. Do not present the campaign as guaranteed.
-
-## Output shape
-
-Lead with the world you mapped (brief — a few sharp sentences, not an essay), because the built act only makes sense once the world is named. Then the mechanism and why. Then the one central creative act — stating clearly what the artist *builds* — with the four-law check, the needy-prompt check, and the reskin test shown, plus a brief note on how it honors the generative ethos (surprise/emotion, connection) without forcing novelty. Then the spokes. Then feasibility, sequence, and honest failure modes. Prose, specific, no filler. This is a design document an artist can act on, not a pitch deck. Never celebrate the idea as flawless; the failure-modes section is mandatory and honest.
-
-## Two hard truths the withholding philosophy must not ignore
-
-These correct the skill's own biggest blind spots. Apply them every time.
-
-- **Subtle at small scale can mean invisible, not mysterious.** A hidden seed only becomes a mystery if enough people notice it to start pooling curiosity. For a bedroom artist with a small real fanbase, a too-quiet planted clue produces *silence* — nobody finds it, nothing happens, and it reads as the artist doing nothing. Calibrate the visibility of the seed to the actual audience: the smaller the fanbase, the more you must *point at the door* even while keeping what's behind it hidden. Discovered-not-shown means hide the *treasure*, not the *map's existence*. At small scale, tell people there's something to find; never tell them what it is.
-- **Immersion is almost always a layer, not the whole campaign.** Fans still need to plainly know the song exists, when it drops, and where to hear it. The immersive world sits *on top of* normal release mechanics, not instead of them. A campaign so cryptic that the song never gets heard has failed at the one job that matters. Design the immersive layer to reward the fans who lean in, while the ordinary release still reaches everyone who won't. Never let the mystery swallow the basic clarity of "this exists, here's where."
-
-## When this skill is the wrong tool
-
-Say so if it is. This is for making a *release* immersive. It's not a general marketing plan, not a growth-hacking tool, not a substitute for the music being good. If the artist's real problem is that the song isn't finished or isn't strong, immersion won't save it — say that. If they want straightforward promo (which is legitimate and sometimes correct), this skill's cryptic withholding approach may be wrong for their goal; name that honestly rather than forcing mystery onto something that wants directness.
+At small audience sizes, a quiet clue can produce silence. Make the first encounter visible enough for the real audience and worthwhile even without collective decoding. Fans must still know the music exists, when it releases and where to hear it. An optional deeper experience should reward curiosity while everyone else can enjoy the song directly.
 `,
       },
     ],

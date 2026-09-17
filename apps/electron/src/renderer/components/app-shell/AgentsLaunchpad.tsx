@@ -684,7 +684,19 @@ interface AgentDetailDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-function AgentDetailDialog({ agent, workspaceId, onAgentUpdated, onOpenChange }: AgentDetailDialogProps) {
+function AgentDetailDialog({ agent: selectedAgent, workspaceId, onAgentUpdated, onOpenChange }: AgentDetailDialogProps) {
+  // Worker rows are workspace projections; global editors must read the saved
+  // definition so changing a model never persists a campaign-only persona.
+  const [canonicalAgent, setCanonicalAgent] = React.useState<AgentDefinitionDTO | null>(null)
+  React.useEffect(() => {
+    let cancelled = false
+    setCanonicalAgent(null)
+    if (selectedAgent) void window.electronAPI.getAgentDefinition(selectedAgent.slug).then(saved => {
+      if (!cancelled) setCanonicalAgent(saved)
+    }).catch(() => { if (!cancelled) toast.error('Could not load the saved worker for editing') })
+    return () => { cancelled = true }
+  }, [selectedAgent])
+  const agent = canonicalAgent?.slug === selectedAgent?.slug ? canonicalAgent : null
   const { getDisplayName } = useAgentDisplayNames()
   const { upsert } = useAgents(workspaceId)
   const availableSkills = useAtomValue(skillsAtom)

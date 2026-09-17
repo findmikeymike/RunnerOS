@@ -1315,19 +1315,19 @@ body
     expect(printAgent?.systemPrompt).toContain('--confirm-runner')
   })
 
-  test('starter library includes the Branding Agent with artist branding skills', () => {
+  test('starter library includes Artist Direction with enduring identity skills', () => {
     const brandingAgent = STARTER_AGENTS.find((agent) => agent.slug === 'branding-agent')
 
     expect(brandingAgent).toBeDefined()
-    expect(brandingAgent?.metadata.name).toBe('Branding Agent')
+    expect(brandingAgent?.metadata.name).toBe('Artist Direction')
     expect(brandingAgent?.metadata.permissionMode).toBe('ask')
     expect(brandingAgent?.metadata.skills).toContain('artist-brand-dna-audit')
     expect(brandingAgent?.metadata.skills).toContain('artist-brand-expression-strategist')
-    expect(brandingAgent?.metadata.tags).toContain('branding')
+    expect(brandingAgent?.metadata.tags).toContain('identity')
     expect(brandingAgent?.systemPrompt).toContain('artist-profile')
     expect(brandingAgent?.systemPrompt).toContain('artist-voice')
     expect(brandingAgent?.systemPrompt).toContain('artist-branding')
-    expect(brandingAgent?.systemPrompt).toContain('artist-intel-report')
+    expect(brandingAgent?.systemPrompt).toContain('artist-profile')
   })
 
   test('starter library includes World Builder with world immersion skill', () => {
@@ -1337,12 +1337,12 @@ body
     expect(worldBuilder?.metadata.name).toBe('World Builder')
     expect(worldBuilder?.metadata.permissionMode).toBe('ask')
     expect(worldBuilder?.metadata.skills).toContain('world-immersion')
-    expect(worldBuilder?.metadata.skills).toContain('artist-narrative-universe')
-    expect(worldBuilder?.metadata.skills).toContain('artist-campaign-angle-builder')
+    expect(worldBuilder?.metadata.skills).not.toContain('artist-narrative-universe')
+    expect(worldBuilder?.metadata.skills).not.toContain('artist-campaign-angle-builder')
     expect(worldBuilder?.metadata.tags).toContain('worldbuilding')
     expect(worldBuilder?.systemPrompt).toContain('campaign-worker-context')
-    expect(worldBuilder?.systemPrompt).toContain('one central immersive mechanic')
-    expect(worldBuilder?.systemPrompt).toContain('The artist builds; fans enter')
+    expect(worldBuilder?.systemPrompt).toContain('campaign-creative-direction')
+    expect(worldBuilder?.systemPrompt).toContain('The artist builds or acts')
   })
 
   test('starter library includes the Comms Agent with artist comms skill', () => {

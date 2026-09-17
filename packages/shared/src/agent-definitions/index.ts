@@ -73,3 +73,6 @@ export { BUILTIN_AGENT_REGISTRATIONS, REQUIRED_BUILTIN_AGENT_SLUGS, BASE_DEFAULT
 export { SPOTIFY_ANALYST_LEGACY_PROMPTS } from './spotify-analyst-prompt-baselines.ts';
 
 export { migrateBuilderResponsibility } from './builder-transition.ts';
+
+export { ARTIST_DIRECTION_AGENT, CAMPAIGN_CREATIVE_DIRECTION, WORLD_BUILDER_AGENT, resolveArtistDirectionForScope } from './artist-direction.ts';
+export { migrateArtistDirection } from './artist-direction-migration.ts';

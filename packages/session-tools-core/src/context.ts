@@ -596,6 +596,8 @@ export interface SessionToolContext {
    * Backend owns credential storage, workspace scoping, process env refresh, and UI broadcasts.
    */
   manageArtistBrain?(input: import('./handlers/manage-artist-brain.ts').ManageArtistBrainInput): Promise<unknown>;
+  proposeBrandingUpdate?(input: import('./handlers/propose-branding-update.ts').ProposeBrandingUpdateInput): Promise<unknown>;
+  saveReleaseCreativeBrief?(input: import('./handlers/save-release-creative-brief.ts').SaveReleaseCreativeBriefInput): Promise<unknown>;
   importArtistCommunity?(input: import('./handlers/import-artist-community.ts').ImportArtistCommunityInput): Promise<unknown>;
   importArtistNetwork?(input: import('./handlers/import-artist-network.ts').ImportArtistNetworkInput): Promise<unknown>;
   setupLlmConnection?(input: import('./handlers/setup-llm-connection.ts').SetupLlmConnectionInput): Promise<unknown>;

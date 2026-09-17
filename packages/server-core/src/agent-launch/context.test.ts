@@ -130,3 +130,17 @@ describe('shared launch context preparation', () => {
     })).toEqual([])
   })
 })
+
+ test.each([['art-director', 'cover-art'], ['scriptwriter', 'short-form'], ['video-director', 'create-video'], ['content-genius', 'ideas']])('focused %s receives authorized release direction but cannot revive disabled or private direction', (slug, modeId) => {
+  const ws = workspace()
+  const definition = STARTER_AGENTS.find(agent => agent.slug === slug)!
+  const mode = resolveAgentTaskMode(definition, modeId)!
+  const brief = doc('campaign-creative-direction', { delivery: 'on-demand' })
+  const prepare = (brief: LoadedContextDoc) => prepareAgentLaunchContext(ws, slug, mode, {
+    loadDocs: () => [brief], refreshTracks: () => ({ ok: true }), refreshReleaseKit: () => ({ contextPersisted: true }),
+    withScriptwriterContext: (_root, _slug, docs) => docs,
+  })
+  expect(prepare(brief).map(doc => doc.slug)).toContain('campaign-creative-direction')
+  expect(prepare({ ...brief, metadata: { ...brief.metadata, enabled: false } })).toEqual([])
+  expect(prepare({ ...brief, metadata: { ...brief.metadata, private: true, routing: { mode: 'targeted', agents: ['branding-agent'] } } })).toEqual([])
+})

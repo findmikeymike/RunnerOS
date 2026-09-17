@@ -5,29 +5,31 @@ description: Turn artist brand DNA into campaign angles, rollout concepts, conte
 
 # Artist Campaign Angle Builder
 
-Use this skill to turn brand strategy into campaign ideas people can talk about. Campaigns should feel like scenes from the artist's movie, not disconnected promo tasks.
+Use this skill to turn brand strategy into campaign ideas people can talk about. Campaigns should express a coherent idea through meaningful choices. A cinematic world is one possible expression, not the default.
 
 ## Workflow
 
-1. Anchor in brand DNA.
-   Pull tensions, mythology, emotional territory, audience gravity, belief system, visual rules, and voice.
+1. Anchor in the chosen direction.
+   Read the Release Creative Brief (`campaign-creative-direction`) alongside approved HQ identity and song material. Develop the selected central idea, emotional pull, cues and constraints. If no idea is chosen, use release-creative-direction to resolve that first; do not silently replace an approved idea. Draw on mythology or visual rules only when they already fit.
 
 2. Choose the campaign job.
    Awareness, release narrative, fan activation, visual world launch, community ritual, controversy/reaction, conversion, or retention.
 
 3. Create angles from tension.
-   Campaign angles should dramatize a contradiction or belief.
+   Campaign angles can express a contradiction, belief, feeling, shared experience or committed act. Choose what is true to this music and meaningful to its listeners.
 
 4. Stack memory hooks.
-   Include at least two: visual symbol, sonic cue, physical action, recurring phrase, fan ritual, environmental trigger, public constraint.
+   Choose only useful cues: a visual symbol, sonic detail, physical act, phrase, voluntary ritual, setting or public constraint. One strong cue can be enough; a quota adds noise.
 
 5. Make it executable.
-   Convert each angle into posts, videos, visuals, captions, rollout beats, and fan participation.
+   Place the strongest angle where it will matter most: a post, video, public act, performance, release moment or optional fan encounter. Do not require every format or audience participation.
 
 6. Filter.
    Remove ideas that do not match the universe, voice, audience, or resources.
 
 ## Output
+
+Answer the current question with the applicable fields. Present the strongest angle and only useful alternatives. Participation, rituals and exhaustive rollout plans are optional. Preserve the source brief and distinguish new proposals from artist-approved decisions.
 
 ```markdown
 Campaign thesis:

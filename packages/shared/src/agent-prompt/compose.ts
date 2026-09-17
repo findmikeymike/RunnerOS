@@ -174,7 +174,7 @@ export function composeAgentSystemPrompt(
   if (memory.artistWorkspaceScope === 'hq' || memory.artistWorkspaceScope === 'campaign' || memory.artistWorkspaceScope === 'lab') {
     parts.push(ARTIST_OS_TEAM_MISSION);
     if (agent.slug?.trim().toLowerCase() === CONCIERGE_SLUG) parts.push(ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE);
-    const specialistGuidance = buildArtistSpecialistGuidance(agent.slug);
+    const specialistGuidance = buildArtistSpecialistGuidance(agent.slug, memory.artistWorkspaceScope);
     if (specialistGuidance) parts.push(specialistGuidance);
   }
   if (taskModeSection) parts.push(taskModeSection);

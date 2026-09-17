@@ -34,6 +34,7 @@ import { resolveAgentReferences, describeMissingReferences } from '@/lib/agent-r
 import { skillsAtom } from '@/atoms/skills'
 import { sourcesAtom } from '@/atoms/sources'
 import type { AgentDefinitionDTO } from '../../shared/types'
+import { resolveArtistDirectionForScope } from '@craft-agent/shared/agent-definitions/artist-direction'
 import { getAgentCapabilityDisplay } from '@/lib/agent-capability-display'
 
 interface AgentInfoPageProps {
@@ -42,11 +43,12 @@ interface AgentInfoPageProps {
 }
 
 export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageProps) {
-  const [agent, setAgent] = React.useState<AgentDefinitionDTO | null>(null)
+  const [canonicalAgent, setAgent] = React.useState<AgentDefinitionDTO | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [editOpen, setEditOpen] = React.useState(false)
   const [isLaunching, setIsLaunching] = React.useState(false)
   const activeWorkspace = useActiveWorkspace()
+  const agent = canonicalAgent ? resolveArtistDirectionForScope(canonicalAgent, activeWorkspace?.artistWorkspaceScope) : null
   const { onCreateSession, onInputChange } = useAppShellContext()
   const canRevealLocally = !activeWorkspace?.remoteServer
   const { activeSlugs, setActive, remove } = useAgents(workspaceId)
@@ -376,7 +378,7 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
       <AgentEditDialog
         open={editOpen}
         onOpenChange={setEditOpen}
-        agent={agent}
+        agent={canonicalAgent ?? undefined}
         workspaceId={workspaceId}
       />
     </Info_Page>

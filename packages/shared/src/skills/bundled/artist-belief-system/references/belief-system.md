@@ -2,11 +2,11 @@
 
 ## Core thesis
 
-Fans become loyal when the artist helps them say "I am this." The belief system converts attention into belonging.
+A clear conviction can help listeners recognize themselves and feel a connection. This is an opportunity, not a formula or promise of loyalty. Use only the exercises that illuminate the artist's real work.
 
-## Define the enemy
+## Optional opposition
 
-The enemy gives the tribe a boundary. It can be:
+When the artist already expresses resistance, naming the opposing force can clarify a shared conviction. Tenderness, humor and joy need no enemy. Possible forces include:
 - mediocrity
 - fake perfection
 - the old guard
@@ -29,9 +29,11 @@ Write belief statements as:
 - "We choose..."
 - "We refuse..."
 
-Good beliefs are specific enough that someone could disagree.
+Good beliefs are specific and recognizable. Disagreement can sharpen a stance but is not required; a tender observation can be equally distinctive.
 
-## Stress tests
+## Optional stress tests
+
+Select relevant tests rather than requiring every belief to pass each one. No enemy, pledge, merch slogan or lifetime doctrine is required.
 
 Hater Test:
 Would someone be clearly opposed to this?

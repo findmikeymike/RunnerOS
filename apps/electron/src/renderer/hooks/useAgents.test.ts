@@ -27,6 +27,7 @@ function harness(workspaceId: string | null, initialActive: string[], options: U
       // Simulate successful definition save with refused activation.
       return created
     }),
+    getAgentDefinition: mock(async (slug: string) => library.find(agent => agent.slug === slug) ?? null),
     listAllAgentDefinitions: mock(async () => library),
     listActiveAgentDefinitions: mock(async () => [...saved]),
     setAgentDefinitionActive: mock(async (_workspaceId: string, slug: string, active: boolean) => {

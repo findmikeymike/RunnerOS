@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { getManagedSkillManifest, getManagedSkillsRoot, skillDigest, type ManagedSkillStorageOptions } from './managed.ts';
 import monidBaselines from '../agent-definitions/__fixtures__/monid-routing-v1/baselines.json';
 import helperBaselines from '../agent-definitions/__fixtures__/helper-guide-v1/baselines.json';
+import directionSkillBaselines from './__fixtures__/artist-direction-skills-v1/baselines.json';
 
 let startupMigrationDeferred = false;
 export function setManagedSkillMigrationDeferred(value: boolean): void { startupMigrationDeferred = value; }
@@ -20,7 +21,10 @@ const legalSlug = (slug: string) => /^[a-z0-9][a-z0-9-]{0,180}$/.test(slug);
 const knownCoreHashes: Readonly<Record<string, readonly string[]>> = {
   ...monidBaselines.skills,
   'artist-os-guide': helperBaselines.skills.map(version => version.sha256),
+  // Exact bundled world-immersion before the Artist/Creative Direction split.
+  'world-immersion': ['91ce0fc1b9698309457ad5c6efa6900c4a1571eff2de88338c81106cd3c51aa2'],
 };
+const knownDirectionFiles: Readonly<Record<string, Readonly<Record<string, string>>>> = directionSkillBaselines;
 
 function readJournal(root: string): MigrationJournal {
   const path = join(root, JOURNAL);
@@ -132,7 +136,10 @@ export function migrateManagedSkillScope(skillsDir: string, options: ManagedSkil
       const isStock = actualFiles.length === stock.files.length
         && actual.filter(([path]) => path.endsWith('/')).every(([directory]) => stock.files.some(file => file.path.startsWith(directory)))
         && actualFiles.every(([path, hash]) => stock.files.some(file => file.path === path
-          && (skillDigest(Buffer.from(file.content).toString('base64')) === hash || (path === 'SKILL.md' && knownPreviousCore))));
+          && (skillDigest(Buffer.from(file.content).toString('base64')) === hash
+            || (path === 'SKILL.md' && knownPreviousCore)
+            || (knownDirectionFiles[slug]?.[path] !== undefined
+              && skillDigest(readFileSync(join(original, path), 'utf8')) === knownDirectionFiles[slug]?.[path]))));
       entry = { digest, copySlug: isStock ? null : `${slug}-personal-${digest.slice(0, 12)}`, retired: false };
       journal.entries[slug] = entry;
       // Journal identity first: an interrupted copy cannot be mistaken for a different customization.

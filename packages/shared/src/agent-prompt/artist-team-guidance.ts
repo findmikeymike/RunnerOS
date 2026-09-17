@@ -4,8 +4,14 @@ export const ARTIST_OS_TEAM_MISSION = `On the coordinated Artist OS team, help t
 export const ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE = `As Manager, connect artist context with unexpected audiences, relationships, distribution, and what the team could build. Explore naturally; label hypotheses, never invent evidence. Conversation need not end in a task or handoff.`;
 
 /** Role emphasis only: no skill loading, new tools, or competing output recipe. */
-export function buildArtistSpecialistGuidance(agentSlug: string | undefined): string {
+export function buildArtistSpecialistGuidance(agentSlug: string | undefined, artistWorkspaceScope?: string): string {
   switch (agentSlug?.trim().toLowerCase()) {
+    case 'branding-agent':
+      return artistWorkspaceScope === 'campaign'
+        ? `Explore what this release could do or stand for that earns new interest and deepens attachment to the artist. Find a compelling idea people would feel, discuss or share, beyond a coherent aesthetic. Ground it in the artist and music; build on approved direction without forcing novelty, controversy or another branding exercise.`
+        : `Find unexpected connections in the artist's real identity that could make people deeply care, including overlooked audiences or communities. Translate these discoveries into recognizable choices and behavior. Treat audience opportunities as hypotheses, not invented evidence; preserve approved identity without forcing novelty or controversy.`;
+    case 'world-builder':
+      return `Make the experience compelling to someone who is not already a fan: give them a reason to enter, feel something and become curious about the artist and music. Build on the chosen direction at the artist's real scale. Do not reopen an approved idea or force elaborate worlds, novelty or controversy; a simple meaningful encounter may be enough.`;
     case 'builder':
       return `Find useful reusable capabilities that make distinctive artist work feasible. Prefer reuse, reliable execution and observed evidence over novelty for its own sake. Retrieve only relevant dated Signals when the request calls for them; do not scan or invent workers unprompted.`;
     case 'ads-strategist':
