@@ -4,7 +4,7 @@ import { getWorkspaces } from '../../../shared/src/config/storage';
 import { canonical, type DurableClaim, type DurableJournal } from '../../../shared/src/durable-execution';
 import type { DurableOperationIntent } from '../../../shared/src/durable-execution/operation-types';
 import type { DurableJson } from '../../../shared/src/protocol/durable-execution';
-import { isCertifiedDurableConnectedReadUrl, type DurableWorkflowConnectedRead } from '../../../shared/src/workflows/connected-reads';
+import { isDurableConnectedReadUrl, type DurableWorkflowConnectedRead } from '../../../shared/src/workflows/connected-reads';
 import { permissionsConfigCache, getAppPermissionsDir, getWorkspacePermissionsPath, getSourcePermissionsPath, PermissionsConfigSchema } from '../../../shared/src/agent/permissions-config';
 import { shouldAllowToolInMode } from '../../../shared/src/agent/mode-manager';
 import { createDurableConnectedReadBindingResolver, type DurableConnectedReadBinding } from './durable-connected-read-binding';
@@ -34,7 +34,7 @@ export function createDurableWorkflowConnectedReads(options: DurableWorkflowConn
     permissionsConfigCache.invalidateDefaults();
     permissionsConfigCache.invalidateWorkspace(workspaceRoot);
     permissionsConfigCache.invalidateSource(workspaceRoot, read.sourceSlug);
-    if (!isCertifiedDurableConnectedReadUrl(read.url) || !shouldAllowToolInMode(`mcp__${read.sourceSlug}__api_${read.sourceSlug}`,
+    if (!isDurableConnectedReadUrl(read.url) || !shouldAllowToolInMode(`mcp__${read.sourceSlug}__api_${read.sourceSlug}`,
       { method: 'GET', path: new URL(read.url).pathname }, 'safe',
       { permissionsContext: { workspaceRootPath: workspaceRoot, activeSourceSlugs: [read.sourceSlug] } }).allowed) {
       throw new Error('durable-connected-read-unavailable');
@@ -67,7 +67,7 @@ export function createDurableWorkflowConnectedReads(options: DurableWorkflowConn
       const results: DurableJson[] = [];
       for (const [index, read] of reads.entries()) {
         const adapter = createDurableConnectedReadAdapter(read.binding, {
-          bindingResolver: resolver, transport: options.transport, isCertifiedRead: isCertifiedDurableConnectedReadUrl,
+          bindingResolver: resolver, transport: options.transport, isCertifiedRead: isDurableConnectedReadUrl,
           isAuthorized: () => { authorize(read, workspaceRoot, assertAuthority); return true; },
         });
         const runner = new DurableEffectRunner(journal, [adapter]);

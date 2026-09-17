@@ -4,6 +4,14 @@
 
 The durable engine is intended to underlie normal workflows. Internal certification is not evidence that normal Start already uses it. The application is still being built; compatibility here means preserving existing working execution while each replacement is proven.
 
+## Current architecture decision — shared behavior, no per-connection upgrade ladder
+
+The September 17 correction supersedes the Spotify-only restriction and mandatory read approvals described in historical slices below. `connectedReads` now uses one canonical, queryless HTTPS GET path for eligible workspace static-bearer sources. The existing application API read policy determines permission; exact source origin/path binding, current credentials, DNS protection, response bounds and journal recovery remain shared. Adding another eligible provider requires its source configuration and workflow declaration, not a new endpoint regex, adapter file or approval flow. Spotify is an example, not a special execution path. As in ordinary API tooling, this read classification assumes the provider obeys GET semantics; workflows must not declare mutating GET endpoints as reads.
+
+Safe-policy-allowed native/web reads no longer create an extra durable approval request. Ask mode also carries current workspace/source permission context into MCP classification, so configured read/search allowances are honored. Existing explicit approvals for sends, writes and other consequential operations remain in the common authorization machinery. Internal access and ownership checks run silently; they are not human approval gates.
+
+Ordinary OAuth tools already share `TokenRefreshManager` → `SourceServerBuilder` → `createApiServer`. Reuse that lifecycle for any future durable dynamic-tool integration; do not build a second login/refresh stack per provider. Dynamic API/MCP tools remain on ordinary execution today because the durable Pi path does not yet expose general proxies. This correction does not claim otherwise, migrate all workflows, or block their existing operation. Provider-specific recovery code is justified only when an external side effect needs its own idempotency/reconciliation semantics; shared GET reads do not need a provider-by-provider certification project.
+
 ## Slice 1: admission, history and recovery boundary
 
 Implemented in source:

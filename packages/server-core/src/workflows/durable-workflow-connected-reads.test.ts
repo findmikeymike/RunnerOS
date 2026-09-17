@@ -10,13 +10,18 @@ import { createDurableConnectedReadBindingResolver } from './durable-connected-r
 
 const cleanups: Array<() => void> = [];
 afterEach(() => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); });
-function fixture() {
+const connections = [
+  { provider: 'spotify', baseUrl: 'https://api.spotify.com/v1/', url: 'https://api.spotify.com/v1/artists/0123456789ABCDEFGHIJKL' },
+  { provider: 'github', baseUrl: 'https://api.github.com/repos/', url: 'https://api.github.com/repos/artist-os/demo' },
+  { provider: 'custom-analytics', baseUrl: 'https://analytics.example.com/v2/', url: 'https://analytics.example.com/v2/reports/latest' },
+];
+function fixture(connection = connections[0]!) {
   const root = mkdtempSync(join(tmpdir(), 'normal-connected-unit-'));
   const configRoot = join(root, 'config'), directory = join(root, 'sources/account');
   mkdirSync(directory, { recursive: true });
   const previous = process.env.CRAFT_CONFIG_DIR; process.env.CRAFT_CONFIG_DIR = configRoot;
   cleanups.push(() => { if (previous === undefined) delete process.env.CRAFT_CONFIG_DIR; else process.env.CRAFT_CONFIG_DIR = previous; rmSync(root, { recursive: true, force: true }); });
-  writeFileSync(join(directory, 'config.json'), JSON.stringify({ id: 'account', slug: 'account', name: 'Account', provider: 'spotify', type: 'api', enabled: true, isAuthenticated: true, api: { baseUrl: 'https://api.spotify.com/v1/', authType: 'bearer' } }));
+  writeFileSync(join(directory, 'config.json'), JSON.stringify({ id: 'account', slug: 'account', name: 'Account', provider: connection.provider, type: 'api', enabled: true, isAuthenticated: true, api: { baseUrl: connection.baseUrl, authType: 'bearer' } }));
   const workspace = { id: 'workspace', name: 'Fixture', slug: 'fixture', rootPath: root, createdAt: 1 };
   let token = 'synthetic-account-secret', reads = 0;
   const bindingResolver = createDurableConnectedReadBindingResolver({ getWorkspaces: () => [workspace], loadSource, loadCredential: async () => ({ value: token }), now: Date.now });
@@ -26,12 +31,12 @@ function fixture() {
     connectedReads: { bindingResolver, transport: async (_binding, _url, allowed) => { if (!allowed()) return { ok: false, reason: 'not-authorized' }; reads++; return { ok: true, data: { name: 'Saved Artist' } }; } },
   };
   const input = { runId: randomUUID(), commandId: 'start', workspaceId: workspace.id, connectionSlug: 'fixture', model: 'fixture', resolvedAgentSlug: 'reader', systemPrompt: 'Summarize observations.', allowedTools: ['read'] as Array<'read'>, maxOutputTokens: 128, maxModelAttempts: 3, deadlineAt: Date.now() + 60000, approvalPrincipalId: 'principal', costPolicy: { unit: 'model-requests' as const, maxTotalUnits: 3, maxUnitsPerAttempt: 1 } };
-  const workflow = { slug: 'connected', source: 'global' as const, path: root, body: '', metadata: { execution: 'durable-local-read' as const, name: 'Artist read', description: '', trigger: { type: 'manual' as const }, outputs: { mode: 'none' as const }, connectedReads: [{ sourceSlug: 'account', url: 'https://api.spotify.com/v1/artists/0123456789ABCDEFGHIJKL' }], steps: [{ id: 'read', agent: 'reader', input: 'Summarize this artist.' }] } };
+  const workflow = { slug: 'connected', source: 'global' as const, path: root, body: '', metadata: { execution: 'durable-local-read' as const, name: 'Artist read', description: '', trigger: { type: 'manual' as const }, outputs: { mode: 'none' as const }, connectedReads: [{ sourceSlug: 'account', url: connection.url }], steps: [{ id: 'read', agent: 'reader', input: 'Summarize this artist.' }] } };
   return { root, directory, journal, options, input, workflow, getReads: () => reads, rotate: () => { token = 'replacement-secret'; } };
 }
 
-test('normal runner gives bounded account observations to model without an approval or new tool', async () => {
-  const f = fixture(); let prompt = '';
+test.each(connections)('normal runner supports $provider account reads without provider code or new approvals', async connection => {
+  const f = fixture(connection); let prompt = '';
   const runner = new DurableReadRunner({ ...f.options, createBackend: args => ({ async *chat(value) {
     prompt = value; const bridge = args.coreConfig.durableExecution!;
     await bridge.checkpoint({ kind: 'model-start', turn: 0, context: { prompt: value } });
@@ -95,4 +100,16 @@ test('revocation while resolving output workspace blocks publication of account-
   const workflow = { ...f.workflow, metadata: { ...f.workflow.metadata, outputs: { mode: 'final-step' as const, kind: 'report' as const } } };
   const state = await (await runner.admitWorkflow(workflow, f.input)).execution;
   expect(publications).toBe(0); expect(state.status).toBe('paused'); expect(state.publication?.status).toBe('pending');
+});
+
+
+test.each([
+  'https://unrelated.example.com/v1/artists/0123456789ABCDEFGHIJKL',
+  'https://api.spotify.com/v2/artists/0123456789ABCDEFGHIJKL',
+])('source binding rejects a declared URL outside its origin or base path before any read: %s', async url => {
+  const f = fixture(); f.workflow.metadata.connectedReads[0]!.url = url;
+  const runner = new DurableReadRunner(f.options);
+  await expect(runner.admitWorkflow(f.workflow, f.input)).rejects.toThrow('durable-connected-read-binding-unavailable');
+  expect(f.getReads()).toBe(0);
+  expect(f.journal.listInternal('workspace')).toHaveLength(0);
 });

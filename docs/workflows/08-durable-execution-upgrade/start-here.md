@@ -22,6 +22,10 @@ This packet specifies an upgrade beneath existing Artist OS workflows. It does n
 | [Build state](state.md) | Resume context and evidence pointers |
 | [First task](tasks/T-01.md) | Current-path inventory and executable boundary contract |
 
+## Maintenance direction
+
+Use the current shared-behavior decision at the top of [normal-engine integration](normal-engine-integration.md). Do not reopen a per-provider GET certification ladder or restore blanket approval prompts for safe reads. Reuse existing connection/auth/tool infrastructure; distinguish actual user decisions from silent runtime validation.
+
 ## Resume instruction
 
 Read state.md for the current integration boundary and unresolved proof. Historical evidence remains historical. New operations and children must preserve the journal's ownership, permission, budget and cancellation fences before any live adapter is enabled.

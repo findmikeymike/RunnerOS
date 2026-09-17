@@ -1,3 +1,4 @@
+import { createDurableReadAuthorization, readDurablePolicyRevision } from '../../durable-read-authorization';
 import { DurableWorkflowHost } from '../../durable-workflow-host';
 import { WorkflowRunner } from '../../runner';
 import { createDurableWorkflowStart } from '../../durable-workflow-start';
@@ -57,6 +58,7 @@ const resolveBundle = async () => {
 };
 const folder = join(root, 'app/packages/pi-agent-server/dist'); mkdirSync(folder, { recursive: true });
 writeFileSync(join(folder, 'index.js'), `import ${JSON.stringify(resolve(import.meta.dir, '../../../../../pi-agent-server/src/index.ts'))};\n`);
+const resolveBinding = (_workspace: string, slug: string, model: string) => ({ ...binding, context: { ...binding.context, resolvedModel: model, connection: { ...binding.context.connection!, slug } } });
 const host = DurableWorkflowHost.open({ configRoot: join(root, 'config'), protection: { isEncryptionAvailable: () => true, encryptString: value => Buffer.from(value), decryptString: value => value.toString() }, resolvePrincipal: () => 'fixture-principal', runnerOptions: {
   authorizeRun: () => {},
   ...(mode === 'connected' ? { connectedReads: { bindingResolver: connectedResolver, transport: async (_binding: unknown, url: string, isAuthorized: () => boolean) => {
@@ -64,8 +66,11 @@ const host = DurableWorkflowHost.open({ configRoot: join(root, 'config'), protec
     appendFileSync(join(root, 'connected-dispatches'), 'read\n');
     return { ok: true as const, data: { name: 'CONNECTED_READ_CONTEXT' } };
   } } } : {}),
-  hostRuntime: { appRootPath: join(root, 'app'), isPackaged: false, nodeRuntimePath: process.execPath }, providerRetryDelayMs: 5, resolveBinding: (_workspace, slug, model) => ({ ...binding, context: { ...binding.context, resolvedModel: model, connection: { ...binding.context.connection!, slug } } }),
-  authorizeTool: async () => ({ principalId: 'fixture-principal', policyRevision: 'fixture', credentialIdentity: identity, allowed: true, requiresApproval: false, approvalExpiresAt: Date.now() + 60000 }),
+  hostRuntime: { appRootPath: join(root, 'app'), isPackaged: false, nodeRuntimePath: process.execPath }, providerRetryDelayMs: 5, resolveBinding,
+  readPolicyRevision: workspaceRoot => readDurablePolicyRevision(join(root, 'config'), workspaceRoot),
+  authorizeTool: createDurableReadAuthorization({ configRoot: join(root, 'config'), resolveBinding, assertRunPrincipal(workspaceId, principalId) {
+    if (workspaceId !== 'approval-workspace' || principalId !== 'fixture-principal') throw new Error('fixture-principal-mismatch');
+  } }),
 } });
 try {
   const runner = new WorkflowRunner({ durableStart: createDurableWorkflowStart({ resolveFallbackCandidates: async () => [{ connectionSlug: 'backup-fixture', model: 'backup-fixture' }], host, getWorkspaceRootPath: () => root, resolveBundle }),

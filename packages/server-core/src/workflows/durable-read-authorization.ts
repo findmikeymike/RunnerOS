@@ -43,6 +43,7 @@ export function createDurableReadAuthorization(options: {
       ? (context.webReadUrls ?? []).map(url => ({ url })) : [request.input];
     const allowed = !!tool && webGrantValid && now < context.deadlineAt && policyInputs.every(input => shouldAllowToolInMode(tool, input, 'safe', { permissionsContext: { workspaceRootPath: binding.workspace.rootPath, activeSourceSlugs: [] } }).allowed);
     return { principalId: context.approvalPrincipalId, credentialIdentity: binding.credentialIdentity, policyRevision: revision,
-      allowed, requiresApproval: true, approvalExpiresAt: Math.min(context.deadlineAt, now + 15 * 60_000) };
+      // Safe-mode policy already permits these read-only tools. Recovery must not add another dialog.
+      allowed, requiresApproval: false, approvalExpiresAt: Math.min(context.deadlineAt, now + 15 * 60_000) };
   };
 }

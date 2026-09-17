@@ -45,21 +45,32 @@ test('authorization rechecks principal after async binding and rejects changed a
     await expect(changed(f.request, f.context)).rejects.toThrow('binding-changed');
   }
 });
-test('deadline and sensitive path deny reads; normal read requires bounded approval', async () => {
+test('deadline and sensitive path deny reads; allowed read needs no additional approval', async () => {
   const f = fixture();
   const authorize = createDurableReadAuthorization({ configRoot: f.configRoot, resolveBinding: () => f.binding, assertRunPrincipal() {}, now: () => 1000 });
   expect((await authorize(f.request, { ...f.context, deadlineAt: 1000 })).allowed).toBe(false);
   expect((await authorize({ ...f.request, input: { path: join(f.workspaceRoot, '.env') } }, f.context)).allowed).toBe(false);
   const normal = await authorize(f.request, { ...f.context, deadlineAt: 2000 });
-  expect(normal.allowed).toBe(true); expect(normal.requiresApproval).toBe(true); expect(normal.approvalExpiresAt).toBe(2000);
+  expect(normal.allowed).toBe(true); expect(normal.requiresApproval).toBe(false); expect(normal.approvalExpiresAt).toBe(2000);
+  for (const tool of ['grep', 'find', 'ls']) {
+    const result = await authorize({ ...f.request, tool, input: { path: f.workspaceRoot, pattern: 'notes' } }, { ...f.context, deadlineAt: 2000 });
+    expect(result.allowed).toBe(true); expect(result.requiresApproval).toBe(false);
+  }
+  const unknown = await authorize({ ...f.request, tool: 'bash' }, f.context);
+  expect(unknown.allowed).toBe(false);
 });
-test('real runner and journal execute the exact native read only after current-policy approval', async () => {
-  const f = fixture(); writeFileSync(f.request.input.path, 'approved native read');
+for (const block of ['none', 'policy', 'credential', 'sensitive-path'] as const) test(`real runner reads without approvals while ${block} authorization fences hold`, async () => {
+  const f = fixture(); if (block === 'sensitive-path') f.request.input.path = join(f.workspaceRoot, '.env');
+  writeFileSync(f.request.input.path, 'policy-allowed native read');
   const journal = new DurableJournal({ configRoot: f.configRoot, key: randomBytes(32) }); cleanup.push(() => journal.close());
   const input: DurableReadInput = { runId: randomUUID(), commandId: 'admit', workspaceId: 'workspace', connectionSlug: 'fixture', model: 'model', prompt: 'Read notes', systemPrompt: 'Read only', allowedTools: ['read'], maxOutputTokens: 100, maxModelAttempts: 4, deadlineAt: f.context.deadlineAt, approvalPrincipalId: 'alice', costPolicy: { unit: 'verified-free', maxTotalUnits: 0, maxUnitsPerAttempt: 0 } };
-  let nativeReads = 0, mutateAfterAuthorization = false, authorizationReturned = false;
+  let nativeReads = 0, mutateAfterAuthorization = block === 'policy' || block === 'credential', authorizationReturned = false;
   const options: DurableReadRunnerOptions = { journal, hostRuntime: { appRootPath: f.root, isPackaged: false }, readPolicyRevision: root => readDurablePolicyRevision(f.configRoot, root), resolveBinding: async () => {
-      if (mutateAfterAuthorization && authorizationReturned) { mutateAfterAuthorization = false; writeFileSync(f.policy, JSON.stringify({ allowedWritePaths: ['changed-during-final-binding/**'] })); }
+      if (mutateAfterAuthorization && authorizationReturned) {
+        mutateAfterAuthorization = false;
+        if (block === 'credential') f.binding.credentialIdentity = 'b'.repeat(64);
+        else writeFileSync(f.policy, JSON.stringify({ allowedWritePaths: ['changed-during-final-binding/**'] }));
+      }
       return f.binding;
     },
     authorizeTool: createDurableReadAuthorization({ configRoot: f.configRoot, resolveBinding: () => f.binding, assertRunPrincipal: (_workspace, principal) => { expect(principal).toBe('alice'); } }),
@@ -77,16 +88,18 @@ test('real runner and journal execute the exact native read only after current-p
   const authorize = options.authorizeTool!;
   options.authorizeTool = async (...args) => { const result = await authorize(...args); authorizationReturned = true; return result; };
   const runner = new DurableReadRunner(options);
-  const waiting = await runner.start(input); expect(waiting.status).toBe('waiting-approval'); expect(nativeReads).toBe(0);
-  const approve = () => { const state = journal.get(input.runId, input.workspaceId), a = state.approvals!.at(-1)!; return runner.decide({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: state.version, action: 'approve', approvalId: a.id, inputDigest: a.inputDigest, principalId: a.principalId, policyRevision: a.policyRevision, credentialIdentity: a.credentialIdentity }); };
-  writeFileSync(f.policy, JSON.stringify({ allowedWritePaths: ['scratch/**'] }));
-  const obsolete = await approve(); expect((await obsolete.execution!)!.status).toBe('waiting-approval'); expect(nativeReads).toBe(0);
-  const current = journal.get(input.runId, input.workspaceId); expect(current.approvals!.at(-1)!.input).toEqual(f.request.input);
-  authorizationReturned = false; mutateAfterAuthorization = true;
-  const raced = await approve(); expect((await raced.execution!)!.status).toBe('paused'); expect(nativeReads).toBe(0);
-  const resumed = await runner.control({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'resume' });
-  expect((await resumed.execution!)!.status).toBe('waiting-approval'); expect(nativeReads).toBe(0);
-  const approved = await approve(); expect((await approved.execution!)!.status).toBe('succeeded'); expect(nativeReads).toBe(1);
+  const first = await runner.start(input);
+  expect(first.approvals).toEqual([]);
+  if (block === 'none') { expect(first.status).toBe('succeeded'); expect(nativeReads).toBe(1); }
+  else {
+    expect(first.status).toBe('paused'); expect(nativeReads).toBe(0);
+    expect(first.turns[0]!.calls[0]!.attempts).toBe(0);
+    if (block === 'sensitive-path') { await runner.quiesce(); return; }
+    f.binding.credentialIdentity = 'a'.repeat(64);
+    const resumed = await runner.control({ runId: input.runId, workspaceId: input.workspaceId, commandId: randomUUID(), expectedVersion: journal.get(input.runId, input.workspaceId).version, action: 'resume' });
+    const recovered = await resumed.execution!;
+    expect(recovered!.status).toBe('succeeded'); expect(recovered!.approvals).toEqual([]); expect(nativeReads).toBe(1);
+  }
   expect((await runner.start(input)).status).toBe('succeeded'); expect(nativeReads).toBe(1);
   await runner.quiesce();
 });
@@ -99,12 +112,12 @@ test('policy revision refuses a different defaults source than the actual policy
   await expect(authorize(f.request, f.context)).rejects.toThrow('policy-source-mismatch');
 });
 
-test('certified web reads use current owner and bounded WebFetch approval', async () => {
+test('certified web reads use current owner and policy without extra approval', async () => {
   const f = fixture(); let current = true;
   const authorize = createDurableReadAuthorization({ configRoot: f.configRoot, resolveBinding: () => f.binding, assertRunPrincipal() { if (!current) throw new Error('principal-revoked'); }, now: () => 1000 });
   const request = { ...f.request, tool: 'web_fetch', input: { url: 'https://example.com/article' } };
   const approval = await authorize(request, { ...f.context, deadlineAt: 2000, webReadUrls: ['https://example.com/article'] });
-  expect(approval.allowed).toBe(true); expect(approval.requiresApproval).toBe(true); expect(approval.approvalExpiresAt).toBe(2000);
+  expect(approval.allowed).toBe(true); expect(approval.requiresApproval).toBe(false); expect(approval.approvalExpiresAt).toBe(2000);
   current = false; await expect(authorize(request, f.context)).rejects.toThrow('principal-revoked');
 });
 

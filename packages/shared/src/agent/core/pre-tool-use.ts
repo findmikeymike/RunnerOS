@@ -1261,7 +1261,7 @@ export function shouldPromptInAskMode(
 
     // Check if it would be blocked in safe mode (= it's a mutation)
     const safeModeResult = shouldAllowToolInMode(
-      toolName, input, 'safe', { plansFolderPath }
+      toolName, input, 'safe', { plansFolderPath, permissionsContext }
     );
     if (!safeModeResult.allowed) {
       // It's a mutation — check whitelist
