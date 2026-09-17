@@ -38,7 +38,13 @@ async function fixture() {
     setSourceServers: async (servers: Record<string, unknown>) => { applied.push(Object.keys(servers)) },
     applyBridgeUpdates: async () => {},
   }
-  const managed = { id: `session-${sequence}`, workspace, agent, enabledSourceSlugs: [source.slug], isProcessing: true }
+  const managed = {
+    id: `session-${sequence}`,
+    workspace,
+    agent: agent as typeof agent | null,
+    enabledSourceSlugs: [source.slug],
+    isProcessing: true,
+  }
   const manager = new SessionManager()
   const runtime = manager as any
   runtime.sessions.set(managed.id, managed)
