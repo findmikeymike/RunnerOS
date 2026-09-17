@@ -86,7 +86,7 @@ export function OutputInlinePreview({
     : className
 
   const hasStaticPreview = Boolean(
-    (mode === 'image' || mode === 'video' || mode === 'audio') && dataUrl
+    mode === 'image' && dataUrl
     || (mode === 'markdown' || mode === 'json' || mode === 'text' || mode === 'receipt' || mode === 'table' || mode === 'chart' || mode === 'workflow') && content !== null
     || mode === 'receipt' && manifest.receipts.length > 0
     || (mode === 'external-link' || mode === 'web' || manifest.links.length > 0) && manifest.links[0],
@@ -200,7 +200,17 @@ export function OutputInlinePreview({
   if (mode === 'video' && dataUrl) {
     return (
       <div className={`relative ${className ?? ''}`}>
-        <video src={dataUrl} controls className="max-h-full w-full rounded-md" />
+        <video
+          key={`${workspaceId}:${manifest.id}:${assetId}:${syncRevision}`}
+          src={dataUrl}
+          controls
+          playsInline
+          preload="auto"
+          aria-label={previewAsset?.label ?? manifest.title}
+          className="max-h-full w-full rounded-md"
+          onLoadedData={() => onPreviewSettled?.('ready')}
+          onError={() => setError('This video could not be played. Try reopening the preview or open the original file from Outputs.')}
+        />
         {videoProjectAsset && (
           <Button
             size="sm"
@@ -219,7 +229,14 @@ export function OutputInlinePreview({
   if (mode === 'audio' && dataUrl) {
     return (
       <div className={className}>
-        <audio src={dataUrl} controls className="w-full" />
+        <audio
+          src={dataUrl}
+          controls
+          preload="auto"
+          className="w-full"
+          onLoadedData={() => onPreviewSettled?.('ready')}
+          onError={() => setError('This audio could not be played. Try reopening the preview or open the original file from Outputs.')}
+        />
       </div>
     )
   }

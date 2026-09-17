@@ -1085,6 +1085,7 @@ export function getSquadSource(workspaceId: string, workspaceRootPath: string): 
         '- `openai`: require the upstream OpenAI director path.',
         '- `modular`: create an orchestration plan for agents to inject shot plans, prompts, generated stills/clips, or selected providers such as WaveSpeed, Fal, Replicate, Zero, HeyGen, MuAPI, or RunPod. It does not claim the wrapper generated those assets.',
         '- `external`: require user/agent supplied assets before final assembly/review.',
+        'The OpenAI director is an optional Squad backend requiring its own API key; it is separate from the artist\'s chat model or ChatGPT login. When modular orchestration is ready, describe the chosen generation providers and proceed within approval. Do not present the unused OpenAI backend as broken app setup or ask the artist to configure it unless they explicitly want that backend.',
         '',
         'This fork keeps Squad workflows available without mutating the external `/Users/michaelb.williams/CAS4/Squad` project.',
       ].join('\n'),

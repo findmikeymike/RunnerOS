@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useAtom } from 'jotai'
-import { outputsStateAtomFamily, type OutputsState } from '@/atoms/outputs'
+import { outputsStateAtomFamily } from '@/atoms/outputs'
+import { createOutputRefreshQueue } from './output-refresh-queue'
 import type { SocialVariantSetManifest, SocialVariantSetSummary } from '@craft-agent/shared/outputs'
 
 export const OUTPUT_RPC_CHANNELS = {
@@ -180,12 +181,10 @@ type OutputsElectronAPI = typeof window.electronAPI & {
 }
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
-const loadedWorkspaceKeys = new Set<string>()
-const inFlightRefreshes = new Map<string, Promise<void>>()
+const outputRefreshQueue = createOutputRefreshQueue()
 const mountedWorkspaceKeys = new Map<string, number>()
 let globalOutputsCleanup: (() => void) | null = null
-const setStateByWorkspaceKey = new Map<string, (updater: (prev: OutputsState) => OutputsState) => void>()
-const refreshersByWorkspaceKey = new Map<string, () => Promise<void>>()
+const refreshersByWorkspaceKey = new Map<string, Set<() => Promise<void>>>()
 
 function getWorkspaceKey(workspaceId: string | null | undefined): string {
   return workspaceId ?? NULL_WORKSPACE_KEY
@@ -228,69 +227,59 @@ export function useOutputs(workspaceId: string | null | undefined): UseOutputsRe
   const available = typeof electronAPI.listOutputs === 'function'
     || window.electronAPI.isChannelAvailable(OUTPUT_RPC_CHANNELS.LIST)
 
-  const refresh = useCallback(async () => {
-    const existing = inFlightRefreshes.get(workspaceKey)
-    if (existing) return existing
-
-    const run = (async () => {
-      setState((prev) => ({ ...prev, loading: true }))
-      try {
-        if (!workspaceId || typeof electronAPI.listOutputs !== 'function') {
-          setState({
-            outputs: [],
-            loading: false,
-            error: workspaceId
-              ? 'Outputs API is unavailable for this window.'
-              : null,
-          })
-          loadedWorkspaceKeys.add(workspaceKey)
-          return
-        }
-        const raw = await electronAPI.listOutputs(workspaceId)
-        const outputs = raw.map(coerceSummary).filter((entry): entry is OutputSummaryDTO => !!entry)
-        setState({ outputs: sortOutputs(outputs), loading: false, error: null })
-        loadedWorkspaceKeys.add(workspaceKey)
-      } catch (err) {
-        setState((prev) => ({
-          ...prev,
+  const refresh = useCallback(() => outputRefreshQueue.refresh(workspaceKey, async () => {
+    setState((prev) => ({ ...prev, loading: true }))
+    try {
+      if (!workspaceId || typeof electronAPI.listOutputs !== 'function') {
+        setState({
+          outputs: [],
           loading: false,
-          error: err instanceof Error ? err.message : String(err),
-        }))
-      } finally {
-        inFlightRefreshes.delete(workspaceKey)
+          error: workspaceId
+            ? 'Outputs API is unavailable for this window.'
+            : null,
+        })
+        return
       }
-    })()
-
-    inFlightRefreshes.set(workspaceKey, run)
-    return run
-  }, [electronAPI, setState, workspaceId, workspaceKey])
+      const raw = await electronAPI.listOutputs(workspaceId)
+      const outputs = raw.map(coerceSummary).filter((entry): entry is OutputSummaryDTO => !!entry)
+      setState({ outputs: sortOutputs(outputs), loading: false, error: null })
+    } catch (err) {
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: err instanceof Error ? err.message : String(err),
+      }))
+    }
+  }), [electronAPI, setState, workspaceId, workspaceKey])
 
   useEffect(() => {
-    setStateByWorkspaceKey.set(workspaceKey, setState)
-    refreshersByWorkspaceKey.set(workspaceKey, refresh)
+    const refreshers = refreshersByWorkspaceKey.get(workspaceKey) ?? new Set<() => Promise<void>>()
+    refreshers.add(refresh)
+    refreshersByWorkspaceKey.set(workspaceKey, refreshers)
     return () => {
-      if (setStateByWorkspaceKey.get(workspaceKey) === setState) {
-        setStateByWorkspaceKey.delete(workspaceKey)
-      }
-      if (refreshersByWorkspaceKey.get(workspaceKey) === refresh) {
-        refreshersByWorkspaceKey.delete(workspaceKey)
-      }
+      refreshers.delete(refresh)
+      if (refreshers.size === 0) refreshersByWorkspaceKey.delete(workspaceKey)
     }
   }, [refresh, setState, workspaceKey])
 
   useEffect(() => {
-    if (!loadedWorkspaceKeys.has(workspaceKey)) {
-      refresh()
-    }
-  }, [refresh, workspaceKey])
-
-  useEffect(() => {
-    mountedWorkspaceKeys.set(workspaceKey, (mountedWorkspaceKeys.get(workspaceKey) ?? 0) + 1)
+    const existingConsumers = mountedWorkspaceKeys.get(workspaceKey) ?? 0
+    mountedWorkspaceKeys.set(workspaceKey, existingConsumers + 1)
     if (!globalOutputsCleanup && typeof electronAPI.onOutputsUpdated === 'function') {
       globalOutputsCleanup = electronAPI.onOutputsUpdated((changedWorkspaceId) => {
         const changedKey = getWorkspaceKey(changedWorkspaceId)
-        refreshersByWorkspaceKey.get(changedKey)?.()
+        outputRefreshQueue.invalidate(changedKey)
+        // A workspace can have several consumers; unmounting one must not
+        // disconnect updates for the others. All share one request queue.
+        const refresher = refreshersByWorkspaceKey.get(changedKey)?.values().next().value
+        void refresher?.()
       })
+    }
+    // Background outputs may arrive while no view for this workspace is mounted.
+    // Always revalidate on re-entry; simultaneous consumers share the read.
+    if (existingConsumers === 0) {
+      outputRefreshQueue.invalidate(workspaceKey)
+      void refresh()
     }
     return () => {
       const nextCount = (mountedWorkspaceKeys.get(workspaceKey) ?? 1) - 1
@@ -302,7 +291,7 @@ export function useOutputs(workspaceId: string | null | undefined): UseOutputsRe
         globalOutputsCleanup = null
       }
     }
-  }, [electronAPI, workspaceKey])
+  }, [electronAPI, refresh, workspaceKey])
 
   const getOutput = useCallback(async (outputId: string): Promise<OutputManifestDTO | null> => {
     if (!workspaceId || typeof electronAPI.getOutput !== 'function') return null
