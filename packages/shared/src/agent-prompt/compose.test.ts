@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ARTIST_OS_TEAM_MISSION, ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE, buildArtistSpecialistGuidance } from './artist-team-guidance.ts';
+import { CONTENT_GENIUS_COLLABORATION_GUIDANCE } from './content-genius-guidance.ts';
+import { buildWebsiteCampaignGuidance } from './website-campaign-guidance.ts';
 import {
   AGENT_CATALOG_HEADER,
   ARTIST_ASSET_CONTRACT_HEADER,
@@ -42,6 +44,34 @@ const source = (slug: string, name: string, tagline?: string) => ({
 });
 
 describe('Artist OS team mission routing', () => {
+  test('routes website campaign guidance only to website roles in artist HQ and Campaigns', () => {
+    for (const scope of ['hq', 'campaign', 'lab', 'general', undefined] as const) {
+      for (const slug of ['website-agent', 'site-builder', 'content-genius', 'custom-worker']) {
+        const worker = { ...agent({}, 'My saved site instructions.'), slug };
+        const result = composeAgentSystemPrompt(worker, [], [], [], [], { artistWorkspaceScope: scope });
+        expect(result.startsWith(worker.systemPrompt!)).toBe(true);
+        const applicable = (scope === 'hq' || scope === 'campaign') && (slug === 'website-agent' || slug === 'site-builder');
+        expect(result.includes('Pass campaignWorkspaceId to website_build')).toBe(applicable);
+        const guidance = buildWebsiteCampaignGuidance(slug, scope);
+        if (applicable) expect(result.split(guidance)).toHaveLength(2);
+        else expect(guidance).toBe('');
+      }
+    }
+  });
+  test('gives Content Genius specialist orchestration without loading specialist skills or replacing saved instructions', () => {
+    for (const scope of ['hq', 'campaign', 'lab', 'general', undefined] as const) {
+      for (const slug of ['content-genius', 'scriptwriter', 'scroll-stopper', 'anticipation-director', 'custom-worker']) {
+        const worker = { ...agent({}, 'My saved creative instructions.'), slug };
+        const result = composeAgentSystemPrompt(worker, [], [], [], [], { artistWorkspaceScope: scope });
+        expect(result.startsWith(worker.systemPrompt!)).toBe(true);
+        expect(result.split(CONTENT_GENIUS_COLLABORATION_GUIDANCE)).toHaveLength(
+          slug === 'content-genius' && scope !== 'general' && scope !== undefined ? 2 : 1,
+        );
+        expect(result).not.toContain(SKILLS_HEADER);
+      }
+    }
+  });
+
   test('delivers only the matching specialist emphasis and never leaks it into general sessions', () => {
     const slugs = ['ads-strategist', 'ads-agent', 'content-genius', 'scriptwriter', 'world-builder'];
     for (const slug of slugs) {

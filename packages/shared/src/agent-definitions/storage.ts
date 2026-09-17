@@ -532,6 +532,8 @@ export function readActivatedAgents(workspaceRootPath: string): ActivatedAgentsM
     return {
       version: 1,
       active,
+      ...(Array.isArray(parsed.libraryOnly) ? { libraryOnly: normalizeActivationSlugs(parsed.libraryOnly).filter(slug => CONTENT_COMPANION_SLUGS.includes(slug) && active.includes(slug)) } : {}),
+      ...(parsed.contentSpecialistsGrouped === true ? { contentSpecialistsGrouped: true as const } : {}),
       ...(deactivated.length > 0 ? { deactivated } : {}),
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
     };
@@ -547,10 +549,14 @@ function normalizeActivationSlugs(value: unknown): string[] {
     : [];
 }
 
-function persistActivatedAgents(workspaceRootPath: string, active: string[], deactivated: string[]): ActivatedAgentsManifest {
+const CONTENT_COMPANION_SLUGS: readonly string[] = ['scroll-stopper', 'anticipation-director'];
+
+function persistActivatedAgents(workspaceRootPath: string, active: string[], deactivated: string[], visibility?: Pick<ActivatedAgentsManifest, 'libraryOnly' | 'contentSpecialistsGrouped'>): ActivatedAgentsManifest {
   const manifest: ActivatedAgentsManifest = {
     version: 1,
     active,
+    ...(visibility?.libraryOnly?.length ? { libraryOnly: visibility.libraryOnly.filter(slug => CONTENT_COMPANION_SLUGS.includes(slug) && active.includes(slug)) } : {}),
+    ...(visibility?.contentSpecialistsGrouped ? { contentSpecialistsGrouped: true as const } : {}),
     ...(deactivated.length > 0 ? { deactivated } : {}),
     updatedAt: new Date().toISOString(),
   };
@@ -568,7 +574,7 @@ export function writeActivatedAgents(workspaceRootPath: string, slugs: string[])
   const active = normalizeActivationSlugs(slugs);
   const current = readActivatedAgents(workspaceRootPath);
   const deactivated = (current.deactivated ?? []).filter(slug => !active.includes(slug));
-  return persistActivatedAgents(workspaceRootPath, active, deactivated);
+  return persistActivatedAgents(workspaceRootPath, active, deactivated, current);
 }
 
 /** Convenience: toggle a single slug's activation and persist explicit off choices. */
@@ -584,7 +590,46 @@ export function setAgentActive(workspaceRootPath: string, slug: string, active: 
     enabled.delete(slug);
     deactivated.add(slug);
   }
-  return persistActivatedAgents(workspaceRootPath, [...enabled], [...deactivated]);
+  return persistActivatedAgents(workspaceRootPath, [...enabled], [...deactivated], {
+    ...current, libraryOnly: current.libraryOnly?.filter(candidate => candidate !== slug),
+  });
+}
+
+/** Enabling the main entry adds missing companions, without hiding individually added workers. */
+export function enableContentCompanions(workspaceRootPath: string, scope: string | undefined, eligibleSlugs: readonly string[]): ActivatedAgentsManifest {
+  const current = readActivatedAgents(workspaceRootPath);
+  if (!['hq', 'campaign'].includes(scope ?? '') || !current.active.includes('content-genius')) return current;
+  const additions = CONTENT_COMPANION_SLUGS.filter(slug => eligibleSlugs.includes(slug)
+    && !current.active.includes(slug) && !current.deactivated?.includes(slug));
+  if (!additions.length) return current;
+  return persistActivatedAgents(workspaceRootPath, [...current.active, ...additions], current.deactivated ?? [], {
+    ...current, libraryOnly: [...(current.libraryOnly ?? []), ...additions],
+  });
+}
+
+/** One-time presentation migration. Runtime activation and saved automation authority stay intact. */
+export function groupContentSpecialists(
+  workspaceRootPath: string,
+  scope: string | undefined,
+  eligibleSlugs: readonly string[],
+  contentGeniusInstalled: boolean,
+): ActivatedAgentsManifest {
+  const current = readActivatedAgents(workspaceRootPath);
+  if (!['hq', 'campaign'].includes(scope ?? '') || current.contentSpecialistsGrouped) return current;
+  const eligible = CONTENT_COMPANION_SLUGS.filter(slug => eligibleSlugs.includes(slug) && !current.deactivated?.includes(slug));
+  const active = new Set(current.active);
+  // A removed Content Genius is an explicit user choice, never overridden by grouping.
+  const canGroup = contentGeniusInstalled && !current.deactivated?.includes('content-genius');
+  if (canGroup && (active.has('content-genius') || eligible.some(slug => active.has(slug)))) {
+    active.add('content-genius');
+    for (const slug of eligible) active.add(slug);
+    return persistActivatedAgents(workspaceRootPath, [...active], current.deactivated ?? [], {
+      contentSpecialistsGrouped: true, libraryOnly: eligible,
+    });
+  }
+  return persistActivatedAgents(workspaceRootPath, current.active, current.deactivated ?? [], {
+    ...current, contentSpecialistsGrouped: true,
+  });
 }
 
 /**

@@ -7,6 +7,20 @@ import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
 
 describe('shared session tool role and scope derivation', () => {
+  test('Website source context belongs only to Website Agent in Artist HQ or Campaigns', () => {
+    for (const role of ['website-agent', 'site-builder', 'concierge', undefined]) {
+      for (const scope of ['hq', 'campaign', 'lab', undefined]) {
+        for (const variant of ['artist-os', 'runneros']) {
+          const options = deriveSessionToolFilterOptions(role, scope, variant);
+          const expected = role === 'website-agent' && variant === 'artist-os' && (scope === 'hq' || scope === 'campaign');
+          expect(options.includeWebsiteCampaignContext).toBe(expected);
+          expect(getSessionToolDefs(options).some(tool => tool.name === 'get_website_campaign_context')).toBe(expected);
+          expect(getSessionToolProxyDefs(options).some(tool => tool.name === 'mcp__session__get_website_campaign_context')).toBe(expected);
+        }
+      }
+    }
+  });
+
   test('Manager privileges follow canonical slug and workspace scope', () => {
     const hq = deriveSessionToolFilterOptions('concierge', 'hq');
     expect(hq.includeManagerTools).toBe(true);
@@ -63,7 +77,7 @@ describe('shared session tool role and scope derivation', () => {
     expect(manager).toContain('manage_goal_run');
   });
 
-  for (const agentSlug of [undefined, 'builder', 'setup-concierge', 'orchestrator', 'concierge', 'raw-video-editor', 'social-publisher', 'scriptwriter']) {
+  for (const agentSlug of [undefined, 'builder', 'setup-concierge', 'orchestrator', 'concierge', 'raw-video-editor', 'social-publisher', 'scriptwriter', 'website-agent']) {
     for (const scope of [undefined, 'hq', 'campaign', 'lab']) {
       for (const delegated of [false, true]) {
         test(`Claude/Pi role parity: ${agentSlug ?? 'ordinary'} / ${scope ?? 'unspecified'} / delegated=${delegated}`, () => {

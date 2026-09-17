@@ -117,7 +117,7 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
   const handleToggleActive = async () => {
     try {
       await setActive(agent.slug, !isActive)
-      toast.success(isActive ? 'Deactivated in this workspace' : 'Activated in this workspace')
+      toast.success(isActive ? 'Removed from Workers' : 'Added to Workers')
     } catch (err) {
       toast.error('Failed to update activation', {
         description: err instanceof Error ? err.message : String(err),
@@ -211,7 +211,7 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
               color: isActive ? 'rgb(50,160,100)' : undefined,
             }}
           >
-            {isActive ? 'Active in this workspace' : 'Activate in this workspace'}
+            {isActive ? 'Remove from Workers' : 'Add to Workers'}
           </button>
           <button
             type="button"

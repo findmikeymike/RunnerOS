@@ -94,3 +94,20 @@ describe('registered agent activation RPC lifecycle', () => {
   expect(definitions.loadGlobalAgent('branding-agent', options)?.metadata.name).toBe('Artist Direction')
   await expect(call(channels.LIST_ALL, 'missing')).rejects.toThrow('Workspace not found')
 })
+
+it('keeps companions available to runtime while library Add controls their visible cards', async () => {
+  const workspace = workspaces[0]!
+  for (const slug of ['content-genius', 'scroll-stopper', 'anticipation-director']) {
+    definitions.writeGlobalAgent(definitions.STARTER_AGENTS.find(agent => agent.slug === slug)!, options)
+  }
+  const result = await call(channels.SET_ACTIVE, workspace.id, 'content-genius', true)
+  expect(result).toEqual({ active: ['content-genius'] })
+  expect(await call(channels.LIST_ACTIVE_IN_WORKSPACE, workspace.id)).toEqual(['content-genius'])
+  expect(definitions.readActivatedAgents(workspace.rootPath).active).toContain('scroll-stopper')
+  expect((await call(channels.LIST_ALL, workspace.id)).some((agent: { slug: string }) => agent.slug === 'scroll-stopper')).toBe(true)
+  expect(await call(channels.SET_ACTIVE, workspace.id, 'scroll-stopper', true)).toEqual({ active: ['content-genius', 'scroll-stopper'] })
+  expect(await call(channels.LIST_ACTIVE_IN_WORKSPACE, workspace.id)).toEqual(['content-genius', 'scroll-stopper'])
+  await call(channels.SET_ACTIVE, workspace.id, 'scroll-stopper', false)
+  await call(channels.SET_ACTIVE, workspace.id, 'content-genius', true)
+  expect(definitions.readActivatedAgents(workspace.rootPath).active).not.toContain('scroll-stopper')
+})

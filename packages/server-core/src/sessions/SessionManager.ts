@@ -233,6 +233,7 @@ import {
 import { prepareAgentLaunchContext } from '../agent-launch/context'
 import { findArtistHqWorkspace } from '../hq-state/snapshot'
 import { WebsiteService, type WebsiteToolResult } from '../website/WebsiteService'
+import { getWebsiteCampaignContext, resolveWebsiteAssetContext } from '../website/website-campaign-context'
 import { loadWebsiteManifest, type ApprovalBinding } from '@craft-agent/shared/website'
 import { CommunityToolService } from '../community/CommunityToolService'
 import type { CommunityMailResult } from '../community/CommunityMailService'
@@ -4489,6 +4490,21 @@ export class SessionManager implements ISessionManager {
         // Keep legacy Runner migrations isolated; Artist OS preserves saved choices.
         const allowLegacyAgentActivation = shouldBackfillLegacyAgentActivation(resolveRuntimeIdentity().variant)
         const { ensured } = ensureRequiredAgents(required)
+        if (resolveRuntimeIdentity().variant === 'artist-os') {
+          const { getWorkspaces } = await import('@craft-agent/shared/config')
+          const { groupWorkspaceContentSpecialists } = await import('./content-specialist-visibility')
+          const { activateHqWebsiteAgentOnce } = await import('./website-agent-activation')
+          activateHqWebsiteAgentOnce(getWorkspaces(), undefined, (message, error) => sessionLog.warn(`[website-agent] ${message}:`, error as Error))
+          for (const workspace of getWorkspaces()) {
+            if (!workspace.remoteServer) groupWorkspaceContentSpecialists(workspace)
+          }
+          const contentGenius = STARTER_AGENTS.find(agent => agent.slug === 'content-genius')!
+          replaceBuiltInAgentMetadata('content-genius', {
+            description: { from: 'Plan short-form content ideas, then finish locked ideas with captions and overlays that command attention.', to: contentGenius.metadata.description },
+            greeting: { from: 'Give me the campaign, artist, content lane, or rough idea. I will shape the strongest short-form concept first, then write overlays and captions once the idea is locked.', to: contentGenius.metadata.greeting },
+          })
+        }
+
         if (ensured > 0) {
           sessionLog.info(`[agent-definitions] Ensured ${ensured} required agent(s)`)
         }
@@ -9435,7 +9451,18 @@ user a clickable link to where the thing now lives.`
       }
 
       // Wire up session self-management tools (set_session_labels, set_session_status, etc.)
+      const websiteCampaignActor = () => ({
+        workspaces: getWorkspaces(),
+        currentWorkspaceId: managed.workspace.id,
+        agentSlug: managed.spawnedFromAgent?.agentSlug,
+      })
+      const websiteAssetContext = (campaignWorkspaceId?: string) =>
+        resolveWebsiteAssetContext(websiteCampaignActor(), campaignWorkspaceId)
       mergeSessionScopedToolCallbacks(managed.id, {
+        ...(managed.spawnedFromAgent?.agentSlug === 'website-agent'
+          && (managed.workspace.artistWorkspaceScope === 'hq' || managed.workspace.artistWorkspaceScope === 'campaign')
+          ? { getWebsiteCampaignContextFn: async (input) => getWebsiteCampaignContext(websiteCampaignActor(), input) }
+          : {}),
         ...(managed.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
           && (managed.workspace.artistWorkspaceScope === 'hq' || managed.workspace.artistWorkspaceScope === 'campaign')
           ? {
@@ -9555,7 +9582,7 @@ user a clickable link to where the thing now lives.`
           website => website.service.setContent(website.rootPath, input),
         ),
         buildWebsiteFn: async (input) => this.withArtistHqWebsite(
-          website => website.service.build(website.rootPath, input, { workspaceRootPath: managed.workspace.rootPath }),
+          website => website.service.build(website.rootPath, input, websiteAssetContext(input.campaignWorkspaceId)),
         ),
         auditWebsiteFn: async (input) => this.withArtistHqWebsite(
           website => website.service.audit(website.rootPath, input),
@@ -9653,7 +9680,7 @@ user a clickable link to where the thing now lives.`
               agentSlug: managed.spawnedFromAgent?.agentSlug,
               agentName: managed.spawnedFromAgent?.agentName,
             },
-            { workspaceRootPath: managed.workspace.rootPath },
+            websiteAssetContext(input.campaignWorkspaceId),
           )
           if (result.ok) {
             this.eventSink?.(

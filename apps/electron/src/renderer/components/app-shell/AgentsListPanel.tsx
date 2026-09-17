@@ -140,7 +140,7 @@ function ActiveToggle({ active, onToggle }: ActiveToggleProps) {
         e.stopPropagation()
         onToggle()
       }}
-      title={active ? 'Active in this workspace · click to deactivate' : 'Inactive · click to activate here'}
+      title={active ? 'Remove from this workspace’s Workers' : 'Add to this workspace’s Workers'}
       style={{
         fontSize: 11,
         padding: '2px 8px',
@@ -152,7 +152,7 @@ function ActiveToggle({ active, onToggle }: ActiveToggleProps) {
         cursor: 'pointer',
       }}
     >
-      {active ? 'Active' : 'Inactive'}
+      {active ? 'Added' : 'Add'}
     </button>
   )
 }

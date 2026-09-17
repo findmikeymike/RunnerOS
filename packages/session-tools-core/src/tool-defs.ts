@@ -87,6 +87,7 @@ import {
   handleSearchArtistNetwork,
 } from './handlers/manager-context.ts';
 import {
+  handleGetWebsiteCampaignContext,
   handleGetWebsiteManifest,
   handleCreateWebsite,
   handleSetWebsiteContent,
@@ -946,11 +947,19 @@ export const SetWebsiteContentSchema = z.object({
     .describe('Structured edits applied in order. Content only; never touches templates or theme.'),
 });
 
+export const GetWebsiteCampaignContextSchema = z.object({
+  campaignWorkspaceId: z.string().min(1).max(200).optional().describe('Exact configured Campaign workspace ID. Omit to discover available Campaigns.'),
+}).strict();
+
+const websiteCampaignAssetSource = z.string().min(1).max(200).optional().describe('Select approved source assets from this configured Campaign workspace ID. The website remains owned by Artist HQ; this does not authorize publishing.');
+
 export const BuildWebsiteSchema = z.object({
+  campaignWorkspaceId: websiteCampaignAssetSource,
   audit: z.boolean().optional().describe('Run the SEO audit after rendering. Defaults to true.'),
 });
 
 export const PreviewWebsiteSchema = z.object({
+  campaignWorkspaceId: websiteCampaignAssetSource,
   build: z.boolean().optional().describe('Rebuild before previewing. Defaults to true.'),
 });
 
@@ -2389,6 +2398,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'website_preview', description: TOOL_DESCRIPTIONS.website_preview, inputSchema: PreviewWebsiteSchema, executionMode: 'registry', safeMode: 'allow', handler: handlePreviewWebsite },
   { name: 'website_create', description: TOOL_DESCRIPTIONS.website_create, inputSchema: CreateWebsiteSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateWebsite },
   { name: 'website_set_content', description: TOOL_DESCRIPTIONS.website_set_content, inputSchema: SetWebsiteContentSchema, executionMode: 'registry', safeMode: 'block', handler: handleSetWebsiteContent },
+  { name: 'get_website_campaign_context', description: 'Read approved Campaign context and ready assets for the artist website. Omit campaignWorkspaceId to discover Campaigns, then select an exact returned ID. Never implies approval to publish. Available only to Website Agent in HQ or Campaigns.', inputSchema: GetWebsiteCampaignContextSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetWebsiteCampaignContext },
   { name: 'website_build', description: TOOL_DESCRIPTIONS.website_build, inputSchema: BuildWebsiteSchema, executionMode: 'registry', safeMode: 'block', handler: handleBuildWebsite },
   { name: 'website_history', description: TOOL_DESCRIPTIONS.website_history, inputSchema: WebsiteHistorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleWebsiteHistory },
   { name: 'website_status', description: TOOL_DESCRIPTIONS.website_status, inputSchema: WebsiteStatusSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleWebsiteStatus },
@@ -2460,6 +2470,8 @@ export interface SessionToolFilterOptions {
   /** Include the HNIC-only semantic Manager tools. */
   includeManagedSkillTools?: boolean;
   includeManagerTools?: boolean;
+  /** Bounded Campaign source context for Website Agent only. */
+  includeWebsiteCampaignContext?: boolean;
   /** Include the current-campaign brief tool. */
   includeCampaignManagerTools?: boolean;
   /** Include Creative Lab song tools only inside an explicit Lab workspace. */
@@ -2499,6 +2511,7 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
     if (options?.excludeDefinitionAuthoring && ['create_agent', 'create_workflow', 'create_automation', 'create_skill', 'update_skill'].includes(def.name)) return false;
     if (!options?.includeAutomationMaintenance && ['list_automations', 'get_automation', 'update_automation'].includes(def.name)) return false;
     if (!includeSupplyWorkInput && def.name === 'supply_work_input') return false;
+    if (!options?.includeWebsiteCampaignContext && def.name === 'get_website_campaign_context') return false;
     if (!includeManagerTools && ['get_manager_brief', 'get_artist_context', 'get_campaign_context'].includes(def.name)) return false;
     if (!includeCampaignManagerTools && def.name === 'get_campaign_brief') return false;
     if (!includeLabTools && ['create_lab_song', 'save_lab_lyrics', 'list_lab_songs'].includes(def.name)) return false;
@@ -2647,6 +2660,8 @@ export function getToolDefsAsJsonSchema(opts?: {
   includeSupplyWorkInput?: boolean;
   includeManagedSkillTools?: boolean;
   includeManagerTools?: boolean;
+  /** Bounded Campaign source context for Website Agent only. */
+  includeWebsiteCampaignContext?: boolean;
   includeCampaignManagerTools?: boolean;
   includeLabTools?: boolean;
   includeSessionTasks?: boolean;
@@ -2663,6 +2678,7 @@ export function getToolDefsAsJsonSchema(opts?: {
     includeSupplyWorkInput: opts?.includeSupplyWorkInput,
     includeManagedSkillTools: opts?.includeManagedSkillTools,
     includeManagerTools: opts?.includeManagerTools,
+    includeWebsiteCampaignContext: opts?.includeWebsiteCampaignContext,
     includeCampaignManagerTools: opts?.includeCampaignManagerTools,
     includeLabTools: opts?.includeLabTools,
     includeSessionTasks: opts?.includeSessionTasks,

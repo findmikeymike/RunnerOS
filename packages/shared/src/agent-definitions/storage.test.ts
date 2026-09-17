@@ -1019,20 +1019,18 @@ body
     ])
     expect(initialAgentSlugsForWorkspace('lab', false)).toEqual(LAB_DEFAULT_ACTIVATED_AGENT_SLUGS)
     expect(initialAgentSlugsForWorkspace('lab', true)).toEqual([])
-    expect(CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['anticipation-director', 'art-director', 'video-director', 'video-editor-agent', 'social-publisher'])
-    expect(HQ_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['catalog-royalty-agent', 'legal-agent', 'gravity'])
-    expect(HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['builder', ANYTHING_AGENT_SLUG, 'scriptwriter', 'site-builder', 'website-agent'])
+    expect(CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['anticipation-director', 'art-director', 'video-director', 'social-publisher'])
+    expect(HQ_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['website-agent', 'catalog-royalty-agent', 'legal-agent', 'gravity'])
+    expect(HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['builder', ANYTHING_AGENT_SLUG, 'scriptwriter', 'site-builder'])
     expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([
       RELEASE_MANAGER_AGENT_SLUG,
       'builder',
       ANYTHING_AGENT_SLUG,
       'scriptwriter',
       'site-builder',
-      'website-agent',
       'anticipation-director',
       'art-director',
       'video-director',
-      'video-editor-agent',
       'social-publisher',
       'branding-agent',
       'world-builder',
@@ -1052,6 +1050,7 @@ body
       'industry-hunter',
     ])
     expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([
+      'content-genius',
       'builder',
       ANYTHING_AGENT_SLUG,
       'scriptwriter',

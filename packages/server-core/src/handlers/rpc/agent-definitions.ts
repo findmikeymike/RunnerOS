@@ -1,4 +1,4 @@
-import { loadActiveAgentsForWorkspace } from '../../sessions/agent-registration'
+import { enableWorkspaceContentCompanions, loadVisibleAgentSlugs } from '../../sessions/content-specialist-visibility'
 /**
  * RPC handlers for the agent definitions library.
  *
@@ -88,7 +88,7 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
   server.handle(RPC_CHANNELS.agentDefinitions.LIST_ACTIVE_IN_WORKSPACE, async (_ctx, workspaceId: string): Promise<string[]> => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) return []
-    return loadActiveAgentsForWorkspace(workspace).map(agent => agent.slug)
+    return loadVisibleAgentSlugs(workspace)
   })
 
   server.handle(RPC_CHANNELS.agentDefinitions.GET, async (_ctx, slug: string, workspaceId?: string): Promise<LoadedAgent | null> => {
@@ -165,8 +165,9 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
       const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
       assertTeamPermission(workspace.rootPath, 'team.settings.update')
       setAgentActive(workspace.rootPath, slug, active)
+      if (active && slug === 'content-genius') enableWorkspaceContentCompanions(workspace)
       broadcastAgentDefinitionsChanged(deps, workspaceId)
-      return { active: loadActiveAgentsForWorkspace(workspace).map(agent => agent.slug) }
+      return { active: loadVisibleAgentSlugs(workspace) }
     })
   })
 }

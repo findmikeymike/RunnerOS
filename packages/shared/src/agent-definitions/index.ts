@@ -39,6 +39,8 @@ export {
   loadAllGlobalAgents,
   loadGlobalAgent,
   readActivatedAgents,
+  groupContentSpecialists,
+  enableContentCompanions,
   writeActivatedAgents,
   setAgentActive,
   loadActivatedAgents,

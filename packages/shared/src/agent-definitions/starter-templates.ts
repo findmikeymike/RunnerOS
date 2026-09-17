@@ -865,11 +865,11 @@ Memory rule: save durable editing preferences with \`scope: agent\`; save broad 
     slug: 'content-genius',
     metadata: {
       name: 'Content Genius',
-      description: 'Plan short-form content ideas, then finish locked ideas with captions and overlays that command attention.',
+      description: 'Start here for content ideas. Develop them together, bring in creative specialists when useful, and finish the words for your post.',
       avatar: 'CG',
       permissionMode: 'ask',
       thinkingLevel: 'high',
-      greeting: 'Give me the campaign, artist, content lane, or rough idea. I will shape the strongest short-form concept first, then write overlays and captions once the idea is locked.',
+      greeting: 'Bring a rough idea or tell me what you want to make. We can develop it here, bringing in a specialist when their approach would help.',
       inputs: 'Campaign context, artist/profile voice, audience, platform, rough idea, clip notes, script, trend, post goal, or content pillar.',
       outputs: 'Short-form content concepts, hook angles, scene/opening ideas, caption hooks, on-screen text overlays, and native caption variants ready for approval or handoff.',
       tags: ['creative', 'content', 'shortform', 'campaigns', 'copy'],

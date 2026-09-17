@@ -454,6 +454,8 @@ export interface SessionToolContext {
   findSignalIdeas?(input: import('@craft-agent/shared/shared-intel').FindSignalIdeasInput): Promise<import('@craft-agent/shared/shared-intel').SignalLookupResult>;
 
   /** Read the artist website manifest: mode, urls, domain, policy, last build. */
+  /** Bounded approved Campaign context for Website Agent. */
+  getWebsiteCampaignContext?(input: import('./handlers/website.ts').GetWebsiteCampaignContextInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
   getWebsiteManifest?(input: import('./handlers/website.ts').GetWebsiteManifestInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
   /** Scaffold a new website in this workspace from a starter template. */
   createWebsite?(input: import('./handlers/website.ts').CreateWebsiteInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;

@@ -49,10 +49,10 @@ describe('workspace registration lifecycle', () => {
 
 // This architecture gate scans the real startup method. Persisted-off tests alone
 // cannot catch a new bespoke loop that explicitly calls setAgentActive(true).
-test('startup backfills stay legacy-only except the explicit one-time Builder transition', () => {
+test('startup backfills stay legacy-only except explicit one-time transitions', () => {
   const path = join(import.meta.dir, 'SessionManager.ts')
   const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true)
-  const writes = new Set(['setAgentActive', 'setGlobalSkillEnabled', 'migrateOrPreserveInitialArtistAgentActivation', 'migrateInitialReleaseManagerActivation', 'preserveReleaseManagerActivationChoices'])
+  const writes = new Set(['activateHqWebsiteAgentOnce', 'setAgentActive', 'setGlobalSkillEnabled', 'migrateOrPreserveInitialArtistAgentActivation', 'migrateInitialReleaseManagerActivation', 'preserveReleaseManagerActivationChoices'])
   let checked = 0
   const unguarded: string[] = []
   function isGuarded(node: ts.Node): boolean {
@@ -65,7 +65,8 @@ test('startup backfills stay legacy-only except the explicit one-time Builder tr
           && options.includes('previouslyInstalled: builderPreviouslyInstalled')
           && options.includes("manifest.deactivated ?? []")
       }
-      if (builderTransition && ts.isIfStatement(parent)
+      const websiteTransition = ts.isCallExpression(node) && node.expression.getText(source) === 'activateHqWebsiteAgentOnce'
+      if ((builderTransition || websiteTransition) && ts.isIfStatement(parent)
         && parent.expression.getText(source) === "resolveRuntimeIdentity().variant === 'artist-os'"
         && node.pos >= parent.thenStatement.pos && node.end <= parent.thenStatement.end) return true
       if (ts.isIfStatement(parent) && node.pos >= parent.thenStatement.pos && node.end <= parent.thenStatement.end

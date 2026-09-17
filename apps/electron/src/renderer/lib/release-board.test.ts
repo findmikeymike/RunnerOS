@@ -316,7 +316,7 @@ describe('release board utilities', () => {
         targetSlug: RELEASE_MANAGER_AGENT_SLUG,
       })
     }
-    expect(getReleaseBoardItemAction('content', 'viral-clips')?.targetSlug).toBe('scroll-stopper')
+    expect(getReleaseBoardItemAction('content', 'viral-clips')?.targetSlug).toBe('content-genius')
     expect(getReleaseBoardItemAction('content', 'performance-clips')?.targetSlug).toBe('raw-video-editor')
     expect(getReleaseBoardItemAction('content', 'idea-generation')).toMatchObject({
       kind: 'workflow',

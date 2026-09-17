@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { loadSiteContent, loadWebsiteManifest } from '@craft-agent/shared/website'
 import { emptyArtistVaultManifest, saveArtistVaultManifest } from '@craft-agent/shared/artist-vault'
+import { materializeReleaseKitItem, resolveReleaseKitItemPath, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit'
 import { WebsiteService } from './WebsiteService'
 
 const service = new WebsiteService()
@@ -185,6 +186,69 @@ describe('WebsiteService', () => {
     expect((await service.build(hqRoot, {}, { workspaceRootPath: campaignRoot })).ok).toBe(true)
     saveArtistVaultManifest(campaignRoot, emptyArtistVaultManifest('campaign-1'))
     expect((await service.build(hqRoot)).ok).toBe(true)
+  })
+
+  test('HQ preview uses verified Campaign Release Kit artwork, keeps ownership in HQ, and rejects revoked or tampered assets', async () => {
+    const hqRoot = workspace()
+    const campaignRoot = workspace()
+    await service.create(hqRoot, { artistName: 'Vera Lane' })
+    await service.create(campaignRoot, { artistName: 'Untouched campaign site' })
+    const campaignFiles = ['site.json', 'content/site.json', 'site/home.html']
+    const campaignBefore = campaignFiles.map(path => readFileSync(join(campaignRoot, 'website', path), 'utf8'))
+    const source = join(campaignRoot, 'approved-cover.png')
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+    writeFileSync(source, png)
+    const { item } = materializeReleaseKitItem(campaignRoot, {
+      workspaceId: 'campaign-workspace', campaignId: 'campaign-1',
+      source: { type: 'upload', originalFileName: 'approved-cover.png' },
+      sourcePath: source, category: 'artwork', subtype: 'single-cover', title: 'Cold Room cover',
+      mimeType: 'image/png', promotedBy: 'user', makePrimary: true,
+    })
+    expect(item.status).toBe('ready')
+    const edited = await service.setContent(hqRoot, {
+      operations: [{ op: 'upsert-release', value: {
+        id: 'release-1', title: 'Cold Room', type: 'single', date: '2026-09-28', artworkAssetId: item.id, links: {},
+      } }],
+    })
+    expect(edited.ok).toBe(true)
+    const assetContext = { workspaceRootPath: campaignRoot }
+    const preview = await service.preview(hqRoot, { workspaceRootPath: hqRoot, workspaceId: 'hq-1' }, {},
+      { sessionId: 'hq-website-session', agentSlug: 'website-agent' }, assetContext)
+    expect(preview.error).toBeUndefined()
+    expect(preview.ok).toBe(true)
+    const outputPath = join(hqRoot, 'outputs', String(preview.outputId), 'output.json')
+    expect(existsSync(outputPath)).toBe(true)
+    expect(existsSync(join(campaignRoot, 'outputs'))).toBe(false)
+    const output = JSON.parse(readFileSync(outputPath, 'utf8'))
+    expect(output.origin.sessionId).toBe('hq-website-session')
+    const staged = loadWebsiteManifest(hqRoot)!.assets.find(asset => asset.id === item.id)!
+    expect(staged.source.kind).toBe('release-kit')
+    expect(staged.source.sha256).toBe(item.sha256)
+    expect(staged.path).toEndWith('.webp')
+    const home = await fetch(String(preview.url))
+    expect(await home.text()).toContain('Cold Room')
+    const assetResponse = await fetch(`${String(preview.url)}assets/${staged.path.replace(/^assets\//, '')}`)
+    expect(assetResponse.status).toBe(200)
+    expect(assetResponse.headers.get('content-type')).toContain('image/webp')
+
+    // Source restrictions are checked again even though HQ already has a staged copy.
+    for (const restriction of ['blockedFromUse', 'needsRightsClearance', 'artistLikenessRestricted'] as const) {
+      updateReleaseKitItemUsage(campaignRoot, 'campaign-workspace', 'campaign-1', item.id, {
+        restrictions: { [restriction]: true },
+      })
+      const blocked = await service.build(hqRoot, {}, assetContext)
+      expect(blocked.ok).toBe(false)
+      expect(String(blocked.error)).toContain('not approved for website use')
+      updateReleaseKitItemUsage(campaignRoot, 'campaign-workspace', 'campaign-1', item.id, {
+        restrictions: { [restriction]: false },
+      })
+    }
+    writeFileSync(resolveReleaseKitItemPath(campaignRoot, item.relativePath), Buffer.from('tampered bytes'))
+    const tampered = await service.build(hqRoot, {}, assetContext)
+    expect(tampered.ok).toBe(false)
+    expect(String(tampered.error)).toContain('integrity verification')
+    expect(campaignFiles.map(path => readFileSync(join(campaignRoot, 'website', path), 'utf8'))).toEqual(campaignBefore)
+    expect(existsSync(join(campaignRoot, 'website', 'dist'))).toBe(false)
   })
 
   test('serializes content edits against builds so staged assets and rendered content cannot diverge', async () => {

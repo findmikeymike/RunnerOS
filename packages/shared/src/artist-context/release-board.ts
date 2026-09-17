@@ -238,8 +238,8 @@ const ITEM_ACTIONS: Record<string, ReleaseBoardItemAction> = {
   },
   'content:viral-clips': {
     kind: 'agent',
-    targetSlug: 'scroll-stopper',
-    targetName: 'Scroll Stopper',
+    targetSlug: 'content-genius',
+    targetName: 'Content Genius',
     instruction: 'I want the strongest absurd, instantly readable vertical video concepts this release can support, with clear cover frames and generation-ready direction.',
   },
   'content:ugc-clips': {

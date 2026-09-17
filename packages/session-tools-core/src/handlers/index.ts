@@ -186,6 +186,7 @@ export type {
 // Artist website: read, edit content, build, preview, audit, publish.
 // Production publishing requires the artist's approval on the exact build.
 export {
+  handleGetWebsiteCampaignContext,
   handleGetWebsiteManifest,
   handleCreateWebsite,
   handleSetWebsiteContent,
@@ -202,6 +203,7 @@ export {
   handleWebsiteInspectExternal,
 } from './website.ts';
 export type {
+  GetWebsiteCampaignContextInput,
   GetWebsiteManifestInput,
   CreateWebsiteInput,
   SetWebsiteContentInput,

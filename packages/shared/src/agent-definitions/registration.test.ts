@@ -40,17 +40,17 @@ describe('built-in registration policy', () => {
     for (const scope of ['hq', 'campaign', 'lab', 'general', undefined] as const) {
       expect(initialAgentSlugsForWorkspace(scope, true)).toEqual([])
     }
-    expect(initialAgentSlugsForWorkspace('hq', false)).toHaveLength(8)
-    expect(initialAgentSlugsForWorkspace('campaign', false)).toHaveLength(27)
+    expect(initialAgentSlugsForWorkspace('hq', false)).toHaveLength(9)
+    expect(initialAgentSlugsForWorkspace('campaign', false)).toHaveLength(25)
     expect(initialAgentSlugsForWorkspace('lab', false)).toHaveLength(6)
   })
 
-  test('new campaigns include the complete curated roster while HQ and Lab defaults stay unchanged', () => {
+  test('new campaigns keep the curated roster, HQ includes Content Genius, and Lab stays unchanged', () => {
     const campaign = initialAgentSlugsForWorkspace('campaign', false)
     expect(new Set(campaign).size).toBe(campaign.length)
     for (const slug of defaultWorkerSlugs(true)) expect(campaign).toContain(slug)
     expect(initialAgentSlugsForWorkspace('campaign', true)).toEqual([])
-    for (const slug of ['art-director', 'video-director', 'video-editor-agent', 'social-publisher']) {
+    for (const slug of ['art-director', 'video-director', 'social-publisher']) {
       expect(campaign.filter(entry => entry === slug)).toHaveLength(1)
       expect(defaultWorkerSlugs(true)).toContain(slug)
       expect(defaultWorkerSlugs(false)).not.toContain(slug)
@@ -58,8 +58,12 @@ describe('built-in registration policy', () => {
       expect(initialAgentSlugsForWorkspace('lab', false)).not.toContain(slug)
       expect(initialAgentSlugsForWorkspace('campaign', true)).not.toContain(slug)
     }
+    expect(campaign).not.toContain('website-agent')
+    expect(campaign).not.toContain('video-editor-agent')
+    expect(isAgentAllowedInArtistWorkspace('video-editor-agent', 'campaign')).toBe(true)
+    expect(isAgentAllowedInArtistWorkspace('website-agent', 'campaign')).toBe(true)
     expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([
-      'builder', 'anything-agent', 'scriptwriter', 'site-builder', 'website-agent', 'catalog-royalty-agent', 'legal-agent', 'gravity',
+      'content-genius', 'builder', 'anything-agent', 'scriptwriter', 'site-builder', 'website-agent', 'catalog-royalty-agent', 'legal-agent', 'gravity',
     ])
     expect(initialAgentSlugsForWorkspace('lab', false)).toEqual([
       'the-excavator', 'reverse-magic', 'hooker', 'legendary-writer', 'reference-master', 'record-doctor',

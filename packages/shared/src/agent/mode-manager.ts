@@ -2142,6 +2142,7 @@ export function shouldAllowToolInMode(
         includeManageGoalRun: true,
         includeSupplyWorkInput: true,
         includeManagerTools: true,
+        includeWebsiteCampaignContext: true,
         includeCampaignManagerTools: true,
         includeLabTools: true,
         includeSessionTasks: true,

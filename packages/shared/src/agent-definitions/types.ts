@@ -196,10 +196,14 @@ export interface LoadedAgent {
 export interface ActivatedAgentsManifest {
   /** Schema version for forward compatibility. */
   version: 1;
-  /** Slugs of globally-defined agents that should be visible in this workspace. */
+  /** Slugs of globally-defined agents available to run in this workspace. */
   active: string[];
   /** Explicitly disabled slugs. Optional for compatibility with older manifests. */
   deactivated?: string[];
+  /** Active creative companions omitted from the default Workers display. */
+  libraryOnly?: string[];
+  /** One-time Content Genius grouping has been applied. */
+  contentSpecialistsGrouped?: true;
   /** ISO timestamp of last mutation. */
   updatedAt: string;
 }

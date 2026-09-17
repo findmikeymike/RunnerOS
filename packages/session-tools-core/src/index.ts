@@ -318,6 +318,7 @@ export {
 } from './handlers/index.ts';
 
 export type {
+  GetWebsiteCampaignContextInput,
   GetWebsiteManifestInput,
   CreateWebsiteInput,
   SetWebsiteContentInput,
@@ -343,6 +344,7 @@ export type {
 } from './handlers/index.ts';
 
 export {
+  handleGetWebsiteCampaignContext,
   handleGetWebsiteManifest,
   handleCreateWebsite,
   handleSetWebsiteContent,

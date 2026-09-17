@@ -108,6 +108,8 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
         })
         if (initialAgentSlugs.length > 0) {
           writeActivatedAgents(workspace.rootPath, [...initialAgentSlugs])
+          const { groupWorkspaceContentSpecialists } = await import('../../sessions/content-specialist-visibility')
+          groupWorkspaceContentSpecialists(workspace)
           const { loadGlobalSkillBySlug, setGlobalSkillEnabled } = await import('@craft-agent/shared/skills')
           for (const agentSlug of initialAgentSlugs) {
             const agent = STARTER_AGENTS.find(candidate => candidate.slug === agentSlug)

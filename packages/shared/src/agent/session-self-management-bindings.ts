@@ -330,6 +330,12 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'getWebsiteCampaignContext', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.getWebsiteCampaignContextFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'getCampaignContext', {
     get() { return getSessionScopedToolCallbacks(sessionId)?.getCampaignContextFn; },
     configurable: true,

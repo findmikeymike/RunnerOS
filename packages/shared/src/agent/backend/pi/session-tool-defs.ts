@@ -29,6 +29,7 @@ export function getSessionToolProxyDefs(options?: Partial<SessionRoleToolFilterO
     includeAutomationMaintenance: options?.includeAutomationMaintenance ?? false,
     includeSupplyWorkInput: options?.includeSupplyWorkInput ?? false,
     includeManagerTools: options?.includeManagerTools ?? false,
+    includeWebsiteCampaignContext: options?.includeWebsiteCampaignContext ?? false,
     includeCampaignManagerTools: options?.includeCampaignManagerTools ?? false,
     includeLabTools: options?.includeLabTools ?? false,
     includeSocialVariantTools: options?.includeSocialVariantTools ?? false,

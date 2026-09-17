@@ -49,6 +49,8 @@ import { buildRecentSessionsSection } from '../sessions-log/render.ts';
 import type { SessionLogEntry } from '../sessions-log/types.ts';
 import { buildSharedIntelPromptSection, isSharedIntelContextSlug } from '../shared-intel/index.ts';
 import { ARTIST_OS_TEAM_MISSION, ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE, GRAVITY_MANAGER_ROUTING_GUIDANCE, buildArtistSpecialistGuidance } from './artist-team-guidance.ts';
+import { CONTENT_GENIUS_COLLABORATION_GUIDANCE } from './content-genius-guidance.ts';
+import { buildWebsiteCampaignGuidance } from './website-campaign-guidance.ts';
 
 const SECTION_DELIMITER = '\n\n---\n\n';
 
@@ -179,6 +181,9 @@ export function composeAgentSystemPrompt(
     }
     const specialistGuidance = buildArtistSpecialistGuidance(agent.slug, memory.artistWorkspaceScope);
     if (specialistGuidance) parts.push(specialistGuidance);
+    if (agent.slug === 'content-genius') parts.push(CONTENT_GENIUS_COLLABORATION_GUIDANCE);
+    const websiteGuidance = buildWebsiteCampaignGuidance(agent.slug, memory.artistWorkspaceScope);
+    if (websiteGuidance) parts.push(websiteGuidance);
   }
   if (taskModeSection) parts.push(taskModeSection);
   if (agent.slug === CONCIERGE_SLUG) parts.push('Start with artist-manager-operating-system only. Keep setup, creator, workflow, automation, and self-edit skills on demand; do not read them merely because they are in the Manager inventory. Stay conversational. For specialist work, discover the appropriate worker and its explicit focus with list_agents, then pass taskModeId when delegating.');

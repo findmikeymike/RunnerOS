@@ -9,6 +9,7 @@ export type SessionRoleToolFilterOptions = Required<Pick<SessionToolFilterOption
   | 'includeAutomationMaintenance'
   | 'includeSupplyWorkInput'
   | 'includeManagerTools'
+  | 'includeWebsiteCampaignContext'
   | 'includeCampaignManagerTools'
   | 'includeLabTools'
   | 'includeSocialVariantTools'
@@ -30,6 +31,7 @@ export function deriveSessionToolFilterOptions(
     includeAutomationMaintenance: isBuilder,
     includeSupplyWorkInput: isManager,
     includeManagerTools: isManager && (artistWorkspaceScope === 'hq' || artistWorkspaceScope === 'campaign'),
+    includeWebsiteCampaignContext: isArtistOS && agentSlug === 'website-agent' && (artistWorkspaceScope === 'hq' || artistWorkspaceScope === 'campaign'),
     includeCampaignManagerTools: isManager && artistWorkspaceScope === 'campaign',
     includeLabTools: artistWorkspaceScope === 'lab',
     includeSocialVariantTools: agentSlug === 'raw-video-editor',

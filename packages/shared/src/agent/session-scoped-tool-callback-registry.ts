@@ -180,6 +180,9 @@ export interface SessionScopedToolCallbacks {
   ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
   findSignalIdeasFn?: (input: import('../shared-intel/signal-retrieval.ts').FindSignalIdeasInput) => Promise<import('../shared-intel/signal-retrieval.ts').SignalLookupResult>;
   /** Artist website: read the manifest, edit content, render, preview, audit. */
+  getWebsiteCampaignContextFn?: (
+    input: import('@craft-agent/session-tools-core').GetWebsiteCampaignContextInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
   getWebsiteManifestFn?: (
     input: import('@craft-agent/session-tools-core').GetWebsiteManifestInput,
   ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;

@@ -2,6 +2,8 @@ import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { errorResponse, successResponse } from '../response.ts';
 
+export interface GetWebsiteCampaignContextInput { campaignWorkspaceId?: string }
+
 export interface GetWebsiteManifestInput { includeHistory?: boolean }
 
 export interface CreateWebsiteInput { artistName: string; template?: string }
@@ -11,7 +13,7 @@ export interface SetWebsiteContentInput {
   operations: unknown[];
 }
 
-export interface BuildWebsiteInput { audit?: boolean }
+export interface BuildWebsiteInput { audit?: boolean; campaignWorkspaceId?: string }
 
 export interface DeployWebsiteInput {
   target?: 'preview' | 'production';
@@ -34,7 +36,7 @@ export interface WebsiteInspectExternalInput {
   /** False when reading somebody else's site rather than the artist's. */
   remember?: boolean;
 }
-export interface PreviewWebsiteInput { build?: boolean }
+export interface PreviewWebsiteInput { build?: boolean; campaignWorkspaceId?: string }
 export interface AuditWebsiteInput { url?: string }
 
 export type WebsiteToolResult = { ok: boolean; error?: string; [key: string]: unknown };
@@ -55,6 +57,10 @@ async function invoke(
 }
 
 const NO_WEBSITE = 'Website tools are only available in an Artist HQ workspace.';
+
+export function handleGetWebsiteCampaignContext(ctx: SessionToolContext, input: GetWebsiteCampaignContextInput): Promise<ToolResult> {
+  return invoke(ctx.getWebsiteCampaignContext, input, 'get_website_campaign_context is only available to Website Agent in Artist HQ or Campaigns.');
+}
 
 export function handleGetWebsiteManifest(ctx: SessionToolContext, input: GetWebsiteManifestInput): Promise<ToolResult> {
   return invoke(ctx.getWebsiteManifest, input, NO_WEBSITE);

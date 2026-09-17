@@ -137,7 +137,7 @@ export function AgentLibraryDialog({
           </div>
 
           <p className="border-t border-white/[0.06] pt-3 text-[11px] text-white/34">
-            {filteredActiveCount(activeSet, sortedAgents)} of {sortedAgents.length} active in this workspace.
+            {filteredActiveCount(activeSet, sortedAgents)} of {sortedAgents.length} added to this workspace’s Workers.
           </p>
         </div>
       </DialogContent>
@@ -183,6 +183,7 @@ function AgentRow({ agent, displayName, active, onToggle, onRename }: AgentRowPr
         type="checkbox"
         checked={active}
         onChange={onToggle}
+        aria-label={`${active ? 'Remove' : 'Add'} ${cleanName} ${active ? 'from' : 'to'} Workers`}
         className="h-3.5 w-3.5 cursor-pointer accent-[#fb923c]"
       />
       <div
