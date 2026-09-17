@@ -400,6 +400,7 @@ export const TIER_TWO_TASK_MODES: Record<string, AgentTaskModeDefinition[]> = {
       primarySkillSlugs: [],
       adjacentSkills: [
         adjacent('setup-models', 'Model connections and defaults.'),
+        adjacent('setup-voice', 'Inworld key, voice creation and fast conversational model setup.'),
         adjacent('setup-tools', 'Tool connections and affordable capability choices.'),
         adjacent('setup-socials', 'Social and Spotify login and identity verification.'),
         adjacent('setup-brain', 'Artist profile, voice and branding intake.'),
@@ -412,6 +413,11 @@ export const TIER_TWO_TASK_MODES: Record<string, AgentTaskModeDefinition[]> = {
       id: 'models', label: 'LLM Setup', icon: 'plug',
       description: 'Connect the models your workers use.', primarySkillSlugs: ['setup-models'],
       context: context([], ['Current model connections and secure setup options only'], 2_000),
+    }),
+    mode({
+      id: 'voice', label: 'Voice Setup', icon: 'mic',
+      description: 'Choose a voice and set up fast spoken calls.', primarySkillSlugs: ['setup-voice'],
+      context: context([], ['Inworld secure service entry, browser walkthrough and separate Conversation settings only'], 2_000),
     }),
     mode({
       id: 'tools', label: 'Tools', icon: 'compass',

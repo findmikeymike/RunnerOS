@@ -18,7 +18,7 @@ export const CONCIERGE_SYSTEM_SKILL_SLUGS = [
   'runneros-self-edit',
 ] as const;
 
-export const SETUP_SYSTEM_SKILL_SLUGS = ['setup-models', 'setup-tools', 'setup-socials', 'setup-brain', 'setup-people'] as const;
+export const SETUP_SYSTEM_SKILL_SLUGS = ['setup-models', 'setup-voice', 'setup-tools', 'setup-socials', 'setup-brain', 'setup-people'] as const;
 
 export const SYSTEM_GLOBAL_SKILL_SLUGS = [...new Set([
   ...SETUP_SYSTEM_SKILL_SLUGS,

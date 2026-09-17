@@ -1,0 +1,151 @@
+[
+  {
+    "kind": "focus",
+    "id": "general",
+    "label": "General",
+    "icon": "message-circle",
+    "description": "Tell me what you need; I will use the right setup skill.",
+    "primarySkillSlugs": [],
+    "adjacentSkills": [
+      {
+        "slug": "setup-models",
+        "when": "Model connections and defaults.",
+        "expansion": "same-session"
+      },
+      {
+        "slug": "setup-tools",
+        "when": "Tool connections and affordable capability choices.",
+        "expansion": "same-session"
+      },
+      {
+        "slug": "setup-socials",
+        "when": "Social and Spotify login and identity verification.",
+        "expansion": "same-session"
+      },
+      {
+        "slug": "setup-brain",
+        "when": "Artist profile, voice and branding intake.",
+        "expansion": "same-session"
+      },
+      {
+        "slug": "setup-people",
+        "when": "Network and Community contact imports.",
+        "expansion": "same-session"
+      },
+      {
+        "slug": "artist-os-guide",
+        "when": "Navigation and help using the app.",
+        "expansion": "same-session"
+      }
+    ],
+    "context": {
+      "preloadTopics": [],
+      "retrieveOnDemandTopics": [
+        "Only state relevant to the current request; load the matching domain skill on demand"
+      ],
+      "maxPreloadChars": 1500
+    }
+  },
+  {
+    "kind": "focus",
+    "id": "models",
+    "label": "LLM Setup",
+    "icon": "plug",
+    "description": "Connect the models your workers use.",
+    "primarySkillSlugs": [
+      "setup-models"
+    ],
+    "context": {
+      "preloadTopics": [],
+      "retrieveOnDemandTopics": [
+        "Current model connections and secure setup options only"
+      ],
+      "maxPreloadChars": 2000
+    }
+  },
+  {
+    "kind": "focus",
+    "id": "tools",
+    "label": "Tools",
+    "icon": "compass",
+    "description": "Connect useful services for your work.",
+    "primarySkillSlugs": [
+      "setup-tools"
+    ],
+    "context": {
+      "preloadTopics": [],
+      "retrieveOnDemandTopics": [
+        "Relevant saved sources and connection choices only"
+      ],
+      "maxPreloadChars": 2000
+    }
+  },
+  {
+    "kind": "focus",
+    "id": "socials",
+    "label": "Social & Spotify",
+    "icon": "link",
+    "description": "Connect and verify the right accounts.",
+    "primarySkillSlugs": [
+      "setup-socials"
+    ],
+    "context": {
+      "preloadTopics": [],
+      "retrieveOnDemandTopics": [
+        "Selected saved account and chosen Spotify service only"
+      ],
+      "maxPreloadChars": 2000
+    }
+  },
+  {
+    "kind": "focus",
+    "id": "brain",
+    "label": "Brain & Profile",
+    "icon": "brain",
+    "description": "Talk through your profile, voice and branding.",
+    "primarySkillSlugs": [
+      "setup-brain"
+    ],
+    "context": {
+      "preloadTopics": [],
+      "retrieveOnDemandTopics": [
+        "Read only the selected HQ profile, voice or branding topic through manage_artist_brain"
+      ],
+      "maxPreloadChars": 2000
+    }
+  },
+  {
+    "kind": "focus",
+    "id": "people",
+    "label": "People & Community",
+    "icon": "users",
+    "description": "Add people to the right HQ list.",
+    "primarySkillSlugs": [
+      "setup-people"
+    ],
+    "context": {
+      "preloadTopics": [],
+      "retrieveOnDemandTopics": [
+        "User supplied contact data and intended Network or Community destination"
+      ],
+      "maxPreloadChars": 2000
+    }
+  },
+  {
+    "kind": "focus",
+    "id": "app-help",
+    "label": "App Help",
+    "icon": "circle-help",
+    "description": "Find the right place and next useful step.",
+    "primarySkillSlugs": [
+      "artist-os-guide"
+    ],
+    "context": {
+      "preloadTopics": [],
+      "retrieveOnDemandTopics": [
+        "Current feature question and its relevant feature reference only"
+      ],
+      "maxPreloadChars": 2000
+    }
+  }
+]

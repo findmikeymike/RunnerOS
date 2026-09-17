@@ -671,6 +671,41 @@ Open the secure Settings wizard for the appropriate supported provider (claude, 
 After the user completes the form, re-list and test the saved connection. A provider validation call may incur usage: do not promise free/inference-free testing. Report actual results. Set a default only as requested with explicit app or workspace scope. A service key is not an LLM connection; subscriptions do not universally include API access. If the tool is unavailable, guide Models Settings without inventing a config-file workaround.
 `;
 
+const SETUP_VOICE_SKILL = `---
+name: Setup Voice
+description: "Set up spoken Artist Manager calls: Inworld key, voice selection or creation, and a fast conversational model."
+tags: [system, setup, artist-os, voice]
+metadata:
+  version: 0.1.0
+---
+
+# Setup Voice
+
+Help the artist finish one step at a time. Reuse working connections; do not request a replacement key just because setup was opened. Brain → Voice describes writing/communication identity, not the spoken call voice.
+
+## Inworld browser walkthrough
+
+Use \`browser_tool\` with \`{"command":"open"}\`, then \`{"command":"navigate https://platform.inworld.ai/"}\`. This is the app's interactive Browser Pane beside the conversation (the browser-in-Canvas walkthrough); do not substitute a static \`visual_surface\` webpage preview. On non-secret pages, use \`{"command":"snapshot"}\` to guide from the actual page. If browser control is unavailable, give the official link and short manual steps; never pretend it opened.
+
+Let the artist complete signup/login. In Portal, Settings → API Keys lets them generate a key and copy its **Base64 credentials**. Hand control to them with \`{"command":"release"}\` before authentication or revealing credentials. Do not snapshot a revealed key, inspect the clipboard, or ask them to paste credentials into chat. They paste directly into Artist OS Settings → Services → Inworld TTS → API key. Never use terminal/config files or a generic source credential prompt as a substitute for this service's secure form.
+
+In the TTS Playground, audition an existing voice, or use Create Voice → Design for a described voice / Create Voice → Clone for their own or an authorized voice sample. Follow current visible controls rather than assuming the portal layout or plan entitlement. After saving a created voice, find its exact Voice ID in its details/API example; use the ID, not merely its display name. Paste it into **Default agent voice** in the same Inworld settings card. An empty ID uses Ashley; do not erase an existing choice. This default also serves agent video voiceovers, so explain that shared effect when changing it.
+
+Use **Save**, then **Test** on the Inworld card. Test can validate draft values, so success alone is not proof they were saved. Reopen the card to confirm the saved voice ID/status without revealing the key. Invalid key/voice and provider unavailable are different failures; correct the reported issue without discarding a working connection.
+
+## Fast conversation settings
+
+Guide Settings → **Conversation** (also reachable through the voice dialog's Call settings). Choose a fast supported model from the current **Voice model** picker using an existing connected provider; prefer low latency with **Reasoning Low or Off** where supported. Use the actual available options, not a hard-coded model recommendation or price promise. These settings autosave and apply to the next call. Keep app/workspace text and creative model defaults unchanged. \`setup_llm_connection\` set-default changes text defaults, NOT the voice model; do not use it for this choice. If no eligible connection exists, load \`setup-models\` and explain that completing a new connection may change the app default before proceeding.
+
+The Inworld speech engine and conversational model are different: the app uses Inworld TTS 2 Flash for speech; the Voice model supplies the conversation. Choose the **Manager** personality separately from the Inworld voice sound. Keep the existing **Hearing** choice unless a change is needed; local Moonshine and connected AssemblyAI are separate transcription options. There is no voice-preferences write tool here: guide the real Settings controls, never claim to have changed them yourself.
+
+## Finish with a real call
+
+After saving, start a short Artist Manager call. Have the user allow microphone access, say a sentence, and confirm they hear the selected voice and can reply. A saved key, successful provider test, visible avatar or text caption alone is not proof of working audio. Confirm the selected model/personality persist when reopening Conversation settings. Report precisely what was checked and what still needs the artist's audio confirmation.
+
+Official references (consult only when needed): [API key setup](https://docs.inworld.ai/quickstart-tts), [voice cloning](https://docs.inworld.ai/tts/instant-voice-cloning), [voice design](https://docs.inworld.ai/tts/voice-design). Verify current portal choices or pricing if asked; do not promise free access.
+`;
+
 const SETUP_TOOLS_SKILL = `---
 name: Setup Tools
 description: "Connect services securely, explain Monid and optional Zero, and choose useful capabilities."
@@ -757,7 +792,7 @@ metadata:
 
 Use for App Assistant and for Artist Manager's app-help questions. Start with the user's goal and whether they are in HQ, a campaign, or Creative Lab. Give the shortest accurate next step.
 
-For setup tasks, load just the relevant domain skill: \`setup-models\`, \`setup-tools\`, \`setup-socials\`, \`setup-brain\`, or \`setup-people\`. General can choose these without a card click. This guide handles app navigation and capability questions; do not read all setup skills or references upfront.
+For setup tasks, load just the relevant domain skill: \`setup-models\`, \`setup-voice\`, \`setup-tools\`, \`setup-socials\`, \`setup-brain\`, or \`setup-people\`. General can choose these without a card click. This guide handles app navigation and capability questions; do not read all setup skills or references upfront.
 
 ## What is available
 
@@ -902,6 +937,8 @@ Search by the user's outcome instead of memorizing every worker: release operati
 Chats are saved conversations; find prior work in the conversation history/sidebar for the relevant workspace. Use available session-list/detail tools to locate a particular run; do not claim unseen conversations are lost.
 
 While a worker runs, **Send update** adds direction. Several pending updates can be delivered together at an eligible processing boundary, in order; this is not a scheduler that fires exactly one update after each answer. Provider timing differs. **Stop** is separate. Do not promise an update was applied without delivery/result evidence.
+
+For spoken-call setup, load \`setup-voice\`: Inworld key and Voice ID belong in Settings → Services; the fast conversational model and Manager personality belong in Settings → Conversation.
 
 The **Artist Manager** voice dialog has **Call settings**, Start call, Cancel connection, and End call. Connection/readiness and caption/audio state matter; an avatar alone does not prove listening or playback. **Brain → Voice** is the artist's communication identity document, not call audio settings.
 
@@ -1273,6 +1310,7 @@ export const STARTER_SKILLS: StarterSkill[] = [
   { slug: 'workflow-creator', files: [{ path: 'SKILL.md', content: WORKFLOW_CREATOR_SKILL }] },
   { slug: 'skill-scout', files: [{ path: 'SKILL.md', content: SKILL_SCOUT_SKILL }] },
   { slug: 'source-recipe', files: [{ path: 'SKILL.md', content: SOURCE_RECIPE_SKILL }] },
+  { slug: 'setup-voice', files: [{ path: 'SKILL.md', content: SETUP_VOICE_SKILL }] },
   { slug: 'setup-models', files: [{ path: 'SKILL.md', content: SETUP_MODELS_SKILL }] },
   { slug: 'setup-tools', files: [{ path: 'SKILL.md', content: SETUP_TOOLS_SKILL }] },
   { slug: 'setup-socials', files: [{ path: 'SKILL.md', content: SETUP_SOCIALS_SKILL }] },

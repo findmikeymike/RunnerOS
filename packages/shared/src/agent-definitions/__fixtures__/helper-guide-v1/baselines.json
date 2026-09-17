@@ -25,6 +25,10 @@
     {
       "file": "setup-concierge-4000a2a8.md",
       "bodySha256": "4000a2a8e913352922892cb20ed2f8d9ecd78b29d93c3ae4f5fe1c932505e842"
+    },
+    {
+      "file": "setup-concierge-pre-voice.md",
+      "bodySha256": "e1c18754f79904e14393ab3351a07f4ed91990664b8b9eae5dfc4f10664b7478"
     }
   ],
   "skills": [
@@ -44,6 +48,10 @@
     {
       "file": "artist-os-guide-df76b17e.md",
       "sha256": "df76b17ef5a6cae86a0e454c823855b38ada898e53a03d9440424b14552a261d"
+    },
+    {
+      "file": "artist-os-guide-pre-voice.md",
+      "sha256": "5582a2cc58173030b16f1637ee14e372523dc2b78d4d8fffe8d053da289a5989"
     }
   ],
   "references": [
@@ -56,6 +64,11 @@
     {
       "file": "artist-os-guide-features-563ddc2e.md",
       "sha256": "563ddc2eaf3e1a59928bf3d221e04fb14662fbeaf61a430e88abf81d0833a23c",
+      "path": "references/features.md"
+    },
+    {
+      "file": "artist-os-guide-features-pre-voice.md",
+      "sha256": "fb08ea8f2b2a8e5f11b14220039dc543ca1919f47b42a4b2763916dfd7981b97",
       "path": "references/features.md"
     }
   ]

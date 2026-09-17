@@ -102,9 +102,9 @@ Status: planned work, not a completed commit awaiting integration.
 
 ## 7. HQ Assistant: voice setup
 
-- [ ] **NEXT — Audit and add voice-setup guidance/tools as needed.** Walk users through Inworld account creation, locating/creating an API key, saving it through the app's credential flow, choosing a voice ID, personality, and suitable model.
-- [ ] **NEXT — Verify current provider requirements when implementing.** Pricing, account steps, voice availability, and model recommendations can change. Do not freeze assumptions into the prompt.
-- [ ] **NEXT — Keep secrets out of chat and prove settings synchronization.** Use existing secure entry surfaces. The assistant should distinguish configuring a value from verifying that voice playback/conversation actually works.
+- [x] **IMPLEMENTED (September 17) — App Assistant Voice Setup.** On-demand `setup-voice` skill and focus guide the in-app browser walkthrough, Inworld Base64 key, voice selection/design/cloning, secure Services entry, and separate fast conversational model/personality. Stock-agent migration preserves custom inventories and modes. Existing controls are used; no new credential or voice-settings mutation tool.
+- [x] **VERIFIED (September 17) — Provider setup guidance.** Checked official Inworld quickstart, cloning and voice-design docs. Guidance follows current visible portal controls and the app's available fast-model picker; no frozen pricing or model recommendation.
+- [ ] **PARTIAL — Secure setup guidance implemented; live settings/call acceptance remains.** Key goes directly into Services, never chat/browser snapshots/clipboard reads. Save is separate from Test. 190 focused tests cover setup migration, helper guide, model routing, and existing Inworld credential validation. Live persistence/audio confirmation remains below.
 - [ ] **NEXT — Smoke new and existing connections.** Confirm selected voice/personality/model persist and match the actual conversational agent. Keep text/creative model preferences distinct from low-latency voice choices.
 
 ## 8. Live acceptance and reliability finishing pass

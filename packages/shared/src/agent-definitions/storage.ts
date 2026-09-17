@@ -831,7 +831,10 @@ export function migrateBuiltInAgentTaskModes(starter: CreateAgentInput, options?
     // inventory only after its recipes passed the shipped-hash gate above.
     // User-edited inventories remain theirs and cannot acquire unusable recipes.
     const stockSetupInventory = starter.slug === 'setup-concierge'
-      && agentMetadataValueEquals(installed.metadata.skills, ['artist-os-guide', 'source-recipe']);
+      && [
+        ['artist-os-guide', 'source-recipe'],
+        ['artist-os-guide', 'source-recipe', 'setup-models', 'setup-tools', 'setup-socials', 'setup-brain', 'setup-people'],
+      ].some(skills => agentMetadataValueEquals(installed.metadata.skills, skills));
     const next = { ...installed.metadata,
       ...(stockSetupInventory ? { skills: starter.metadata.skills } : {}),
       taskModes: starter.metadata.taskModes,
