@@ -11,6 +11,7 @@
 
 import { ARTIST_DIRECTION_AGENT, WORLD_BUILDER_AGENT } from './artist-direction.ts'
 import { SCRIPTWRITER_AGENT } from './scriptwriter.ts'
+import { GRAVITY_AGENT } from './gravity.ts'
 import type { CreateAgentInput } from './storage.ts'
 import type { AgentTaskModeDefinition } from './types.ts'
 import { TIER_ONE_TASK_MODES } from './task-mode-recipes/tier-one.ts'
@@ -36,6 +37,7 @@ const PORTABLE_AGENT_LIBRARY_ROOT = RUNTIME_IDENTITY.variant === 'artist-os'
  * which is useful even before Rooms ship.
  */
 const BASE_STARTER_AGENTS: CreateAgentInput[] = [
+  GRAVITY_AGENT,
   {
     slug: ANYTHING_AGENT_SLUG,
     metadata: {

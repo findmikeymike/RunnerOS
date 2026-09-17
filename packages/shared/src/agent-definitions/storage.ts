@@ -1048,6 +1048,7 @@ export function replaceBuiltInAgentMetadata(
   options?: AgentStorageOptions,
 ): { updated: boolean } {
   const builtIns = new Set([
+    'gravity',
     'builder',
     'anything-agent',
     'concierge',

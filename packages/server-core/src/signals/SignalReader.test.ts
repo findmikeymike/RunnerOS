@@ -88,7 +88,7 @@ test('permission denial precedes reads and is redacted', async () => {
   permission.mockImplementation(() => { throw new Error('private credentials /path'); });
   const result = await reader.find('hq'); expect(result.ok).toBe(false); expect(JSON.stringify(result)).not.toContain('private');
 });
-for (const broken of ['attempt', 'run', 'final', 'status', 'metadata', 'index', 'hash', 'excerpt', 'bound', 'topic', 'support'] as const) test(`excludes invalid ${broken} proof`, async () => {
+for (const broken of ['attempt', 'run', 'final', 'status', 'metadata', 'index', 'hash', 'bound', 'topic', 'support'] as const) test(`excludes invalid ${broken} proof`, async () => {
   const f = publish();
   if (broken === 'attempt') f.request.workflowRunId = randomUUID();
   if (broken === 'run') f.run.state = 'failed';
@@ -97,12 +97,21 @@ for (const broken of ['attempt', 'run', 'final', 'status', 'metadata', 'index', 
   if (broken === 'metadata') f.metadata.identity = { ...f.metadata.identity, hqWorkspaceId: 'other' };
   if (broken === 'index') f.metadata.indexingStatus = 'failed';
   if (broken === 'hash') f.metadata.contentHash = hash('different');
-  if (broken === 'excerpt') f.metadata.ideas[0]!.excerpt = 'not saved';
   if (broken === 'bound') f.metadata.findings[0]!.excerpt = 'x'.repeat(601);
   if (broken === 'topic') f.metadata.ideas[0]!.topics = Array(9).fill('topic');
   if (broken === 'support') f.metadata.ideas[0]!.supportingFindingIds = ['missing'];
   f.persist();
   expect((await reader.resolveReference('hq', f.reference)).ok).toBe(false);
+});
+test('validated summaries need not literally repeat report prose', async () => {
+  const f = publish();
+  f.metadata.ideas[0]!.excerpt = 'Use the telescope finding as the basis for a discussion about perspective.';
+  f.persist();
+  const result = await reader.resolveReference('hq', f.reference);
+  expect(result.ok).toBe(true);
+  expect(result.entries[0]!.excerpt).toBe(f.metadata.ideas[0]!.excerpt);
+  expect(result.entries[0]!.sourceRefs).toEqual(f.metadata.ideas[0]!.sourceRefs);
+  expect(result.entries[0]!.supportingFindings![0]!.id).toBe('finding');
 });
 test('bounded output and malformed inputs never produce unbounded tool context', async () => {
   const f = publish({ count: 5 });
@@ -133,15 +142,18 @@ test('rejects corrupt sidecar and symlink escape without exposing their contents
   writeFileSync(join(hq.rootPath, 'signals/packets', `${f.request.reportMetadataHash}.json`), 'private malformed');
   expect((await reader.listIdeas('hq', f.output.id)).ok).toBe(false);
 });
-test('all seven active worker identities can retrieve through the session host entrypoint', async () => {
+test('all active eligible worker identities can retrieve through the session host entrypoint', async () => {
   const f = publish(); let active: readonly string[] = SIGNAL_RETRIEVAL_WORKERS;
   const workerReader = new SignalReader({ workspaces: () => workspaces, permission, now: () => now, activeAgents: () => active });
   for (const slug of SIGNAL_RETRIEVAL_WORKERS) {
-    const result = await workerReader.findForWorker('campaign', slug, { reference: f.reference });
+    const result = await workerReader.findForWorker(slug === 'gravity' ? 'hq' : 'campaign', slug, { reference: f.reference });
     expect(result.ok).toBe(true); expect(result.entries[0]!.reference).toEqual(f.reference);
   }
   active = [];
+  expect((await workerReader.findForWorker('hq', 'gravity', {})).ok).toBe(false);
   expect((await workerReader.findForWorker('campaign', 'content-genius', {})).ok).toBe(false);
+  active = ['gravity'];
+  expect((await workerReader.findForWorker('campaign', 'gravity', {})).ok).toBe(false);
   active = ['scroll-stopper', 'artist-manager'];
   expect((await workerReader.findForWorker('campaign', 'scroll-stopper', {})).ok).toBe(false);
   expect((await workerReader.findForWorker('campaign', 'artist-manager', {})).ok).toBe(false);

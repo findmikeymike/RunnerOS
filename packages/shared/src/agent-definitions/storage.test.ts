@@ -1020,7 +1020,7 @@ body
     expect(initialAgentSlugsForWorkspace('lab', false)).toEqual(LAB_DEFAULT_ACTIVATED_AGENT_SLUGS)
     expect(initialAgentSlugsForWorkspace('lab', true)).toEqual([])
     expect(CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['anticipation-director', 'art-director', 'video-director', 'video-editor-agent', 'social-publisher'])
-    expect(HQ_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['catalog-royalty-agent', 'legal-agent'])
+    expect(HQ_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['catalog-royalty-agent', 'legal-agent', 'gravity'])
     expect(HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['builder', ANYTHING_AGENT_SLUG, 'scriptwriter', 'site-builder', 'website-agent'])
     expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([
       RELEASE_MANAGER_AGENT_SLUG,
@@ -1059,6 +1059,7 @@ body
       'website-agent',
       'catalog-royalty-agent',
       'legal-agent',
+      'gravity',
     ])
     expect(initialAgentSlugsForWorkspace('general', false)).toEqual([])
     expect(isAgentAllowedInArtistWorkspace('legal-agent', 'hq')).toBe(true)

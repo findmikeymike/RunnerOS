@@ -25,7 +25,7 @@ describe('session tool filtering helpers', () => {
     expect(def.inputSchema.safeParse({ query: 'x'.repeat(501) }).success).toBe(false);
     expect(def.inputSchema.safeParse({ workspaceId: 'other' }).success).toBe(false);
     const ref = { hqWorkspaceId: 'hq', outputId: 'output', contentHash: 'a'.repeat(64), entryId: 'idea:1' };
-    for (const input of [{}, { query: 'stars' }, { reference: ref }, { reference: { ...ref, entryId: undefined } },
+    for (const input of [{}, { query: 'stars' }, { lookbackDays: 1 }, { lookbackDays: 60 }, { lookbackDays: 0 }, { lookbackDays: 61 }, { lookbackDays: 1.5 }, { lookbackDays: '30' }, { reference: ref }, { reference: { ...ref, entryId: undefined } },
       { query: 'x'.repeat(501) }, { freshness: 'today' }, { reference: { ...ref, contentHash: 'wrong' } },
       { reference: { ...ref, entryId: '../private' } }, { track: 'unknown' }, { reference: { ...ref, extra: true } }, { workspaceId: 'other' }]) {
       expect(def.inputSchema.safeParse(input).success).toBe(findSignalIdeasSchema.safeParse(input).success);

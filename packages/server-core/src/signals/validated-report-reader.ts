@@ -37,7 +37,7 @@ export function readValidatedSignalEntries(hq: Pick<Workspace, 'id' | 'rootPath'
   const markdown = readPrimary(hq.rootPath, output.id, output.primary.path);
   validateSignalFinalReportContent(metadata, markdown);
   // Reuse the synthesis validator to check bounds, source references, supporting
-  // findings and literal excerpt membership; never regenerate metadata.
+  // findings. Valid summaries need not repeat report prose; never regenerate metadata.
   const parsed = parseSignalSynthesis({ version: 1, outcome: 'report', markdown,
     examinedVideoIds: [...new Set(metadata.sources.flatMap(source => source.videoId ? [source.videoId] : []))],
     findings: metadata.findings, ideas: metadata.ideas }, { identity: metadata.identity, sources: metadata.sources });
@@ -55,4 +55,3 @@ export function readValidatedSignalEntries(hq: Pick<Workspace, 'id' | 'rootPath'
     };
   });
 }
-

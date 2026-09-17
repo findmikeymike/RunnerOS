@@ -3,7 +3,7 @@ import type { SignalFinding, SignalIdea, SignalReportSource } from './signal-rep
 import type { SignalMode, SignalTrack } from './signal-contracts.ts';
 
 export const SIGNAL_RETRIEVAL_LIMITS = { entries: 5, characters: 4000, query: 500, reports: 200 } as const;
-export const SIGNAL_RETRIEVAL_WORKERS = ['content-genius', 'x-editorial', 'world-builder', 'branding-agent', 'community-agent', 'concierge', 'content-director', 'builder'] as const;
+export const SIGNAL_RETRIEVAL_WORKERS = ['content-genius', 'x-editorial', 'world-builder', 'branding-agent', 'community-agent', 'concierge', 'content-director', 'builder', 'gravity'] as const;
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/);
 export const signalEntryReferenceSchema = z.object({
   hqWorkspaceId: identifier, outputId: identifier, contentHash: z.string().regex(/^[a-f0-9]{64}$/),

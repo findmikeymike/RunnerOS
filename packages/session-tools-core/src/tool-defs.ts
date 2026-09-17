@@ -1073,6 +1073,7 @@ export const FindSignalIdeasSchema = z.object({
   query: z.string().trim().max(500).optional(),
   track: z.enum(['industry', 'your-world']).optional(),
   freshness: z.enum(['recent', 'evergreen']).optional(),
+  lookbackDays: z.number().int().min(1).max(60).optional().describe('Bound recent reports and their supporting source dates to this many days.'),
   kind: z.enum(['finding', 'idea']).optional(),
   reference: z.object({
     hqWorkspaceId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/),

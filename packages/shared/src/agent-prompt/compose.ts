@@ -48,7 +48,7 @@ import type { MemoryEntry } from '../memory/types.ts';
 import { buildRecentSessionsSection } from '../sessions-log/render.ts';
 import type { SessionLogEntry } from '../sessions-log/types.ts';
 import { buildSharedIntelPromptSection, isSharedIntelContextSlug } from '../shared-intel/index.ts';
-import { ARTIST_OS_TEAM_MISSION, ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE, buildArtistSpecialistGuidance } from './artist-team-guidance.ts';
+import { ARTIST_OS_TEAM_MISSION, ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE, GRAVITY_MANAGER_ROUTING_GUIDANCE, buildArtistSpecialistGuidance } from './artist-team-guidance.ts';
 
 const SECTION_DELIMITER = '\n\n---\n\n';
 
@@ -173,7 +173,10 @@ export function composeAgentSystemPrompt(
   // Explicit workspace scope keeps this product mission out of general Runner sessions.
   if (memory.artistWorkspaceScope === 'hq' || memory.artistWorkspaceScope === 'campaign' || memory.artistWorkspaceScope === 'lab') {
     parts.push(ARTIST_OS_TEAM_MISSION);
-    if (agent.slug?.trim().toLowerCase() === CONCIERGE_SLUG) parts.push(ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE);
+    if (agent.slug?.trim().toLowerCase() === CONCIERGE_SLUG) {
+      parts.push(ARTIST_MANAGER_BREAKTHROUGH_GUIDANCE);
+      if (memory.artistWorkspaceScope !== 'lab') parts.push(GRAVITY_MANAGER_ROUTING_GUIDANCE);
+    }
     const specialistGuidance = buildArtistSpecialistGuidance(agent.slug, memory.artistWorkspaceScope);
     if (specialistGuidance) parts.push(specialistGuidance);
   }
@@ -195,6 +198,7 @@ export function composeAgentSystemPrompt(
 }
 
 const SIGNAL_IDEA_ROLES: Record<string, string> = {
+  'gravity': 'Investigate exceptional career opportunities using relevant recent scans, unexpected cultural intersections and counterevidence. Connect them with real artist identity and verified team capabilities; do not manufacture trends or reopen approved work.',
   'content-genius': 'Develop specific content concepts and talking points. Respect non-music topics and the requested scale; do not force a release tie-in or a full campaign portfolio.',
   'x-editorial': 'Find relevant commentary, stories, and discussion starters, including evergreen observations. Do not post automatically.',
   'world-builder': 'Find cultural references for storytelling, campaign worlds, experiences, and creative extensions.',

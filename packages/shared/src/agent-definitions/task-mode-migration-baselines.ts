@@ -2,6 +2,8 @@
  * Generated from historical STARTER_AGENTS, never from the installed user file.
  * Append verified historical releases when a recipe changes; do not replace these. */
 export const BUILT_IN_TASK_MODE_BASELINES: Readonly<Record<string, { recipeHashes: readonly string[]; withoutRecipesHashes: readonly string[] }>> = {
+  // New built-in: only exact current stock without recipes can acquire them.
+  "gravity": { "recipeHashes": [], "withoutRecipesHashes": [] },
   "concierge": {"recipeHashes": ["9a43199735fe62fd8db27a301f8261f0d1497b60d8d7f16ad356d70e1ecf0ba5"], "withoutRecipesHashes": ["c16c640de16579abcb439f16922c748f0d3bc393fd606cb3e79c53389e2bdd04", "c640dd66eb9166cc4ac8d7d89fa05205bf008670f029ad0f90709c0e1cc9e813"]},
   "setup-concierge": {"recipeHashes": ["d29beb4f88ab5f3b3f5c5a85178de0184e87726be8f496f33aecc364bdb99682"], "withoutRecipesHashes": ["d2f78e862f2246cff4c309c46c6613adae85fbf05395e326cce52613cc372bc7", "8a9de6b803892ab9a8cf06688066b917c806cf463f3cb1eb4bd9288924b01721", "5782eb4b5a384e6e4b92857b310a96c1e4b8415026829616a96c313f6f9dc4ba"]},
   "social-publisher": {"recipeHashes": ["3df7588dd0f365edc058b063392abb319295fc04094f6e22809f4e81b170b220"], "withoutRecipesHashes": ["696ba349136b9c90246bc22123d37d12826e7d2dbe4728f7af44515aad87e68b"]},
