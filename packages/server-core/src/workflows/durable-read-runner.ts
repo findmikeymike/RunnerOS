@@ -1,3 +1,5 @@
+import { isDurableWorkflowConnectedReads } from '../../../shared/src/workflows/connected-reads';
+import { createDurableWorkflowConnectedReads, type DurableWorkflowConnectedReadOptions, type FrozenWorkflowConnectedRead } from './durable-workflow-connected-reads';
 import { assertDurableTriggerDeclarations, normalizeDurableTriggerInputs, durableTriggerTemplateContext } from './durable-workflow-inputs';
 import { durableStepOutput, supportsDurableOutputSchema, supportsDurableOutputPath } from './durable-workflow-output-schema';
 import { appendOutputSchemaInstruction } from '../../../shared/src/workflows/output-schema';
@@ -50,6 +52,7 @@ export interface DurableReadBackendArgs {
 }
 type ReadBackend = Pick<AgentBackend, 'chat' | 'abort' | 'destroy'>;
 export interface DurableReadRunnerOptions {
+  connectedReads?: DurableWorkflowConnectedReadOptions;
   assertBackgroundFence?: (workspaceId: string, fence: string) => void;
   journal: DurableJournal;
   hostRuntime: BackendHostRuntimeContext;
@@ -80,6 +83,7 @@ export interface DurableReadDecisionResult {
 export interface DurableReadSteeringResult { receipt: DurableSteeringReceipt; execution?: Promise<DurableRunSnapshot> }
 interface ActiveReadExecution { claim?: DurableClaim; backend?: ReadBackend; promise: Promise<DurableRunSnapshot>; replayForSteering?: boolean }
 interface FrozenReadContext {
+  connectedReads?: FrozenWorkflowConnectedRead[];
   backgroundFence?: string;
   prompt: string; systemPrompt: string; connectionSlug: string; workspaceRoot: string; bindingDigest: string;
   requireNonEmptyOutput: boolean;
@@ -138,6 +142,7 @@ export function supportsDurableReadWorkflow(workflow: LoadedWorkflow): boolean {
   try { assertDurableTriggerDeclarations(workflow); } catch { return false; }
   if (workflow.metadata.webReadUrls !== undefined && !isDurableWebReadUrls(workflow.metadata.webReadUrls)) return false;
   if (workflow.metadata.webReadRedirects !== undefined && (typeof workflow.metadata.webReadRedirects !== 'boolean' || workflow.metadata.webReadUrls === undefined)) return false;
+  if (workflow.metadata.connectedReads !== undefined && !isDurableWorkflowConnectedReads(workflow.metadata.connectedReads)) return false;
   const triggerNames = new Set((workflow.metadata.trigger.inputs ?? []).map(definition => definition.name));
   if (workflow.parseWarnings?.length || workflow.metadata.trigger.type !== 'manual' || !supportsPublication(workflow)
     || workflow.metadata.steps.length < 1 || workflow.metadata.steps.length > 8) return false;
@@ -275,6 +280,17 @@ export class DurableReadRunner {
       }
       modelPlans.push({ ...(step.modelPlan.role ? { role: step.modelPlan.role } : {}), candidates });
     }
+    let connectedReads: FrozenWorkflowConnectedRead[] | undefined;
+    if (workflow?.metadata.connectedReads !== undefined) {
+      if (!requested.approvalPrincipalId || !this.options.authorizeRun || requested.costPolicy.unit !== 'model-requests') throw new Error('unsupported-durable-read-workflow');
+      const assertAuthority = () => {
+        this.assertOpen();
+        this.assertBackgroundFence(requested.workspaceId, requested.backgroundFence);
+        this.options.authorizeRun!({ runId: requested.runId, workspaceId: requested.workspaceId, approvalPrincipalId: requested.approvalPrincipalId! });
+      };
+      connectedReads = await createDurableWorkflowConnectedReads(this.options.connectedReads).capture(workflow.metadata.connectedReads,
+        requested.workspaceId, realpathSync(binding.workspace.rootPath), assertAuthority);
+    }
     const context: FrozenReadContext = { prompt: requested.prompt, systemPrompt: requested.systemPrompt,
       ...(requested.backgroundFence !== undefined ? { backgroundFence: requested.backgroundFence } : {}),
       connectionSlug: requested.connectionSlug, workspaceRoot: realpathSync(binding.workspace.rootPath), bindingDigest: bindingDigest(binding),
@@ -282,6 +298,7 @@ export class DurableReadRunner {
       workflow: workflow ? JSON.parse(JSON.stringify(workflow)) as DurableJson : null,
       ...(workflow ? { triggerInputs: requested.triggerInputs ?? {}, untrustedTriggerInputs: requested.untrustedTriggerInputs ?? [] } : {}),
       ...(requested.localSources?.length ? { localSources: requested.localSources } : {}),
+      ...(connectedReads ? { connectedReads } : {}),
       ...(roleRouting ? { modelPlans } : {}),
       ...(workflow && (workflow.metadata.steps.length > 1 || roleRouting) ? { steps: workflow.metadata.steps.map((step, i) => ({ id: step.id, prompt: step.input,
         systemPrompt: resolvedSteps![i]!.systemPrompt, requireNonEmptyOutput: step.completion?.requireNonEmptyOutput !== false })) } : {}) };
@@ -303,6 +320,7 @@ export class DurableReadRunner {
         kind: (output.kind ?? 'document') as 'report' | 'document', title: output.title?.trim() || workflow!.metadata.name.trim(),
         ...(output.summary?.trim() ? { summary: output.summary.trim() } : {}), stepId: workflow!.metadata.steps.at(-1)!.id } } : {}),
       ...(roleRouting ? { fallbackPlan: { steps: modelPlans.map(plan => ({ candidates: plan.candidates.map(({ connectionSlug, model, credentialIdentity }) => ({ connectionSlug, model, credentialIdentity })) })) } } : {}),
+      ...(connectedReads ? { readOperationBudget: { maxOperations: connectedReads.length, maxAttempts: connectedReads.length * 2 } } : {}),
       costPolicy: requested.costPolicy, context: context as unknown as DurableJson,
       ...(requested.approvalPrincipalId !== undefined ? { approvalPrincipalId: requested.approvalPrincipalId } : {}),
       authority: { adapter: context.steps ? 'pi-local-read-multi-1' : 'pi-local-read-1', stepCount: context.steps?.length ?? 1, completion: 'journal-only' },
@@ -438,7 +456,21 @@ export class DurableReadRunner {
       const current = await this.options.resolvePublicationWorkspace(workspaceId);
       if (current.id !== workspaceId || realpathSync(current.rootPath) !== frozen.workspaceRoot) throw new Error('durable-output-workspace-changed');
       category = 'authorization';
-      this.options.authorizePublication({ workspaceId, approvalPrincipalId: state.spec.approvalPrincipalId });
+      const approvalPrincipalId = state.spec.approvalPrincipalId;
+      if (frozen.connectedReads?.length) {
+        const assertPublicationAuthority = () => {
+          this.assertBackgroundFence(workspaceId, frozen.backgroundFence);
+          journal.bridge(claim); // Fence the immutable publishing owner after every awaited lookup.
+          const currentState = journal.get(runId, workspaceId);
+          if (currentState.status !== 'running' || currentState.controlRevision !== claim.controlRevision) throw new Error('durable-control-changed');
+          if (!this.options.authorizeRun) throw new Error('durable-authorization-blocked');
+          this.options.authorizeRun({ runId, workspaceId, approvalPrincipalId });
+          this.options.authorizePublication!({ workspaceId, approvalPrincipalId });
+        };
+        await createDurableWorkflowConnectedReads(this.options.connectedReads).assertCurrent(frozen.connectedReads, frozen.workspaceRoot, assertPublicationAuthority);
+        assertPublicationAuthority();
+      }
+      this.options.authorizePublication({ workspaceId, approvalPrincipalId });
       state = journal.get(runId, workspaceId);
       if (state.status !== 'running' || state.controlRevision !== claim.controlRevision) return state;
       const workflow = frozen.workflow as unknown as LoadedWorkflow;
@@ -471,6 +503,24 @@ export class DurableReadRunner {
     const initialFrozen = frozenContext(initial.spec);
     const primaryCandidate = { connectionSlug: initialFrozen.connectionSlug, model: initial.spec.model,
       credentialIdentity: initial.spec.credentialIdentity, bindingDigest: initialFrozen.bindingDigest };
+    const connected = createDurableWorkflowConnectedReads(this.options.connectedReads);
+    const assertConnectedAuthority = () => {
+      this.assertBackgroundFence(workspaceId, initialFrozen.backgroundFence);
+      if (!initial.spec.approvalPrincipalId || !this.options.authorizeRun) throw new Error('durable-authorization-blocked');
+      this.options.authorizeRun({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId });
+    };
+    const checkConnected = async (ownedClaim: DurableClaim = claim) => {
+      if (!initialFrozen.connectedReads?.length) return;
+      try { await connected.assertCurrent(initialFrozen.connectedReads, initialFrozen.workspaceRoot, assertConnectedAuthority); }
+      catch (error) {
+        const state = journal.get(runId, workspaceId);
+        if (state.status === 'running' && state.controlRevision === ownedClaim.controlRevision) {
+          journal.bridge(ownedClaim);
+          journal.command({ runId, workspaceId, commandId: randomUUID(), expectedVersion: state.version, action: 'pause' });
+        }
+        throw new Error('durable-authorization-blocked', { cause: error });
+      }
+    };
     // Each bridge closes over an immutable claim and candidate, fencing responses from older attempts.
     const createBridges = (claim: DurableClaim, candidate: FrozenModelPlan['candidates'][number]) => {
       const journalBridge = journal.bridge(claim, initial.spec.approvalPrincipalId ? {
@@ -484,6 +534,7 @@ export class DurableReadRunner {
           this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId! });
           this.checkBinding(current, workspaceId, candidate.connectionSlug, candidate.model);
           if (bindingDigest(current) !== candidate.bindingDigest) throw new Error('durable-authorization-blocked');
+          await checkConnected(claim);
           assertDurableLocalSourcesCurrent(frozen.workspaceRoot, frozen.localSources ?? []);
           permissionsConfigCache.invalidateDefaults();
           permissionsConfigCache.invalidateWorkspace(frozen.workspaceRoot);
@@ -517,7 +568,7 @@ export class DurableReadRunner {
     };
     const bridge: typeof journalBridge = { ...journalBridge, checkpoint: async request => {
       if (request.kind === 'output-published') throw new Error('durable-workflow-host-checkpoint-required');
-      if (request.kind === 'tool-start') assertDispatch();
+      if (request.kind === 'tool-start') { await checkConnected(claim); assertDispatch(); }
       if (request.kind === 'model-start') {
         assertDispatch();
         try {
@@ -527,6 +578,7 @@ export class DurableReadRunner {
           if (initial.spec.approvalPrincipalId) this.options.authorizeRun?.({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId });
           this.checkBinding(current, workspaceId, candidate.connectionSlug, candidate.model);
           if (bindingDigest(current) !== candidate.bindingDigest) throw new Error('durable-read-binding-changed');
+          await checkConnected(claim);
         } catch (error) {
           const state = journal.get(runId, workspaceId);
           // A delayed authorization lookup belongs only to the claim that issued it.
@@ -541,7 +593,7 @@ export class DurableReadRunner {
         }
         assertDispatch();
       }
-      if (request.kind === 'complete') assertDispatch();
+      if (request.kind === 'complete') { await checkConnected(claim); assertDispatch(); }
       if (request.kind === 'complete' && !frozenContext(initial.spec).steps) {
         const schema = (frozenContext(initial.spec).workflow as unknown as LoadedWorkflow | null)?.metadata.steps[0]?.outputSchema;
         if (schema) {
@@ -563,7 +615,22 @@ export class DurableReadRunner {
     try {
       const spec = initial.spec, frozen = frozenContext(spec);
       if (spec.engine !== 'sqlite-v2-readonly-1' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(spec.runId) || canonical(spec.authority) !== canonical({ adapter: frozen.steps ? 'pi-local-read-multi-1' : 'pi-local-read-1', stepCount: frozen.steps?.length ?? 1, completion: 'journal-only' })) throw new Error('unsupported-durable-read-authority');
+      await checkConnected();
       if (initial.publication?.status === 'pending') return await this.publishPending(initial, claim, journalBridge);
+      let connectedContext = '';
+      if (frozen.connectedReads?.length) {
+        try {
+          connectedContext = await connected.context(frozen.connectedReads, frozen.workspaceRoot,
+            () => { assertDispatch(); assertConnectedAuthority(); }, journal, claim);
+        } catch (error) {
+          const state = journal.get(runId, workspaceId);
+          if (state.status === 'running' && state.controlRevision === claim.controlRevision) {
+            journal.bridge(claim);
+            journal.command({ runId, workspaceId, commandId: randomUUID(), expectedVersion: state.version, action: 'pause' });
+          }
+          throw new Error('durable-authorization-blocked', { cause: error });
+        }
+      }
       const steps = frozen.steps ?? [{ id: '', prompt: frozen.prompt, systemPrompt: frozen.systemPrompt, requireNonEmptyOutput: frozen.requireNonEmptyOutput }];
       for (let index = 0; index < steps.length; index++) {
         const step = steps[index]!;
@@ -576,7 +643,7 @@ export class DurableReadRunner {
         const resolved = savedWorkflow || frozen.steps ? resolveTemplate(step.prompt, { steps: outputs,
           trigger: durableTriggerTemplateContext(savedWorkflow, frozen.triggerInputs), untrustedTriggerFields: frozen.untrustedTriggerInputs }) : { output: step.prompt, warnings: [] };
         if (resolved.warnings.length) throw new Error('durable-workflow-template-unresolved');
-        const prompt = schema ? appendOutputSchemaInstruction(resolved.output, schema) : resolved.output;
+        const prompt = (schema ? appendOutputSchemaInstruction(resolved.output, schema) : resolved.output) + connectedContext;
         if (frozen.steps) await bridge.checkpoint({ kind: 'workflow-step-start', step: index, input: { prompt, systemPrompt: step.systemPrompt } });
         state = journal.get(runId, workspaceId);
         const savedAttempt = state.providerAttempts?.findLast(attempt => attempt.step === index);
@@ -620,8 +687,10 @@ export class DurableReadRunner {
         const offset = frozen.steps ? state.workflowSteps![index]!.startTurn : 0;
         const ownedBridge = bridge;
         const assertAttemptDispatch = assertDispatch;
+        const attemptClaim = claim;
         const stepBridge: typeof bridge = !frozen.steps ? ownedBridge : { ...ownedBridge, checkpoint: async request => {
           if (request.kind === 'complete') {
+            await checkConnected(attemptClaim);
             assertAttemptDispatch();
             if (schema) {
               const message = journal.get(runId, workspaceId).turns.at(-1)?.message as { content?: Array<{ type?: string; text?: string }> } | undefined;
@@ -688,6 +757,7 @@ export class DurableReadRunner {
         }
 
       }
+      await checkConnected();
       return await this.publishPending(journal.get(runId, workspaceId), claim, journalBridge);
     } catch (error) {
       const pending = journal.get(runId, workspaceId);

@@ -17,6 +17,7 @@
  * sync with `docs/workflows/01-spec.md`.
  */
 
+import type { DurableWorkflowConnectedRead } from './connected-reads.ts';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import type { OutputKind } from '../outputs/types.ts';
 
@@ -128,6 +129,8 @@ export interface WorkflowStep {
 export interface WorkflowMetadata {
   /** Explicit execution capability opt-in; omission preserves the legacy engine. */
   execution?: 'durable-local-read';
+  /** Certified connected reads frozen as context before workflow steps execute. */
+  connectedReads?: DurableWorkflowConnectedRead[];
   /** Exact public HTTPS pages approved for durable text reads; no search or downloads. */
   webReadUrls?: string[];
   /** Follow up to three redirects, exclusively between approved URLs. Default false. */

@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { parseWorkflowFile, serializeWorkflow } from './parser.ts';
+import { isCertifiedDurableConnectedReadUrl, isDurableWorkflowConnectedReads } from './connected-reads.ts';
 import type { WorkflowMetadata } from './types.ts';
 const metadata: WorkflowMetadata = { name: 'Read', description: 'Read local files', trigger: { type: 'manual' }, outputs: { mode: 'none' }, steps: [{ id: 'read', agent: 'reader', input: 'Read the notes.' }] };
 test('explicit durable local read execution survives serialization and parsing', () => {
@@ -56,4 +57,34 @@ test('web redirects require an explicit boolean and a durable URL grant', () => 
     expect(parseWorkflowFile(source)).toBeNull();
   }
   expect(parseWorkflowFile(serializeWorkflow(metadata, '').replace('name:', 'webReadRedirects: true\nname:'))).toBeNull();
+});
+
+const artistUrl = 'https://api.spotify.com/v1/artists/0123456789ABCDEFGHIJKL';
+test('certified connected reads roundtrip only for the durable engine', () => {
+ const connectedReads = [{ sourceSlug: 'spotify', url: artistUrl }, { sourceSlug: 'spotify', url: artistUrl.replace('012345', 'abcdef') }];
+ const value = { ...metadata, execution: 'durable-local-read' as const, connectedReads };
+ expect(parseWorkflowFile(serializeWorkflow(value, 'Notes'))?.metadata.connectedReads).toEqual(connectedReads);
+ expect(isDurableWorkflowConnectedReads(connectedReads)).toBe(true);
+ expect(() => serializeWorkflow({ ...metadata, connectedReads }, '')).toThrow('connected reads');
+ expect(parseWorkflowFile(serializeWorkflow(metadata, '').replace('---\n', `---\nconnectedReads: ${JSON.stringify(connectedReads)}\n`))).toBeNull();
+ expect(Object.hasOwn(parseWorkflowFile(serializeWorkflow(metadata, ''))!.metadata, 'connectedReads')).toBe(false);
+});
+test('connected read declarations reject malformed entries in both parse and serialization', () => {
+ const read = { sourceSlug: 'spotify', url: artistUrl };
+ const values: unknown[] = [null, false, {}, [], [null], [read, read], [read, { ...read, sourceSlug: 'two' }, { ...read, sourceSlug: 'three' }],
+  [{ ...read, method: 'GET' }], [{ sourceSlug: 'spotify' }], [{ url: artistUrl }],
+  ...['', ' spotify', 'spotify ', 'spotify\n', '../spotify', 'a/b', 'a.b', '-spotify', 'a%2fb'].map(sourceSlug => [{ ...read, sourceSlug }])];
+ for (const connectedReads of values) {
+  expect(isDurableWorkflowConnectedReads(connectedReads)).toBe(false);
+  expect(() => serializeWorkflow({ ...metadata, execution: 'durable-local-read', connectedReads } as WorkflowMetadata, '')).toThrow('connected reads');
+  expect(parseWorkflowFile(serializeWorkflow({ ...metadata, execution: 'durable-local-read' }, '').replace('---\n', `---\nconnectedReads: ${JSON.stringify(connectedReads)}\n`))).toBeNull();
+ }
+});
+test('connected read certification refuses URL widening or normalization', () => {
+ expect(isCertifiedDurableConnectedReadUrl(artistUrl)).toBe(true);
+ for (const url of [artistUrl + '?market=US', artistUrl + '#x', artistUrl + '/', artistUrl + '\n', artistUrl + '?', artistUrl.slice(0, -1), artistUrl + 'x', artistUrl.replace('https:', 'http:'), artistUrl.replace('api.spotify.com', 'API.SPOTIFY.COM'), artistUrl.replace('api.spotify.com', 'api.spotify.com:443'), artistUrl.replace('api.spotify.com', 'user:pass@api.spotify.com'), artistUrl.replace('/artists/', '/artists/../artists/'), artistUrl.replace('/artists/', '/me/'), artistUrl.replace('012345', '%3012345')]) {
+  expect(isCertifiedDurableConnectedReadUrl(url)).toBe(false);
+  expect(() => serializeWorkflow({ ...metadata, execution: 'durable-local-read', connectedReads: [{ sourceSlug: 'spotify', url }] }, '')).toThrow('connected reads');
+  expect(parseWorkflowFile(serializeWorkflow({ ...metadata, execution: 'durable-local-read' }, '').replace('---\n', `---\nconnectedReads: ${JSON.stringify([{ sourceSlug: 'spotify', url }])}\n`))).toBeNull();
+ }
 });

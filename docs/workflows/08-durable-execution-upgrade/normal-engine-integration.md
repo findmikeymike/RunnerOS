@@ -237,4 +237,24 @@ Saved read outcomes reauthorize current source/account access before returning c
 
 An unsaved pure-read response cannot be reconstructed. Recovery marks it retryable without fetching; a separate execution command may issue another GET within the original attempt/unit limits. A saved response replays exactly. Tests prove both process-death boundaries and reject credential rotation before cached-data access. These are host adapter proofs using synthetic transport/credentials, not live account tests.
 
-Normal Start/Pi tool registration remains a separate integration step. Its `model-requests` budget deliberately rejects operation-journal work today; that budget bridge, a certified provider route and model-tool exposure must be added together before claiming normal workflow adoption. Existing workflow tool behavior and approval policy are unchanged.
+At this slice, normal Start integration remained separate and `model-requests` runs rejected operation-journal work. Slice 18 adds the budget bridge and a certified provider route as host-preloaded context; model-tool exposure remains outside scope. Existing workflow tool behavior and approval policy are unchanged.
+
+
+## Slice 18 — declared connected reads through normal Start
+
+A durable workflow can now declare up to two account reads that the host fetches before its agents run:
+
+```yaml
+execution: durable-local-read
+connectedReads:
+  - sourceSlug: spotify-api
+    url: https://api.spotify.com/v1/artists/0TnOYISbd1XYRBk9myaseg
+```
+
+The first certified route is [Spotify Get Artist](https://developer.spotify.com/documentation/web-api/reference/get-an-artist). The source must be an existing workspace-owned static bearer API source with a matching base URL and valid credential. This does not add built-in Spotify OAuth refresh, MCP support, dynamic account tools, arbitrary authenticated GETs, or writes. Existing agent bundle eligibility still applies; an agent's unsupported active remote tools do not become eligible through this declaration. No user workflow is converted automatically.
+
+Normal Start freezes each source binding and exact URL. The host records the response through the connected-read operation adapter and supplies bounded, explicitly untrusted JSON context to every unfinished step. Saved responses replay without another GET. An unsaved interrupted read may be retried once; two attempts per declared read remain within a separate run-wide read request allowance. These requests do not consume or reset the model request allowance. This is a request bound, not a dollar-price guarantee. Journal schema 7 prevents older binaries reopening this new operation format; old records retain their prior capabilities.
+
+Existing run authority, current source binding and safe-mode API permission checks guard dispatch and reuse. Access loss pauses through the existing run controls; no new approval dialog or expanded permission mode is introduced. Resume does not silently adopt changed credentials or source configuration. Existing public web and local-only workflow tools remain unchanged. The account data is preloaded context, not a new model-selected tool.
+
+Verification uses isolated synthetic credentials and local model-provider fixtures. No live Spotify account or running desktop restart is part of this slice. Test results and review closure are recorded in state.md after verification.

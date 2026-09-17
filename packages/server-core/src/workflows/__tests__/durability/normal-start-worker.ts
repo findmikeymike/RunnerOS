@@ -2,7 +2,7 @@ import { DurableWorkflowHost } from '../../durable-workflow-host';
 import { WorkflowRunner } from '../../runner';
 import { createDurableWorkflowStart } from '../../durable-workflow-start';
 /** Actual normal Start/default Pi execution, only in supervisor-owned synthetic configuration. */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { durableCredentialIdentity } from '../../../../../shared/src/protocol/durable-execution.ts';
 import { getCredentialManager } from '../../../../../shared/src/credentials/manager.ts';
@@ -12,6 +12,10 @@ import { createDurableWorkflowBundleResolver } from '../../durable-workflow-bund
 import { savePersonalInstruction } from '../../../../../shared/src/skills/personal-instructions.ts';
 import { setGlobalSkillEnabled } from '../../../../../shared/src/skills/storage.ts';
 
+import { createDurableConnectedReadBindingResolver } from '../../durable-connected-read-binding';
+import { loadSource } from '../../../../../shared/src/sources/storage';
+
+const connectedUrl = 'https://api.spotify.com/v1/artists/0123456789ABCDEFGHIJKL';
 const [root, endpoint, mode] = process.argv.slice(2) as [string, string, string];
 if (readFileSync(join(root, 'synthetic-only'), 'utf8') !== 'approval-fixture' || process.env.CRAFT_CONFIG_DIR !== join(root, 'config')) throw new Error('isolated-approval-fixture-required');
 const key = 'synthetic-approval-provider-key';
@@ -29,6 +33,11 @@ const binding: DurableReadBinding = { credentialIdentity: identity,
     slug: 'approval-fixture', name: 'Fixture', providerType: 'pi_compat', authType: 'api_key', piAuthProvider: 'openai', baseUrl: endpoint + '/v1', customEndpoint: { api: 'openai-completions' }, models: ['approval-fixture', 'backup-fixture'], createdAt: 1,
   } },
 };
+if (mode === 'connected') {
+  mkdirSync(join(root, 'sources/account'), { recursive: true });
+  writeFileSync(join(root, 'sources/account/config.json'), JSON.stringify({ id: 'account', slug: 'account', name: 'Account', provider: 'spotify', type: 'api', enabled: true, isAuthenticated: true, api: { baseUrl: 'https://api.spotify.com/v1/', authType: 'bearer' } }));
+}
+const connectedResolver = createDurableConnectedReadBindingResolver({ getWorkspaces: () => [binding.workspace], loadSource, loadCredential: async () => ({ value: 'synthetic-account-token' }), now: Date.now });
 const resolveBundle = async () => {
   const systemPrompt = 'Use the native read tool to read fixture.txt, then summarize.\n' + localSources.map(source => source.guide).join('\n');
   if (mode !== 'skills') return { connectionSlug: 'approval-fixture', model: 'approval-fixture', localSources, systemPrompt };
@@ -49,6 +58,12 @@ const resolveBundle = async () => {
 const folder = join(root, 'app/packages/pi-agent-server/dist'); mkdirSync(folder, { recursive: true });
 writeFileSync(join(folder, 'index.js'), `import ${JSON.stringify(resolve(import.meta.dir, '../../../../../pi-agent-server/src/index.ts'))};\n`);
 const host = DurableWorkflowHost.open({ configRoot: join(root, 'config'), protection: { isEncryptionAvailable: () => true, encryptString: value => Buffer.from(value), decryptString: value => value.toString() }, resolvePrincipal: () => 'fixture-principal', runnerOptions: {
+  authorizeRun: () => {},
+  ...(mode === 'connected' ? { connectedReads: { bindingResolver: connectedResolver, transport: async (_binding: unknown, url: string, isAuthorized: () => boolean) => {
+    if (url !== connectedUrl || !isAuthorized()) throw new Error('unexpected-connected-dispatch');
+    appendFileSync(join(root, 'connected-dispatches'), 'read\n');
+    return { ok: true as const, data: { name: 'CONNECTED_READ_CONTEXT' } };
+  } } } : {}),
   hostRuntime: { appRootPath: join(root, 'app'), isPackaged: false, nodeRuntimePath: process.execPath }, providerRetryDelayMs: 5, resolveBinding: (_workspace, slug, model) => ({ ...binding, context: { ...binding.context, resolvedModel: model, connection: { ...binding.context.connection!, slug } } }),
   authorizeTool: async () => ({ principalId: 'fixture-principal', policyRevision: 'fixture', credentialIdentity: identity, allowed: true, requiresApproval: false, approvalExpiresAt: Date.now() + 60000 }),
 } });
@@ -57,7 +72,7 @@ try {
     getWorkspaceRootPath: () => root, createSession: async () => { throw new Error('legacy-session-forbidden'); }, sendMessage: async () => {}, getLastAssistantText: () => '', abortSession: async () => {},
   });
   const actor = { clientId: 'fixture-client', workspaceId: 'approval-workspace' };
-  const state = await runner.start({ invocation: 'manual-ui', actor, workspaceId: actor.workspaceId, triggerInputs: mode === 'inputs' ? { file: 'fixture.txt' } : {}, workflow: { slug: 'approval-fixture', path: root, source: 'global', body: '', metadata: { execution: 'durable-local-read' as const, name: 'Fixture', description: '', trigger: { type: 'manual', ...(mode === 'inputs' ? { inputs: [{ name: 'file', type: 'string' as const, required: true }] } : {}) }, outputs: { mode: 'none' }, steps: [{ id: 'read', agent: 'reader', ...(['fallback', 'credits'].includes(mode) ? { modelRole: 'fast' as const } : {}), ...(mode === 'structured' ? { outputSchema: { type: 'object', required: ['summary'], properties: { summary: { type: 'string' } } } } : {}), input: mode === 'inputs' ? 'INPUT_FIXTURE Read {{trigger.file}}.' : 'Read fixture.txt.' }, ...(mode === 'multi' ? [{ id: 'second', agent: 'reader', input: 'Use {{steps.read.output}} and read fixture.txt again.' }] : [])] } } });
+  const state = await runner.start({ invocation: 'manual-ui', actor, workspaceId: actor.workspaceId, triggerInputs: mode === 'inputs' ? { file: 'fixture.txt' } : {}, workflow: { slug: 'approval-fixture', path: root, source: 'global', body: '', metadata: { execution: 'durable-local-read' as const, ...(mode === 'connected' ? { connectedReads: [{ sourceSlug: 'account', url: connectedUrl }] } : {}), name: 'Fixture', description: '', trigger: { type: 'manual', ...(mode === 'inputs' ? { inputs: [{ name: 'file', type: 'string' as const, required: true }] } : {}) }, outputs: { mode: 'none' }, steps: [{ id: 'read', agent: 'reader', ...(['fallback', 'credits'].includes(mode) ? { modelRole: 'fast' as const } : {}), ...(mode === 'structured' ? { outputSchema: { type: 'object', required: ['summary'], properties: { summary: { type: 'string' } } } } : {}), input: mode === 'inputs' ? 'INPUT_FIXTURE Read {{trigger.file}}.' : 'Read fixture.txt.' }, ...(mode === 'multi' ? [{ id: 'second', agent: 'reader', input: 'Use {{steps.read.output}} and read fixture.txt again.' }] : [])] } } });
   console.log(JSON.stringify({ barrier: 'admitted', runId: state.id, state: state.state }));
   for (let i = 0; i < 1000; i++) {
     const current = await host.runs.get(actor.workspaceId, state.id, actor);
