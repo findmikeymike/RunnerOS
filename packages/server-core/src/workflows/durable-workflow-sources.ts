@@ -1,3 +1,4 @@
+import { DurableWorkflowEligibilityError } from './durable-workflow-eligibility';
 import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, parse } from 'node:path';
 import { canonical, digest } from '../../../shared/src/durable-execution';
@@ -13,7 +14,7 @@ export interface DurableLocalSource {
   guideDigest: string;
   identityDigest: string;
 }
-const unsupported = () => new Error('unsupported-durable-agent-bundle');
+const unsupported = () => new DurableWorkflowEligibilityError('sources', 'unsupported-durable-agent-bundle');
 function contained(root: string, path: string): boolean {
   const rel = relative(root, path);
   return !isAbsolute(rel) && rel !== '..' && !rel.startsWith('../');

@@ -1,3 +1,4 @@
+import { DurableWorkflowEligibilityError } from '../workflows/durable-workflow-eligibility'
 import { manageArtistBrain } from '../hq-state/brain-setup';
 import { importArtistCommunityContacts } from '../community/import-contacts';
 import { importArtistNetwork } from '../hq-state/network-import';
@@ -3589,21 +3590,23 @@ export class SessionManager implements ISessionManager {
       },
       resolveBundle: async (workspaceId, agentSlug, taskModeId) => {
         const storedAgent = loadGlobalAgent(agentSlug)
-        if (!storedAgent) return null
+        if (!storedAgent) throw new DurableWorkflowEligibilityError('workspace')
         const agent = resolveArtistDirectionForScope(storedAgent, getWorkspaceByNameOrId(workspaceId)?.artistWorkspaceScope)
         try {
           assertDurableWorkflowAgentMetadata(agent.metadata, taskModeId)
           const workspace = getWorkspaceByNameOrId(workspaceId)
-          if (!workspace || workspace.remoteServer) return null
+          if (!workspace || workspace.remoteServer) throw new DurableWorkflowEligibilityError('workspace')
           assertDurableWorkflowSourcesBeforeComposition(workspace.rootPath, agent.metadata, taskModeId)
         }
         catch (error) {
+          if (error instanceof DurableWorkflowEligibilityError) throw error
           if (error instanceof Error && error.message === 'unsupported-durable-agent-bundle') return null
           throw error
         }
         const options = await this.resolveAgentSessionOptions(workspaceId, agentSlug, { referenceMode: 'strict', taskModeId, taskModeSelectionSource: 'workflow' })
         try { return resolveDurableWorkflowBundle(workspaceId, agentSlug, options, taskModeId) }
         catch (error) {
+          if (error instanceof DurableWorkflowEligibilityError) throw error
           if (error instanceof Error && error.message === 'unsupported-durable-agent-bundle') return null
           throw error
         }

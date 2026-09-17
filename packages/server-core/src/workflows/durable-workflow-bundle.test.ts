@@ -1,3 +1,4 @@
+import { DurableWorkflowEligibilityError, type DurableWorkflowBlocker } from './durable-workflow-eligibility';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -158,4 +159,23 @@ test('precomposition ignores usable optional MCP sources not selected by a skill
   expect(() => assertDurableWorkflowSourcesBeforeComposition(root, f.metadata, 'read')).not.toThrow();
   f.metadata.taskModes[0]!.requiredSourceSlugs = ['remote'];
   expect(() => assertDurableWorkflowSourcesBeforeComposition(root, f.metadata, 'read')).toThrow('unsupported-durable-agent-bundle');
+});
+
+test('real bundle guards identify the repair category without exposing context', () => {
+  const cases: Array<[Partial<CreateSessionOptions>, DurableWorkflowBlocker]> = [
+    [{ thinkingLevel: 'high' }, 'thinking'],
+    [{ permissionMode: 'allow-all' }, 'permission'],
+    [{ trustedWorkerTools: ['private-tool'] }, 'tools'],
+    [{ workingDirectory: '/private/artist' }, 'context'],
+    [{ agentSkillSlugs: ['private-skill'] }, 'receipt'],
+    [{ enabledSourceSlugs: ['private-source'] }, 'sources'],
+  ];
+  for (const [override, blocker] of cases) {
+    const f = fixture();
+    try { f.resolve('w', 'reader', { ...f.options, ...override }); throw new Error('expected rejection'); }
+    catch (error) { expect(error).toBeInstanceOf(DurableWorkflowEligibilityError); expect((error as DurableWorkflowEligibilityError).blocker).toBe(blocker); }
+  }
+  const f = fixture(); f.connection.authType = 'oauth';
+  try { f.resolve('w', 'reader', f.options); throw new Error('expected rejection'); }
+  catch (error) { expect((error as DurableWorkflowEligibilityError).blocker).toBe('provider'); }
 });

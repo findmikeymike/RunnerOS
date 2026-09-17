@@ -1,3 +1,4 @@
+import { durableWorkflowStartError } from './durable-workflow-eligibility';
 import { getLlmConnections, getModelFallbackChain } from '@craft-agent/shared/config';
 import { getCredentialManager } from '../../../shared/src/credentials/index';
 import { resolveModelFallbackChain } from '../../../shared/src/config/model-fallback';
@@ -61,11 +62,16 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
       // are applied exactly once when admission freezes the normalized inputs.
       normalizeDurableTriggerInputs(workflow, pinned.triggerInputs, pinned.untrustedTriggerInputs);
       const bundles = new Map<string, DurableStartBundle>();
-      for (const step of workflow.metadata.steps) {
+      for (const [stepIndex, step] of workflow.metadata.steps.entries()) {
         const bundleKey = canonical([step.agent, step.taskModeId ?? null]);
         if (bundles.has(bundleKey)) continue;
-        const resolved = await options.resolveBundle(workspaceId, step.agent, step.taskModeId);
-        if (!resolved) throw new Error('This agent is not supported for durable local reads. It requires read-only permission, thinking off, supported workspace filesystem sources, and no skills or specialist tools.');
+        let resolved: DurableStartBundle | null;
+        try {
+          resolved = await options.resolveBundle(workspaceId, step.agent, step.taskModeId);
+        } catch (error) {
+          throw durableWorkflowStartError(error, stepIndex + 1);
+        }
+        if (!resolved) throw durableWorkflowStartError(null, stepIndex + 1);
         bundles.set(bundleKey, JSON.parse(canonical(resolved)) as DurableStartBundle);
       }
       const bundle = bundles.get(canonical([workflow.metadata.steps[0]!.agent, workflow.metadata.steps[0]!.taskModeId ?? null]))!;

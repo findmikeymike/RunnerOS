@@ -1,3 +1,4 @@
+import { DurableWorkflowEligibilityError } from './durable-workflow-eligibility';
 import { getOutputDir, readOutputManifest, listOutputs } from '../../../shared/src/outputs/storage';
 import { writeRun, getRunFile, listRuns } from '../../../shared/src/workflows/run-storage';
 import { afterEach, expect, spyOn, test } from 'bun:test';
@@ -467,4 +468,39 @@ test('reopened durable run retains the original fence instead of adopting the ne
   await reopened.close();
   expect(observed).toContain('runner-a-epoch-1');
   expect(f.modelCalls()).toBe(1);
+});
+
+test('blocked second step gives actionable guidance without admission or legacy fallback; retry remains possible', async () => {
+  const f = fixture(); let blocked = true;
+  const input = structuredClone(f.input);
+  input.workflow.metadata.steps.push({ ...input.workflow.metadata.steps[0]!, id: 'second', agent: 'second-reader' });
+  const start = f.createStart(async (_workspace, agent) => {
+    if (agent === 'second-reader' && blocked) throw new DurableWorkflowEligibilityError('thinking');
+    return f.bundle;
+  });
+  await expect(f.createRunner(start).start(input)).rejects.toThrow('Workflow step 2 cannot start. Set this worker’s thinking level to off.');
+  expect(f.modelCalls()).toBe(0); expect(f.legacyCalls()).toBe(0);
+  expect(await f.host.runs.list('w', f.input.actor!)).toEqual([]);
+  blocked = false;
+  const run = await start(input); expect(run?.durable).toBeDefined(); f.release();
+});
+
+test('resolver failures and null bundles do not leak private details or claim skills are forbidden', async () => {
+  const f = fixture();
+  for (const error of [new Error('secret-key private prompt /private/artist'), new DurableWorkflowEligibilityError('skills', 'private recipe')]) {
+    let message = '';
+    try { await f.createStart(async () => { throw error; })(f.input); } catch (caught) { message = (caught as Error).message; }
+    expect(message).toContain('Workflow step 1 cannot start.');
+    expect(message).not.toContain('private'); expect(message).not.toContain('secret-key');
+    if (error instanceof DurableWorkflowEligibilityError) expect(message).toContain('certified instruction-only skills');
+  }
+  await expect(f.createStart(async () => null)(f.input)).rejects.toThrow('worker configuration could not be verified');
+  expect(f.modelCalls()).toBe(0); expect(await f.host.runs.list('w', f.input.actor!)).toEqual([]);
+});
+
+test('authorization runs before eligibility diagnostics', async () => {
+  const f = fixture(); let lookups = 0;
+  const deny = spyOn(f.host.runs, 'list').mockRejectedValue(new Error('access denied')); cleanup.push(() => deny.mockRestore());
+  await expect(f.createStart(async () => { lookups++; throw new DurableWorkflowEligibilityError('skills'); })(f.input)).rejects.toThrow('access denied');
+  expect(lookups).toBe(0);
 });

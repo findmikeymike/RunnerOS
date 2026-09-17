@@ -1,3 +1,4 @@
+import { DurableWorkflowEligibilityError } from './durable-workflow-eligibility';
 import matter from 'gray-matter';
 import { resolve } from 'node:path';
 import { getManagedSkillManifest, skillDigest } from '../../../shared/src/skills/managed';
@@ -15,7 +16,7 @@ const CERTIFIED_REVISIONS: Readonly<Record<string, string>> = Object.freeze({
   'artist-belief-system': '1db2d0a4950f50ddd190d9e478e921707de33647d61cf6e530bc2150531f13ae',
   'artist-brand-expression-strategist': 'aaef407d92ecbc40b30268de82dd4eedeed0d3fae9984471da8109d18956fbee',
 });
-const unsupported = () => new Error('unsupported-durable-workflow-skills');
+const unsupported = () => new DurableWorkflowEligibilityError('skills', 'unsupported-durable-workflow-skills');
 export function assertDurableWorkflowSkillSlugs(slugs: string[]): void {
   if (!Array.isArray(slugs) || slugs.length > 2 || new Set(slugs).size !== slugs.length
     || slugs.some(slug => typeof slug !== 'string' || !Object.hasOwn(CERTIFIED_REVISIONS, slug))) throw unsupported();

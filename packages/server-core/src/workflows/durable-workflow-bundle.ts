@@ -1,3 +1,4 @@
+import { DurableWorkflowEligibilityError, type DurableWorkflowBlocker } from './durable-workflow-eligibility';
 import { resolveArtistDirectionForScope } from '../../../shared/src/agent-definitions/artist-direction';
 import { resolveAgentTaskMode, selectTaskModeSourceSlugs } from '../../../shared/src/agent-definitions/task-modes';
 import { getSourcesBySlugs } from '../../../shared/src/sources/storage';
@@ -13,14 +14,15 @@ import { resolveBackendContext, resolveSessionConnection } from '../../../shared
 import { normalizeThinkingLevel } from '../../../shared/src/agent/thinking-levels';
 import type { CreateSessionOptions } from '../../../shared/src/protocol/dto';
 
-const unsupported = () => new Error('unsupported-durable-agent-bundle');
+const unsupported = (blocker: DurableWorkflowBlocker = 'context') => new DurableWorkflowEligibilityError(blocker);
 /** Call before session-option composition, which can refresh context and enable skills. */
 export function assertDurableWorkflowAgentMetadata(metadata: AgentMetadata, taskModeId?: string) {
-  if (metadata.trustedWorkerTools?.length || metadata.visualAgent || metadata.taskModes?.length && !taskModeId) throw unsupported();
+  if (metadata.trustedWorkerTools?.length || metadata.visualAgent) throw unsupported('tools');
+  if (metadata.taskModes?.length && !taskModeId) throw unsupported('mode');
   let mode: ReturnType<typeof resolveAgentTaskMode>;
-  try { mode = resolveAgentTaskMode({ slug: 'durable-reader', metadata }, taskModeId); } catch { throw unsupported(); }
-  if (mode?.adjacentSkills.length) throw unsupported();
-  try { assertDurableWorkflowSkillSlugs(mode?.primarySkillSlugs ?? metadata.skills ?? []); } catch { throw unsupported(); }
+  try { mode = resolveAgentTaskMode({ slug: 'durable-reader', metadata }, taskModeId); } catch { throw unsupported('mode'); }
+  if (mode?.adjacentSkills.length) throw unsupported('skills');
+  try { assertDurableWorkflowSkillSlugs(mode?.primarySkillSlugs ?? metadata.skills ?? []); } catch { throw unsupported('skills'); }
   return mode;
 }
 const defaults = { getWorkspaceByNameOrId, loadWorkspaceConfig, loadGlobalAgent, resolveBackendContext,
@@ -30,22 +32,25 @@ export function createDurableWorkflowBundleResolver(deps: typeof defaults = defa
   return (workspaceId: string, agentSlug: string, options: Partial<CreateSessionOptions>, taskModeId?: string): DurableStartBundle => {
     const workspace = deps.getWorkspaceByNameOrId(workspaceId), storedAgent = deps.loadGlobalAgent(agentSlug);
     const agent = storedAgent ? resolveArtistDirectionForScope(storedAgent, workspace?.artistWorkspaceScope) : null;
-    if (!workspace || workspace.id !== workspaceId || workspace.remoteServer || !agent || agent.slug !== agentSlug) throw unsupported();
+    if (!workspace || workspace.id !== workspaceId || workspace.remoteServer || !agent || agent.slug !== agentSlug) throw unsupported('workspace');
     const mode = assertDurableWorkflowAgentMetadata(agent.metadata, taskModeId);
     const skillSlugs = mode?.primarySkillSlugs ?? agent.metadata.skills ?? [];
     const receipt = options.launchReceipt?.taskMode;
     if (mode ? !receipt || receipt.id !== mode.id || receipt.definitionRevision !== mode.definitionRevision
       || receipt.selectionSource !== 'workflow' || JSON.stringify(receipt.primarySkills) !== JSON.stringify(skillSlugs)
       || !Array.isArray(receipt.adjacentSkills) || receipt.adjacentSkills.length || receipt.fullMode !== mode.fullMode
-      : receipt !== undefined) throw unsupported();
+      : receipt !== undefined) throw unsupported('receipt');
     const config = deps.loadWorkspaceConfig(workspace.rootPath);
     const sources = options.enabledSourceSlugs ?? config?.defaults?.enabledSourceSlugs;
     const thinking = normalizeThinkingLevel(options.thinkingLevel) ?? normalizeThinkingLevel(config?.defaults?.thinkingLevel) ?? deps.getDefaultThinkingLevel();
     const permission = options.permissionMode ?? config?.defaults?.permissionMode ?? deps.loadConfigDefaults().workspaceDefaults.permissionMode;
     if (JSON.stringify(options.agentSkillSlugs ?? []) !== JSON.stringify(skillSlugs)
       || skillSlugs.length && JSON.stringify(options.launchReceipt?.injected?.skills) !== JSON.stringify(skillSlugs)
-      || options.trustedWorkerTools?.length
-      || thinking !== 'off' || permission !== 'safe' || !options.customSystemPrompt?.trim()
+      ) throw unsupported('receipt');
+    if (options.trustedWorkerTools?.length) throw unsupported('tools');
+    if (thinking !== 'off') throw unsupported('thinking');
+    if (permission !== 'safe') throw unsupported('permission');
+    if (!options.customSystemPrompt?.trim()
       || options.spawnedFromAgent && options.spawnedFromAgent.agentSlug !== agentSlug
       || options.workingDirectory && options.workingDirectory !== 'user_default'
       || config?.defaults?.workingDirectory && config.defaults.workingDirectory !== workspace.rootPath
@@ -54,7 +59,7 @@ export function createDurableWorkflowBundleResolver(deps: typeof defaults = defa
     if (mode) {
       const expected = selectTaskModeSourceSlugs(mode, sources ?? []);
       if (!Array.isArray(options.enabledSourceSlugs) || mode.requiredSourceSlugs.some(slug => !options.enabledSourceSlugs!.includes(slug)) || expected.length !== options.enabledSourceSlugs.length
-        || options.enabledSourceSlugs.some(slug => !expected.includes(slug))) throw unsupported();
+        || options.enabledSourceSlugs.some(slug => !expected.includes(slug))) throw unsupported('sources');
     }
     const localSources = resolveDurableLocalSources(workspace.rootPath, mode?.requiredSourceSlugs ?? agent.metadata.sources ?? [], sources ?? []);
     const skillPrompt = (deps.resolveDurableWorkflowSkills ?? resolveDurableWorkflowSkills)(workspace.rootPath, skillSlugs);
@@ -69,7 +74,7 @@ export function createDurableWorkflowBundleResolver(deps: typeof defaults = defa
     const context = deps.resolveBackendContext({ sessionConnectionSlug: options.llmConnection,
       workspaceDefaultConnectionSlug: config?.defaults?.defaultLlmConnection, managedModel: model });
     if (context.provider !== 'pi' || context.authType !== 'api_key' || context.connection?.authType !== 'api_key'
-      || !context.connection.piAuthProvider || !context.connection.slug || !context.resolvedModel) throw unsupported();
+      || !context.connection.piAuthProvider || !context.connection.slug || !context.resolvedModel) throw unsupported('provider');
     return { connectionSlug: context.connection.slug, model: context.resolvedModel, systemPrompt: options.customSystemPrompt + durableLocalSourcesPrompt(localSources) + skillPrompt, ...(localSources.length ? { localSources } : {}) };
   };
 }
