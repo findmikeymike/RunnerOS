@@ -313,6 +313,7 @@ export class ScheduledWorkRunner {
         this.log.warn(`[ScheduledWork] ${parsed.error}`)
         return { scanned: 0, started: 0, blocked: 0, completed: 0, failed: 0 }
       }
+      await this.reconcileTerminalWorkflowOrders(workspaceId, workspaceRootPath, parsed.work.items)
       await this.reconcileXEditorialOutputs(workspaceId, workspaceRootPath, parsed.work.items)
       const candidates = parsed.work.items
         .filter((order) => this.shouldScanOrder(order, now)
@@ -964,6 +965,13 @@ export class ScheduledWorkRunner {
     const afterActive = this.getCurrentOrder(workspaceRootPath, workspaceId, order.id)
     if (!afterActive || afterActive.status !== 'running' || currentWorkflowAttemptId(afterActive) !== attemptId) return 'running'
     if (ACTIVE_WORKFLOW_STATES.has(run.state) || (run.durable && run.state === 'interrupted')) return 'running'
+    if (run.state === 'cancelled') {
+      const persisted = await this.updateScannedOrder(workspaceId, workspaceRootPath, order.id, afterActive, (current, nowIso) => ({
+        ...current, status: 'canceled', attention: undefined, updatedAt: nowIso,
+        runs: updateLatestRun(current.runs, current.id, { status: 'skipped', endedAt: nowIso, resultSummary: 'Workflow canceled.' }),
+      }))
+      return persisted.updated ? 'done' : 'running'
+    }
     if (run.state === 'succeeded') {
       if (run.outputError) {
         const persisted = await this.finishWithAttention(
@@ -1439,6 +1447,37 @@ export class ScheduledWorkRunner {
       this.deps.emitContextChanged?.(workspaceId, loadAllContextDocs(workspaceRootPath))
       return { updated: true, work: nextWork, order: nextOrder }
     })
+  }
+
+  /** Reflect recovered terminal journals without admitting another attempt. */
+  private async reconcileTerminalWorkflowOrders(workspaceId: string, root: string, orders: ScheduledWorkOrder[]): Promise<void> {
+    for (const expected of orders) {
+      if (expected.deletedAt || expected.legacyRef || expected.continuation
+        || expected.status !== 'needs-attention' || expected.attention?.reason !== 'execution-failed'
+        || expected.execution.type !== 'workflow-run') continue
+      const attempt = expected.runs.at(-1)
+      const runId = currentWorkflowRunId(expected)
+      if (!runId || !attempt || attempt.jobId !== expected.id || attempt.status !== 'failed') continue
+      let run: WorkflowRunSnapshot | null | undefined
+      try {
+        run = await this.deps.readWorkflowRun(root, runId)
+        if (!run || run.id !== runId || run.workspaceId !== workspaceId || run.workflowSlug !== expected.execution.workflowSlug
+          || scheduledWorkDefinitionDigest(run.workflowSnapshot) !== expected.execution.workflowDigest
+          || (run.state !== 'cancelled' && (run.state !== 'succeeded' || run.outputError))) continue
+        if (run.durable && await this.deps.isWorkflowRunActive?.(root, runId)) continue
+      } catch { continue } // Unknown remote/journal state is not evidence of recovery.
+      const terminal = run
+      const canceled = terminal.state === 'cancelled'
+      await this.updateScannedOrder(workspaceId, root, expected.id, expected, (current, nowIso) => ({
+        ...current, status: canceled ? 'canceled' : 'done', attention: undefined, updatedAt: nowIso,
+        ...(canceled ? {} : { result: { type: 'workflow-run' as const, workflowRunId: runId, outputIds: uniqueOutputIds(terminal) } }),
+        // Correct the same attempt; retain its original error and older history.
+        runs: current.runs.map((item, index) => index === current.runs.length - 1
+          ? { ...item, status: canceled ? 'skipped' as const : 'done' as const, endedAt: item.endedAt ?? nowIso,
+              resultSummary: canceled ? 'Workflow canceled.' : 'Workflow completed after result recovery.' }
+          : item),
+      }))
+    }
   }
 
   private async reconcileXEditorialOutputs(

@@ -7,6 +7,8 @@
 @source "../renderer/components/**/*.{ts,tsx,jsx}";
 @source "../renderer/contexts/**/*.{ts,tsx,jsx}";
 @source "../renderer/hooks/**/*.{ts,tsx,jsx}";
+@source "../renderer/features/**/*.{ts,tsx,jsx}";
+@source "../renderer/lib/**/*.{ts,tsx,jsx}";
 @source "../renderer/pages/**/*.{ts,tsx,jsx}";
 @source "../renderer/tabs/**/*.{ts,tsx,jsx}";
 @source "../renderer/playground/**/*.{ts,tsx,jsx}";

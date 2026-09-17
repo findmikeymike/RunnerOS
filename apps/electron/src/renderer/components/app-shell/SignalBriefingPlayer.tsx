@@ -8,17 +8,18 @@ interface Props {
   output: Parameters<typeof isFinalSignalReport>[0] & { id: string }
   content: string
   showTranscriptControl?: boolean
+  compact?: boolean
 }
 
-export function SignalBriefingPlayer({ workspaceId, output, content, showTranscriptControl = true }: Props) {
+export function SignalBriefingPlayer({ workspaceId, output, content, showTranscriptControl = true, compact = false }: Props) {
   const briefing = parseSignalBriefing(content)
   if (!isFinalSignalReport(output)) return null
   if (!briefing) return <p className="border-b border-white/[0.055] px-5 py-3 text-xs text-white/45">Audio briefing unavailable for this report.</p>
   // Remount on report/voice text changes so pending responses cannot play another report.
-  return <BriefingPlayer key={`${workspaceId}:${output.id}:${content}`} workspaceId={workspaceId} outputId={output.id} briefing={briefing} showTranscriptControl={showTranscriptControl} />
+  return <BriefingPlayer key={`${workspaceId}:${output.id}:${content}`} workspaceId={workspaceId} outputId={output.id} briefing={briefing} showTranscriptControl={showTranscriptControl} compact={compact} />
 }
 
-export function BriefingPlayer({ workspaceId, outputId, briefing, showTranscriptControl = true }: { workspaceId: string; outputId: string; briefing: string; showTranscriptControl?: boolean }) {
+export function BriefingPlayer({ workspaceId, outputId, briefing, showTranscriptControl = true, compact = false }: { workspaceId: string; outputId: string; briefing: string; showTranscriptControl?: boolean; compact?: boolean }) {
   const [expanded, setExpanded] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [audioUrl, setAudioUrl] = React.useState<string | null>(null)
@@ -69,7 +70,7 @@ export function BriefingPlayer({ workspaceId, outputId, briefing, showTranscript
   }
 
   return (
-    <section aria-label="Your Briefing" className="border-b border-white/[0.055] px-5 py-3 text-xs text-white/70">
+    <section aria-label="Your Briefing" className={compact ? "text-xs text-white/70" : "border-b border-white/[0.055] px-5 py-3 text-xs text-white/70"}>
       <div className="flex flex-wrap items-center gap-2">
         {!audioUrl ? (
           <button type="button" onClick={() => { void listen() }} disabled={busy}

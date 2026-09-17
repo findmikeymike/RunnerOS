@@ -37,7 +37,7 @@ const envelopeSchema = z.object({
   noFindingVideoIds: z.array(z.string()).max(20).optional(),
 }).strict();
 
-/** Engine validates the envelope; host validation below checks evidence and excerpts. */
+/** Engine validates the envelope; host validation below checks source membership and index structure. */
 export const SIGNAL_SYNTHESIS_OUTPUT_SCHEMA = {
   type: 'object', additionalProperties: false,
   required: ['version', 'outcome', 'markdown', 'examinedVideoIds', 'findings', 'ideas'],
@@ -83,7 +83,6 @@ export function parseSignalSynthesis(value: unknown, context: SignalSynthesisCon
   function validateEntry<T extends SignalFinding>(entry: T): T {
     if (ids.has(entry.id)) throw new Error(`Duplicate entry ID: ${entry.id}`);
     if (new Set(entry.sourceRefs).size !== entry.sourceRefs.length || entry.sourceRefs.some(ref => !sources.has(ref))) throw new Error(`Unknown or duplicate source reference: ${entry.id}`);
-    if (!input.markdown.includes(entry.excerpt)) throw new Error(`Excerpt absent from report: ${entry.id}`);
     if (entry.eventDate && (!validEventDate(entry.eventDate) || !entry.sourceRefs.some(ref => sources.get(ref)?.eventDate === entry.eventDate))) {
       warnings.push(`Unverified event date omitted: ${entry.id}`);
       delete entry.eventDate;

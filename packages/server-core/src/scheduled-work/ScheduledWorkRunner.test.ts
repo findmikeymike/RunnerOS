@@ -1353,7 +1353,7 @@ describe('ScheduledWorkRunner', () => {
     active = false
     expect(await runner.isBackgroundLaneOccupied(root, workspaceId)).toBe(false)
     await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
-    expect(readWork(root).items[0]!.status).toBe(state === 'paused' ? 'running' : 'needs-attention')
+    expect(readWork(root).items[0]!.status).toBe(state === 'paused' ? 'running' : 'canceled')
   })
 
   test('attempt replacement during awaited drain check keeps the lane and cannot be settled by old status', async () => {
@@ -2951,3 +2951,64 @@ for (const change of ['cancel', 'replace'] as const) {
     expect(saved.runs.at(-1)?.workflowRunId).toBe(change === 'cancel' ? undefined : 'replacement-workflow')
   })
 }
+
+for (const state of ['succeeded', 'cancelled'] as const) test(`reconciles attention from persisted ${state} workflow without rerunning or losing history`, async () => {
+  const root = makeRoot()
+  const snapshot = { metadata: { name: 'Signals', steps: [] }, body: '# Signals' }
+  const order = buildOrder({ id: 'terminal-recovery', type: 'workflow-run', status: 'needs-attention',
+    attention: { reason: 'execution-failed', message: 'Previous output error' },
+    execution: { type: 'workflow-run', workflowSlug: 'signals-industry-scan', workflowDigest: scheduledWorkDefinitionDigest(snapshot), triggerInputs: {} },
+    runs: [{ id: 'attempt', jobId: 'terminal-recovery', startedAt: '2026-07-10T14:00:00.000Z', status: 'failed', workflowRunId: 'run', error: 'Previous output error' }] })
+  writeWork(root, [order])
+  let starts = 0
+  const runner = new ScheduledWorkRunner({
+    canRunBackgroundWork: () => true, withLock: createLock(), executeAgentTask: async () => {},
+    startWorkflow: async () => { starts++; throw new Error('must not dispatch') },
+    readWorkflowRun: async () => ({ id: 'run', workspaceId, workflowSlug: 'signals-industry-scan', workflowSnapshot: snapshot, state, steps: [], finalOutputId: 'report' } as unknown as WorkflowRunSnapshot),
+    listOutputManifests: () => [],
+  })
+  await runner.scanWorkspace(workspaceId, root)
+  const saved = readWork(root).items[0]!
+  expect(saved.status).toBe(state === 'succeeded' ? 'done' : 'canceled')
+  expect(saved.attention).toBeUndefined()
+  expect(saved.runs).toHaveLength(1)
+  expect(saved.runs[0]!.id).toBe('attempt')
+  expect(saved.runs[0]!.error).toBe('Previous output error')
+  expect(saved.runs[0]!.status).toBe(state === 'succeeded' ? 'done' : 'skipped')
+  if (state === 'succeeded') expect(saved.result).toEqual({ type: 'workflow-run', workflowRunId: 'run', outputIds: ['report'] })
+  await runner.scanWorkspace(workspaceId, root)
+  expect(readWork(root).items[0]).toEqual(saved)
+  expect(starts).toBe(0)
+})
+
+for (const issue of ['failed', 'output-error', 'foreign-workspace', 'foreign-workflow', 'changed-definition', 'active', 'replacement', 'newer-cancel', 'attention-changed'] as const) test(`terminal workflow recovery preserves attention when ${issue}`, async () => {
+  const root = makeRoot()
+  const snapshot = { metadata: { name: 'Signals', steps: [] }, body: '# Signals' }
+  const order = buildOrder({ id: 'guarded-recovery', type: 'workflow-run', status: 'needs-attention',
+    attention: { reason: 'execution-failed', message: 'Original failure' },
+    execution: { type: 'workflow-run', workflowSlug: 'signals-industry-scan', workflowDigest: scheduledWorkDefinitionDigest(snapshot), triggerInputs: {} },
+    runs: [{ id: 'attempt', jobId: 'guarded-recovery', startedAt: '2026-07-10T14:00:00.000Z', status: 'failed', workflowRunId: 'run' }] })
+  writeWork(root, [order])
+  let expected = readWork(root).items[0]!
+  const runner = new ScheduledWorkRunner({
+    canRunBackgroundWork: () => true, withLock: createLock(), executeAgentTask: async () => {},
+    startWorkflow: async () => { throw new Error('must not dispatch') },
+    isWorkflowRunActive: async () => issue === 'active',
+    readWorkflowRun: async () => {
+      if (issue === 'replacement' || issue === 'newer-cancel' || issue === 'attention-changed') {
+        const changed = readWork(root).items[0]!
+        if (issue === 'replacement') changed.runs.push({ ...changed.runs[0]!, id: 'new-attempt', workflowRunId: 'new-run' })
+        if (issue === 'newer-cancel') changed.status = 'canceled'
+        if (issue === 'attention-changed') changed.attention = { ...changed.attention!, message: 'Newer failure' }
+        writeWork(root, [changed]); expected = readWork(root).items[0]!
+      }
+      return { id: 'run', workspaceId: issue === 'foreign-workspace' ? 'other' : workspaceId,
+        workflowSlug: issue === 'foreign-workflow' ? 'other' : 'signals-industry-scan',
+        workflowSnapshot: issue === 'changed-definition' ? { ...snapshot, body: 'different' } : snapshot,
+        state: issue === 'failed' ? 'failed' : 'succeeded', outputError: issue === 'output-error' ? 'Still broken' : undefined,
+        durable: { engine: 'durable-local-read' }, steps: [] } as unknown as WorkflowRunSnapshot
+    }, listOutputManifests: () => [],
+  })
+  await runner.scanWorkspace(workspaceId, root)
+  expect(readWork(root).items[0]).toEqual(expected)
+})

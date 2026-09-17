@@ -31,12 +31,15 @@ describe('new-contract Signal workflows', () => {
     for (const workflow of SIGNAL_CONTRACT_WORKFLOWS) {
       const parsed = parseWorkflowFile(serializeWorkflow(workflow.metadata, workflow.body))!;
       expect(parsed).not.toBeNull();
-      expect(parsed.metadata.steps.map(step => step.id)).toEqual(['youtube-intel', 'synthesize']);
-      expect(parsed.metadata.steps.map(step => step.agent)).toEqual(['youtube-intelligence-agent', 'signal-analyst-agent']);
+      expect(parsed.metadata.steps.map(step => step.id)).toEqual(['synthesize']);
+      expect(parsed.metadata.steps.map(step => step.agent)).toEqual(['signal-analyst-agent']);
+      expect(parsed.metadata.steps[0]!.timeout).toBe(300);
       expect(parsed.metadata.outputs?.mode).toBe('none');
       expect(parsed.metadata.steps.every(step => step.input.includes('Signals v2'))).toBe(true);
       expect(parsed.metadata.steps.every(step => step.input.includes('{{trigger.signalPacket | escape}}'))).toBe(true);
-      expect(parsed.metadata.steps.at(-1)!.input).toContain('{{steps.youtube-intel.output | escape}}');
+      expect(parsed.metadata.steps.at(-1)!.input).not.toContain('{{steps.youtube-intel.output | escape}}');
+      expect(parsed.metadata.steps[0]!.input).toContain('plain transcripts directly');
+      expect(parsed.metadata.steps[0]!.input).toContain('Do not request timestamps, proof excerpts');
       expect(parsed.metadata.steps.every(step => step.completion?.maxAgentMessages === 0)).toBe(true);
       expect(HQ_DEFAULT_WORKFLOW_SLUGS).not.toContain(workflow.slug);
       expect(CAMPAIGN_DEFAULT_WORKFLOW_SLUGS).not.toContain(workflow.slug);

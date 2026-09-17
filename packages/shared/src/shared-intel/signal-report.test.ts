@@ -28,11 +28,19 @@ describe('host-scoped Signal report contract', () => {
     expect(() => parseSignalSynthesis({ ...envelope(), examinedVideoIds: ['9bZkp7q19f0'] }, context)).toThrow();
     expect(() => parseSignalSynthesis({ ...envelope(), findings: [{ ...finding, sourceRefs: ['unknown'] }] }, context)).toThrow();
   });
-  test('does not index excerpts absent from report, duplicate IDs or excessive entries', () => {
-    const absent = parseSignalSynthesis({ ...envelope(), markdown: '# Other report' }, context);
-    expect(absent.indexingStatus).toBe('failed');
-    expect(absent.findings).toEqual([]);
-    expect(absent.markdown).toBe('# Other report');
+  test('indexes concise summaries without requiring literal report excerpts', () => {
+    const idea = { ...finding, id: 'i1', excerpt: 'A useful angle summarized in different words.', supportingFindingIds: ['f1'] };
+    const markdown = '# Your World\n\nA discovery suggests a question worth exploring.';
+    const result = parseSignalSynthesis({ ...envelope(), markdown, ideas: [idea] }, context);
+    expect(result.indexingStatus).toBe('ready');
+    expect(result.findings).toEqual([finding]);
+    expect(result.ideas).toHaveLength(1);
+    expect(result.ideas[0]?.excerpt).toBe(idea.excerpt);
+    expect(result.markdown).toBe(markdown);
+    expect(result.coverage.includedVideoIds).toEqual(['dQw4w9WgXcQ']);
+    expect(result.warnings).toEqual([]);
+  });
+  test('does not index duplicate IDs or accept excessive entries', () => {
     expect(parseSignalSynthesis({ ...envelope(), findings: [finding, finding] }, context).indexingStatus).toBe('failed');
     expect(() => parseSignalSynthesis({ ...envelope(), findings: Array.from({ length: 13 }, () => finding) }, context)).toThrow();
   });
@@ -51,7 +59,7 @@ describe('host-scoped Signal report contract', () => {
     const source2 = { ...context.sources[0]!, sourceId: 'video-2', videoId: '9bZkp7q19f0', sourceUrl: 'https://youtu.be/9bZkp7q19f0' };
     const extended = { identity: { ...context.identity, requestedVideoIds: ['dQw4w9WgXcQ', '9bZkp7q19f0'] }, sources: [...context.sources, source2] };
     const result = parseSignalSynthesis({ ...envelope(), examinedVideoIds: extended.identity.requestedVideoIds,
-      findings: [finding, { ...finding, id: 'f2', sourceRefs: ['video-2'], excerpt: 'This excerpt is not in the report.' }] }, extended);
+      findings: [finding, { ...finding, id: 'f2', sourceRefs: ['video-2'], title: '' }] }, extended);
     expect(result.indexingStatus).toBe('failed');
     expect(result.findings).toEqual([]);
     expect(result.coverage).toEqual({ includedVideoIds: ['dQw4w9WgXcQ'], examinedNoFindingVideoIds: [], unresolvedVideoIds: ['9bZkp7q19f0'] });

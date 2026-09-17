@@ -18,6 +18,7 @@ import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lo
 import { createCampaignJobRun } from '@craft-agent/shared/campaign-calendar';
 import type { SignalReportMetadata } from '@craft-agent/shared/shared-intel';
 import { SIGNAL_WEBSITE_SOURCES, type SignalWebsitePacket } from './website-collector';
+import { MonidSignalError } from './monid-transcript';
 
 const definitions = [createSignalContractWorkflow('your-world', 'scan'), createSignalContractWorkflow('industry', 'scan'), createSignalContractWorkflow('your-world', 'links')];
 const loaded = (slug: string) => { const value = definitions.find(item => item.slug === slug); return value ? { ...value, path: '/fixture/WORKFLOW.md', source: 'global' as const } : null; };
@@ -70,6 +71,34 @@ const finding = { id: 'finding', title: 'Useful', excerpt: 'Useful finding.', to
 const report = (findings: unknown[] = [finding]) => ({ version: 1, outcome: 'report', markdown: '# Brief\nUseful finding.', examinedVideoIds: [videoId], findings, ideas: [] });
 const empty = { version: 1, outcome: 'no-change', markdown: '', examinedVideoIds: [videoId], findings: [], ideas: [] };
 
+test('synthesis gets compact complete text without timestamp or proof metadata', async () => {
+  const request = await prepared();
+  const packet = JSON.parse(service.packetInput(request));
+  expect(packet.videos[0].transcript).toBe('Useful finding.');
+  expect(packet.videos[0].url).toBe(metadata.sourceUrl);
+  expect(packet.videos[0].id).toBe(`video:${videoId}`);
+  expect(packet.videos[0].contentHash).toBeUndefined();
+  expect(packet.videos[0].metadata).toBeUndefined();
+  expect(packet.videos[0].transcript).not.toContain('start');
+});
+
+for (const phase of ['metadata', 'transcript'] as const) for (const sanitized of [true, false]) {
+  test(`${phase} collection preserves sanitized Monid diagnostics and hides raw provider errors (${sanitized})`, async () => {
+    const message = 'Monid result retrieval is taking longer than expected. Retry to resume saved work.';
+    const error = sanitized ? new MonidSignalError(message, false, 'known-run') : new Error('SECRET provider response');
+    if (phase === 'metadata') provider.recent = mock(async () => { throw error; });
+    else provider.transcript = mock(async () => { throw error; });
+    const request = await prepared();
+    const coverage = request.coverage.find(item => item.sourceId === channelId)!;
+    expect(coverage.status).toBe('unavailable');
+    expect(coverage.message).toBe(sanitized ? message : phase === 'metadata'
+      ? 'YouTube metadata is unavailable. Check metadata access and retry.'
+      : 'YouTube transcript evidence is unavailable. Check transcript access and retry.');
+    expect(service.packetInput(request)).not.toContain('SECRET');
+    expect(readSignals(root, 'hq').requests[0]!.coverage[0]!.message).toBe(coverage.message);
+  });
+}
+
 test('GET is read-only and offline canonical settings support pause, notes and removal', async () => {
   await service.getState('hq'); expect(permission).toHaveBeenCalledTimes(0);
   const state = await configure();
@@ -89,6 +118,69 @@ test('interactive channel lookup aborts stalled collection before the RPC deadli
   await expect(bounded.resolveChannel('hq', '@fixture')).rejects.toThrow('Retry to resume any submitted work');
   expect(received?.aborted).toBe(true);
   expect(provider.resolveChannel).toHaveBeenCalledTimes(1);
+});
+test('metadata uses two workers, persists faster sources and keeps configured order and sequential transcripts', async () => {
+  const ids = [channelId, channel2, `UC${'c'.repeat(22)}`];
+  const initial = (await service.getState('hq')).tracks['your-world'];
+  await service.saveConfig('hq', 'your-world', { ...initial, enabled: true, sources: ids.map(id => ({ channelId: id, url: `https://www.youtube.com/channel/${id}`, name: id, priority: 'medium' })) }, initial.revision);
+  const releases = new Map<string, () => void>();
+  let thirdStarted!: () => void;
+  const third = new Promise<void>(resolve => { thirdStarted = resolve; });
+  let twoStarted!: () => void;
+  const two = new Promise<void>(resolve => { twoStarted = resolve; });
+  let active = 0; let maximum = 0;
+  provider.recent = mock(async id => {
+    active++; maximum = Math.max(maximum, active);
+    await new Promise<void>(resolve => { releases.set(id, resolve); if (releases.size === 2) twoStarted(); if (id === ids[2]) thirdStarted(); });
+    active--;
+    const index = ids.indexOf(id);
+    return { videos: [{ ...metadata, channelId: id, videoId: String(index).padStart(11, '0'), sourceUrl: `https://www.youtube.com/watch?v=${String(index).padStart(11, '0')}` }], complete: true };
+  });
+  let transcriptActive = 0; let transcriptMax = 0;
+  provider.transcript = mock(async (_root, id) => {
+    transcriptActive++; transcriptMax = Math.max(transcriptMax, transcriptActive);
+    await new Promise(resolve => setTimeout(resolve, 1)); transcriptActive--;
+    return { videoId: id, provider: 'fixture', segments: [{ start: 0, end: 1, text: 'Useful finding.' }] };
+  });
+  const queued = await service.start('hq', { track: 'your-world', mode: 'scan', idempotencyKey: 'parallel' });
+  const saved = readSignals(root, 'hq').requests[0]!;
+  const pending = service.prepare('hq', queued.runId, queued.orderIds[0]!, saved.workflowDigest);
+  await two;
+  expect(releases.has(ids[2]!)).toBe(false);
+  releases.get(channel2)!(); await third;
+  expect(readSignals(root, 'hq').requests[0]!.coverage.find(item => item.sourceId === channel2)?.status).toBe('checked');
+  releases.get(ids[2]!)!(); releases.get(channelId)!();
+  const result = await pending;
+  expect(maximum).toBe(2); expect(transcriptMax).toBe(1);
+  expect(result.coverage.map(item => item.sourceId)).toEqual(ids);
+  expect((result as typeof result & { discovery: Array<{ sourceId: string }> }).discovery.map(item => item.sourceId)).toEqual(ids);
+  expect(provider.transcript).toHaveBeenCalledTimes(3);
+});
+test('cancelling parallel metadata preserves completed receipts and prevents late failed-request writes', async () => {
+  await configure(true);
+  const controller = new AbortController();
+  let releaseLate!: () => void;
+  provider.recent = mock(async id => {
+    if (id === channelId) await new Promise<void>(resolve => { releaseLate = resolve; });
+    return { videos: [{ ...metadata, channelId: id }], complete: true };
+  });
+  const queued = await service.start('hq', { track: 'your-world', mode: 'scan', idempotencyKey: 'parallel-cancel' });
+  const saved = readSignals(root, 'hq').requests[0]!;
+  const pending = service.prepare('hq', queued.runId, queued.orderIds[0]!, saved.workflowDigest, controller.signal);
+  const cancelAfterReceipt = (async () => {
+    for (let tick = 0; tick < 100; tick++) {
+      if (readSignals(root, 'hq').requests[0]!.coverage.some(item => item.sourceId === channel2 && item.status === 'checked')) { controller.abort(); return; }
+      await new Promise(resolve => setTimeout(resolve, 1));
+    }
+    throw new Error('Parallel source receipt did not persist');
+  })();
+  await expect(pending).rejects.toThrow('preparation failed'); await cancelAfterReceipt;
+  const failed = readSignals(root, 'hq').requests[0]!;
+  expect(failed.status).toBe('failed');
+  expect(failed.coverage.find(item => item.sourceId === channel2)?.status).toBe('checked');
+  releaseLate(); await new Promise(resolve => setTimeout(resolve, 5));
+  expect(readSignals(root, 'hq').requests[0]).toEqual(failed);
+  expect(provider.transcript).not.toHaveBeenCalled();
 });
 test('saving unresolved channels shares one deadline and never writes a timed-out config', async () => {
   let received: AbortSignal | undefined;
@@ -123,7 +215,7 @@ test('packet bodies are external, immutable, reusable and corruption is rejected
   const journal = readFileSync(join(root, 'signals/state.json'), 'utf8');
   expect(journal).not.toContain('Useful finding.');
   expect(journal).not.toContain('"segments"');
-  expect(JSON.parse(service.packetInput(readSignals(root, 'hq').requests[0]!)).videos[0].transcript.segments[0].text).toBe('Useful finding.');
+  expect(JSON.parse(service.packetInput(readSignals(root, 'hq').requests[0]!)).videos[0].transcript).toBe('Useful finding.');
   await service.prepare('hq', request.runId, request.orderIds[0]!, request.workflowDigest);
   expect(provider.transcript).toHaveBeenCalledTimes(1);
   writeFileSync(join(root, 'signals/packets', `${request.packets[0]!.contentHash}.json`), '{}');
@@ -145,7 +237,7 @@ test('deadline bounds preparation and releases active request for retry', async 
   await configure();
   const queued = await service.start('hq', { track: 'your-world', mode: 'scan', idempotencyKey: 'timeout' });
   const request = readSignals(root, 'hq').requests[0]!;
-  await expect(service.prepare('hq', queued.runId, queued.orderIds[0]!, request.workflowDigest)).rejects.toThrow('preparation failed');
+  await expect(service.prepare('hq', queued.runId, queued.orderIds[0]!, request.workflowDigest)).rejects.toThrow('Saved collection work remains available');
   expect(readSignals(root, 'hq').requests[0]!.status).toBe('failed');
   const retry = await service.start('hq', { track: 'your-world', mode: 'scan', idempotencyKey: 'retry' });
   expect(retry.runId).not.toBe(queued.runId);
@@ -159,7 +251,7 @@ test('wrong work-order provenance fails before provider calls', async () => {
 });
 test('parser index failure preserves readable report without inventing no-finding coverage', async () => {
   const request = await prepared();
-  const snapshot = run(request, report([{ ...finding, excerpt: 'Missing excerpt' }]));
+  const snapshot = run(request, report([{ ...finding, title: '' }]));
   workflows.writeRun(root, snapshot);
   await service.complete(snapshot, new AbortController().signal);
   const state = readSignals(root, 'hq');
@@ -205,8 +297,8 @@ test('long transcripts are supplied whole and can advance coverage', async () =>
   provider.transcript = mock(async () => ({ videoId, provider: 'fixture', segments: [{ start: 0, end: 500, text: 'x'.repeat(13_000) }] }));
   const request = await prepared();
   const packet = JSON.parse(service.packetInput(request));
-  expect(packet.videos[0].truncated).toBe(false);
-  expect(packet.videos[0].transcript.segments[0].text.length).toBe(13_000);
+  expect(packet.videos[0].transcript).toHaveLength(13_000);
+  expect(packet.videos[0].transcript.length).toBe(13_000);
   const snapshot = run(request, report()); workflows.writeRun(root, snapshot);
   await service.complete(snapshot, new AbortController().signal);
   expect(readSignals(root, 'hq').ledger.map(entry => entry.outcome)).toEqual(['included']);
@@ -218,7 +310,7 @@ test('over-budget videos are omitted whole and stay retryable', async () => {
   provider.transcript = mock(async (_root, id) => ({ videoId: id, provider: 'fixture', segments: [{ start: 0, end: 500, text: 'x'.repeat(260_000) }] }));
   const request = await prepared(true);
   const packet = JSON.parse(service.packetInput(request));
-  expect(packet.videos.map((item: { metadata: { videoId: string } }) => item.metadata.videoId)).toEqual([videoId]);
+  expect(packet.videos.map((item: { id: string }) => item.id.replace('video:', ''))).toEqual([videoId]);
   expect(request.packets.find(item => item.metadata.videoId === largeId)?.excludedFromSynthesis).toBe(true);
   const snapshot = run(request, report()); workflows.writeRun(root, snapshot);
   await service.complete(snapshot, new AbortController().signal);
@@ -227,7 +319,7 @@ test('over-budget videos are omitted whole and stay retryable', async () => {
   const next = await service.start('hq', { track: 'your-world', mode: 'scan', idempotencyKey: 'next-budget-window' });
   const nextSaved = readSignals(root, 'hq').requests.find(item => item.runId === next.runId)!;
   const nextPrepared = await service.prepare('hq', next.runId, next.orderIds[0]!, nextSaved.workflowDigest);
-  expect(JSON.parse(service.packetInput(nextPrepared)).videos.map((item: { metadata: { videoId: string } }) => item.metadata.videoId)).toEqual([largeId]);
+  expect(JSON.parse(service.packetInput(nextPrepared)).videos.map((item: { id: string }) => item.id.replace('video:', ''))).toEqual([largeId]);
 });
 
 test('single over-budget link fails clearly without partial transcript synthesis', async () => {
@@ -427,16 +519,15 @@ for (const mode of ['scan', 'links'] as const) for (const failedPhase of ['metad
       },
       createSession: async () => ({ id: randomUUID() }),
       sendMessage: async (_id, prompt) => { prompts.push(prompt); },
-      getLastAssistantText: () => prompts.length === 1 ? 'Fresh analysis of both videos' : JSON.stringify({ ...report(), examinedVideoIds: [videoId, secondId], noFindingVideoIds: [secondId] }),
+      getLastAssistantText: () => JSON.stringify({ ...report(), examinedVideoIds: [videoId, secondId], noFindingVideoIds: [secondId] }),
       getSessionToolUseCount: () => 0, abortSession: async () => {}, getWorkspaceRootPath: () => root,
       authorizeRerun: (old, next, signal) => service.authorizeRetry(old, next, signal),
       completeWithoutSteps: (snapshot, signal) => service.completeEmpty(snapshot, signal),
       postProcessSucceededRun: async (snapshot, signal) => { await service.complete(snapshot, signal); }, emit: event => events.push(event) });
     const retry = await runner.rerunFromStep({ workspaceId: 'hq', runId: original.id, stepId: 'synthesize' });
     for (let i = 0; i < 100 && !events.some(event => event.type === 'run.completed'); i++) await new Promise(resolve => setTimeout(resolve, 5));
-    expect(prompts).toHaveLength(2);
+    expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain(`Evidence for ${secondId}`);
-    expect(prompts[1]).toContain('Fresh analysis of both videos');
     expect(events.find(event => event.type === 'run.completed')?.run.state).toBe('succeeded');
     await service.reconcile('hq');
     const saved = readSignals(root, 'hq').requests[0]!;
@@ -492,8 +583,9 @@ test('cancelled collection recovery preserves valid evidence and resumes through
   const retry = persistRetry(original); phase = 'cancel';
   const controller = new AbortController();
   const pending = service.authorizeRetry(original, retry, controller.signal);
-  const rejected = expect(pending).rejects.toThrow('preparation failed');
-  await collecting; controller.abort(); await rejected;
+  const cancellation = collecting.then(() => controller.abort());
+  await expect(pending).rejects.toThrow('preparation failed');
+  await cancellation;
   const cancelled = readSignals(root, 'hq').requests[0]!;
   expect(cancelled.collectionComplete).toBe(false); expect(cancelled.packets).toHaveLength(1);
   expect(cancelled.packets[0]!.contentHash).toBe(request.packets[0]!.contentHash);
@@ -822,7 +914,8 @@ test('HQ resolution never chooses the first of multiple HQs', () => {
   expect(() => resolveSignalHqWorkspace('campaign', [workspace, campaign, { ...workspace, id: 'other' }])).toThrow('unambiguous');
 });
 
-for (const fresh of [false, true]) test(`production website adapter to Industry lifecycle: ${fresh ? 'dated finding' : 'quiet window'}`, async () => {
+for (const sourceKind of ['quiet', 'item', 'page'] as const) test(`production website adapter to Industry lifecycle: ${sourceKind}`, async () => {
+  const fresh = sourceKind !== 'quiet';
   const adapter = new LocalSignalProvider({ fetch: async url => {
     const origin = new URL(url).origin;
     return new Response(`<?xml version="1.0"?><rss version="2.0"><channel><title>News</title><link>${origin}</link>${fresh ? `<item><title>Useful finding</title><link>${origin}/new-story</link><pubDate>Sun, 06 Sep 2026 12:00:00 GMT</pubDate><description>Useful finding.</description></item>` : ''}<item><title>Old</title><link>${origin}/old-story</link><pubDate>Sat, 01 Aug 2026 12:00:00 GMT</pubDate><description>Old information.</description></item></channel></rss>`, { headers: { 'content-type': 'application/rss+xml' } });
@@ -844,7 +937,7 @@ for (const fresh of [false, true]) test(`production website adapter to Industry 
     expect(item.publishedAt).toBe('2026-09-06T12:00:00.000Z');
     expect(item.url).toBe('https://artists.spotify.com/new-story');
     expect(item.text).not.toContain('<');
-    const snapshot = run(request, { ...report([{ ...finding, sourceRefs: [item.id] }]), examinedVideoIds: [] }); workflows.writeRun(root, snapshot);
+    const snapshot = run(request, { ...report([{ ...finding, sourceRefs: [sourceKind === 'page' ? packet.websites[0].id : item.id] }]), examinedVideoIds: [] }); workflows.writeRun(root, snapshot);
     await service.complete(snapshot, new AbortController().signal);
     expect(readSignals(root, 'hq').requests[0]!.status).toBe('report');
   }
@@ -919,4 +1012,19 @@ test('ordinary observer failure preserves terminal report publication and manage
   await expect(service.complete(snapshot, new AbortController().signal)).resolves.toBe(true);
   expect(published).toHaveBeenCalledTimes(1);
   expect(readSignals(root, 'hq').requests[0]!.status).toBe('report');
+});
+
+for (const recoverable of [true, false]) test(`completed report save recovery never recollects or reruns: ${recoverable}`, async () => {
+  const request = await prepared();
+  const snapshot = { ...run(request, report([{ ...finding, sourceRefs: recoverable ? finding.sourceRefs : ['missing-source'] }])), outputError: 'Previous save failed' };
+  workflows.writeRun(root, snapshot);
+  const state = readSignals(root, 'hq'); state.requests[0]!.status = 'failed'; writeSignals(root, state);
+  const before = { recent: (provider.recent as ReturnType<typeof mock>).mock.calls.length, transcript: (provider.transcript as ReturnType<typeof mock>).mock.calls.length };
+  await service.reconcile('hq'); await service.reconcile('hq');
+  const saved = readSignals(root, 'hq').requests[0]!;
+  expect(saved.status).toBe(recoverable ? 'report' : 'failed');
+  expect(Boolean(saved.outputId)).toBe(recoverable);
+  expect(provider.recent).toHaveBeenCalledTimes(before.recent);
+  expect(provider.transcript).toHaveBeenCalledTimes(before.transcript);
+  if (recoverable) expect(workflows.readRun(root, snapshot.id)!.outputError).toBeUndefined();
 });

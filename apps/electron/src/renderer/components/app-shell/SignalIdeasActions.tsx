@@ -24,10 +24,16 @@ export function SignalIdeasActions({ workspaceId, outputId, revision, onDevelop 
     <button onClick={retry} className="inline-flex items-center gap-1 text-foreground"><RefreshCw size={13} />Retry</button>
   </div>
   if (!ideas.length) return null
-  return <div aria-label="Develop report ideas" className="space-y-2 border-t border-white/10 px-4 py-3">
-    {ideas.map(idea => <div key={idea.reference.entryId} className="flex flex-wrap items-center justify-between gap-2">
-      <span className="min-w-0 flex-1 break-words text-sm text-white/75">{idea.title}</span>
-      <button className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 text-xs text-white/80 hover:bg-white/10" onClick={() => onDevelop(idea.reference)} aria-label={`Develop this idea: ${idea.title}`}><ArrowRight size={14} />Develop this idea</button>
-    </div>)}
-  </div>
+  return <details aria-label="Develop report ideas" className="group border-t border-white/[0.07] bg-white/[0.015]">
+    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 text-sm text-white/65 transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-300/50 sm:px-8 [&::-webkit-details-marker]:hidden">
+      <span>Ideas worth exploring <span className="ml-2 text-xs text-white/35">{ideas.length}</span></span>
+      <ArrowRight size={15} className="transition-transform group-open:rotate-90" />
+    </summary>
+    <div className="space-y-1 px-3 pb-4 sm:px-5">
+      {ideas.map(idea => <button key={idea.reference.entryId} className="group/idea flex w-full items-center justify-between gap-4 rounded-lg px-3 py-3 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-300/50" onClick={() => onDevelop(idea.reference)} aria-label={`Develop this idea: ${idea.title}`}>
+        <span className="min-w-0"><span className="block text-sm text-white/80">{idea.title}</span><span className="mt-1 block text-xs text-white/40">Explore with your team</span></span>
+        <ArrowRight size={15} className="shrink-0 text-white/30 group-hover/idea:text-orange-300" />
+      </button>)}
+    </div>
+  </details>
 }

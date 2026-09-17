@@ -14,10 +14,11 @@ import {
   type SignalChannel, type SignalTrack, type SignalMode, type SignalTrackConfig, type SignalState, type SignalQueueResult, type SignalEvidenceReceipt, type SignalSourceCoverage, type SignalVideoMetadata,
 } from '@craft-agent/shared/shared-intel';
 import { queueAutomationWork } from '../scheduled-work/AutomationWorkQueue';
-import { LocalSignalProvider, type SignalProvider, type SignalTranscript } from './SignalProvider';
+import { LocalSignalProvider, validSignalTranscript, signalTranscriptText, type SignalProvider, type SignalTranscript } from './SignalProvider';
 import { hash, readSignals, writeSignals, readEvidence, saveEvidence, withSignalsLock, SignalStorageLimitError, type SignalRequest, type SignalStore } from './storage';
 import { resolveSignalHqWorkspace } from './scope';
 import { SIGNAL_WEBSITE_SOURCES, type SignalWebsitePacket as CollectedWebsitePacket } from './website-collector';
+import { MonidSignalError } from './monid-transcript';
 
 const WEBSITE_SOURCES = SIGNAL_WEBSITE_SOURCES;
 // Optional service-owned journal fields keep pre-recovery requests readable.
@@ -46,6 +47,7 @@ export interface SignalServiceDeps {
 export class SignalService {
   private readonly provider: SignalProvider;
   private readonly admissions = new Set<string>();
+  private readonly finalizationRecoveries = new Set<string>();
   constructor(private readonly deps: SignalServiceDeps = {}) { this.provider = deps.provider ?? new LocalSignalProvider(); }
   private now() { return this.deps.now?.() ?? new Date().toISOString(); }
   private scope(id: string) { return resolveSignalHqWorkspace(id, this.deps.workspaces?.() ?? getWorkspaces()); }
@@ -327,7 +329,13 @@ export class SignalService {
     const expected = request.mode === 'links' ? request.identity.requestedVideoIds
       : [...request.config.sources.map(source => source.channelId), ...(request.track === 'industry' ? WEBSITE_SOURCES.map((_, i) => `web:${i}`) : [])];
     return !request.collectionComplete || expected.some(id => !request.coverage.some(source => source.sourceId === id && source.status !== 'unavailable'))
-      || request.selected.some(video => !request.packets.some(packet => packet.metadata.videoId === video.videoId));
+      || request.selected.some(video => !request.packets.some(packet => packet.metadata.videoId === video.videoId && this.validPacket(request, packet)));
+  }
+  private validPacket(request: SignalRequest, packet: SignalRequest['packets'][number]): boolean {
+    try {
+      const transcript = packet.transcript ?? readEvidence<SignalTranscript>(this.scope(request.identity.hqWorkspaceId).rootPath, packet.contentHash);
+      return packet.contentHash === hash(transcript) && validSignalTranscript(transcript, packet.metadata.videoId);
+    } catch { return false; }
   }
 
   /** Invoked only from the admitted Scheduled Work workflow start callback. */
@@ -357,7 +365,11 @@ export class SignalService {
       if (!request || !request.orderIds.includes(orderId) || request.workflowDigest !== workflowDigest || !['queued', 'running'].includes(request.status)) throw new Error('Signals request provenance does not match this work order.');
       attemptRunId = request.workflowRunId ?? request.identity.workflowRunId;
       controller.signal.throwIfAborted();
-      if (request.collectionComplete) return request;
+      if (request.collectionComplete && !this.needsCollectionRecovery(request)) return request;
+      request.collectionComplete = false;
+      // Invalid historical blobs remain on disk and in prior workflow snapshots.
+      // Only the retry's current evidence references are replaced after validation.
+      request.packets = request.packets.filter(packet => this.validPacket(request!, packet));
       const saveRequest = async () => withSignalsLock(workspace.rootPath, async () => {
         const current = this.state(workspace);
         const index = current.requests.findIndex(item => item.runId === requestId);
@@ -370,11 +382,12 @@ export class SignalService {
       const setCoverage = (coverage: SignalSourceCoverage) => {
         request!.coverage = [...request!.coverage.filter(item => item.sourceId !== coverage.sourceId), coverage];
       };
-      request.discovery ??= [];
+      const discoveryReceipts = request.discovery ??= [];
       const sourceIds = request.mode === 'links' ? request.identity.requestedVideoIds : request.config.sources.map(source => source.channelId);
-      for (const sourceId of sourceIds) {
+      const sourceOrder = new Map(sourceIds.map((id, index) => [id, index]));
+      const discoverSource = async (sourceId: string) => {
         controller.signal.throwIfAborted();
-        let discovery = request.discovery.find(item => item.sourceId === sourceId);
+        let discovery = discoveryReceipts.find(item => item.sourceId === sourceId);
         if (!discovery) {
           const prior = request.coverage.find(item => item.sourceId === sourceId);
           const videos = request.selected.filter(video => (request!.mode === 'links' ? video.videoId : video.channelId) === sourceId);
@@ -393,17 +406,35 @@ export class SignalService {
               discovery = { sourceId, videos: result.videos, coverage: { sourceId, status: complete ? 'checked' : 'incomplete', checkedAt: this.now(),
                 candidateVideoIds: result.videos.filter(video => Date.parse(video.publishedAt) >= cutoff && Date.parse(video.publishedAt) <= Date.parse(request!.createdAt)).map(video => video.videoId) } };
             }
-          } catch {
-            setCoverage({ sourceId, status: 'unavailable', checkedAt: this.now(), candidateVideoIds: request.mode === 'links' ? [sourceId] : [], message: 'YouTube metadata is unavailable. Check metadata access and retry.' });
+          } catch (error) {
+            controller.signal.throwIfAborted();
+            setCoverage({ sourceId, status: 'unavailable', checkedAt: this.now(), candidateVideoIds: request.mode === 'links' ? [sourceId] : [],
+              message: error instanceof MonidSignalError ? error.message : 'YouTube metadata is unavailable. Check metadata access and retry.' });
           }
-          if (discovery) request.discovery.push(discovery);
+          if (discovery) discoveryReceipts.push(discovery);
         }
         if (discovery) setCoverage(structuredClone(discovery.coverage));
-        // Save each source before awaiting another: interrupted discovery resumes
-        // missing sources without losing successful metadata or refetching it.
+        // Completion order must not reorder the configured source list or selection.
+        discoveryReceipts.sort((a, b) => (sourceOrder.get(a.sourceId) ?? sourceIds.length) - (sourceOrder.get(b.sourceId) ?? sourceIds.length));
+        request.coverage.sort((a, b) => (sourceOrder.get(a.sourceId) ?? sourceIds.length) - (sourceOrder.get(b.sourceId) ?? sourceIds.length));
         await saveRequest();
-      }
-      const videos = request.discovery.flatMap(item => item.videos);
+      };
+      let nextSource = 0;
+      const discoverWorker = async () => {
+        try {
+          while (nextSource < sourceIds.length) {
+            controller.signal.throwIfAborted();
+            const sourceId = sourceIds[nextSource++]!;
+            await discoverSource(sourceId);
+          }
+        } catch (error) { controller.abort(error); throw error; }
+      };
+      // Persist successes as they arrive, with at most two metadata requests in flight.
+      // Drain both workers before failure handling so no late receipt overwrites it.
+      const discoveries = await Promise.allSettled(Array.from({ length: Math.min(2, sourceIds.length) }, () => discoverWorker()));
+      const failedDiscovery = discoveries.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+      if (failedDiscovery) throw failedDiscovery.reason;
+      const videos = discoveryReceipts.flatMap(item => item.videos);
       if (request.mode === 'links') {
         request.selected = request.identity.requestedVideoIds.flatMap(id => videos.find(video => video.videoId === id) ?? []);
       } else {
@@ -431,7 +462,7 @@ export class SignalService {
         }
         try {
           const transcript = await collect(this.provider.transcript(workspace.rootPath, video.videoId, controller.signal, request.workflowRunId ?? request.identity.workflowRunId));
-          if (transcript.videoId !== video.videoId || !transcript.segments.length) throw new Error('Invalid evidence identity');
+          if (!validSignalTranscript(transcript, video.videoId)) throw new Error('No usable transcript text');
           const packet = { id: `video:${video.videoId}`, metadata: video, transcript, contentHash: hash(transcript), excludedFromSynthesis: false };
           request.packets.push(packet);
           // Keep whole transcripts only. Reserve room for Industry's other lanes.
@@ -440,9 +471,12 @@ export class SignalService {
             const source = request.coverage.find(item => item.sourceId === (request!.mode === 'links' ? video.videoId : video.channelId));
             if (source) { source.status = 'incomplete'; source.message = 'A whole video was omitted because its full evidence exceeds this run\'s context budget. It remains eligible for a later scan.'; }
           }
-        } catch {
+        } catch (error) {
           const source = request.coverage.find(item => item.sourceId === (request!.mode === 'links' ? video.videoId : video.channelId));
-          if (source) source.status = 'unavailable';
+          if (source) {
+            source.status = 'unavailable';
+            source.message = error instanceof MonidSignalError ? error.message : 'YouTube transcript evidence is unavailable. Check transcript access and retry.';
+          }
         }
         await saveRequest();
       }
@@ -477,6 +511,8 @@ export class SignalService {
       return request;
       } catch (error) {
         if (error instanceof SignalStorageLimitError) failureMessage = error.message;
+        else if (error instanceof MonidSignalError) failureMessage = error.message;
+        else if (controller.signal.aborted && !signal?.aborted) failureMessage = 'Signals collection timed out or was stopped. Saved collection work remains available; retry to resume it.';
         await withSignalsLock(workspace.rootPath, async () => {
           const current = this.state(workspace);
           const saved = current.requests.find(item => item.runId === requestId);
@@ -494,7 +530,8 @@ export class SignalService {
     const root = this.scope(request.identity.hqWorkspaceId).rootPath;
     const videos = request.packets.filter(packet => !packet.excludedFromSynthesis).map(packet => {
       const transcript = packet.transcript ?? readEvidence<SignalTranscript>(root, packet.contentHash);
-      return { id: packet.id, metadata: packet.metadata, contentHash: packet.contentHash, transcript, truncated: false };
+      if (!validSignalTranscript(transcript, packet.metadata.videoId)) throw new Error('Saved transcript text is unavailable. Retry this scan.');
+      return { id: packet.id, title: packet.metadata.title, url: packet.metadata.sourceUrl, transcript: signalTranscriptText(transcript) };
     });
     const websites = request.websites.filter(packet => !packet.excludedFromSynthesis).map(packet => ({ id: packet.id, contentHash: packet.contentHash,
       ...(packet.content ?? readEvidence<CollectedWebsitePacket>(root, packet.contentHash)) }));
@@ -521,7 +558,13 @@ export class SignalService {
       const raw = step?.output;
       const { parseSignalSynthesis } = await import('@craft-agent/shared/shared-intel');
       const sources = [...request.packets.filter(packet => !packet.excludedFromSynthesis).map(packet => ({ sourceId: packet.id, sourceUrl: packet.metadata.sourceUrl, videoId: packet.metadata.videoId, sourcePublishedAt: packet.metadata.publishedAt })),
-        ...request.websites.filter(packet => !packet.excludedFromSynthesis).flatMap(packet => readEvidence<CollectedWebsitePacket>(workspace.rootPath, packet.contentHash).items.map(item => ({ sourceId: item.id, sourceUrl: item.url, sourcePublishedAt: item.publishedAt })))];
+        ...request.websites.filter(packet => !packet.excludedFromSynthesis).flatMap(packet => {
+          const content = readEvidence<CollectedWebsitePacket>(workspace.rootPath, packet.contentHash);
+          // The model receives both the page ID and its item IDs. Either identifies
+          // supplied content; empty/unavailable pages cannot support a finding.
+          return [...(content.items.length ? [{ sourceId: packet.id, sourceUrl: packet.url }] : []),
+            ...content.items.map(item => ({ sourceId: item.id, sourceUrl: item.url, sourcePublishedAt: item.publishedAt }))];
+        })];
       const result = parseSignalSynthesis(typeof raw === 'string' ? JSON.parse(raw) : raw, { identity, sources });
       if (result.coverage.unresolvedVideoIds.length) result.warnings.push(`Videos without a validated synthesis outcome: ${result.coverage.unresolvedVideoIds.join(', ')}.`);
       const completePacket = (packet: SignalRequest['packets'][number]) => !packet.excludedFromSynthesis;
@@ -573,7 +616,7 @@ export class SignalService {
       }
       state.ledger = finalizeSignalCoverage({ ...proof, ledger: state.ledger, outcome: result.outcome, publishedReport, finalizedAt: this.now() });
       request.status = result.outcome === 'report' && proof.coverageIncomplete ? 'partial' : result.outcome;
-      request.examinedVideoIds = result.examinedVideoIds; request.updatedAt = this.now();
+      request.examinedVideoIds = result.examinedVideoIds; request.updatedAt = this.now(); request.error = undefined;
       if (request.mode === 'scan' && request.outputId) state.latestScan[request.track] = request.outputId;
       this.save(workspace, state);
       if (['report', 'partial'].includes(request.status) && request.reportMetadataHash
@@ -613,8 +656,16 @@ export class SignalService {
     for (const request of requests) {
       // Reads reconcile published state only. Retry admission and paid recovery
       // belong to the runner's explicit authorizeRetry lifecycle callback.
-      if (!['running', 'queued'].includes(request.status)) continue;
       const run = readRun(workspace.rootPath, request.workflowRunId ?? request.identity.workflowRunId);
+      // Recover a completed analysis after a save failure without running agents
+      // or collectors again. Try once per app lifetime; preserve failures for review.
+      if (request.status === 'failed' && run?.state === 'succeeded' && run.outputError
+        && !this.finalizationRecoveries.has(run.id)) {
+        this.finalizationRecoveries.add(run.id);
+        try { await this.complete(run, new AbortController().signal); } catch { /* Keep the saved failure and report intact. */ }
+        continue;
+      }
+      if (!['running', 'queued'].includes(request.status)) continue;
       if (!['running', 'queued'].includes(this.state(workspace).requests.find(item => item.runId === request.runId)!.status)) continue;
       if (run?.state === 'succeeded' && !run.outputError) {
         if (!await this.completeEmpty(run, new AbortController().signal)) await this.complete(run, new AbortController().signal);

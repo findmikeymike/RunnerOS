@@ -101,8 +101,7 @@ function ActiveRow({ item, onOpen, onAction, supplyOpen, children }: {
             ) : null}
           </span>
           <span className="shrink-0 text-[10.5px] text-white/36">
-            <span className="sm:hidden">{item.statusLabel}</span>
-            <span className="hidden sm:inline">{when || item.statusLabel}</span>
+            {when || item.statusLabel}
           </span>
           {item.cadenceLabel ? (
             <span className="hidden shrink-0 rounded-full bg-white/[0.05] px-2 py-1 text-[9.5px] font-medium text-white/40 md:block">

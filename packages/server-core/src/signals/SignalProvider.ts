@@ -12,7 +12,20 @@ import { monidSignalTranscript, isMonidSignalFallbackBlocked } from './monid-tra
 import { monidResolveChannel, monidRecentVideos, monidVideoMetadata } from './monid-metadata';
 import { resolveSignalToolPath, SignalToolPathError } from './tool-path';
 
-export interface SignalTranscript { videoId: string; segments: Array<{ start: number; end: number; text: string }>; provider: string }
+export interface SignalTranscript { videoId: string; segments: Array<{ start?: number; end?: number; text: string }>; provider: string }
+export function validSignalTranscript(value: unknown, videoId: string): value is SignalTranscript {
+  const transcript = value as SignalTranscript | undefined;
+  if (!transcript || transcript.videoId !== videoId || !Array.isArray(transcript.segments)
+    || !transcript.segments.length || transcript.segments.length > 20_000
+    || transcript.segments.some(s => !s || typeof s.text !== 'string' || !s.text.trim())) return false;
+  return transcript.segments.reduce((size, s) => size + s.text.length, 0) <= 2_000_000;
+}
+
+/** Only readable transcript text goes to the model. Timing is optional source data. */
+export function signalTranscriptText(transcript: SignalTranscript): string {
+  return transcript.segments.map(s => s.text.replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ').trim()).join(' ');
+}
 export interface SignalProvider {
   resolveChannel(url: string, root?: string, attemptScope?: string, signal?: AbortSignal): Promise<SignalChannel>;
   recent(channelId: string, signal?: AbortSignal, root?: string, attemptScope?: string): Promise<{ videos: SignalVideoMetadata[]; complete: boolean }>;
@@ -90,15 +103,15 @@ export class LocalSignalProvider implements SignalProvider {
   async recent(channelId: string, signal?: AbortSignal, root?: string, attemptScope?: string): Promise<{ videos: SignalVideoMetadata[]; complete: boolean }> {
     if (!SIGNAL_CHANNEL_ID.test(channelId)) throw new Error('Invalid canonical channel.');
     try {
-      const result = await this.call('youtube-research', ['youtube', 'channel-uploads', channelId, '--top', '50', '--json', '--no-input', '--data-source', 'live'], signal);
+      const result = await this.call('youtube-research', ['youtube', 'channel-uploads', channelId, '--top', '10', '--json', '--no-input', '--data-source', 'live'], signal);
       // channel-uploads puts channel identity on the envelope, not each upload.
       const hasUploadsEnvelope = result && typeof result === 'object' && !Array.isArray(result) && 'uploads' in result;
       if (hasUploadsEnvelope && (result.channelId !== channelId || !Array.isArray(result.uploads))) throw new Error('Channel evidence identity mismatch.');
       const uploads = hasUploadsEnvelope ? result.uploads : rows(result);
-      if (uploads.length > 50) throw new Error('YouTube exceeded the requested upload limit.');
+      if (uploads.length > 10) throw new Error('YouTube exceeded the requested upload limit.');
       const videos = uploads.map((row: unknown) => metadata(row, hasUploadsEnvelope ? result.channelId : undefined));
       if (videos.some((video: SignalVideoMetadata) => video.channelId !== channelId)) throw new Error('Channel evidence identity mismatch.');
-      return { videos, complete: videos.length < 50 };
+      return { videos, complete: videos.length < 10 };
     } catch (error) {
       signal?.throwIfAborted();
       if (!root) throw error;
@@ -119,10 +132,12 @@ export class LocalSignalProvider implements SignalProvider {
   }
   async transcript(root: string, videoId: string, signal?: AbortSignal, attemptScope?: string): Promise<SignalTranscript> {
     if (!SIGNAL_VIDEO_ID.test(videoId)) throw new Error('Invalid video.');
-    const directory = join(root, 'signals', 'evidence', videoId);
+    const directory = join(root, 'signals', 'evidence-v2', videoId);
     await mkdir(directory, { recursive: true });
     signal?.throwIfAborted();
     try { const cached = await this.readTranscript(join(directory, 'raw-transcript.json'), videoId); signal?.throwIfAborted(); return cached; }
+    catch { signal?.throwIfAborted(); }
+    try { const cached = await this.readTranscript(join(root, 'signals', 'evidence', videoId, 'raw-transcript.json'), videoId); signal?.throwIfAborted(); return cached; }
     catch { signal?.throwIfAborted(); }
     try {
       const result = await this.call('youtube-intelligence', ['prepare', '--video', `https://www.youtube.com/watch?v=${videoId}`, '--provider', 'auto', '--cache-dir', join(root, 'signals', 'transcript-cache'), '--out', directory], signal);
@@ -153,6 +168,7 @@ export class LocalSignalProvider implements SignalProvider {
     } catch (error) { signal?.throwIfAborted(); throw error; }
   }
   private async cacheTranscript(directory: string, transcript: SignalTranscript): Promise<void> {
+    if (!validSignalTranscript(transcript, transcript.videoId)) throw new Error('No usable transcript text was returned.');
     const target = join(directory, 'raw-transcript.json');
     const temporary = `${target}.${randomUUID()}.tmp`;
     // Share verified paid evidence across tracks and providers, not only one helper's cache.
@@ -164,8 +180,7 @@ export class LocalSignalProvider implements SignalProvider {
     const raw = await readFile(path);
     if (raw.length > 2 * 1024 * 1024) throw new Error('Transcript exceeds supported size.');
     const value = JSON.parse(raw.toString('utf8'));
-    if (value.videoId !== videoId || !Array.isArray(value.segments) || !value.segments.length || value.segments.length > 20000
-      || value.segments.some((s: any) => typeof s.text !== 'string' || !s.text.trim() || !Number.isFinite(s.start) || !Number.isFinite(s.end) || s.start < 0 || s.end < s.start)) throw new Error('Transcript packet is invalid.');
+    if (!validSignalTranscript(value, videoId)) throw new Error('Transcript packet is invalid.');
     return { videoId, provider: String(value.provider ?? 'local'), segments: value.segments };
   }
 }

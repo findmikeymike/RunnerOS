@@ -35,9 +35,9 @@ function runAsync(args, options = {}) {
 
 test('prepare with transcript file writes timestamped packet files', () => {
   const dir = mkdtempSync(join(tmpdir(), 'youtube-intel-file-'));
-  const transcript = join(dir, 'transcript.txt');
+  const transcript = join(dir, 'transcript.json');
   const out = join(dir, 'out');
-  spawnSync('sh', ['-c', `printf 'One concrete tactic.\\n\\nSecond timestamped tactic.' > "${transcript}"`]);
+  writeFileSync(transcript, JSON.stringify({ segments: [{ start: 1, end: 4, text: 'One concrete tactic.' }, { start: 5, end: 9, text: 'Second timestamped tactic.' }] }));
 
   const result = run(['prepare', '--video', 'dQw4w9WgXcQ', '--transcript', transcript, '--out', out]);
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -167,8 +167,8 @@ test('batch-prepare writes per-video packets and batch prompts', () => {
   const transcriptA = join(dir, 'a.txt');
   const transcriptB = join(dir, 'b.txt');
   const out = join(dir, 'out');
-  spawnSync('sh', ['-c', `printf 'First concrete tactic.\\n\\nSecond concrete tactic.' > "${transcriptA}"`]);
-  spawnSync('sh', ['-c', `printf 'Another useful mechanism.\\n\\nSpecific implementation note.' > "${transcriptB}"`]);
+  writeFileSync(transcriptA, JSON.stringify([{ start: 1, end: 4, text: 'First concrete tactic.' }, { start: 5, end: 8, text: 'Second concrete tactic.' }]));
+  writeFileSync(transcriptB, JSON.stringify([{ start: 1, end: 4, text: 'Another useful mechanism.' }, { start: 5, end: 8, text: 'Specific implementation note.' }]));
   spawnSync('sh', ['-c', `cat > "${input}" <<EOF
 https://www.youtube.com/watch?v=dQw4w9WgXcQ	${transcriptA}
 https://youtu.be/9bZkp7q19f0	${transcriptB}
@@ -233,7 +233,7 @@ test('batch-prepare can continue on failed rows and preserve manifest', () => {
   const input = join(dir, 'links.tsv');
   const transcript = join(dir, 'ok.txt');
   const out = join(dir, 'out');
-  spawnSync('sh', ['-c', `printf 'Working transcript.' > "${transcript}"`]);
+  writeFileSync(transcript, JSON.stringify([{ start: 1, end: 4, text: 'Working transcript.' }]));
   spawnSync('sh', ['-c', `cat > "${input}" <<EOF
 dQw4w9WgXcQ	${transcript}
 bad-video-input
@@ -248,4 +248,58 @@ EOF`]);
   assert.equal(manifest.items[1].status, 'failed');
 
   rmSync(dir, { recursive: true, force: true });
+});
+
+test('native millisecond fields preserve real time and decode captions without estimated defaults', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'youtube-intel-real-timing-'));
+  try {
+    const transcript = join(dir, 'input.json'); const out = join(dir, 'out');
+    writeFileSync(transcript, JSON.stringify({ segments: [
+      { start_ms: 320, duration_ms: 4880, text: 'We&amp;#39;re &quot;ready&quot; &amp; able.' },
+      { start_ms: 5200, duration_ms: 2120, text: 'Second.' },
+      { start: 10, duration: 2.5, text: 'Seconds remain seconds.' },
+      { tStartMs: 15000, dDurationMs: 1200, text: 'JSON3 time.' },
+    ] }));
+    const result = run(['prepare', '--video', 'dQw4w9WgXcQ', '--transcript', transcript, '--out', out]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const raw = JSON.parse(readFileSync(join(out, 'raw-transcript.json'), 'utf8'));
+    assert.deepEqual(raw.segments, [
+      { start: 0.32, end: 5.2, text: 'We\'re "ready" & able.' },
+      { start: 5.2, end: 7.32, text: 'Second.' },
+      { start: 10, end: 12.5, text: 'Seconds remain seconds.' },
+      { start: 15, end: 16.2, text: 'JSON3 time.' },
+    ]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('plain transcript text succeeds without timestamps', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'youtube-intel-no-fake-timing-'));
+  try {
+    for (const value of ['Untimed prose.', { segments: [{ text: 'Missing time.' }] },
+      { segments: [{ start: 1, end: 2, text: 'Valid.' }, { start_ms: 'bad', duration_ms: 2, text: 'Invalid.' }] },
+      { segments: [{ start: 1, text: 'No end.' }] }]) {
+      const file = join(dir, 'input.json'); writeFileSync(file, typeof value === 'string' ? value : JSON.stringify(value));
+      const result = run(['prepare', '--video', 'dQw4w9WgXcQ', '--transcript', file, '--out', join(dir, 'out')]);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.ok(JSON.parse(readFileSync(join(dir, 'out', 'raw-transcript.json'), 'utf8')).segments.length);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('legacy cache preserves useful text and original files', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'youtube-intel-legacy-timing-'));
+  try {
+    const file = join(dir, 'dQw4w9WgXcQ.en.json');
+    const legacy = JSON.stringify({ videoId: 'dQw4w9WgXcQ', lang: 'en', provider: 'youtube-research',
+      segments: [{ start: 0, end: 6, text: 'Old broken timing.' }], raw: { segments: [{ start_ms: 320, duration_ms: 4880, text: 'Original.' }] } });
+    writeFileSync(file, legacy);
+    const result = run(['prepare', '--video', 'dQw4w9WgXcQ', '--provider', 'local', '--cache-dir', dir, '--out', join(dir, 'out')]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'out', 'raw-transcript.json'), 'utf8')).segments, [{ start: 0.32, end: 5.2, text: 'Original.' }]);
+    assert.equal(readFileSync(file, 'utf8'), legacy);
+    const invalid = JSON.stringify({ videoId: 'dQw4w9WgXcQ', lang: 'en', segments: [{ start: 0, end: 6, text: 'Fake.' }] });
+    writeFileSync(file, invalid);
+    const rejected = run(['prepare', '--video', 'dQw4w9WgXcQ', '--provider', 'local', '--cache-dir', dir, '--out', join(dir, 'rejected')], { env: { YOUTUBE_RESEARCH_WRAPPER: join(dir, 'missing.mjs') } });
+    assert.equal(rejected.status, 0, rejected.stderr || rejected.stdout); assert.equal(readFileSync(file, 'utf8'), invalid);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

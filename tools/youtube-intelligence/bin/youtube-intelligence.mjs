@@ -109,18 +109,8 @@ function readLines(file) {
 }
 
 function textToSegments(text) {
-  const cleaned = String(text || '').replace(/\r/g, '').trim();
-  if (!cleaned) return [];
-  const paragraphs = cleaned.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-  const units = paragraphs.length > 1 ? paragraphs : cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
-  let cursor = 0;
-  return units.map((unit) => {
-    const words = unit.split(/\s+/).filter(Boolean).length;
-    const start = cursor;
-    const duration = Math.max(6, Math.ceil(words / 2.6));
-    cursor += duration;
-    return { start, end: cursor, text: unit };
-  });
+  const content = String(text ?? '').trim();
+  return content ? [{ text: decodeCaptionText(content), start: 0, end: 0 }] : [];
 }
 
 function findText(value) {
@@ -139,10 +129,9 @@ function findText(value) {
 function findSegments(value) {
   if (!value) return [];
   if (Array.isArray(value)) {
-    const direct = value
-      .map(coerceSegment)
-      .filter(Boolean);
-    if (direct.length) return direct;
+    const direct = value.map(coerceSegment);
+    if (direct.some(Boolean)) return direct.every(Boolean) ? direct : [];
+    if (value.some(item => item && typeof item === 'object' && ['text', 'caption', 'content'].some(key => typeof item[key] === 'string'))) return [];
     return value.flatMap(findSegments);
   }
   if (typeof value === 'object') {
@@ -154,20 +143,37 @@ function findSegments(value) {
   return [];
 }
 
+function decodeCaptionText(value) {
+  const named = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ' };
+  let text = value;
+  for (let pass = 0; pass < 2; pass++) {
+    text = text.replace(/&(#x[0-9a-f]+|#\d+|amp|quot|apos|lt|gt|nbsp);/gi, (entity, key) => {
+      if (key[0] !== '#') return named[key.toLowerCase()] ?? entity;
+      const code = key[1].toLowerCase() === 'x' ? parseInt(key.slice(2), 16) : Number(key.slice(1));
+      return code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : entity;
+    });
+  }
+  return text.trim();
+}
+
 function coerceSegment(item) {
   if (!item || typeof item !== 'object') return null;
   const text = item.text ?? item.caption ?? item.content;
   if (typeof text !== 'string' || !text.trim()) return null;
-  const offset = item.offset != null ? Number(item.offset) / 1000 : undefined;
-  const tStart = item.tStartMs != null ? Number(item.tStartMs) / 1000 : undefined;
-  const start = Number(item.start ?? item.start_seconds ?? offset ?? tStart ?? 0);
-  const rawEnd = item.end ?? item.end_seconds;
-  const rawDuration = item.duration ?? item.duration_seconds ?? item.dur ?? 0;
-  const duration = item.duration != null && item.duration_seconds == null
-    ? Number(rawDuration) / 1000
-    : Number(rawDuration);
-  const end = Number(rawEnd ?? (start + duration) ?? start);
-  return { start: Number.isFinite(start) ? start : 0, end: Number.isFinite(end) && end > start ? end : start + 6, text: text.trim() };
+  const numeric = value => (typeof value === 'number' || typeof value === 'string' && value.trim()) && Number.isFinite(Number(value)) ? Number(value) : NaN;
+  const startMs = item.start_ms ?? item.tStartMs ?? item.offset;
+  const start = item.start != null || item.start_seconds != null ? numeric(item.start ?? item.start_seconds) : numeric(startMs) / 1000;
+  const durationMs = item.duration_ms ?? item.dDurationMs;
+  const duration = durationMs != null ? numeric(durationMs) / 1000
+    : item.duration_seconds != null ? numeric(item.duration_seconds)
+    : item.duration != null ? numeric(item.duration) / (item.offset != null || item.tStartMs != null ? 1000 : 1)
+    : numeric(item.dur);
+  const end = item.end != null || item.end_seconds != null ? numeric(item.end ?? item.end_seconds)
+    : item.end_ms != null ? numeric(item.end_ms) / 1000 : start + duration;
+  // Missing timing must never block useful text. Zero denotes unknown timing;
+  // the Signals model receives plain text, never these compatibility fields.
+  if (!Number.isFinite(start) || start < 0 || !Number.isFinite(end) || end <= start) return { text: decodeCaptionText(text), start: 0, end: 0 };
+  return { start, end, text: decodeCaptionText(text) };
 }
 
 function youtubeResearchPath() {
@@ -199,14 +205,20 @@ function defaultCacheDir() {
 }
 
 function cacheFileFor(videoId, lang, cacheDir) {
-  return join(resolve(cacheDir || defaultCacheDir()), `${videoId}.${lang || 'en'}.json`);
+  return join(resolve(cacheDir || defaultCacheDir()), `${videoId}.${lang || 'en'}.v2.json`);
 }
 
 function readCachedTranscript(videoId, lang, cacheDir) {
-  const file = cacheFileFor(videoId, lang, cacheDir);
+  const current = cacheFileFor(videoId, lang, cacheDir);
+  const legacy = current.replace(/\.v2\.json$/, '.json');
+  const file = existsSync(current) ? current : legacy;
   if (!existsSync(file)) return null;
-  const parsed = JSON.parse(readFileSync(file, 'utf8'));
-  const segments = findSegments(parsed);
+  let parsed;
+  try { parsed = JSON.parse(readFileSync(file, 'utf8')); } catch { return null; }
+  if (parsed.videoId !== videoId || parsed.lang !== (lang || 'en')) return null;
+  // Legacy normalized segments may contain fabricated 0..6 timings. Reparse
+  // original provider evidence only; never overwrite or delete the old cache.
+  const segments = findSegments(parsed.raw ?? parsed.segments);
   if (!segments.length) return null;
   return {
     provider: parsed.provider || 'cache',
@@ -221,6 +233,7 @@ function writeCachedTranscript(videoId, lang, transcript, cacheDir) {
   const file = cacheFileFor(videoId, lang, cacheDir);
   ensureDir(dirname(file));
   writeFileSync(file, JSON.stringify({
+    parserVersion: 2,
     videoId,
     lang: lang || 'en',
     provider: transcript.provider,
@@ -259,8 +272,6 @@ function requireTestOnlyMockEnv() {
 function parseTranscriptResponse(parsed, provider = 'supadata') {
   const segments = findSegments(parsed);
   if (segments.length) return { provider, raw: parsed, segments };
-  const transcriptText = findText(parsed);
-  if (transcriptText) return { provider, raw: parsed, segments: textToSegments(transcriptText) };
   return null;
 }
 
@@ -384,17 +395,11 @@ function fetchLocalTranscript(videoId, lang) {
     throw new Error((result.stderr || result.stdout || `youtube-research exited ${result.status}`).trim());
   }
   const raw = result.stdout.trim();
-  try {
-    const parsed = JSON.parse(raw);
-    const segments = findSegments(parsed);
-    if (segments.length) return { provider: 'youtube-research', raw: parsed, segments };
-    const text = findText(parsed);
-    if (text) return { provider: 'youtube-research', raw: parsed, segments: textToSegments(text) };
-  } catch {
-    const segments = textToSegments(raw);
-    if (segments.length) return { provider: 'youtube-research', raw, segments };
-  }
-  throw new Error('youtube-research returned no transcript text');
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { throw new Error('youtube-research returned no timestamped transcript JSON'); }
+  const segments = findSegments(parsed);
+  if (segments.length) return { provider: 'youtube-research', raw: parsed, segments };
+  throw new Error('youtube-research returned no verified timestamped transcript segments');
 }
 
 async function fetchTranscript(videoId, lang, options = {}) {

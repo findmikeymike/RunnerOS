@@ -37,7 +37,7 @@ test('pins one URL, exact official input casing and conservative operation caps'
   await monidVideoMetadata('/hq', videoId, signal, f.deps);
   expect(f.calls.map(call => call.root)).toEqual(['/hq', '/hq', '/hq']);
   expect(f.calls.map(call => call.operation.maxCostUsd)).toEqual([0.02, 0.25, 0.02]);
-  expect(f.calls.map(call => call.operation.input.maxResults)).toEqual([1, 50, 1]);
+  expect(f.calls.map(call => call.operation.input.maxResults)).toEqual([1, 10, 1]);
   expect(f.calls[1]!.signal).toBe(signal);
   for (const { operation } of f.calls) {
     expect(operation.endpoint).toBe('/streamers/youtube-scraper');
@@ -102,7 +102,7 @@ test('recent list enforces channel identity, uniqueness, limit and truthful comp
   const recent = await monidRecentVideos('/hq', channelId, undefined, f.deps);
   expect(recent.complete).toBe(true); expect(recent.videos[0]!.videoId).toBe(videoId);
   expect(await monidRecentVideos('/hq', channelId, undefined, fixture([]).deps)).toEqual({ videos: [], complete: false });
-  const fifty = Array.from({ length: 50 }, (_, i) => ({ ...row(), id: String(i).padStart(11, '0'), url: undefined }));
+  const fifty = Array.from({ length: 10 }, (_, i) => ({ ...row(), id: String(i).padStart(11, '0'), url: undefined }));
   expect((await monidRecentVideos('/hq', channelId, undefined, fixture(fifty).deps)).complete).toBe(false);
   for (const output of [[...fifty, row()], [row(), row()], [{ ...row(), channelId: `UC${'b'.repeat(22)}`, channelUrl: `https://youtube.com/channel/UC${'b'.repeat(22)}` }]]) {
     await expect(monidRecentVideos('/hq', channelId, undefined, fixture(output).deps)).rejects.toThrow();
@@ -222,7 +222,7 @@ test('expired metadata polls within its scope and permits fresh guarded work onl
   expect(f.budget.getStatus().spentLast7DaysUsd).toBe(0.008);
 });
 test('current price, operation ceiling and user budget block before any paid run', async () => {
-  const expensive = guardedFixture(); expensive.controls.unitPrice = 0.006;
+  const expensive = guardedFixture(); expensive.controls.unitPrice = 0.026;
   await expect(monidRecentVideos(expensive.root, channelId, undefined, expensive.deps)).rejects.toThrow();
   expect(expensive.calls).toEqual(['monid_inspect']);
   const single = guardedFixture(); single.controls.unitPrice = 0.021;

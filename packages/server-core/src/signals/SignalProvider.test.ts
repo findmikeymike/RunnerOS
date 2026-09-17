@@ -1,5 +1,5 @@
 import { expect, test, mock } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { LocalSignalProvider } from './SignalProvider';
@@ -37,7 +37,7 @@ test('native channel-uploads inherits only a validated envelope identity', async
   expect(await provider.recent(channelId)).toEqual({ videos: [{ videoId, channelId, publishedAt, title: 'Fixture', sourceUrl: upload.watchUrl }], complete: true });
   response = { channelId, uploads: [] };
   expect(await provider.recent(channelId)).toEqual({ videos: [], complete: true });
-  response = { channelId, uploads: Array(50).fill(upload) };
+  response = { channelId, uploads: Array(10).fill(upload) };
   expect((await provider.recent(channelId)).complete).toBe(false);
   for (const invalid of [
     { uploads: [upload] },
@@ -74,16 +74,29 @@ test('validated full cached transcript is reused without running a provider', as
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('cached plain transcript is usable regardless of missing or old timing', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'signals-text-')); const videoId = 'abcdefghijk';
+  try {
+    const directory = join(root, 'signals/evidence', videoId); mkdirSync(directory, { recursive: true });
+    const value = { videoId, provider: 'cached', segments: Array.from({ length: 20 }, () => ({ text: 'Useful transcript text' })) };
+    const path = join(directory, 'raw-transcript.json'); const original = JSON.stringify(value); writeFileSync(path, original);
+    const command = mock(async () => { throw new Error('No recollection needed'); });
+    const provider = new LocalSignalProvider(undefined, { command });
+    expect(await provider.transcript(root, videoId)).toEqual(value);
+    expect(command).toHaveBeenCalledTimes(0); expect(readFileSync(path, 'utf8')).toBe(original);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 for (const localWorks of [true, false]) test(`guarded Zero fallback is ${localWorks ? 'not used after native success' : 'used once after native and Monid failure'}`, async () => {
   const root = mkdtempSync(join(tmpdir(), 'signals-provider-'));
   const videoId = 'abcdefghijk';
   const transcript = { videoId, provider: 'fixture', segments: [{ start: 1, end: 3, text: 'Evidence' }] };
   const sequence: string[] = [];
   try {
-    const command = mock(async (name: string) => {
+    const command = mock(async (name: string, args: string[]) => {
       sequence.push(name);
       if (!localWorks) throw new Error('local unavailable');
-      writeFileSync(join(root, 'signals/evidence', videoId, 'raw-transcript.json'), JSON.stringify(transcript));
+      writeFileSync(join(args[args.indexOf('--out') + 1]!, 'raw-transcript.json'), JSON.stringify(transcript));
       return { ok: true, videoId };
     });
     const zeroTranscript = mock(async (hq: string, id: string) => { expect(hq).toBe(root); expect(id).toBe(videoId); sequence.push('zero'); return transcript; });

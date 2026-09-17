@@ -33,7 +33,48 @@ export async function createMonidSignalClient(root: string): Promise<PoolClient>
   const manager = getSourceCredentialManager();
   const token = await monidSignalToken(source, manager);
   if (!token) throw new MonidSignalError('Connect Monid in Connections > Services.', false);
-  return new CraftMcpClient({ transport: 'http', url: 'https://mcp.monid.ai/v1', headers: { Authorization: `Bearer ${token}` } });
+  return withMonidRunRetrieval(new CraftMcpClient({ transport: 'http', url: 'https://mcp.monid.ai/v1', headers: { Authorization: `Bearer ${token}` } }), token);
+}
+
+/** Monid's documented read-only result API avoids a stalled MCP SSE result stream.
+ * https://docs.monid.ai/api/runs.html — same OAuth credential, same saved run.
+ * Paid inspect/run calls remain on MCP with the existing allowance and receipts. */
+export function withMonidRunRetrieval(client: PoolClient, token: string, fetcher: typeof fetch = fetch): PoolClient {
+  const active = new Set<AbortController>();
+  return {
+    listTools: () => client.listTools(),
+    async callTool(name, args) {
+      if (name !== 'monid_get_run') return client.callTool(name, args);
+      const runId = args.runId;
+      if (typeof runId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(runId)) throw new MonidSignalError('Invalid saved Monid run identifier.', false);
+      const controller = new AbortController(); active.add(controller);
+      const timer = setTimeout(() => controller.abort(), 20_000);
+      try {
+        const response = await fetcher(`https://api.monid.ai/v1/runs/${encodeURIComponent(runId)}`, {
+          method: 'GET', headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+          redirect: 'error', signal: controller.signal,
+        });
+        if (response.status === 401 || response.status === 403) throw new MonidSignalError('Monid refused access to this saved result. Check the Monid connection permissions.', false, runId);
+        if (!response.ok || !response.body) throw new MonidSignalError('Monid result retrieval is temporarily unavailable. Retry to resume the saved run.', false, runId);
+        const reader = response.body.getReader();
+        const parts: Uint8Array[] = []; let size = 0;
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > MAX_BYTES) throw new MonidSignalError('Monid result exceeds the supported size. The saved run has been preserved.', false, runId);
+            parts.push(value);
+          }
+        } finally { void reader.cancel().catch(() => {}); }
+        return JSON.parse(Buffer.concat(parts).toString('utf8'));
+      } catch (error) {
+        if (error instanceof MonidSignalError) throw error;
+        throw new MonidSignalError('Monid result retrieval failed or timed out. Retry to resume the saved run without another submission.', false, runId);
+      } finally { clearTimeout(timer); controller.abort(); active.delete(controller); }
+    },
+    async close() { for (const controller of active) controller.abort(); await client.close(); },
+  };
 }
 
 export async function monidSignalToken(source: Parameters<ReturnType<typeof getSourceCredentialManager>['getToken']>[0],
@@ -289,11 +330,10 @@ export function monidSignalTranscript(root: string, videoId: string, signal?: Ab
         || !row.transcript.length || row.transcript.length > 20_000) throw new Error('Monid returned no verified transcript for this video.');
       let total = 0;
       const segments = row.transcript.map((part: unknown) => {
-        if (!object(part) || typeof part.text !== 'string' || !part.text.trim() || !Number.isFinite(part.start) || part.start < 0
-          || !Number.isFinite(part.end) || part.end < part.start) throw new Error('Monid transcript has invalid timestamps.');
+        if (!object(part) || typeof part.text !== 'string' || !part.text.trim()) throw new Error('Monid returned no usable transcript text.');
         total += part.text.length;
         if (total > 2_000_000) throw new Error('Monid transcript is too large.');
-        return { start: part.start, end: part.end, text: part.text };
+        return { start: Number.isFinite(part.start) ? part.start : 0, end: Number.isFinite(part.end) ? part.end : 0, text: part.text };
       });
       return { videoId, segments, provider: `monid:apify${TRANSCRIPT}` };
     },
