@@ -39,7 +39,7 @@ test('bundled native metadata envelopes round-trip through the Signals adapter u
     const binary = resolve(import.meta.dir, '../../../../tools/youtube-research/bin', `${process.platform}-${process.arch}`, process.platform === 'win32' ? 'youtube-pp-cli.exe' : 'youtube-pp-cli');
     const provider = new LocalSignalProvider(undefined, { command: async (name, args) => {
       expect(name).toBe('youtube-research');
-      if (args[1] === 'channel-uploads') expect(args.slice(args.indexOf('--top'), args.indexOf('--top') + 2)).toEqual(['--top', '10']);
+      if (args[1] === 'channel-uploads') expect(args.slice(args.indexOf('--top'), args.indexOf('--top') + 2)).toEqual(['--top', '5']);
       const invocationHome = mkdtempSync(join(home, 'invocation-'));
       const { stdout } = await execute(binary, args, {
         cwd: invocationHome, timeout: 10_000, maxBuffer: 2 * 1024 * 1024,
@@ -59,15 +59,15 @@ test('bundled native metadata envelopes round-trip through the Signals adapter u
     expect(await provider.recent(channelId)).toMatchObject({ complete: true, videos: [{ videoId, channelId }] });
     uploadCount = 0;
     expect(await provider.recent(channelId)).toEqual({ complete: true, videos: [] });
-    uploadCount = 9;
+    uploadCount = 4;
     const belowCap = await provider.recent(channelId);
-    expect(belowCap.videos).toHaveLength(9);
+    expect(belowCap.videos).toHaveLength(4);
     expect(belowCap.complete).toBe(true);
-    // The upstream fixture has more than ten uploads; the native command must
+    // The upstream fixture has more than five uploads; the native command must
     // honor the bounded scan and the adapter must report incomplete discovery.
     uploadCount = 50;
     const capped = await provider.recent(channelId);
-    expect(capped.videos).toHaveLength(10);
+    expect(capped.videos).toHaveLength(5);
     expect(capped.complete).toBe(false);
     expect(calls.some(path => path.endsWith('/channels'))).toBe(true);
     expect(calls.some(path => path.endsWith('/videos'))).toBe(true);

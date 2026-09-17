@@ -4,7 +4,7 @@ import { runMonidSignalOperation } from './monid-transcript';
 // Pinned public contract: https://apify.com/streamers/youtube-scraper/input-schema
 // Monid still inspects current schema/pricing before every new paid operation.
 const ENDPOINT = '/streamers/youtube-scraper';
-const RECENT_LIMIT = 10;
+const RECENT_LIMIT = 5;
 const SINGLE_CAP_USD = 0.02;
 const LIST_CAP_USD = 0.25;
 interface MetadataDeps { run?: typeof runMonidSignalOperation; attemptScope?: string; signal?: AbortSignal }

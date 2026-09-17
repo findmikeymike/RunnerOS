@@ -180,6 +180,11 @@ export interface SessionScopedToolCallbacks {
   ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
   findSignalIdeasFn?: (input: import('../shared-intel/signal-retrieval.ts').FindSignalIdeasInput) => Promise<import('../shared-intel/signal-retrieval.ts').SignalLookupResult>;
   /** Artist website: read the manifest, edit content, render, preview, audit. */
+  composioStatusFn?: (input: Record<string, never>) => Promise<unknown>;
+  composioGmailSearchFn?: (input: import('@craft-agent/session-tools-core').ComposioSearchInput) => Promise<import('@craft-agent/session-tools-core').ComposioToolResult>;
+  composioGmailReadFn?: (input: import('@craft-agent/session-tools-core').ComposioReadInput) => Promise<import('@craft-agent/session-tools-core').ComposioToolResult>;
+  composioGmailDraftFn?: (input: import('@craft-agent/session-tools-core').ComposioEmailInput) => Promise<import('@craft-agent/session-tools-core').ComposioToolResult>;
+  composioGmailSendFn?: (input: import('@craft-agent/session-tools-core').ComposioEmailInput) => Promise<import('@craft-agent/session-tools-core').ComposioToolResult>;
   getWebsiteCampaignContextFn?: (
     input: import('@craft-agent/session-tools-core').GetWebsiteCampaignContextInput,
   ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;

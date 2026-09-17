@@ -719,6 +719,8 @@ export function classifyGmailMutation(
   input: Record<string, unknown>,
 ): GmailMutationKind | null {
   const normalizedTool = toolName.toLowerCase();
+  if (normalizeSessionToolName(normalizedTool) === 'composio_gmail_send') return 'send';
+  if (normalizeSessionToolName(normalizedTool) === 'composio_gmail_draft') return 'draft';
   if (!normalizedTool.includes('api_gmail')) return null;
 
   const method = String(input.method ?? 'GET').toUpperCase();
@@ -1019,8 +1021,10 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
     return {
       type: 'prompt',
       promptType: 'api_mutation',
-      description: `Approve sending this exact Gmail message now\n${JSON.stringify(input)}`,
-      command: `POST ${String(input.path ?? '')}`,
+      description: normalizedSessionTool === 'composio_gmail_send'
+        ? `Approve sending this exact Gmail message via Composio now\nFrom: ${String(input.accountEmail ?? '')}\nSelected account: ${String(input.accountId ?? '')}\nTo: ${String(input.to ?? '')}\nCC: ${JSON.stringify(input.cc ?? [])}\nBCC: ${JSON.stringify(input.bcc ?? [])}\nSubject: ${String(input.subject ?? '')}\n\n${String(input.body ?? '')}`
+        : `Approve sending this exact Gmail message now\n${JSON.stringify(input)}`,
+      command: normalizedSessionTool === 'composio_gmail_send' ? toolName : `POST ${String(input.path ?? '')}`,
       modifiedInput: wasModified ? currentInput : undefined,
     };
   }

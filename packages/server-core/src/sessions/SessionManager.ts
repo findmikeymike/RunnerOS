@@ -1,3 +1,6 @@
+import { createComposioSessionCallbacks } from '@craft-agent/shared/agent'
+import { getComposioService } from '../composio/service.ts'
+import { assertGlobalSecretVaultPermission } from '../handlers/rpc/team-permission-helpers.ts'
 import { DurableWorkflowEligibilityError } from '../workflows/durable-workflow-eligibility'
 import { manageArtistBrain } from '../hq-state/brain-setup';
 import { importArtistCommunityContacts } from '../community/import-contacts';
@@ -9462,6 +9465,13 @@ user a clickable link to where the thing now lives.`
       const websiteAssetContext = (campaignWorkspaceId?: string) =>
         resolveWebsiteAssetContext(websiteCampaignActor(), campaignWorkspaceId)
       mergeSessionScopedToolCallbacks(managed.id, {
+        ...createComposioSessionCallbacks({
+          actor: () => ({ agentSlug: managed.spawnedFromAgent?.agentSlug,
+            scope: getWorkspaceByNameOrId(managed.workspace.id)?.artistWorkspaceScope,
+            variant: RUNTIME_IDENTITY.variant }),
+          authorize: () => assertGlobalSecretVaultPermission(managed.workspace.id, 'Composio Gmail access'),
+          service: getComposioService(),
+        }),
         ...(managed.spawnedFromAgent?.agentSlug === 'website-agent'
           && (managed.workspace.artistWorkspaceScope === 'hq' || managed.workspace.artistWorkspaceScope === 'campaign')
           ? { getWebsiteCampaignContextFn: async (input) => getWebsiteCampaignContext(websiteCampaignActor(), input) }

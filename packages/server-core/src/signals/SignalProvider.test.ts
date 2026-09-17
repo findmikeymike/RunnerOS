@@ -37,7 +37,7 @@ test('native channel-uploads inherits only a validated envelope identity', async
   expect(await provider.recent(channelId)).toEqual({ videos: [{ videoId, channelId, publishedAt, title: 'Fixture', sourceUrl: upload.watchUrl }], complete: true });
   response = { channelId, uploads: [] };
   expect(await provider.recent(channelId)).toEqual({ videos: [], complete: true });
-  response = { channelId, uploads: Array(10).fill(upload) };
+  response = { channelId, uploads: Array(5).fill(upload) };
   expect((await provider.recent(channelId)).complete).toBe(false);
   for (const invalid of [
     { uploads: [upload] },

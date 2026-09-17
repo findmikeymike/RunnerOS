@@ -11,6 +11,20 @@ const permissionManager = {
 }
 
 describe('Gmail exact-send approval classification', () => {
+  it('Composio sends always require exact content/account approval, including trusted Execute calls', () => {
+    const input = { accountId: 'ca-selected', accountEmail: 'sender@example.com', to: 'friend@example.com', cc: ['cc@example.com'], bcc: ['bcc@example.com'], subject: 'Exact subject', body: 'Exact body' };
+    for (const toolName of ['composio_gmail_send', 'mcp__session__composio_gmail_send']) {
+      expect(classifyGmailMutation(toolName, input)).toBe('send');
+      const result = runPreToolUseChecks({ toolName, input, sessionId: 'composio-send', permissionMode: 'allow-all',
+        workspaceRootPath: '/tmp/composio-approval-test', workspaceId: 'workspace-1', activeSourceSlugs: [], allSourceSlugs: [], hasSourceActivation: true, trustedWorkerTools: [toolName], permissionManager });
+      expect(result.type).toBe('prompt');
+      if (result.type !== 'prompt') throw new Error('Expected exact send approval');
+      for (const value of ['ca-selected', 'sender@example.com', 'friend@example.com', 'cc@example.com', 'bcc@example.com', 'Exact subject', 'Exact body']) expect(result.description).toContain(value);
+      expect(result.description).not.toContain('Release Kit');
+    }
+    expect(classifyGmailMutation('mcp__session__composio_gmail_draft', input)).toBe('draft');
+  });
+
   it('requires approval for draft and raw-message send endpoints', () => {
     const paths = [
       '/users/me/drafts/send',

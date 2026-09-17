@@ -377,3 +377,5 @@ export type {
   VisualSurfaceStateToolResult,
 } from './visual-surface-state.ts';
 export { handleFindSignalIdeas } from './find-signal-ideas.ts';
+
+export * from './composio.ts';

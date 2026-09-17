@@ -1321,17 +1321,12 @@ College Radio packet intake:
 - A delegated request to send must include the user's verbatim approval from the current turn covering the exact recipient, sender/account, subject, body, links/attachments, and action. A summary such as "the user approved" is not approval.
 
 Delivery:
-- Gmail is optional. The core job still succeeds without Gmail: find the email, research the person, and produce a clean copy-paste packet the user can send from their own Gmail or any inbox.
-- If Gmail is not connected or unavailable, do not block. Say "Gmail is not connected" and return the finished subject, recipient, and body for manual copy/paste.
-- If Gmail is connected, prefer a Gmail draft first. Build an RFC 2822 message with To, Subject, and body, base64url encode it, then call the Gmail API draft endpoint: \`POST /users/me/drafts\` with \`{"message":{"raw":"<base64url>"}}\`.
-- After draft creation, return the draft id/link if provided. Only send the existing draft after the user explicitly approves:
-  - recipient email
-  - subject
-  - body
-  - sender/account
-  - draft id
-- To send an approved draft, call \`POST /users/me/drafts/send\` with \`{"id":"<draftId>"}\`. If sending fails or Gmail is not connected, keep the draft/manual copy-paste packet as the finished deliverable.
-- After sending, return the Gmail receipt/thread/message id if the tool provides it.
+- Gmail is optional. Without a usable connection, return the finished recipient, subject and body as a manual copy-paste packet.
+- Follow the current runtime Gmail connection routing guidance. Preserve the selected sender and route; do not assume the native Gmail source is the only available connection.
+- Composio has dedicated status, search, read, draft and send tools. Its send tool sends the exact supplied plain-text content, not a saved draft ID. Do not invent attachment support or claim it sends edits made to a saved Gmail draft.
+- With an explicitly selected native Gmail source, use that source's current guide and actual API schema for draft creation or sending an approved existing draft. Do not apply native API payloads to Composio tools.
+- Prefer a private draft when requested. Sending requires the user's current-turn approval covering the exact sender, recipients, subject, body, and any supported attachments.
+- Return the actual provider receipt. Stop on uncertain delivery; never retry through another connection automatically.
 
 Compliance and reputation guard:
 - Do not help with spam, deceptive identity, scraped bulk campaigns, sensitive targeting, or harassment.

@@ -10,6 +10,7 @@ import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { LoadedSource, MonidBudgetStatus, SourceCredentialScopeResult, UserSecretSummary, ZeroStatus } from '../../../shared/types'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { navigate, routes } from '@/lib/navigate'
+import { ComposioConnectionCard } from './ComposioConnectionCard'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -697,6 +698,7 @@ const PRESET_BY_NAME = new Map(SECRET_PRESETS.map((preset) => [preset.name, pres
 export default function SecretsSettingsPage() {
   const { activeWorkspaceId } = useAppShellContext()
   const [secrets, setSecrets] = React.useState<UserSecretSummary[]>([])
+  const [composioReady, setComposioReady] = React.useState(false)
   const [sources, setSources] = React.useState<LoadedSource[]>([])
   const [monid, setMonid] = React.useState<SourceCredentialScopeResult | null>(null)
   const [monidBudget, setMonidBudget] = React.useState<MonidBudgetStatus | null>(null)
@@ -744,6 +746,7 @@ export default function SecretsSettingsPage() {
     setLoading(true)
     setCanManageSecrets(null)
     setSecrets([])
+    setComposioReady(false)
     setZero(null)
     setSources([])
     setGmailScope(null)
@@ -1255,8 +1258,8 @@ export default function SecretsSettingsPage() {
                         : service.id === 'zero'
                           ? zero?.installed === true && zero.walletConfigured
                         : serviceStatus(service, savedByName, sourceBySlug, draftValues) === 'ready'
-                    )).length + (group === 'Essential' && monid?.hasEffectiveCredential ? 1 : 0)
-                    const serviceCount = groupServices.length + (group === 'Essential' ? 1 : 0)
+                    )).length + (group === 'Essential' && monid?.hasEffectiveCredential ? 1 : 0) + (group === 'Essential' && composioReady ? 1 : 0)
+                    const serviceCount = groupServices.length + (group === 'Essential' ? 2 : 0)
                     return (
                       <button
                         key={group}
@@ -1278,6 +1281,7 @@ export default function SecretsSettingsPage() {
               </SettingsCard>
 
               <div className="space-y-3">
+                {selectedGroup === 'Essential' && activeWorkspaceId ? <ComposioConnectionCard key={activeWorkspaceId} workspaceId={activeWorkspaceId} onReadyChange={setComposioReady} /> : null}
                 {selectedGroup === 'Essential' ? (
                   <SettingsCard className="!border-0 bg-[#111113] shadow-none">
                     <div className="p-3">

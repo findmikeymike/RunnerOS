@@ -217,3 +217,5 @@ export {
   type ListPendingOptions,
   type EscalationListener,
 } from './escalation-store.ts';
+
+export { createComposioSessionCallbacks } from './composio-session-callbacks.ts';

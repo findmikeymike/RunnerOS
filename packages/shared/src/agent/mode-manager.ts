@@ -2143,6 +2143,7 @@ export function shouldAllowToolInMode(
         includeSupplyWorkInput: true,
         includeManagerTools: true,
         includeWebsiteCampaignContext: true,
+        includeComposioTools: true,
         includeCampaignManagerTools: true,
         includeLabTools: true,
         includeSessionTasks: true,

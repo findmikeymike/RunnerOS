@@ -164,6 +164,13 @@ export const RPC_CHANNELS = {
   credentials: {
     HEALTH_CHECK: 'credentials:healthCheck',
   },
+  composio: {
+    STATUS: 'composio:status',
+    SAVE_KEY: 'composio:saveKey',
+    CONNECT: 'composio:connect',
+    REFRESH: 'composio:refresh',
+    DISCONNECT: 'composio:disconnect',
+  },
   secrets: {
     LIST: 'secrets:list',
     SAVE: 'secrets:save',

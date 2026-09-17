@@ -34,6 +34,7 @@ import type {
 // Mode types from dedicated subpath export (avoids pulling in SDK)
 import type { PermissionMode } from '@craft-agent/shared/agent/modes';
 import type { SessionLogEntry } from '@craft-agent/shared/sessions-log';
+import type { ComposioStatus } from '@craft-agent/shared/composio';
 import type {
   ArtistOSActivateInputV1,
   ArtistOSLicenseCommandResultV1,
@@ -863,6 +864,11 @@ export interface ElectronAPI {
   fundZero(workspaceId: string, amount?: string): Promise<{ success: boolean; fundingUrl?: string; output?: string; error?: string }>
   claimZeroWelcome(workspaceId: string): Promise<{ success: boolean; output?: string; error?: string }>
   getMonidBudget(workspaceId: string): Promise<MonidBudgetStatus>
+  composioStatus(workspaceId: string): Promise<ComposioStatus>
+  composioSaveKey(workspaceId: string, key: string): Promise<ComposioStatus>
+  composioConnect(workspaceId: string): Promise<{ redirectUrl: string }>
+  composioRefresh(workspaceId: string): Promise<ComposioStatus>
+  composioDisconnect(workspaceId: string): Promise<ComposioStatus>
   setMonidBudget(workspaceId: string, args: { singleCallCapUsd: number; weeklyCapUsd: number }): Promise<MonidBudgetStatus>
 
   // Onboarding

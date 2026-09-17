@@ -1,4 +1,5 @@
 import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
+import { canUseComposioGmail } from '../composio/policy.ts';
 import type { SessionToolFilterOptions } from '@craft-agent/session-tools-core';
 
 /** Role/scope policy shared by backend adapters; runtime and backend flags stay local. */
@@ -10,6 +11,7 @@ export type SessionRoleToolFilterOptions = Required<Pick<SessionToolFilterOption
   | 'includeSupplyWorkInput'
   | 'includeManagerTools'
   | 'includeWebsiteCampaignContext'
+  | 'includeComposioTools'
   | 'includeCampaignManagerTools'
   | 'includeLabTools'
   | 'includeSocialVariantTools'
@@ -32,6 +34,7 @@ export function deriveSessionToolFilterOptions(
     includeSupplyWorkInput: isManager,
     includeManagerTools: isManager && (artistWorkspaceScope === 'hq' || artistWorkspaceScope === 'campaign'),
     includeWebsiteCampaignContext: isArtistOS && agentSlug === 'website-agent' && (artistWorkspaceScope === 'hq' || artistWorkspaceScope === 'campaign'),
+    includeComposioTools: canUseComposioGmail(agentSlug, artistWorkspaceScope, variant),
     includeCampaignManagerTools: isManager && artistWorkspaceScope === 'campaign',
     includeLabTools: artistWorkspaceScope === 'lab',
     includeSocialVariantTools: agentSlug === 'raw-video-editor',

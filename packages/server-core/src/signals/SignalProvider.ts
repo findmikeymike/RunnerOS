@@ -103,15 +103,15 @@ export class LocalSignalProvider implements SignalProvider {
   async recent(channelId: string, signal?: AbortSignal, root?: string, attemptScope?: string): Promise<{ videos: SignalVideoMetadata[]; complete: boolean }> {
     if (!SIGNAL_CHANNEL_ID.test(channelId)) throw new Error('Invalid canonical channel.');
     try {
-      const result = await this.call('youtube-research', ['youtube', 'channel-uploads', channelId, '--top', '10', '--json', '--no-input', '--data-source', 'live'], signal);
+      const result = await this.call('youtube-research', ['youtube', 'channel-uploads', channelId, '--top', '5', '--json', '--no-input', '--data-source', 'live'], signal);
       // channel-uploads puts channel identity on the envelope, not each upload.
       const hasUploadsEnvelope = result && typeof result === 'object' && !Array.isArray(result) && 'uploads' in result;
       if (hasUploadsEnvelope && (result.channelId !== channelId || !Array.isArray(result.uploads))) throw new Error('Channel evidence identity mismatch.');
       const uploads = hasUploadsEnvelope ? result.uploads : rows(result);
-      if (uploads.length > 10) throw new Error('YouTube exceeded the requested upload limit.');
+      if (uploads.length > 5) throw new Error('YouTube exceeded the requested upload limit.');
       const videos = uploads.map((row: unknown) => metadata(row, hasUploadsEnvelope ? result.channelId : undefined));
       if (videos.some((video: SignalVideoMetadata) => video.channelId !== channelId)) throw new Error('Channel evidence identity mismatch.');
-      return { videos, complete: videos.length < 10 };
+      return { videos, complete: videos.length < 5 };
     } catch (error) {
       signal?.throwIfAborted();
       if (!root) throw error;

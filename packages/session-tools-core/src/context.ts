@@ -455,6 +455,11 @@ export interface SessionToolContext {
 
   /** Read the artist website manifest: mode, urls, domain, policy, last build. */
   /** Bounded approved Campaign context for Website Agent. */
+  composioStatus?(input: Record<string, never>): Promise<unknown>;
+  composioGmailSearch?(input: import('./handlers/composio.ts').ComposioSearchInput): Promise<import('./handlers/composio.ts').ComposioToolResult>;
+  composioGmailRead?(input: import('./handlers/composio.ts').ComposioReadInput): Promise<import('./handlers/composio.ts').ComposioToolResult>;
+  composioGmailDraft?(input: import('./handlers/composio.ts').ComposioEmailInput): Promise<import('./handlers/composio.ts').ComposioToolResult>;
+  composioGmailSend?(input: import('./handlers/composio.ts').ComposioEmailInput): Promise<import('./handlers/composio.ts').ComposioToolResult>;
   getWebsiteCampaignContext?(input: import('./handlers/website.ts').GetWebsiteCampaignContextInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
   getWebsiteManifest?(input: import('./handlers/website.ts').GetWebsiteManifestInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
   /** Scaffold a new website in this workspace from a starter template. */

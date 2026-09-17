@@ -138,6 +138,11 @@ export const CHANNEL_MAP = {
   fundZero: invoke(RPC_CHANNELS.secrets.FUND_ZERO),
   claimZeroWelcome: invoke(RPC_CHANNELS.secrets.CLAIM_ZERO_WELCOME),
   getMonidBudget: invoke(RPC_CHANNELS.secrets.MONID_BUDGET_GET),
+  composioStatus: invoke(RPC_CHANNELS.composio.STATUS),
+  composioSaveKey: invoke(RPC_CHANNELS.composio.SAVE_KEY),
+  composioConnect: invoke(RPC_CHANNELS.composio.CONNECT),
+  composioRefresh: invoke(RPC_CHANNELS.composio.REFRESH),
+  composioDisconnect: invoke(RPC_CHANNELS.composio.DISCONNECT),
   setMonidBudget: invoke(RPC_CHANNELS.secrets.MONID_BUDGET_SET),
 
   // Onboarding

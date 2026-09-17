@@ -7,6 +7,8 @@ source_of_truth: true
 
 # Google OAuth Production App
 
+September 17, 2026: [Composio Gmail](../integrations/composio-gmail.md) now provides an optional hosted-auth implementation using the user's Composio project key; real-account acceptance is pending. This does not complete the native Google app work below or add hosted Calendar/Drive/YouTube support.
+
 ## Goal
 
 Submit and verify a Runner-owned Google OAuth app so normal users can connect Gmail, Calendar, and Drive with a standard **Connect Google** flow instead of creating their own Google Cloud project and OAuth credentials.

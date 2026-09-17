@@ -7,6 +7,20 @@ import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
 
 describe('shared session tool role and scope derivation', () => {
+  test('Composio tools belong only to approved Artist OS communication roles in HQ/Campaign', () => {
+    for (const role of ['concierge', 'comms-agent', 'outreach-agent', 'builder', 'gravity', undefined]) {
+      for (const scope of ['hq', 'campaign', 'lab', undefined]) {
+        for (const variant of ['artist-os', 'runneros']) {
+          const options = deriveSessionToolFilterOptions(role, scope, variant);
+          const expected = ['concierge', 'comms-agent', 'outreach-agent'].includes(role ?? '') && variant === 'artist-os' && (scope === 'hq' || scope === 'campaign');
+          expect(options.includeComposioTools).toBe(expected);
+          expect(getSessionToolDefs(options).some(tool => tool.name === 'composio_gmail_send')).toBe(expected);
+          expect(getSessionToolProxyDefs(options).some(tool => tool.name === 'mcp__session__composio_gmail_send')).toBe(expected);
+        }
+      }
+    }
+  });
+
   test('Website source context belongs only to Website Agent in Artist HQ or Campaigns', () => {
     for (const role of ['website-agent', 'site-builder', 'concierge', undefined]) {
       for (const scope of ['hq', 'campaign', 'lab', undefined]) {

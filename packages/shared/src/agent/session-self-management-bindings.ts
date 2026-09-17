@@ -330,6 +330,26 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'composioStatus', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.composioStatusFn; },
+    configurable: true, enumerable: true,
+  });
+  Object.defineProperty(context, 'composioGmailSearch', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.composioGmailSearchFn; },
+    configurable: true, enumerable: true,
+  });
+  Object.defineProperty(context, 'composioGmailRead', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.composioGmailReadFn; },
+    configurable: true, enumerable: true,
+  });
+  Object.defineProperty(context, 'composioGmailDraft', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.composioGmailDraftFn; },
+    configurable: true, enumerable: true,
+  });
+  Object.defineProperty(context, 'composioGmailSend', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.composioGmailSendFn; },
+    configurable: true, enumerable: true,
+  });
   Object.defineProperty(context, 'getWebsiteCampaignContext', {
     get() { return getSessionScopedToolCallbacks(sessionId)?.getWebsiteCampaignContextFn; },
     configurable: true,

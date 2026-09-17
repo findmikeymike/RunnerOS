@@ -31,6 +31,10 @@ No integration is marked "fully end-to-end verified" until it passes:
 
 ## Live Verification Queue
 
+### Composio Gmail
+
+Implemented September 17, 2026. Use the [setup guide and live acceptance checklist](../integrations/composio-gmail.md). Real-account OAuth, restart persistence, mailbox reads, a requested draft, and one explicitly approved test send remain unverified. Existing native Google connections remain separate.
+
 ### Shopify Agent
 
 - [ ] Create/connect a Shopify custom app token through Settings -> Secrets.

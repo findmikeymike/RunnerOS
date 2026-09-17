@@ -574,3 +574,5 @@ export type { CustomSkillIdentity, CreateCustomSkillInput, UpdateCustomSkillInpu
 
 export { proposeBrandingUpdateSchema } from './handlers/propose-branding-update.ts';
 export type { ProposeBrandingUpdateInput } from './handlers/propose-branding-update.ts';
+
+export * from './handlers/composio.ts';

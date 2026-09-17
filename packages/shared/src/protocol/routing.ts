@@ -341,6 +341,12 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.credentials.HEALTH_CHECK,
 
   // secrets — runtime/user env vault on the owning server
+  // Composio credentials and hosted sessions live on the workspace's server.
+  RPC_CHANNELS.composio.STATUS,
+  RPC_CHANNELS.composio.SAVE_KEY,
+  RPC_CHANNELS.composio.CONNECT,
+  RPC_CHANNELS.composio.REFRESH,
+  RPC_CHANNELS.composio.DISCONNECT,
   RPC_CHANNELS.secrets.LIST,
   RPC_CHANNELS.secrets.SAVE,
   RPC_CHANNELS.secrets.DELETE,
