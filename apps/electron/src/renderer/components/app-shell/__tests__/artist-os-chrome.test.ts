@@ -219,7 +219,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain('onSaveNugget={saveTrackNugget}')
     expect(reader).toContain('aria-label="Signals intelligence reader"')
     expect(reader).toContain('aria-label="Signals track"')
-    expect(reader).toContain('Save selection')
+    expect(reader).toContain('aria-label="Bookmark selection"')
     expect(hq).toContain('SIGNAL_NUGGETS_CONTEXT_SLUG')
     expect(hq).toContain('WEEKLY_SIGNAL_SCAN_SLUG')
     expect(hq).toContain('createSignalScanQueueWorkAction')

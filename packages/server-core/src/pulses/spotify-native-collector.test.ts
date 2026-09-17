@@ -48,20 +48,24 @@ describe('native Spotify collector', () => {
     expect(f.captures[1].topTracks).toEqual([{ name: 'Homebody', streams: 1200 }])
     expect(f.events.slice(-2)).toEqual(['clear', 'unbind'])
   })
-  test('waits for changing Home placeholders and persists only stable hydrated counts', async () => {
+  test.each([1, 10])('waits for changing Home placeholders and persists only stable hydrated counts (poll %d ms)', async (pollMs) => {
     const f = await fixture()
+    f.options.pollMs = pollMs
     f.options.settleMs = 12
     f.options.stableMs = 5
     f.options.zeroSettleMs = 25
-    f.options.pageTimeoutMs = 80
+    f.options.pageTimeoutMs = 1_000
+    f.options.timeoutMs = 3_000
     const evaluate = f.browser.evaluate
     let homeReads = 0
     f.browser.evaluate = async () => {
       const data = await evaluate()
       if (!data.url.endsWith('/home')) return data
       homeReads++
-      if (homeReads <= 4) return { ...data, text: 'Last 28 days\nMonthly listeners\n0\nStreams\n0' }
-      if (homeReads <= 7) return { ...data, text: 'Last 28 days\nMonthly listeners\n81,259\nStreams\n100' }
+      if (homeReads === 1) return { ...data, text: 'Last 28 days\nMonthly listeners\n0\nStreams\n0' }
+      // Provisional counts must change on every sample. Repeating an interim
+      // value can legitimately satisfy stableMs when a busy runner polls slowly.
+      if (homeReads <= 7) return { ...data, text: `Last 28 days\nMonthly listeners\n81,259\nStreams\n${100 + homeReads}` }
       return data
     }
     await collectSpotifyNative(f.options)

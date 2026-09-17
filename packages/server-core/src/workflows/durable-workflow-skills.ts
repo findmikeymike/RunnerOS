@@ -5,10 +5,15 @@ import { loadSkillBySlug } from '../../../shared/src/skills/storage';
 import { resolveManagedSkillInstructions, MAX_PERSONAL_INSTRUCTION_BYTES } from '../../../shared/src/skills/personal-instructions';
 import { canonical } from '../../../shared/src/durable-execution';
 
-/** Each exact shipped core and reference was reviewed as instruction-only. Updates require recertification. */
+/**
+ * Each exact shipped core and reference was reviewed as instruction-only. Updates require recertification.
+ * Reviewed fc91256fd artist-direction revisions: approved-context inputs and optional branding
+ * exercises remain advisory text, with no helpers, required sources, or additional tool authority.
+ * Public-behavior examples describe proposed deliverables; the private appendix grants no actions.
+ */
 const CERTIFIED_REVISIONS: Readonly<Record<string, string>> = Object.freeze({
-  'artist-belief-system': '94f0bb8d0270614850e0ea37c1cdef6df41951f2545e39f7503a6af36d4af451',
-  'artist-brand-expression-strategist': '8c8141a41903e2e0249f5514461261318bd9d29a23ac1777d21fc5438143d33c',
+  'artist-belief-system': '1db2d0a4950f50ddd190d9e478e921707de33647d61cf6e530bc2150531f13ae',
+  'artist-brand-expression-strategist': 'aaef407d92ecbc40b30268de82dd4eedeed0d3fae9984471da8109d18956fbee',
 });
 const unsupported = () => new Error('unsupported-durable-workflow-skills');
 export function assertDurableWorkflowSkillSlugs(slugs: string[]): void {

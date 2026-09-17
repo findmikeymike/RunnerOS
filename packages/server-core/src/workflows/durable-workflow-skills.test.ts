@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { getManagedSkill, getManagedSkillManifest } from '../../../shared/src/skills/managed';
+import { getManagedSkill, getManagedSkillManifest, skillDigest } from '../../../shared/src/skills/managed';
 import { resolveManagedSkillInstructions, savePersonalInstruction } from '../../../shared/src/skills/personal-instructions';
 import { assertDurableWorkflowSkillSlugs, resolveDurableWorkflowSkills } from './durable-workflow-skills';
 const cleanup: Array<() => void> = [];
@@ -44,6 +44,23 @@ test('actual user-owned override and managed path mismatch cannot masquerade as 
   const f = fixture(), actual = getManagedSkill(slug, f.options)!;
   expect(() => resolveDurableWorkflowSkills(f.workspace, [slug], { ...f.deps, loadSkillBySlug: () => ({ ...actual, managed: undefined }) })).toThrow('unsupported-durable');
   expect(() => resolveDurableWorkflowSkills(f.workspace, [slug], { ...f.deps, loadSkillBySlug: () => ({ ...actual, path: '/different' }) })).toThrow('unsupported-durable');
+});
+for (const name of [slug, 'artist-brand-expression-strategist']) test(`self-consistent repackaged ${name} still requires explicit recertification`, () => {
+  const f = fixture(), entries = new Map(getManagedSkillManifest()), entry = structuredClone(entries.get(name)!);
+  entry.files = entry.files.map(file => {
+    const content = file.path.startsWith('references/') ? file.content + '\nNew unreviewed instructions.\n' : file.content;
+    return { ...file, content, sha256: skillDigest(content) };
+  });
+  entry.revision = skillDigest(JSON.stringify(entry.files.map(file => [file.path, file.sha256])));
+  entries.set(name, entry);
+  const actual = getManagedSkill(name, f.options)!;
+  const snapshot = resolveManagedSkillInstructions(f.workspace, name, f.options)!;
+  const managed = { ...actual.managed!, revision: entry.revision };
+  expect(() => resolveDurableWorkflowSkills(f.workspace, [name], {
+    getManagedSkillManifest: () => entries,
+    loadSkillBySlug: () => ({ ...actual, managed }),
+    resolveManagedSkillInstructions: () => ({ ...snapshot, managed, revision: entry.revision, files: entry.files }),
+  })).toThrow('unsupported-durable-workflow-skills');
 });
 for (const kind of ['oversized', 'malformed', 'reversed', 'hash'] as const) test(`invalid personal ${kind} snapshot fails without leaking content`, () => {
   const f = fixture(); savePersonalInstruction(f.workspace, slug, { scope: 'shared', text: 'private-marker', enabled: true }, f.options); savePersonalInstruction(f.workspace, slug, { scope: 'workspace', text: 'workspace-marker', enabled: true }, f.options);

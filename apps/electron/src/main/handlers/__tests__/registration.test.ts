@@ -136,6 +136,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     deepResearch,
     videoStudio,
     scheduledWork,
+    brandingState,
   ] = await Promise.all([
     import('@craft-agent/server-core/handlers/rpc/auth'),
     import('@craft-agent/server-core/handlers/rpc/automations'),
@@ -175,6 +176,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     import('@craft-agent/server-core/handlers/rpc/deep-research'),
     import('@craft-agent/server-core/handlers/rpc/video-studio'),
     import('@craft-agent/server-core/handlers/rpc/scheduled-work'),
+    import('@craft-agent/server-core/handlers/rpc/branding-state'),
   ])
 
   // GUI handler channels (remain in electron)
@@ -224,6 +226,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     ...deepResearch.HANDLED_CHANNELS,
     ...videoStudio.HANDLED_CHANNELS,
     ...scheduledWork.HANDLED_CHANNELS,
+    ...brandingState.HANDLED_CHANNELS,
     ...browser.HANDLED_CHANNELS,
     ...guiSystem.GUI_HANDLED_CHANNELS,
     ...guiWorkspace.GUI_HANDLED_CHANNELS,

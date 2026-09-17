@@ -69,7 +69,7 @@ test('queue cancellation keeps active work, and repeat updates create nothing', 
   const changed = await change({ enabled: false })
   expect(changed).toMatchObject({ changed: true, canceledQueuedWork: 1, runningWork: 1 })
   const parsed = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG)!, workspace.id)
-  expect(parsed.ok && parsed.work.items.map(item => item.status)).toEqual(['canceled', 'running'])
+  expect(parsed.ok && Object.fromEntries(parsed.work.items.map(item => [item.id, item.status]))).toEqual({ pending: 'canceled', active: 'running' })
   const repeated = await change({ enabled: false })
   expect(repeated).toMatchObject({ changed: false, canceledQueuedWork: 0 })
   expect(JSON.parse(readFileSync(configPath, 'utf8')).automations.SchedulerTick).toHaveLength(1)
@@ -101,12 +101,13 @@ test('a retry after settings saved recovers still-pending obsolete work', async 
 test('an unchanged enabled retry preserves work from the current definition', async () => {
   const action = { type: 'queue-work', ownerScope: 'hq', title: 'Report', execution: { type: 'agent-task', agentSlug: 'reporter', brief: 'Report', permissionMode: 'safe', expectedOutput: { requirement: 'none' } } }
   writeConfig([{ ...base, actions: [action] }])
-  const fresh = work('scheduled', 'fresh')
+  const fresh = { ...work('scheduled', 'fresh'), startAt: '2026-09-01T00:00:00.000Z' }
   fresh.automationRef!.configurationDigest = scheduledWorkDefinitionDigest({ matcherId: base.id, actionIndex: 0, event: 'SchedulerTick', action })
   writeWork([work('scheduled', 'stale'), fresh])
   expect(await change({ enabled: true })).toMatchObject({ changed: false, canceledQueuedWork: 1 })
   const result = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG)!, workspace.id)
-  expect(result.ok && result.work.items.map(item => item.status)).toEqual(['canceled', 'scheduled'])
+  // Serialization orders by startAt; assert which work survived, independent of clock ties.
+  expect(result.ok && Object.fromEntries(result.work.items.map(item => [item.id, item.status]))).toEqual({ stale: 'canceled', fresh: 'scheduled' })
 })
 
 test('trigger-only save failure recovers exact old queued work without canceling new work', async () => {
@@ -128,6 +129,6 @@ test('trigger-only save failure recovers exact old queued work without canceling
   writeWork([old, fresh])
   expect(await change(patch)).toMatchObject({ changed: false, canceledQueuedWork: 1 })
   const parsed = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG)!, workspace.id)
-  expect(parsed.ok && parsed.work.items.map(item => item.status)).toEqual(['canceled', 'scheduled'])
+  expect(parsed.ok && Object.fromEntries(parsed.work.items.map(item => [item.id, item.status]))).toEqual({ 'before-edit': 'canceled', 'after-edit': 'scheduled' })
   expect(JSON.parse(readFileSync(configPath, 'utf8')).automations.SchedulerTick[0]._pendingWorkCleanup).toBeUndefined()
 })
