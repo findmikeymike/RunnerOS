@@ -2345,7 +2345,29 @@ export function FreeFormInput({
             </Tooltip>
           )}
 
-          {/* Sending an update uses the normal mid-stream path; Stop stays separate. */}
+          {/* Keep Send consistent; pending messages show their queue state above the composer. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="submit"
+                size="icon"
+                variant="default"
+                aria-label={t('shortcuts.sendMessage')}
+                className={cn(
+                  'send-btn h-7 w-7 shrink-0 rounded-full ml-2',
+                  RENDERER_PRODUCT_VARIANT === 'artist-os' &&
+                    'bg-[#f4511e] text-white hover:bg-[#ff5a22] active:bg-[#dc3f18] disabled:bg-[#f4511e] disabled:text-white disabled:opacity-35',
+                )}
+                disabled={!hasContent || disabled || disableSend}
+                data-tutorial="send-button"
+              >
+                <ArrowUp className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {t('shortcuts.sendMessage')}
+            </TooltipContent>
+          </Tooltip>
           {isProcessing && (
             <Button
               type="button"
@@ -2363,23 +2385,6 @@ export function FreeFormInput({
               <Square className="h-3 w-3 fill-current" />
             </Button>
           )}
-            <Button
-              type="submit"
-              size="icon"
-              aria-label={isProcessing ? 'Queue message' : t('shortcuts.sendMessage')}
-              title={isProcessing ? 'Queue for the next response. Use Steer now above to redirect the current response.' : undefined}
-              className={cn(
-                'send-btn h-7 shrink-0 rounded-full ml-2',
-                isProcessing ? 'w-auto gap-1.5 px-2.5' : 'w-7',
-                RENDERER_PRODUCT_VARIANT === 'artist-os' &&
-                  'bg-[#f4511e] text-white hover:bg-[#ff5a22] active:bg-[#dc3f18] disabled:bg-[#f4511e] disabled:text-white disabled:opacity-35',
-              )}
-              disabled={!hasContent || disabled || disableSend}
-              data-tutorial="send-button"
-            >
-              <ArrowUp className="h-4 w-4" />
-              {isProcessing && <span className="text-xs">Queue</span>}
-            </Button>
           </div>
           </div>
         </div>
