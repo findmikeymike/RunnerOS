@@ -1,3 +1,4 @@
+import { withMissionAssetsMutex } from '../../track-intelligence/mission-assets-mutex'
 import { mkdirSync } from 'node:fs'
 import { basename } from 'node:path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
@@ -87,7 +88,8 @@ export function registerReleaseKitHandlers(server: RpcServer, deps: HandlerDeps)
     RPC_CHANNELS.releaseKit.PROMOTE,
     async (_ctx, workspaceId: string, input: PromoteToReleaseKitInput) => {
       await assertReleaseKitWrite(workspaceId)
-      return service.promote(workspaceId, input, 'user')
+      const workspace = getWorkspaceByNameOrId(workspaceId)!
+      return withMissionAssetsMutex(workspace.rootPath, async () => service.promoteUserUpload(workspaceId, input))
     },
   )
 

@@ -134,7 +134,7 @@ export function TrackIntelligenceReviewDialog({
             <DialogPrimitive.Title className="truncate text-lg font-medium text-white/90">{title}</DialogPrimitive.Title>
             <DialogPrimitive.Description className="mt-1 text-xs text-white/40">Review the machine draft. Saving makes these lyrics and tags available to agents.</DialogPrimitive.Description>
           </div>
-          <button type="button" onClick={onClose} disabled={busy} className="rounded-full p-2 text-white/40 hover:bg-white/[0.06] hover:text-white"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} aria-label="Close lyrics review" disabled={busy} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/70 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 disabled:opacity-40"><X className="h-4 w-4" /></button>
         </header>
 
         <div className="flex items-center gap-1 border-b border-white/[0.05] px-5 py-2">

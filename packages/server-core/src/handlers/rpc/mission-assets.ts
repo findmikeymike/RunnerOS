@@ -1,3 +1,4 @@
+import { withMissionAssetsMutex } from '../../track-intelligence/mission-assets-mutex'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { existsSync } from 'node:fs'
@@ -50,15 +51,6 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.missionAssets.SCAN,
   RPC_CHANNELS.missionAssets.OPEN_FOLDER,
 ] as const
-
-const workspaceMutexes = new Map<string, Promise<void>>()
-
-function withWorkspaceMutex<T>(workspaceRootPath: string, fn: () => Promise<T>): Promise<T> {
-  const prev = workspaceMutexes.get(workspaceRootPath) ?? Promise.resolve()
-  const next = prev.then(fn, fn)
-  workspaceMutexes.set(workspaceRootPath, next.then(() => {}, () => {}))
-  return next
-}
 
 function resolveRootPath(workspaceId: string): string {
   const workspace = getWorkspaceByNameOrId(workspaceId)
@@ -128,7 +120,7 @@ export function registerMissionAssetsHandlers(server: RpcServer, deps: HandlerDe
       const rootPath = resolveRootPath(workspaceId)
       const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
       assertTeamPermission(rootPath, 'files.write')
-      return withWorkspaceMutex(rootPath, async () => {
+      return withMissionAssetsMutex(rootPath, async () => {
         const result = await importMissionAssetsAsync(rootPath, workspaceId, filePaths, options ?? {})
         mirrorManifestToContext(rootPath, workspaceId, result.manifest, deps)
         return result
@@ -142,7 +134,7 @@ export function registerMissionAssetsHandlers(server: RpcServer, deps: HandlerDe
       const rootPath = resolveRootPath(workspaceId)
       const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
       assertTeamPermission(rootPath, 'files.write')
-      return withWorkspaceMutex(rootPath, async () => {
+      return withMissionAssetsMutex(rootPath, async () => {
         const manifest = loadMissionAssetManifest(rootPath, workspaceId)
         const audioAsset = selectMissionAudioForLyrics(manifest, options?.audioAssetId)
         if (!audioAsset) {
@@ -163,6 +155,9 @@ export function registerMissionAssetsHandlers(server: RpcServer, deps: HandlerDe
             audioAsset,
             error: 'Approved lyrics already exist for this audio. Choose re-analyze to create a new draft.',
           }
+        }
+        if (draftLyrics && audioAsset.trackIntelligence?.draft && !options?.force) {
+          return { ok: true, manifest, lyricsAsset: draftLyrics, audioAsset }
         }
         const audioFile = missionAssetAbsolutePath(rootPath, audioAsset)
         if (!audioFile || !existsSync(audioFile)) {
@@ -207,7 +202,7 @@ export function registerMissionAssetsHandlers(server: RpcServer, deps: HandlerDe
       const rootPath = resolveRootPath(workspaceId)
       const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
       assertTeamPermission(rootPath, 'files.write')
-      return withWorkspaceMutex(rootPath, async () => {
+      return withMissionAssetsMutex(rootPath, async () => {
         const { sourceSha256: _untrustedSourceSha256, ...reviewInput } = input
         const result = await saveMissionLyricsAsync(rootPath, workspaceId, {
           ...reviewInput,
@@ -224,7 +219,7 @@ export function registerMissionAssetsHandlers(server: RpcServer, deps: HandlerDe
     const rootPath = resolveRootPath(workspaceId)
     const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
     assertTeamPermission(rootPath, 'files.write')
-    return withWorkspaceMutex(rootPath, async () => {
+    return withMissionAssetsMutex(rootPath, async () => {
       const result = await scanMissionAssetsAsync(rootPath, workspaceId)
       mirrorManifestToContext(rootPath, workspaceId, result.manifest, deps)
       return result

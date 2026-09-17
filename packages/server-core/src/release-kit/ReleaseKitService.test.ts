@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { importArtistVaultAssets } from '@craft-agent/shared/artist-vault'
+import { importArtistVaultAssets, loadArtistVaultManifest, updateArtistVaultAsset, saveArtistVaultTrackDraft, reviewArtistVaultTrackIntelligence } from '@craft-agent/shared/artist-vault'
 import { importMissionAssets, saveMissionLyricsAsync } from '@craft-agent/shared/mission-assets'
-import { resolveReleaseKitItemPath } from '@craft-agent/shared/release-kit'
+import { resolveReleaseKitItemPath, loadReleaseKitManifest, saveReleaseKitManifest } from '@craft-agent/shared/release-kit'
 import { writeOutputFinalsRegistry } from '@craft-agent/shared/outputs'
 import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import { createCampaignCalendarItem, parseCampaignCalendarDocResult, serializeCampaignCalendarBody } from '@craft-agent/shared/campaign-calendar'
@@ -23,6 +23,7 @@ beforeEach(() => workspaces.clear())
 
 function service(): ReleaseKitService {
   return new ReleaseKitService({
+    getWorkspaces: () => [...workspaces.values()] as never,
     getWorkspaceByNameOrId: (id) => workspaces.get(id) as never,
     assertWritePermission: () => {},
   })
@@ -271,7 +272,8 @@ describe('ReleaseKitService source trust', () => {
       source: { type: 'campaign-asset', assetId: asset.id }, category: 'audio', subtype: 'master',
     }, 'user')
     const readOnly = new ReleaseKitService({
-      getWorkspaceByNameOrId: (id) => workspaces.get(id) as never,
+      getWorkspaces: () => [...workspaces.values()] as never,
+    getWorkspaceByNameOrId: (id) => workspaces.get(id) as never,
       assertWritePermission: () => { throw new Error('files.write denied') },
     })
     expect(readOnly.get('campaign-1').items).toHaveLength(1)
@@ -519,4 +521,166 @@ test('unchanged kit reads do not refresh briefs but missing files do', () => {
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+describe('Release Kit audio intake', () => {
+  test('uploads master into HQ Vault and reuses exact existing audio for later lyric approval', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'release-audio-intake-'))
+    const hq = join(root, 'hq'); mkdirSync(hq)
+    workspaces.set('hq-1', { id: 'hq-1', name: 'HQ', rootPath: hq, artistWorkspaceScope: 'hq' })
+    workspaces.set('campaign-1', { id: 'campaign-1', name: 'Campaign', rootPath: root, artistWorkspaceScope: 'campaign' })
+    try {
+      const path = join(root, 'final.wav')
+      writeFileSync(path, 'audio bytes')
+      const input = { source: { type: 'upload' as const, originalFileName: 'final.wav' }, uploadPath: path, category: 'audio' as const, subtype: 'master' }
+      const first = await service().promoteUserUpload('campaign-1', input)
+      const second = await service().promoteUserUpload('campaign-1', input)
+      expect(first.item.source.type).toBe('vault-asset')
+      expect(second.item.source).toEqual(first.item.source)
+      expect(second.item.id).toBe(first.item.id)
+      expect(second.manifest.items).toHaveLength(1)
+      expect(first.item.trackIntelligence).toBeUndefined()
+      const manifest = loadArtistVaultManifest(hq, 'hq-1')
+      expect(manifest.assets).toHaveLength(1)
+      expect(manifest.assets[0]!.kind).toBe('master-final')
+      expect(manifest.assets[0]!.sha256).toBe(first.item.sha256)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('does not reuse drifted campaign audio or route artwork through audio intake', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'release-audio-drift-'))
+    const hq = join(root, 'hq'); mkdirSync(hq)
+    workspaces.set('hq-1', { id: 'hq-1', name: 'HQ', rootPath: hq, artistWorkspaceScope: 'hq' })
+    workspaces.set('campaign-1', { id: 'campaign-1', name: 'Campaign', rootPath: root, artistWorkspaceScope: 'campaign' })
+    try {
+      const path = join(root, 'final.wav')
+      writeFileSync(path, 'audio bytes')
+      const imported = importMissionAssets(root, 'campaign-1', [path], { kindHint: 'master' }).imported[0]!
+      writeFileSync(join(root, imported.relativePath!), 'modified bytes')
+      const result = await service().promoteUserUpload('campaign-1', { source: { type: 'upload', originalFileName: 'final.wav' }, uploadPath: path, category: 'audio', subtype: 'master' })
+      expect(result.item.source).not.toEqual({ type: 'campaign-asset', assetId: imported.id })
+      const art = join(root, 'cover.png')
+      writeFileSync(art, 'image')
+      const picture = await service().promoteUserUpload('campaign-1', { source: { type: 'upload', originalFileName: 'cover.png' }, uploadPath: art, category: 'artwork', subtype: 'cover' })
+      expect(picture.item.source.type).toBe('upload')
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+test('HQ master reuse preserves approved lyrics; later approval refreshes same-byte campaign context', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'hq-master-review-'))
+  const hq = join(root, 'hq'); mkdirSync(hq)
+  workspaces.set('campaign-1', { id: 'campaign-1', name: 'Campaign', rootPath: root, artistWorkspaceScope: 'campaign' })
+  workspaces.set('hq-1', { id: 'hq-1', name: 'HQ', rootPath: hq, artistWorkspaceScope: 'hq' })
+  try {
+    const path = join(root, 'master.wav'); writeFileSync(path, 'master bytes')
+    const audio = importArtistVaultAssets(hq, 'hq-1', [path], { kindHint: 'master-final' }).imported[0]!
+    const draft = { id: 'draft-1', lyrics: { lines: [{ id: 'line-1', text: 'original lyric' }], timingSource: 'manual' as const, timingStatus: 'needs-alignment' as const }, provenance: { sourceSha256: audio.sha256 } }
+    saveArtistVaultTrackDraft(hq, 'hq-1', audio.id, { status: 'draft', schemaVersion: 1, draft })
+    const kit = service()
+    const result = await kit.promoteUserUpload('campaign-1', { source: { type: 'upload', originalFileName: 'master.wav' }, uploadPath: path, category: 'audio', subtype: 'master' })
+    expect(result.item.source).toEqual({ type: 'vault-asset', assetId: audio.id, vaultWorkspaceId: 'hq-1' })
+    expect(loadArtistVaultManifest(hq, 'hq-1').assets).toHaveLength(1)
+    expect(loadArtistVaultManifest(hq, 'hq-1').assets[0]!.trackIntelligence?.draft?.id).toBe('draft-1')
+    reviewArtistVaultTrackIntelligence(hq, 'hq-1', { assetId: audio.id, draftId: draft.id, lyrics: { ...draft.lyrics, lines: [{ id: 'line-1', text: 'artist approved lyric' }] } }, 'artist')
+    expect(kit.getItem('campaign-1', result.item.id).item.trackIntelligence?.lyrics?.lines[0]!.text).toBe('artist approved lyric')
+    kit.refreshAgentContext('campaign-1')
+    expect(loadContextDoc(root, 'release-kit')?.body).toContain('\"hasLyrics\": true')
+    const again = await kit.promoteUserUpload('campaign-1', { source: { type: 'upload', originalFileName: 'master.wav' }, uploadPath: path, category: 'audio', subtype: 'master' })
+    expect(again.item.trackIntelligence?.reviewedBy.clientId).toBe('artist')
+    updateArtistVaultAsset(hq, 'hq-1', audio.id, { rightsStatus: 'private' })
+    expect(kit.getItem('campaign-1', result.item.id).item.trackIntelligence).toBeUndefined()
+    await expect(kit.promoteUserUpload('campaign-1', { source: { type: 'upload', originalFileName: 'master.wav' }, uploadPath: path, category: 'audio', subtype: 'master' })).rejects.toThrow(/private/i)
+    expect(loadArtistVaultManifest(hq, 'hq-1').assets).toHaveLength(1)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test('missing or ambiguous HQ refuses audio intake before creating any files', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'hq-master-missing-'))
+  workspaces.set('campaign-1', { id: 'campaign-1', name: 'Campaign', rootPath: root, artistWorkspaceScope: 'campaign' })
+  try {
+    const path = join(root, 'master.wav'); writeFileSync(path, 'audio')
+    const input = { source: { type: 'upload' as const, originalFileName: 'master.wav' }, uploadPath: path, category: 'audio' as const, subtype: 'master' }
+    await expect(service().promoteUserUpload('campaign-1', input)).rejects.toThrow(/set up Artist HQ/i)
+    workspaces.set('hq-1', { id: 'hq-1', name: 'HQ', rootPath: join(root, 'one'), artistWorkspaceScope: 'hq' })
+    workspaces.set('hq-2', { id: 'hq-2', name: 'HQ2', rootPath: join(root, 'two'), artistWorkspaceScope: 'hq' })
+    await expect(service().promoteUserUpload('campaign-1', input)).rejects.toThrow(/multiple/i)
+    expect(existsSync(join(root, 'vault'))).toBe(false)
+    expect(existsSync(join(root, 'assets'))).toBe(false)
+    expect(existsSync(join(root, 'release-kit'))).toBe(false)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test('copies exact campaign approval to new HQ master and retries do not duplicate finals', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'hq-master-campaign-review-'))
+  const hq = join(root, 'hq'); mkdirSync(hq)
+  workspaces.set('campaign-1', { id: 'campaign-1', name: 'Campaign', rootPath: root, artistWorkspaceScope: 'campaign' })
+  workspaces.set('hq-1', { id: 'hq-1', name: 'HQ', rootPath: hq, artistWorkspaceScope: 'hq' })
+  try {
+    const path = join(root, 'master.wav'); writeFileSync(path, 'master bytes')
+    const audio = importMissionAssets(root, 'campaign-1', [path], { kindHint: 'master' }).imported[0]!
+    await saveMissionLyricsAsync(root, 'campaign-1', { sourceAudioAssetId: audio.id, lyricsText: 'existing approved lyric' }, 'artist')
+    const kit = service()
+    const input = { source: { type: 'upload' as const, originalFileName: 'master.wav' }, uploadPath: path, category: 'audio' as const, subtype: 'master', title: 'Homebody' }
+    const first = await kit.promoteUserUpload('campaign-1', input)
+    const again = await kit.promoteUserUpload('campaign-1', { ...input, makePrimary: true })
+    expect(again.item.id).toBe(first.item.id)
+    expect(again.item.isPrimary).toBe(true)
+    expect(again.manifest.items).toHaveLength(1)
+    const master = loadArtistVaultManifest(hq, 'hq-1').assets[0]!
+    expect(master.label).toBe('Homebody')
+    expect(master.trackIntelligence?.approved?.lyrics?.lines[0]?.text).toBe('existing approved lyric')
+    expect(master.trackIntelligence?.approved?.reviewedBy.clientId).toBe('artist')
+    updateArtistVaultAsset(hq, 'hq-1', master.id, { rightsStatus: 'needs-clearance' })
+    const variant = kit.promote('campaign-1', { source: { type: 'vault-asset', assetId: master.id, vaultWorkspaceId: 'hq-1' }, category: 'audio', subtype: 'clean-version', title: 'Clean' }, 'user')
+    expect(variant.item.usage.restrictions.needsRightsClearance).toBe(true)
+    expect(variant.manifest.items.filter(item => item.category === 'audio')).toHaveLength(1)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test('Final Audio replacement preserves old bytes, updates one slot, and failures retain current final', () => {
+  const root = mkdtempSync(join(tmpdir(), 'single-final-audio-'))
+  workspaces.set('campaign-1', { id: 'campaign-1', name: 'Campaign', rootPath: root, artistWorkspaceScope: 'campaign' })
+  try {
+    const path = join(root, 'master.wav'); writeFileSync(path, 'original')
+    const kit = service()
+    const first = kit.promote('campaign-1', { source: { type: 'upload', originalFileName: 'master.wav' }, uploadPath: path, category: 'audio', subtype: 'master' }, 'user')
+    const original = resolveReleaseKitItemPath(root, first.item.relativePath)
+    writeFileSync(path, 'replacement')
+    const campaignAsset = importMissionAssets(root, 'campaign-1', [path], { kindHint: 'master' }).imported[0]!
+    const replacement = { source: { type: 'campaign-asset' as const, assetId: campaignAsset.id }, category: 'audio' as const, subtype: 'clean-version', title: 'Updated master' }
+    const second = kit.promote('campaign-1', replacement, 'agent')
+    expect(second.manifest.items.filter(item => item.category === 'audio')).toHaveLength(1)
+    expect(second.item.id).not.toBe(first.item.id)
+    expect(readFileSync(original, 'utf8')).toBe('original')
+    expect(readFileSync(join(root, 'release-kit', '.replaced-audio.json'), 'utf8')).toContain(first.item.id)
+    expect(kit.promote('campaign-1', replacement, 'agent').item.id).toBe(second.item.id)
+    expect(() => kit.promote('campaign-1', { ...replacement, source: { type: 'campaign-asset', assetId: 'missing' } }, 'agent')).toThrow()
+    expect(kit.get('campaign-1').items[0]!.id).toBe(second.item.id)
+    const calendarItem = createCampaignCalendarItem({ id: 'future-use', campaignId: 'campaign-1', date: '2026-10-01', title: 'Use this exact master', kind: 'manual', releaseKitRefs: [{ itemId: second.item.id, sha256: second.item.sha256, label: second.item.title }] })
+    upsertContextDoc(root, { slug: 'campaign-calendar', metadata: { name: 'Calendar', enabled: true, routing: { mode: 'broadcast' } }, body: serializeCampaignCalendarBody({ version: 1, campaignId: 'campaign-1', items: [calendarItem], updatedAt: calendarItem.updatedAt }) })
+    expect(() => kit.promote('campaign-1', { ...replacement, title: 'Another' }, 'user')).toThrow(/referenced/i)
+    expect(loadReleaseKitManifest(root, 'campaign-1').items[0]!.id).toBe(second.item.id)
+    expect(readFileSync(original, 'utf8')).toBe('original')
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test('legacy multiple audio slots collapse to valid primary and archived files never reappear on removal', () => {
+  const root = mkdtempSync(join(tmpdir(), 'single-audio-legacy-'))
+  workspaces.set('campaign-1', { id: 'campaign-1', name: 'Campaign', rootPath: root, artistWorkspaceScope: 'campaign' })
+  try {
+    const path = join(root, 'master.wav'); writeFileSync(path, 'original')
+    const kit = service()
+    const first = kit.promote('campaign-1', { source: { type: 'upload', originalFileName: 'master.wav' }, uploadPath: path, category: 'audio', subtype: 'master' }, 'user')
+    writeFileSync(path, 'new')
+    const second = kit.promote('campaign-1', { source: { type: 'upload', originalFileName: 'master.wav' }, uploadPath: path, category: 'audio', subtype: 'master' }, 'user')
+    saveReleaseKitManifest(root, { ...second.manifest, items: [{ ...first.item, isPrimary: true }, { ...second.item, isPrimary: false }] })
+    expect(kit.get('campaign-1').items.map(item => item.id)).toEqual([first.item.id])
+    expect(existsSync(resolveReleaseKitItemPath(root, second.item.relativePath))).toBe(true)
+    kit.remove('campaign-1', first.item.id)
+    expect(kit.get('campaign-1').items).toHaveLength(0)
+    expect(kit.migrateLegacy('campaign-1').manifest.items).toHaveLength(0)
+    saveReleaseKitManifest(root, { ...second.manifest, items: [{ ...first.item, isPrimary: true }, { ...second.item, isPrimary: false }] })
+    expect(kit.get('campaign-1').items.map(item => item.id)).toEqual([second.item.id])
+  } finally { rmSync(root, { recursive: true, force: true }) }
 })

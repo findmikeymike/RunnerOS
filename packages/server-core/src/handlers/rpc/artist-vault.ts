@@ -1,3 +1,5 @@
+import { ReleaseKitService } from '../../release-kit/ReleaseKitService'
+import { loadReleaseKitManifest } from '@craft-agent/shared/release-kit'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId, getWorkspaces } from '@craft-agent/shared/config'
 import { existsSync } from 'node:fs'
@@ -118,6 +120,19 @@ function mirrorManifestToContext(workspaceRootPath: string, workspaceId: string,
   })
   refreshHqStateContextDocBestEffort(workspaceRootPath)
   broadcastContextChanged(deps, workspaceId, loadAllContextDocs(workspaceRootPath))
+  // Approved Vault lyrics are shared by every campaign referencing these exact master bytes.
+  for (const campaign of getWorkspaces().filter(candidate => candidate.artistWorkspaceScope === 'campaign')) {
+    try {
+      const kit = loadReleaseKitManifest(campaign.rootPath, campaign.id, campaign.id)
+      if (!kit.items.some(item => item.source.type === 'vault-asset' && item.source.vaultWorkspaceId === workspaceId)) continue
+      const refreshed = new ReleaseKitService().refreshAgentContext(campaign.id)
+      broadcastContextChanged(deps, campaign.id, loadAllContextDocs(campaign.rootPath))
+      const wsServerLike = deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } }
+      wsServerLike.wsServer?.push?.(RPC_CHANNELS.releaseKit.CHANGED, { to: 'all' }, campaign.id, refreshed.manifest)
+    } catch (error) {
+      console.warn('[artist-vault] Unable to refresh linked campaign lyrics:', error instanceof Error ? error.message : String(error))
+    }
+  }
 }
 
 export function registerArtistVaultHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -220,6 +235,9 @@ export function registerArtistVaultHandlers(server: RpcServer, deps: HandlerDeps
         }
         if (asset.trackIntelligence?.status === 'reviewed' && !options.force) {
           return { ok: false, manifest, asset, error: 'Reviewed track lyrics already exist. Choose re-analyze to replace the machine draft.' }
+        }
+        if (asset.trackIntelligence?.draft && !options.force) {
+          return { ok: true, manifest, asset }
         }
         const audioFile = resolveArtistVaultAssetPath(rootPath, asset)
         if (!audioFile || !existsSync(audioFile)) {

@@ -90,6 +90,7 @@ export function loadReleaseKitManifest(
 export function materializeReleaseKitItem(
   workspaceRootPath: string,
   input: MaterializeReleaseKitItemInput,
+  beforeReplaceAudio?: (item: ReleaseKitItem) => void,
 ): { manifest: ReleaseKitManifest; item: ReleaseKitItem } {
   return withReleaseKitLock(workspaceRootPath, () => {
     validateMaterializeInput(input);
@@ -102,6 +103,8 @@ export function materializeReleaseKitItem(
       throw new Error('Release Kit manifest belongs to a different workspace or campaign.');
     }
 
+    const replacedAudio = input.category === 'audio' ? manifest.items.filter(item => item.category === 'audio') : [];
+    replacedAudio.forEach(item => beforeReplaceAudio?.(item));
     const subtype = normalizeSubtype(input.subtype);
     const fileName = safeSnapshotFileName(basename(sourcePath));
     const destination = nextAvailableSnapshotPath(workspaceRootPath, input.category, subtype, fileName);
@@ -134,7 +137,7 @@ export function materializeReleaseKitItem(
         snapshotMtimeMs: snapshotInfo.mtimeMs,
         sha256: snapshotSha256,
         status: 'ready',
-        isPrimary: Boolean(input.makePrimary),
+        isPrimary: input.category === 'audio' || Boolean(input.makePrimary),
         promotedAt: now,
         promotedBy: input.promotedBy,
         ...(input.note?.trim() ? { note: input.note.trim().slice(0, 1_000) } : {}),
@@ -144,7 +147,7 @@ export function materializeReleaseKitItem(
           ? { ...normalizeReleaseKitUsage(input.usage), updatedAt: now, updatedBy: input.promotedBy === 'migration' ? 'migration' : 'system' }
           : defaultReleaseKitUsage(now, input.promotedBy === 'migration' ? 'migration' : 'system'),
       };
-      const nextItems = manifest.items.map((existing) => (
+      const nextItems = manifest.items.filter(existing => input.category !== 'audio' || existing.category !== 'audio').map((existing) => (
         item.isPrimary && existing.category === item.category && existing.subtype === item.subtype
           ? { ...existing, isPrimary: false }
           : existing
@@ -156,12 +159,55 @@ export function materializeReleaseKitItem(
         updatedAt: now,
         items: nextItems,
       };
+      archiveReplacedAudio(workspaceRootPath, manifest, replacedAudio);
       saveReleaseKitManifest(workspaceRootPath, nextManifest);
       return { manifest: nextManifest, item };
     } catch (error) {
       rmSync(destination, { force: true });
       throw error;
     }
+  });
+}
+
+/** Recoverable history is private storage, never another active Final Audio slot. */
+function archiveReplacedAudio(workspaceRootPath: string, manifest: ReleaseKitManifest, items: ReleaseKitItem[]): void {
+  if (!items.length) return;
+  const path = resolveReleaseKitItemPath(workspaceRootPath, 'release-kit/.replaced-audio.json');
+  const previous = existsSync(path) ? parseManifest(readFileSync(path, 'utf8')) : undefined;
+  if (existsSync(path) && (!previous || previous.workspaceId !== manifest.workspaceId || previous.campaignId !== manifest.campaignId)) {
+    throw new Error('Cannot safely replace Final Audio: its recovery record is invalid.');
+  }
+  const archived = [...(previous?.items ?? [])];
+  for (const item of items) if (!archived.some(candidate => candidate.id === item.id)) archived.push(item);
+  mkdirSync(dirname(path), { recursive: true });
+  const temporary = `${path}.tmp-${randomUUID()}`;
+  try {
+    writeFileSync(temporary, JSON.stringify({ ...manifest, items: archived }), 'utf8');
+    renameSync(temporary, path);
+  } finally { rmSync(temporary, { force: true }); }
+}
+
+/** Select one active audio atomically; retain the superseded snapshot files and metadata. */
+export function selectSingleReleaseKitAudio(
+  workspaceRootPath: string, workspaceId: string, campaignId: string,
+  selectedItemId?: string, beforeReplace?: (item: ReleaseKitItem) => void,
+): ReleaseKitManifest {
+  return withReleaseKitLock(workspaceRootPath, () => {
+    const manifest = loadReleaseKitManifest(workspaceRootPath, workspaceId, campaignId);
+    const audio = manifest.items.filter(item => item.category === 'audio');
+    if (!audio.length) return manifest;
+    const selected = selectedItemId ? audio.find(item => item.id === selectedItemId)
+      : [...audio].sort((a, b) => Number(b.status === 'ready') - Number(a.status === 'ready') || Number(b.isPrimary) - Number(a.isPrimary) || b.promotedAt.localeCompare(a.promotedAt))[0];
+    if (!selected) throw new Error('Final Audio selection no longer exists.');
+    if (audio.length === 1) return manifest;
+    const replaced = audio.filter(item => item.id !== selected.id);
+    replaced.forEach(item => beforeReplace?.(item));
+    archiveReplacedAudio(workspaceRootPath, manifest, replaced);
+    return saveReleaseKitManifest(workspaceRootPath, {
+      ...manifest, updatedAt: new Date().toISOString(),
+      items: manifest.items.filter(item => item.category !== 'audio' || item.id === selected.id)
+        .map(item => item.id === selected.id ? { ...item, isPrimary: true } : item),
+    });
   });
 }
 

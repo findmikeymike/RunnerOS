@@ -5,7 +5,6 @@ import {
   AudioWaveform,
   Bot,
   Check,
-  ChevronDown,
   Clock3,
   ExternalLink,
   File,
@@ -22,6 +21,7 @@ import {
   Trash2,
   Upload,
   Video,
+  X,
 } from 'lucide-react'
 import type { MissionAssetRecord } from '@craft-agent/shared/mission-assets'
 import type { VaultAssetRecord } from '@craft-agent/shared/artist-vault'
@@ -35,6 +35,9 @@ import type {
 import type { ReleaseKitItemUseSummary } from '@craft-agent/shared/scheduled-work'
 import type { OutputSummaryDTO } from '@/hooks/useOutputs'
 import type { OutputAsset, OutputManifest, SocialVariantDestinationIntent } from '@craft-agent/shared/outputs'
+import { ReleaseKitAudioLyrics } from './ReleaseKitAudioLyrics'
+import { ReleaseKitAudioPlayer } from './ReleaseKitAudioPlayer'
+import { isReleaseKitAudioAsset, supportsReleaseKitSocialPost } from '@/lib/release-kit-media'
 import { Button } from '@/components/ui/button'
 import { CompactPageHeader } from './CompactPageHeader'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -120,9 +123,11 @@ export function ReleaseKitPage({
   const [error, setError] = React.useState<string | null>(null)
   const [tab, setTab] = React.useState<'finals' | 'variants' | 'outputs'>('finals')
   const [addOpen, setAddOpen] = React.useState(false)
+  const [addingAudio, setAddingAudio] = React.useState(false)
   const [scheduleIntent, setScheduleIntent] = React.useState<PendingReleaseKitOutput | null>(null)
   const [schedulingPromotion, setSchedulingPromotion] = React.useState(false)
   const [prefillOutput, setPrefillOutput] = React.useState<OutputSummaryDTO | null>(null)
+  const [newAudioItemId, setNewAudioItemId] = React.useState<string | null>(null)
   const [itemPaths, setItemPaths] = React.useState<Record<string, string>>({})
   const [selectedItemId, setSelectedItemId] = React.useState<string | null>(null)
   const [selectedVariantPostIntent, setSelectedVariantPostIntent] = React.useState<SocialVariantPostIntent | null>(null)
@@ -134,7 +139,7 @@ export function ReleaseKitPage({
     () => pendingVariantPromotion ? pendingVariantAsReleaseKitItem(workspaceId, pendingVariantPromotion) : null,
     [pendingVariantPromotion, workspaceId],
   )
-  const { onCreateSession, onInputChange, onSendMessage, skills, enabledSources, activeAgents } = useAppShellContext()
+  const { onCreateSession, onInputChange, onSendMessage, skills, enabledSources, activeAgents, workspaces } = useAppShellContext()
   const variantOutputs = React.useMemo(() => outputs.filter((output) => Boolean(output.socialVariantSetSummary)), [outputs])
 
   const continueVariantSet = React.useCallback(async (output: OutputSummaryDTO) => {
@@ -312,7 +317,7 @@ export function ReleaseKitPage({
   React.useEffect(() => {
     let cancelled = false
     const previewable = manifest?.items.filter((item) => (
-      item.status !== 'missing' && (item.category === 'artwork' || item.category === 'video' || item.category === 'images')
+      item.status !== 'missing' && (item.category === 'audio' || item.category === 'artwork' || item.category === 'video' || item.category === 'images')
     )) ?? []
     if (!previewable.length) {
       setItemPaths({})
@@ -390,7 +395,7 @@ export function ReleaseKitPage({
                 itemPaths={itemPaths}
                 workspaceId={workspaceId}
                 onChanged={setManifest}
-                onAdd={() => setAddOpen(true)}
+                onAdd={(audioOnly = false) => { setAddingAudio(audioOnly); setAddOpen(true) }}
               />
             </ReleaseKitInspectContext.Provider>
           ) : tab === 'variants' ? (
@@ -422,12 +427,15 @@ export function ReleaseKitPage({
 
       <AddFinalDialog
         open={addOpen}
-        onOpenChange={(next) => { setAddOpen(next); if (!next) { setPrefillOutput(null); setSchedulingPromotion(false) } }}
+        audioOnly={addingAudio}
+        onOpenChange={(next) => { setAddOpen(next); if (!next) { setPrefillOutput(null); setSchedulingPromotion(false); setAddingAudio(false) } }}
         workspaceId={workspaceId}
         hqWorkspaceId={hqWorkspaceId}
+        campaignName={workspaces.find((workspace) => workspace.id === workspaceId)?.name}
         outputs={outputs}
         prefillOutput={prefillOutput}
-        onAdded={(next) => {
+        onAdded={(next, audioItemId) => {
+          if (audioItemId) { setNewAudioItemId(audioItemId); setSelectedItemId(audioItemId) }
           setManifest(next)
           setTab('finals')
           if (schedulingPromotion && prefillOutput?.primaryAssetId) {
@@ -441,11 +449,12 @@ export function ReleaseKitPage({
         item={selectedItem ?? pendingVariantItem}
         itemPath={selectedItem ? itemPaths[selectedItem.id] : undefined}
         workspaceId={workspaceId}
+        autoAnalyzeAudio={selectedItem?.id === newAudioItemId}
         initialPostIntent={selectedVariantPostIntent ?? (selectedItem?.socialVariantIntent
           ? { ...selectedItem.socialVariantIntent.destination, variantId: selectedItem.socialVariantIntent.variantId }
           : null)}
         pendingVariantPromotion={pendingVariantPromotion}
-        onOpenChange={(open) => { if (!open) { setSelectedItemId(null); setSelectedVariantPostIntent(null); setPendingVariantPromotion(null) } }}
+        onOpenChange={(open) => { if (!open) { setNewAudioItemId(null); setSelectedItemId(null); setSelectedVariantPostIntent(null); setPendingVariantPromotion(null) } }}
         onChanged={setManifest}
         onCreateVariants={(itemId) => {
           setSelectedItemId(null)
@@ -473,19 +482,19 @@ function FinalsGallery({ manifest, visibleCategories, itemPaths, workspaceId, on
   itemPaths: Record<string, string>
   workspaceId: string
   onChanged: (manifest: ReleaseKitManifest) => void
-  onAdd: () => void
+  onAdd: (audioOnly?: boolean) => void
 }) {
   const itemsFor = (category: ReleaseKitCategory) => manifest?.items.filter((item) => item.category === category) ?? []
   const quieterCategories = visibleCategories.filter((category) => !VISUAL_CATEGORIES.has(category))
   return (
     <div className="mx-auto max-w-[1240px] space-y-4">
       <ReadinessStrip manifest={manifest} />
-      <AudioPanel items={itemsFor('audio')} workspaceId={workspaceId} onChanged={onChanged} onAdd={onAdd} />
+      <AudioPanel items={itemsFor('audio')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={() => onAdd(true)} />
       <div className="grid items-stretch gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <SingleArtPanel items={itemsFor('artwork')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={onAdd} />
-        <ImagePanel items={itemsFor('images')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={onAdd} />
+        <SingleArtPanel items={itemsFor('artwork')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={() => onAdd()} />
+        <ImagePanel items={itemsFor('images')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={() => onAdd()} />
       </div>
-      <VideoPanel items={itemsFor('video')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={onAdd} />
+      <VideoPanel items={itemsFor('video')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={() => onAdd()} />
       {quieterCategories.length ? (
         <div className="grid gap-4 xl:grid-cols-2">
           {quieterCategories.map((category) => (
@@ -495,7 +504,7 @@ function FinalsGallery({ manifest, visibleCategories, itemPaths, workspaceId, on
               items={itemsFor(category)}
               workspaceId={workspaceId}
               onChanged={onChanged}
-              onAdd={onAdd}
+              onAdd={() => onAdd()}
             />
           ))}
         </div>
@@ -530,21 +539,9 @@ function ReadinessStrip({ manifest }: { manifest: ReleaseKitManifest | null }) {
   )
 }
 
-function AudioPanel({ items, workspaceId, onChanged, onAdd }: FinalCategoryProps) {
+function AudioPanel({ items, itemPaths, workspaceId, onChanged, onAdd }: FinalCategoryProps & { itemPaths: Record<string, string> }) {
   const featured = featuredReleaseKitItem(items)
   const openItem = useOpenReleaseKitItem(workspaceId)
-  const versionsRef = React.useRef<HTMLDetailsElement>(null)
-
-  React.useEffect(() => {
-    const closeVersions = (event: PointerEvent) => {
-      const versions = versionsRef.current
-      if (!versions?.open || !(event.target instanceof Node) || versions.contains(event.target)) return
-      versions.open = false
-    }
-
-    document.addEventListener('pointerdown', closeVersions)
-    return () => document.removeEventListener('pointerdown', closeVersions)
-  }, [])
 
   return (
     <section className={cn(RELEASE_KIT_SURFACE_CLASS, 'p-3')} style={RELEASE_KIT_SURFACE_STYLE}>
@@ -553,38 +550,20 @@ function AudioPanel({ items, workspaceId, onChanged, onAdd }: FinalCategoryProps
         <div className="flex shrink-0 items-center gap-2 lg:w-[158px]">
           <CategoryHeaderIcon category="audio" />
           <h2 className="text-[11px] font-medium text-white/90">Final Audio</h2>
-          {items.length ? <span className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-[10px] font-medium text-white/45">{items.length}</span> : null}
         </div>
         {featured ? (
           <div className={cn('flex min-w-0 flex-1 items-center gap-3 rounded-xl border bg-black/25 px-3 py-2', isUnverifiedReleaseKitItem(featured) ? 'border-amber-400/45 ring-1 ring-amber-400/25' : 'border-white/[0.07]')}>
-            <button type="button" onClick={() => void openItem(featured)} className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white shadow-tinted transition-transform hover:scale-105', isUnverifiedReleaseKitItem(featured) ? 'bg-white/20' : 'bg-[#f97316]')} title="Open final audio">
-              <Play className="ml-0.5 h-3.5 w-3.5 fill-current" />
-            </button>
             <button type="button" onClick={() => void openItem(featured)} className="min-w-0 flex-1 text-left">
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-medium text-white/88">{featured.title}</span>
-                {shouldShowPrimaryBadge(featured) ? <PrimaryBadge /> : null}
                 <StatusBadge item={featured} />
               </div>
-              <p className="mt-0.5 truncate text-[11px] text-white/38">{displaySubtype(featured.subtype)} · {displaySource(featured.source)}{featured.sizeBytes ? ` · ${formatFileSize(featured.sizeBytes)}` : ''}</p>
             </button>
-            <div className="hidden h-8 items-end gap-[2px] opacity-55 xl:flex" aria-hidden="true">
-              {WAVEFORM_HEIGHTS.map((height, index) => <span key={index} className={cn('w-0.5 rounded-full', index < 7 ? 'bg-[#f97316]' : 'bg-white/22')} style={{ height }} />)}
-            </div>
-            {items.length > 1 ? (
-              <details ref={versionsRef} className="group/versions relative shrink-0">
-                <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] text-white/62 hover:bg-white/[0.07] [&::-webkit-details-marker]:hidden">
-                  Versions <span className="text-white/32">{items.length - 1}</span><ChevronDown className="h-3 w-3 transition-transform group-open/versions:rotate-180" />
-                </summary>
-                <div className="absolute right-0 top-10 z-30 w-72 max-w-[70vw] space-y-1.5 rounded-xl border border-white/[0.1] bg-[#101012]/95 p-2 shadow-modal-small backdrop-blur-xl">
-                  {items.filter((item) => item.id !== featured.id).map((item) => <FinalItem key={item.id} item={item} workspaceId={workspaceId} onChanged={onChanged} />)}
-                </div>
-              </details>
-            ) : null}
+            <div className="w-[260px] max-w-[50%] shrink-0"><ReleaseKitAudioPlayer path={itemPaths[featured.id]} title={featured.title} /></div>
             <FinalActions item={featured} workspaceId={workspaceId} onChanged={onChanged} />
           </div>
         ) : <VisualEmpty category="audio" label="Add approved audio" onAdd={onAdd} className="min-h-14 flex-1" />}
-        <button type="button" onClick={onAdd} aria-label="Add final audio" title="Add final audio" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white/38 transition-colors hover:bg-white/[0.05] hover:text-white/75"><Plus className="h-3.5 w-3.5" /></button>
+        <button type="button" onClick={onAdd} aria-label={featured ? "Replace final audio" : "Add final audio"} title={featured ? "Replace final audio" : "Add final audio"} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white/38 transition-colors hover:bg-white/[0.05] hover:text-white/75"><Plus className="h-3.5 w-3.5" /></button>
       </div>
     </section>
   )
@@ -767,7 +746,7 @@ function VisualEmpty({ category, label, onAdd, className }: { category: ReleaseK
 function FinalActions({ item, workspaceId, onChanged, surface = false }: { item: ReleaseKitItem; workspaceId: string; onChanged: (manifest: ReleaseKitManifest) => void; surface?: boolean }) {
   return (
     <div className={cn('flex shrink-0 items-center opacity-55 transition-opacity group-hover:opacity-100', surface && 'rounded-lg bg-black/55 p-0.5 backdrop-blur-md')}>
-      {!item.isPrimary && item.status === 'ready' ? (
+      {item.category !== 'audio' && !item.isPrimary && item.status === 'ready' ? (
         <IconButton title="Set Primary" onClick={async () => onChanged(await window.electronAPI.setReleaseKitPrimary(workspaceId, item.id))}><Star className="h-3.5 w-3.5" /></IconButton>
       ) : null}
       <IconButton title="Remove final" danger onClick={async () => {
@@ -888,11 +867,12 @@ function displayVariantStatus(status: string): string {
   return status.replace(/-/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
-function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostIntent, pendingVariantPromotion, onOpenChange, onChanged, onCreateVariants }: {
+function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, autoAnalyzeAudio, initialPostIntent, pendingVariantPromotion, onOpenChange, onChanged, onCreateVariants }: {
   open: boolean
   item: ReleaseKitItem | null
   itemPath?: string
   workspaceId: string
+  autoAnalyzeAudio?: boolean
   initialPostIntent?: SocialVariantPostIntent | null
   pendingVariantPromotion?: PendingVariantPromotion | null
   onOpenChange: (open: boolean) => void
@@ -1034,7 +1014,8 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostI
   return (
     <Drawer direction="right" open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <DrawerContent className="w-[min(480px,94vw)] border-white/[0.07] bg-[#090909] text-white sm:max-w-[480px]">
-        <DrawerHeader className="border-b border-white/[0.06]">
+        <DrawerHeader className="relative border-b border-white/[0.06] pr-14">
+          <button type="button" aria-label="Close final preview" onClick={() => onOpenChange(false)} disabled={busy} className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 disabled:opacity-40"><X className="h-4 w-4" /></button>
           <div className="flex items-center gap-2">
             {mode !== 'details' ? <button type="button" onClick={() => {
               if (mode === 'where' && pendingVariantPromotion) onOpenChange(false)
@@ -1042,7 +1023,7 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostI
             }} className="rounded-md p-1 text-white/45 hover:bg-white/[0.06] hover:text-white"><ArrowLeft className="h-4 w-4" /></button> : null}
             <div>
               <DrawerTitle className="text-base text-white/86">{mode === 'details' ? item.title : mode === 'where' ? 'Choose an account' : mode === 'post' ? 'Write the post' : 'Choose when'}</DrawerTitle>
-              <DrawerDescription>{mode === 'details' ? `${displaySubtype(item.subtype)}${item.sizeBytes ? ` · ${formatFileSize(item.sizeBytes)}` : ''} · Finished and ready for use. Schedule separately when you choose.` : `Schedule ${item.title}`}</DrawerDescription>
+              <DrawerDescription>{mode === 'details' ? `${displaySubtype(item.subtype)}${item.sizeBytes ? ` · ${formatFileSize(item.sizeBytes)}` : ''} · Finished and ready for use.${supportsReleaseKitSocialPost(item.category) ? ' Schedule separately when you choose.' : ''}` : `Schedule ${item.title}`}</DrawerDescription>
             </div>
           </div>
         </DrawerHeader>
@@ -1053,17 +1034,18 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostI
               {(item.category === 'artwork' || item.category === 'images' || item.category === 'video') && itemPath ? (
                 <div className="max-h-56 overflow-hidden rounded-lg bg-white/[0.025]"><img src={thumbnailUrl(itemPath)} alt={item.title} className="h-full max-h-56 w-full object-contain" /></div>
               ) : null}
+              {item.category === 'audio' && <><ReleaseKitAudioPlayer path={itemPath} title={item.title} /><ReleaseKitAudioLyrics key={`${workspaceId}:${item.id}`} workspaceId={workspaceId} item={item} autoAnalyze={autoAnalyzeAudio} /></>}
               <div className="flex flex-wrap gap-2">
                 {item.category === 'video' ? (
                   <Button variant="outline" className="border-white/10 bg-transparent text-white/65 hover:bg-white/[0.05] hover:text-white" disabled={Boolean(repurposeRestriction) || busy} onClick={() => onCreateVariants(item.id)}><Scissors className="mr-1.5 h-3.5 w-3.5" />Create variants</Button>
                 ) : null}
-                <Button className="bg-[#f97316] text-black hover:bg-[#fb923c]" disabled={!eligible} onClick={() => setMode('where')}><Send className="mr-1.5 h-3.5 w-3.5" />Schedule social post</Button>
+                {supportsReleaseKitSocialPost(item.category) && <Button className="bg-[#f97316] text-black hover:bg-[#fb923c]" disabled={!eligible} onClick={() => setMode('where')}><Send className="mr-1.5 h-3.5 w-3.5" />Schedule social post</Button>}
                 <Button variant="outline" className="border-white/10 bg-transparent text-white/65" onClick={async () => {
                   const detail = await window.electronAPI.getReleaseKitItem(workspaceId, item.id)
                   onOpenFile(detail.absolutePath)
                 }}><ExternalLink className="mr-1.5 h-3.5 w-3.5" />Open file</Button>
               </div>
-              {!eligible ? <p className="text-xs text-amber-200/75">{restrictionMessage ?? (item.status !== 'ready' ? releaseKitStatusExplanation(item) : 'Social scheduling supports final images and videos.')}</p> : null}
+              {supportsReleaseKitSocialPost(item.category) && !eligible ? <p className="text-xs text-amber-200/75">{restrictionMessage ?? (item.status !== 'ready' ? releaseKitStatusExplanation(item) : 'Social scheduling supports final images and videos.')}</p> : null}
               {item.category === 'video' && repurposeRestriction && eligible ? <p className="text-xs text-amber-200/75">{repurposeRestriction}</p> : null}
 
               <DrawerSection title="Details">
@@ -1080,8 +1062,8 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostI
                 <Button size="sm" variant="outline" disabled={busy} className="border-white/10 bg-transparent text-white/65" onClick={() => void saveDetails()}>{busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}Save details</Button>
               </DrawerSection>
 
-              <DrawerSection title="Planned">{planned.length ? planned.map((use) => <AssetUseRow key={use.orderId} use={use} />) : <EmptyDrawerLine>No posts planned.</EmptyDrawerLine>}</DrawerSection>
-              <DrawerSection title="History">{history.length ? history.map((use) => <AssetUseRow key={use.orderId} use={use} />) : <EmptyDrawerLine>No posting history.</EmptyDrawerLine>}</DrawerSection>
+              {supportsReleaseKitSocialPost(item.category) && <><DrawerSection title="Planned">{planned.length ? planned.map((use) => <AssetUseRow key={use.orderId} use={use} />) : <EmptyDrawerLine>No posts planned.</EmptyDrawerLine>}</DrawerSection>
+              <DrawerSection title="History">{history.length ? history.map((use) => <AssetUseRow key={use.orderId} use={use} />) : <EmptyDrawerLine>No posting history.</EmptyDrawerLine>}</DrawerSection></>}
             </div>
           ) : mode === 'where' ? (
             <div className="divide-y divide-white/[0.06] border-y border-white/[0.06]">
@@ -1135,14 +1117,16 @@ function releaseKitScheduleRestriction(item: ReleaseKitItem): string | undefined
   return undefined
 }
 
-function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, outputs, prefillOutput, onAdded }: {
+function AddFinalDialog({ open, audioOnly, onOpenChange, workspaceId, hqWorkspaceId, campaignName, outputs, prefillOutput, onAdded }: {
   open: boolean
+  audioOnly: boolean
   onOpenChange: (open: boolean) => void
   workspaceId: string
   hqWorkspaceId?: string
   outputs: OutputSummaryDTO[]
   prefillOutput: OutputSummaryDTO | null
-  onAdded: (manifest: ReleaseKitManifest) => void
+  campaignName?: string
+  onAdded: (manifest: ReleaseKitManifest, audioItemId?: string) => void
 }) {
   const [stage, setStage] = React.useState<AddStage>('source')
   const [sourceKind, setSourceKind] = React.useState<SourceKind | null>(null)
@@ -1164,13 +1148,13 @@ function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, output
     if (!open) reset()
   }, [open, reset])
 
-  const selectSource = (next: SelectedSource) => {
+  const selectSource = React.useCallback((next: SelectedSource) => {
     setSelected(next)
     setCategory(next.suggested.category)
     setSubtype(next.suggested.subtype)
-    setTitle(next.label)
+    setTitle(next.suggested.category === 'audio' && next.suggested.subtype === 'master' && campaignName?.trim() ? campaignName.trim() : next.label)
     setStage('details')
-  }
+  }, [campaignName])
 
   React.useEffect(() => {
     if (!open || !prefillOutput) return
@@ -1194,25 +1178,25 @@ function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, output
       if (!cancelled) setBusy(false)
     })
     return () => { cancelled = true }
-  }, [open, prefillOutput, workspaceId])
+  }, [open, prefillOutput, workspaceId, selectSource])
 
   const chooseKind = async (kind: SourceKind) => {
     setSourceKind(kind)
-    if (kind === 'upload') {
-      const upload = await window.electronAPI.chooseReleaseKitUpload(workspaceId)
-      if (!upload) return
-      selectSource(sourceFromUpload(upload.path, upload.originalFileName))
-      return
-    }
+    if (busy) return
     setBusy(true)
     try {
+      if (kind === 'upload') {
+        const upload = await window.electronAPI.chooseReleaseKitUpload(workspaceId)
+        if (upload) selectSource(sourceFromUpload(upload.path, upload.originalFileName))
+        return
+      }
       if (kind === 'campaign-asset') {
         const manifest = await window.electronAPI.getMissionAssetManifest(workspaceId)
         setCampaignAssets(manifest.files.filter((asset) => asset.status === 'available' && asset.usableByAgents))
       } else if (kind === 'vault-asset') {
         if (!hqWorkspaceId) throw new Error('Artist HQ Vault is not configured.')
         const manifest = await window.electronAPI.getArtistVaultManifest(hqWorkspaceId)
-        setVaultAssets(manifest.assets.filter((asset) => asset.usableByAgents && asset.rightsStatus !== 'private' && asset.status !== 'missing' && asset.status !== 'archived'))
+        setVaultAssets(manifest.assets.filter((asset) => (!audioOnly || isReleaseKitAudioAsset(asset)) && asset.usableByAgents && asset.rightsStatus !== 'private' && asset.status !== 'missing' && asset.status !== 'archived'))
       } else if (kind === 'output') {
         const manifests = await Promise.all(outputs.map((output) => window.electronAPI.getOutput(workspaceId, output.id)))
         setOutputChoices(manifests.flatMap((output) => output ? sourceChoicesFromOutput(output) : []))
@@ -1236,10 +1220,10 @@ function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, output
         subtype: subtype.trim(),
         title: title.trim(),
         mimeType: selected.mimeType,
-        makePrimary,
+        makePrimary: category === 'audio' || makePrimary,
       }
       const result = await window.electronAPI.promoteToReleaseKit(workspaceId, input)
-      onAdded(result.manifest)
+      onAdded(result.manifest, category === 'audio' ? result.item.id : undefined)
       onOpenChange(false)
       toast.success('Added to Release Kit')
     } catch (error) {
@@ -1263,17 +1247,17 @@ function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, output
         <DialogHeader>
           <div className="flex items-center gap-2">
             {stage !== 'source' ? <button type="button" onClick={() => setStage(stage === 'details' && sourceKind !== 'upload' ? 'item' : 'source')} className="rounded-[5px] p-1 text-white/45 hover:bg-white/[0.06] hover:text-white"><ArrowLeft className="h-4 w-4" /></button> : null}
-            <DialogTitle>{stage === 'source' ? 'Add a final' : stage === 'item' ? 'Choose the exact item' : 'Final details'}</DialogTitle>
+            <DialogTitle>{stage === 'source' ? (audioOnly ? 'Set final audio' : 'Add a final') : stage === 'item' ? 'Choose the exact item' : 'Final details'}</DialogTitle>
           </div>
-          <DialogDescription>Save a stable copy of this finished version for use. Posting, sending, and timing are separate decisions.</DialogDescription>
+          <DialogDescription>{audioOnly || (stage === 'details' && category === 'audio') ? 'One final track per campaign. Adding a track replaces the current final audio. Your Vault originals stay saved.' : 'Save a stable copy of this finished version for use. Posting, sending, and timing are separate decisions.'}</DialogDescription>
         </DialogHeader>
 
         {stage === 'source' ? (
           <div className="divide-y divide-white/[0.07] border-y border-white/[0.07]">
-            <SourceChoice icon={Upload} title="Upload a file" detail="Add a finished file from your computer" onClick={() => void chooseKind('upload')} />
+            <SourceChoice icon={Upload} title="From computer" detail="Audio masters are also saved to Vault, with lyrics ready to review" onClick={() => void chooseKind('upload')} />
+            <SourceChoice icon={FolderOpen} title="From Vault" detail="Use an existing file and keep its lyrics—no need to upload again" onClick={() => void chooseKind('vault-asset')} />
             <SourceChoice icon={Archive} title="Campaign Asset" detail="Promote an approved source file from this campaign" onClick={() => void chooseKind('campaign-asset')} />
             <SourceChoice icon={Bot} title="Agent Output" detail="Promote a durable work product created in Artist OS" onClick={() => void chooseKind('output')} />
-            <SourceChoice icon={FolderOpen} title="HQ Vault" detail="Reuse approved material from the artist’s career library" onClick={() => void chooseKind('vault-asset')} />
           </div>
         ) : stage === 'item' ? (
           <div className="max-h-[420px] overflow-y-auto border-y border-white/[0.07]">
@@ -1283,7 +1267,7 @@ function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, output
                 <span className="min-w-0 flex-1 truncate text-sm text-white/74">{choice.label}</span>
                 <span className="text-[11px] capitalize text-white/28">{displaySubtype(choice.suggested.subtype)}</span>
               </button>
-            )) : <Centered>No eligible items found.</Centered>}
+            )) : <Centered>{audioOnly ? 'No audio files available. Add a song to Vault or choose From computer.' : 'No eligible items found.'}</Centered>}
           </div>
         ) : selected ? (
           <div className="space-y-4">
@@ -1307,14 +1291,14 @@ function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, output
                 <input value={subtype} onChange={(event) => setSubtype(event.target.value)} placeholder="master, cover-art, lyric-video…" className={INPUT_CLASS} />
               </label>
             </div>
-            <label className="flex cursor-pointer items-center gap-2.5 rounded-[6px] border border-white/[0.07] px-3 py-2.5 text-sm text-white/62">
+            {category !== 'audio' && <label className="flex cursor-pointer items-center gap-2.5 rounded-[6px] border border-white/[0.07] px-3 py-2.5 text-sm text-white/62">
               <input type="checkbox" checked={makePrimary} onChange={(event) => setMakePrimary(event.target.checked)} className="accent-[#f97316]" />
               Make this the Primary {displaySubtype(subtype)}
-            </label>
+            </label>}
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
               <Button disabled={busy || !title.trim() || !subtype.trim()} className="bg-[#f97316] text-black hover:bg-[#fb923c]" onClick={() => void submit()}>
-                {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />} Add final
+                {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />} {category === 'audio' ? 'Use as final audio' : 'Add final'}
               </Button>
             </div>
           </div>
@@ -1390,7 +1374,7 @@ function sourceFromUpload(path: string, originalFileName: string): SelectedSourc
 
 function placementForKind(kind: string): { category: ReleaseKitCategory; subtype: string } {
   const value = kind.toLowerCase()
-  if (/master|demo|stem|audio|wav|aiff|flac|mp3|m4a/.test(value)) return { category: 'audio', subtype: value.includes('clean') ? 'clean-version' : 'master' }
+  if (/master|demo|stem|audio|wav|aiff?|flac|mp3|m4a|aac|ogg|opus/.test(value)) return { category: 'audio', subtype: value.includes('clean') ? 'clean-version' : 'master' }
   if (/cover-art|artwork|psd|ai$/.test(value)) return { category: 'artwork', subtype: 'cover-art' }
   if (/video|mov|mp4|m4v|webm/.test(value)) return { category: 'video', subtype: value.includes('lyric') ? 'lyric-video' : 'final-video' }
   if (/image|photo|png|jpe?g|webp|gif|tiff?/.test(value)) return { category: 'images', subtype: value.includes('press') ? 'press-photo' : 'social-image' }
@@ -1456,7 +1440,6 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`
 }
 
-const WAVEFORM_HEIGHTS = ['28%', '48%', '72%', '94%', '78%', '58%', '36%', '50%', '82%', '100%', '68%', '42%', '60%', '88%', '54%', '32%', '70%', '46%']
 
 const INPUT_CLASS = 'h-10 w-full rounded-[6px] border border-white/[0.1] bg-[#111114] px-3 text-sm text-white/78 outline-none focus:border-[#f97316]/55'
 

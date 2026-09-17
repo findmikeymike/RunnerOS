@@ -1,8 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve, sep } from 'node:path'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import { getWorkspaceByNameOrId, getWorkspaces } from '@craft-agent/shared/config'
 import {
   loadArtistVaultManifest,
+  importArtistVaultAssetsAsync,
+  saveArtistVaultManifest,
+  withArtistVaultMutex,
+  artistVaultContextSlug,
+  artistVaultContextMetadata,
+  serializeArtistVaultContext,
   type VaultAssetRecord,
 } from '@craft-agent/shared/artist-vault'
 import {
@@ -11,6 +17,7 @@ import {
 } from '@craft-agent/shared/mission-assets'
 import {
   hashFileSha256,
+  defaultReleaseKitUsage,
   getReleaseKitRoot,
   loadReleaseKitManifest,
   materializeReleaseKitItem,
@@ -20,6 +27,7 @@ import {
   resolveReleaseKitItemPath,
   serializeReleaseKitContext,
   setReleaseKitPrimary,
+  selectSingleReleaseKitAudio,
   updateReleaseKitItemUsageWhileLocked,
   withReleaseKitLockAsync,
   verifyReleaseKit,
@@ -49,12 +57,14 @@ import {
   parseCampaignCalendarDocResult,
   serializeCampaignCalendarBody,
 } from '@craft-agent/shared/campaign-calendar'
+import { verifiedArtistVaultManifestForAgents } from '../track-intelligence/agent-visibility'
 import { OutputService } from '../outputs/OutputService'
 import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock'
 
 export interface ReleaseKitServiceOptions {
   onChanged?: (workspaceId: string, manifest: ReleaseKitManifest, contextChanged: boolean) => void
   getWorkspaceByNameOrId?: typeof getWorkspaceByNameOrId
+  getWorkspaces?: typeof getWorkspaces
   assertWritePermission?: (workspaceRootPath: string) => void
 }
 
@@ -79,11 +89,13 @@ export class ReleaseKitService {
 
   refreshAgentContext(workspaceId: string): { manifest: ReleaseKitManifest; contextPersisted: boolean } {
     const workspace = this.getCampaignWorkspace(workspaceId)
-    const verified = verifyReleaseKit(workspace.rootPath, workspace.id, workspace.id).manifest
+    verifyReleaseKit(workspace.rootPath, workspace.id, workspace.id)
+    const verified = selectSingleReleaseKitAudio(workspace.rootPath, workspace.id, workspace.id, undefined,
+      item => this.assertItemIsUnreferenced(workspace.id, workspace.rootPath, item.id))
     const safeManifest = {
       ...verified,
       items: verified.items.map((item) => item.status === 'ready'
-        ? item
+        ? this.withCurrentApprovedLyrics(workspace.id, item)
         : { ...item, trackIntelligence: undefined }),
     }
     const contextPersisted = this.commitContext(workspace.id, workspace.rootPath, safeManifest)
@@ -98,7 +110,7 @@ export class ReleaseKitService {
       throw new Error(`Release Kit item failed integrity verification: ${item.status}`)
     }
     return {
-      item,
+      item: this.withCurrentApprovedLyrics(workspace.id, item),
       absolutePath: resolveReleaseKitItemPath(workspace.rootPath, item.relativePath),
     }
   }
@@ -126,6 +138,21 @@ export class ReleaseKitService {
     this.assertWritePermission(workspace.rootPath)
     const resolved = this.resolveSource(workspace.id, workspace.rootPath, input, actor)
     this.prepareContextSync(workspace.rootPath)
+    const sourceSha256 = hashFileSha256(resolved.path)
+    const existing = loadReleaseKitManifest(workspace.rootPath, workspace.id, workspace.id).items.find(item =>
+      item.category === input.category && item.subtype === input.subtype
+      && item.title === (input.title?.trim() || basename(resolved.path))
+      && JSON.stringify(item.source) === JSON.stringify(input.source)
+      && item.sha256 === sourceSha256)
+    if (existing) {
+      const detail = this.getItem(workspace.id, existing.id)
+      const manifest = input.category === 'audio'
+        ? selectSingleReleaseKitAudio(workspace.rootPath, workspace.id, workspace.id, existing.id,
+          item => this.assertItemIsUnreferenced(workspace.id, workspace.rootPath, item.id))
+        : input.makePrimary && !existing.isPrimary ? this.setPrimary(workspace.id, existing.id) : this.get(workspace.id)
+      const current = input.category === 'audio' ? this.get(workspace.id) : manifest
+      return { manifest: current, item: current.items.find(item => item.id === existing.id) ?? detail.item }
+    }
     const result = materializeReleaseKitItem(workspace.rootPath, {
       workspaceId: workspace.id,
       campaignId: workspace.id,
@@ -141,9 +168,56 @@ export class ReleaseKitService {
       trackIntelligence: resolved.trackIntelligence,
       usage: resolved.usage,
       socialVariantIntent: resolved.socialVariantIntent,
-    })
+    }, item => this.assertItemIsUnreferenced(workspace.id, workspace.rootPath, item.id))
     this.commitContext(workspace.id, workspace.rootPath, result.manifest)
     return result
+  }
+
+  /** New final masters live in the artist's canonical Vault, with one lyric package. */
+  async promoteUserUpload(workspaceId: string, input: PromoteToReleaseKitInput): Promise<{ manifest: ReleaseKitManifest; item: ReleaseKitItem }> {
+    if (input.source.type !== 'upload' || input.category !== 'audio') return this.promote(workspaceId, input, 'user')
+    const workspace = this.getCampaignWorkspace(workspaceId)
+    this.assertWritePermission(workspace.rootPath)
+    const headquarters = (this.options.getWorkspaces ?? getWorkspaces)().filter(candidate => candidate.artistWorkspaceScope === 'hq')
+    if (headquarters.length !== 1) throw new Error(headquarters.length ? 'Multiple Artist HQ workspaces are configured. Choose the correct HQ before adding a master.' : 'Set up Artist HQ before adding a final master to Vault.')
+    const hq = headquarters[0]!
+    this.assertWritePermission(hq.rootPath)
+    const resolved = this.resolveSource(workspace.id, workspace.rootPath, input, 'user')
+    this.prepareContextSync(workspace.rootPath)
+    const sha256 = hashFileSha256(resolved.path)
+    return withArtistVaultMutex(hq.rootPath, async () => {
+      let manifest = loadArtistVaultManifest(hq.rootPath, hq.id)
+      const matching = manifest.assets.filter(asset => asset.sha256 === sha256)
+      // A duplicate upload must never bypass a saved privacy or agent-access decision.
+      for (const asset of matching) assertVaultAssetCanEnterReleaseKit(asset)
+      let audio = matching.find(asset => {
+        if (!['master-final', 'demo'].includes(asset.kind)) return false
+        try { return hashFileSha256(resolveVaultAssetPath(hq.rootPath, asset)) === sha256 } catch { return false }
+      })
+      if (!audio) {
+        const imported = await importArtistVaultAssetsAsync(hq.rootPath, hq.id, [resolved.path], { kindHint: 'master-final', details: [{ sourcePath: resolved.path, label: input.title }] })
+        manifest = imported.manifest
+        audio = imported.imported[0]
+        if (!audio) throw new Error(imported.skipped[0]?.reason ?? 'Unable to save the master to Artist HQ Vault.')
+        // Preserve a legitimate existing campaign review when moving these exact bytes into HQ.
+        const existing = loadMissionAssetManifest(workspace.rootPath, workspace.id).files.find(asset => {
+          if (asset.sha256 !== sha256 || asset.status !== 'available' || !asset.usableByAgents) return false
+          try { return hashFileSha256(resolveMissionAssetPath(workspace.rootPath, asset)) === sha256 } catch { return false }
+        })
+        const intelligence = existing?.trackIntelligence
+        if (intelligence) {
+          const approved = intelligence.approved?.provenance.sourceSha256 === sha256 ? intelligence.approved : undefined
+          const draft = intelligence.draft?.provenance.sourceSha256 === sha256 ? intelligence.draft : undefined
+          if (approved || draft) {
+            const relocate = <T extends NonNullable<typeof approved> | NonNullable<typeof draft>>(revision: T): T => ({ ...revision, provenance: { ...revision.provenance, transcriptRelativePath: undefined } })
+            audio.trackIntelligence = { schemaVersion: 1, status: draft ? 'draft' : 'reviewed', approved: approved && relocate(approved), draft: draft && relocate(draft) }
+            manifest = saveArtistVaultManifest(hq.rootPath, manifest)
+          }
+        }
+      }
+      upsertContextDoc(hq.rootPath, { slug: artistVaultContextSlug(), metadata: artistVaultContextMetadata(), body: serializeArtistVaultContext(verifiedArtistVaultManifestForAgents(hq.rootPath, manifest)) })
+      return this.promote(workspaceId, { ...input, uploadPath: undefined, source: { type: 'vault-asset', assetId: audio.id, vaultWorkspaceId: hq.id } }, 'user')
+    })
   }
 
   remove(workspaceId: string, itemId: string): ReleaseKitManifest {
@@ -232,6 +306,11 @@ export class ReleaseKitService {
           : output.primary ?? output.assets[0]
         if (!asset) throw new Error(`Output has no file asset: ${final.outputId}`)
         const mapped = releaseKitPlacementFromLegacySlot(final.slot)
+        if (mapped.category === 'audio' && (manifest.items.some(item => item.category === 'audio') || existsSync(join(getReleaseKitRoot(workspace.rootPath), '.replaced-audio.json')))) {
+          migration.importedLegacyFinalIds.add(final.id)
+          saveLegacyMigrationLedger(workspace.rootPath, migration)
+          continue
+        }
         const result = materializeReleaseKitItem(workspace.rootPath, {
           workspaceId: workspace.id,
           campaignId: workspace.id,
@@ -307,6 +386,7 @@ export class ReleaseKitService {
         path: resolveVaultAssetPath(vaultWorkspace.rootPath, record),
         mimeType: record.mimeType,
         trackIntelligence: record.trackIntelligence?.approved,
+        usage: { ...defaultReleaseKitUsage(new Date().toISOString(), 'system'), restrictions: { blockedFromUse: false, needsRightsClearance: record.rightsStatus === 'needs-clearance', artistLikenessRestricted: false } },
       }
     }
 
@@ -485,6 +565,19 @@ export class ReleaseKitService {
       return
     }
     assertTeamPermission(workspaceRootPath, 'files.write')
+  }
+
+  private withCurrentApprovedLyrics(workspaceId: string, item: ReleaseKitItem): ReleaseKitItem {
+    if (item.category !== 'audio' || !['vault-asset', 'campaign-asset'].includes(item.source.type)) return item
+    try {
+      const workspace = this.getCampaignWorkspace(workspaceId)
+      const source = this.resolveSource(workspace.id, workspace.rootPath, {
+        source: item.source, category: item.category, subtype: item.subtype,
+      }, 'user')
+      const approved = source.trackIntelligence
+      if (hashFileSha256(source.path) !== item.sha256) return { ...item, trackIntelligence: undefined }
+      return { ...item, trackIntelligence: approved?.provenance.sourceSha256 === item.sha256 ? approved : undefined }
+    } catch { return { ...item, trackIntelligence: undefined } }
   }
 
   private getCampaignWorkspace(workspaceId: string): ReturnType<ReleaseKitService['getWorkspace']> {
