@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 /**
  * SourceCredentialManager
  *
@@ -465,6 +466,20 @@ export class SourceCredentialManager {
    */
   async loadEffective(source: LoadedSource): Promise<StoredCredential | null> {
     return (await this.resolveEffectiveCredential(source))?.credential ?? null;
+  }
+
+  /** Durable identity of the effective encrypted credential owner, never its token. */
+  async captureDurableIdentity(source: LoadedSource): Promise<{ credentialIdentity: string } | null> {
+    const manager = getCredentialManager();
+    const before = await this.resolveEffectiveCredential(source);
+    if (!before?.credential.value && !before?.credential.refreshToken) return null;
+    const generation = await manager.captureDurableSourceIdentity(before.id);
+    if (!generation) return null;
+    const after = await this.resolveEffectiveCredential(source);
+    if (!after || credentialIdToAccount(after.id) !== credentialIdToAccount(before.id)
+      || !after.credential.value && !after.credential.refreshToken
+      || after.credential.durableAuthIdentity !== generation) return null;
+    return { credentialIdentity: createHash('sha256').update(JSON.stringify({ owner: credentialIdToAccount(after.id), generation })).digest('hex') };
   }
 
   /** Resolve the actual storage owner together with its credential. */

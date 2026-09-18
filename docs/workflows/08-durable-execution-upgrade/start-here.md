@@ -9,7 +9,7 @@ This packet specifies an upgrade beneath existing Artist OS workflows. It does n
 - Revision: r10. P-01/P-02 internal foundations and earlier P-03 slices are implemented; the P-03 internal implementation pass is complete; live exit gates remain open.
 - Authority: latest user request → specification → current code/evidence. Specs and structural plan validity do not prove shipped behavior.
 - Current entry: [Build state](state.md), [normal-engine integration slices](normal-engine-integration.md).
-- The durable host is opt-in; normal manual Start supports explicitly marked local-read workflows. Other workflow classes remain on the existing engine. Do not restart the user's app without permission.
+- The durable host is opt-in; normal Start supports explicitly marked read workflows, including selected API source GET tools through the shared OAuth/API stack. Other workflow classes remain on the existing engine. Do not restart the user's app without permission.
 
 ## Packet map
 

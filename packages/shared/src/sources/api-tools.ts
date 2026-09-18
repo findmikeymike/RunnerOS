@@ -232,11 +232,18 @@ export function buildToolDescription(config: ApiConfig): string {
  * @param sessionPath - Optional path to session folder for saving large responses
  * @returns SDK tool that can be included in an MCP server
  */
+/** Optional durable host guard. Ordinary callers retain their existing behavior. */
+export interface ApiExecutionGuard {
+  beforeFetch(request: { url: string; method: string }): Promise<void>;
+  assertDispatch(): void;
+}
+
 export function createApiTool(
   config: ApiConfig,
   credential: ApiCredentialSource,
   sessionPath?: string,
-  summarize?: SummarizeCallback
+  summarize?: SummarizeCallback,
+  executionGuard?: ApiExecutionGuard
 ) {
   const toolName = `api_${config.name}`;
   debug(`[api-tools] Creating flexible tool: ${toolName}`);
@@ -309,13 +316,18 @@ export function createApiTool(
         let response: Response;
         let buffer: Buffer;
         try {
+          if (executionGuard) {
+            await executionGuard.beforeFetch({ url, method });
+            fetchOptions.redirect = 'error';
+            executionGuard.assertDispatch();
+          }
           response = await fetch(url, fetchOptions);
 
           // OOM safety: reject before loading into memory
           const contentLength = response.headers.get('content-length');
           if (contentLength) {
             const size = parseInt(contentLength, 10);
-            if (!isNaN(size) && size > MAX_DOWNLOAD_SIZE) {
+            if (!isNaN(size) && size > (executionGuard ? 512 * 1024 : MAX_DOWNLOAD_SIZE)) {
               return {
                 content: [{
                   type: 'text' as const,
@@ -326,10 +338,49 @@ export function createApiTool(
             }
           }
 
-          // Load response as raw buffer — guardLargeResult handles binary detection
-          buffer = Buffer.from(await response.arrayBuffer());
+          // Durable tool results stay bounded even when the server omits or lies
+          // about Content-Length. Ordinary session downloads keep their existing path.
+          if (executionGuard && response.body) {
+            const reader = response.body.getReader(), chunks: Uint8Array[] = [];
+            let bytes = 0;
+            try {
+              while (true) {
+                const chunk = await reader.read();
+                if (chunk.done) break;
+                bytes += chunk.value.byteLength;
+                if (bytes > 512 * 1024) { await reader.cancel(); throw new Error('durable-api-response-too-large'); }
+                chunks.push(chunk.value);
+              }
+              buffer = Buffer.concat(chunks);
+            } finally { reader.releaseLock(); }
+          } else {
+            buffer = Buffer.from(await response.arrayBuffer());
+          }
         } finally {
           clearTimeout(timeout);
+        }
+
+        if (executionGuard) {
+          if (buffer.length > 512 * 1024) return { content: [{ type: 'text' as const, text: 'API response exceeded the durable read limit.' }], isError: true };
+          const text = buffer.toString('utf8');
+          const secrets = typeof resolvedCredential === 'string' ? [resolvedCredential] : Object.values(resolvedCredential);
+          if (headers.Authorization) secrets.push(headers.Authorization, headers.Authorization.replace(/^\S+\s+/, ''));
+          const observations: string[] = [text];
+          try {
+            // Compare decoded JSON too: unicode escaping must not conceal a token
+            // that the model will receive as ordinary JSON string content.
+            const pending: unknown[] = [JSON.parse(text)];
+            while (pending.length) {
+              const value = pending.pop();
+              if (typeof value === 'string') observations.push(value);
+              else if (value && typeof value === 'object') {
+                for (const [key, entry] of Object.entries(value)) { observations.push(key); pending.push(entry); }
+              }
+            }
+          } catch { /* Non-JSON responses are still checked as raw text. */ }
+          if (secrets.some(value => typeof value === 'string' && value && observations.some(observation => observation.includes(value) || observation.includes(encodeURIComponent(value))))) {
+            return { content: [{ type: 'text' as const, text: 'API response withheld because it echoed authentication data.' }], isError: true };
+          }
         }
 
         // Check for error responses first (errors are always text)
@@ -364,6 +415,7 @@ export function createApiTool(
         return { content: [{ type: 'text' as const, text: buffer.toString('utf-8') }] };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
+        if (executionGuard) return { content: [{ type: 'text' as const, text: 'API read failed. Check the connection and retry.' }], isError: true };
         debug(`[api-tools] ${config.name} request failed${config.name === 'gmail' ? '' : `: ${message}`}`);
         return {
           content: [{
@@ -392,11 +444,12 @@ export function createApiServer(
   config: ApiConfig,
   credential: ApiCredentialSource,
   sessionPath?: string,
-  summarize?: SummarizeCallback
+  summarize?: SummarizeCallback,
+  executionGuard?: ApiExecutionGuard
 ): ReturnType<typeof createSdkMcpServer> {
   debug(`[api-tools] Creating server for ${config.name}${sessionPath ? ` (session: ${sessionPath})` : ''}`);
 
-  const apiTool = createApiTool(config, credential, sessionPath, summarize);
+  const apiTool = createApiTool(config, credential, sessionPath, summarize, executionGuard);
 
   const server = createSdkMcpServer({
     name: `api_${config.name}`,

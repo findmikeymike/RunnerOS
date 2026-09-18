@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { startProcess } from './process-support';
 import { getManagedSkillManifest } from '../../../../../shared/src/skills/managed.ts';
 
-test.each(['start', 'multi', 'sources', 'inputs', 'structured', 'fallback', 'credits', 'skills', 'connected'])('normal runner %s reaches default Pi backend and performs native reads in isolated configuration', async (mode) => {
+test.each(['start', 'multi', 'sources', 'inputs', 'structured', 'fallback', 'credits', 'skills', 'connected', 'source-tools'])('normal runner %s reaches default Pi backend and performs native reads in isolated configuration', async (mode) => {
   const root = mkdtempSync(join(tmpdir(), 'artist-normal-pi-')); let requests = 0, nativeReads = 0, usedPriorOutput = false;
   const server = createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk;
@@ -29,8 +29,13 @@ test.each(['start', 'multi', 'sources', 'inputs', 'structured', 'fallback', 'cre
       expect(body.tools.map((tool: { function: { name: string } }) => tool.function.name).sort()).toEqual(['find', 'grep', 'ls', 'read']);
     }
     if (mode === 'inputs') { expect(raw).toContain('INPUT_FIXTURE Read fixture.txt.'); expect(raw).not.toContain('{{trigger.file}}'); }
-    if (done) { nativeReads++; expect(raw).toContain('NORMAL_START_NATIVE_READ'); }
-    const delta = done ? { role: 'assistant', content: mode === 'structured' ? '{"summary":"Read completed"}' : 'Read completed' } : { role: 'assistant', tool_calls: [{ index: 0, id: 'read-1', type: 'function', function: { name: 'read', arguments: JSON.stringify({ path: join(root, 'fixture.txt') }) } }] };
+    if (done) { nativeReads++; expect(raw).toContain(mode === 'source-tools' ? 'SOURCE_PROXY_NATIVE_READ' : 'NORMAL_START_NATIVE_READ'); }
+    if (mode === 'source-tools') {
+      expect(raw).not.toContain('synthetic-source-token');
+      expect(raw).not.toContain('synthetic-refreshed-source-token');
+      expect(body.tools.map((tool: { function: { name: string } }) => tool.function.name)).toContain('mcp__account__api_account');
+    }
+    const delta = done ? { role: 'assistant', content: mode === 'structured' ? '{"summary":"Read completed"}' : 'Read completed' } : { role: 'assistant', tool_calls: [{ index: 0, id: 'read-1', type: 'function', function: { name: mode === 'source-tools' ? 'mcp__account__api_account' : 'read', arguments: JSON.stringify(mode === 'source-tools' ? { method: 'GET', path: '/items' } : { path: join(root, 'fixture.txt') }) } }] };
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     for (const [value, finish] of [[delta, null], [{}, done ? 'stop' : 'tool_calls']]) res.write(`data: ${JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', created: 1, model: 'approval-fixture', choices: [{ index: 0, delta: value, finish_reason: finish }] })}\n\n`);
     res.end('data: [DONE]\n\n');
@@ -44,7 +49,48 @@ test.each(['start', 'multi', 'sources', 'inputs', 'structured', 'fallback', 'cre
     if (['fallback', 'credits'].includes(mode)) { const complete = JSON.parse(result.stdout.split('\n').find(line => line.includes('\"result\":\"succeeded\"'))!); expect(complete.providerAttempts.map((attempt: { model: string }) => attempt.model)).toEqual(['approval-fixture', 'backup-fixture']); }
     if (mode === 'structured') { const complete = JSON.parse(result.stdout.split('\n').find(line => line.includes('\"result\":\"succeeded\"'))!); expect(complete.steps[0].output).toEqual({ summary: 'Read completed' }); }
     if (mode === 'skills') { expect(result.stdout.includes('SKILL_PERSONAL_NATIVE_READ')).toBe(false); expect(result.stdout.includes('private-durable-skill-guidance')).toBe(false); }
+    if (mode === 'source-tools') expect(readFileSync(join(root, 'source-dispatches'), 'utf8')).toBe('GET\n');
     if (mode === 'connected') expect(readFileSync(join(root, 'connected-dispatches'), 'utf8')).toBe('read\n');
     if (mode === 'multi') { expect(usedPriorOutput).toBe(true); const complete = JSON.parse(result.stdout.split('\n').find(line => line.includes('\"result\":\"succeeded\"'))!); expect(complete.steps.map((step: { state: string }) => step.state)).toEqual(['succeeded', 'succeeded']); }
   } finally { server.closeAllConnections(); await new Promise<void>(yes => server.close(() => yes())); rmSync(root, { recursive: true, force: true }); }
 }, 30000);
+
+test('normal source proxy reuses saved GET after process death without another fetch or approval', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'artist-source-replay-'));
+  writeFileSync(join(root, 'synthetic-only'), 'approval-fixture');
+  let reached!: () => void;
+  const saved = new Promise<void>(resolve => { reached = resolve; });
+  let recovering = false, calls = 0;
+  const server = createServer(async (req, res) => {
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    const body = JSON.parse(raw); calls++;
+    const done = body.messages.some((message: { role: string }) => message.role === 'tool');
+    if (done && !recovering) { reached(); return; }
+    if (recovering) { expect(done).toBe(true); expect(raw).toContain('SOURCE_PROXY_NATIVE_READ'); }
+    const delta = done ? { role: 'assistant', content: 'Source recovery complete' } : { role: 'assistant', tool_calls: [{ index: 0, id: 'read-1', type: 'function', function: { name: 'mcp__account__api_account', arguments: JSON.stringify({ method: 'GET', path: '/items' }) } }] };
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    for (const [value, finish] of [[delta, null], [{}, done ? 'stop' : 'tool_calls']]) res.write(`data: ${JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', created: 1, model: 'approval-fixture', choices: [{ index: 0, delta: value, finish_reason: finish }] })}\n\n`);
+    res.end('data: [DONE]\n\n');
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const endpoint = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const env = { CRAFT_CONFIG_DIR: join(root, 'config'), CRAFT_PRODUCT_VARIANT: 'artist-os', CRAFT_BUNDLED_ASSETS_ROOT: resolve(import.meta.dir, '../../../../../../apps/electron/resources') };
+  let child = startProcess([join(import.meta.dir, 'normal-start-worker.ts'), root, endpoint, 'source-tools'], env);
+  try {
+    await Promise.race([saved, child.done.then(result => { throw new Error('worker exited before saved result: ' + result.stderr); })]);
+    expect(readFileSync(join(root, 'source-dispatches'), 'utf8')).toBe('GET\n');
+    child.child.kill('SIGKILL'); await child.done;
+    recovering = true;
+    child = startProcess([join(import.meta.dir, 'normal-start-worker.ts'), root, endpoint, 'source-tools-recover'], env);
+    const result = await child.done;
+    expect({ code: result.code, error: result.code ? result.stderr : '' }).toEqual({ code: 0, error: '' });
+    expect(result.stdout).toContain('"result":"succeeded"');
+    expect(readFileSync(join(root, 'source-dispatches'), 'utf8')).toBe('GET\n');
+    expect(calls).toBe(3);
+    expect(readFileSync(join(root, 'source-policy-checks'), 'utf8')).toContain('recover\n');
+  } finally {
+    if (child.child.exitCode === null) { child.child.kill('SIGKILL'); await child.done; }
+    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 45000);

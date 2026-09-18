@@ -13,7 +13,7 @@ import type { DurableWorkflowHost } from './durable-workflow-host.ts';
 import { durableWorkflowOccurrenceIdentity } from './durable-workflow-occurrence.ts';
 import type { DurableLocalSource } from './durable-workflow-sources.ts';
 
-export interface DurableStartBundle { connectionSlug: string; model: string; systemPrompt: string; localSources?: DurableLocalSource[] }
+export interface DurableStartBundle { connectionSlug: string; model: string; systemPrompt: string; localSources?: DurableLocalSource[]; sourceToolSlugs?: string[] }
 export interface DurableWorkflowStartOptions {
   host: DurableWorkflowHost;
   /** Null means unsupported capabilities; an explicitly selected durable workflow must reject. */
@@ -85,7 +85,7 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
       const runId = scheduled ? durableWorkflowOccurrenceIdentity(workspaceId, pinned.occurrence!).runId : randomUUID();
       const resolvedSteps = await Promise.all(workflow.metadata.steps.map(async step => {
         const selected = bundles.get(canonical([step.agent, step.taskModeId ?? null]))!;
-        return { id: step.id, agent: step.agent, ...(step.taskModeId ? { taskModeId: step.taskModeId } : {}), systemPrompt: selected.systemPrompt,
+        return { id: step.id, agent: step.agent, ...(step.taskModeId ? { taskModeId: step.taskModeId } : {}), systemPrompt: selected.systemPrompt, ...(selected.sourceToolSlugs?.length ? { sourceToolSlugs: selected.sourceToolSlugs } : {}),
           ...(roleRouting ? { modelPlan: { ...(step.modelRole ? { role: step.modelRole } : {}), candidates: [
             { connectionSlug: selected.connectionSlug, model: selected.model },
             ...(step.modelRole ? await (options.resolveFallbackCandidates ?? resolveDurableFallbackCandidates)(selected, step.modelRole) : []),
@@ -96,6 +96,7 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
       const admission = {
         ...(pinned.backgroundFence !== undefined ? { backgroundFence: pinned.backgroundFence } : {}),
         ...bundle, triggerInputs: pinned.triggerInputs, ...(pinned.untrustedTriggerInputs ? { untrustedTriggerInputs: pinned.untrustedTriggerInputs } : {}), workspaceId, runId, commandId: scheduled ? durableWorkflowOccurrenceIdentity(workspaceId, pinned.occurrence!).commandId : `manual-start:${runId}`,
+        sourceToolSlugs: [...new Set([...bundles.values()].flatMap(candidate => candidate.sourceToolSlugs ?? []))].sort(),
         localSources: [...new Map([...bundles.values()].flatMap(candidate => candidate.localSources ?? []).map(source => [canonical(source), source])).values()],
         resolvedAgentSlug: workflow.metadata.steps[0]!.agent,
         ...(workflow.metadata.steps[0]!.taskModeId ? { resolvedTaskModeId: workflow.metadata.steps[0]!.taskModeId } : {}),

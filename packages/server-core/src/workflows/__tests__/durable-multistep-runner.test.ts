@@ -169,3 +169,23 @@ test('explicitly allowed empty result remains valid and passes an empty string f
   const done = await runner.startWorkflow(workflow, f.input);
   expect(done.status).toBe('succeeded'); expect(done.workflowSteps?.[0]?.output).toBe(''); expect(done.workflowSteps?.[1]?.output).toBe('finished');
 });
+
+test('API source proxies stay scoped to their selected workflow step', async () => {
+  const f = fixture();
+  f.input.approvalPrincipalId = 'owner'; f.input.sourceToolSlugs = ['account'];
+  f.input.resolvedSteps![1]!.sourceToolSlugs = ['account'];
+  const name = 'mcp__account__api_account';
+  let checks = 0, index = 0;
+  const gateway: NonNullable<DurableReadRunnerOptions['sourceTools']> = {
+    capture: async (workspaceId, workspaceRoot) => [{ workspaceId, workspaceRoot, sourceSlug: 'account', sourceIdentity: 'source', toolIdentity: 'tool', credentialIdentity: 'credential', toolName: 'api_account', modelToolName: name, description: 'Read account', inputSchema: { type: 'object' } }],
+    assertCurrent: async () => { checks++; }, assertAllowed() {}, execute: async () => { throw new Error('unused'); },
+  };
+  const runner = new DurableReadRunner({ ...f.base(), sourceTools: gateway, authorizeRun() {}, createBackend: args => {
+    const step = index++;
+    expect(args.coreConfig.durableExecution!.descriptor.allowedTools).toEqual(step === 0 ? ['read'] : ['read', name]);
+    expect(args.coreConfig.durableExecution!.descriptor.sourceTools?.map(tool => tool.name)).toEqual(step === 0 ? undefined : [name]);
+    return { async *chat(prompt) { await model(args, prompt, 'output'); await args.coreConfig.durableExecution!.checkpoint({ kind: 'complete' }); }, async abort() {}, destroy() {} };
+  } });
+  expect((await runner.startWorkflow(f.workflow, f.input)).status).toBe('succeeded');
+  expect(index).toBe(2); expect(checks).toBeGreaterThan(2);
+});

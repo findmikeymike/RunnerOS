@@ -1,3 +1,4 @@
+import { createDurableSourceTools, type DurableSourceToolGrant } from './durable-source-tools';
 import { isDurableWorkflowConnectedReads } from '../../../shared/src/workflows/connected-reads';
 import { createDurableWorkflowConnectedReads, type DurableWorkflowConnectedReadOptions, type FrozenWorkflowConnectedRead } from './durable-workflow-connected-reads';
 import { assertDurableTriggerDeclarations, normalizeDurableTriggerInputs, durableTriggerTemplateContext } from './durable-workflow-inputs';
@@ -34,6 +35,7 @@ export interface DurableReadInput {
   /** Opt-in trusted authorization binding. Omit for the existing certified read path. */
   approvalPrincipalId?: string;
   localSources?: DurableLocalSource[];
+  sourceToolSlugs?: string[];
   triggerInputs?: Record<string, unknown>;
   untrustedTriggerInputs?: string[];
   /** Certified by the host, never estimated from renderer input. */
@@ -41,7 +43,7 @@ export interface DurableReadInput {
 }
 interface ModelPlan { role?: 'reasoning' | 'fast'; candidates: Array<{ connectionSlug: string; model: string }> }
 interface FrozenModelPlan { role?: 'reasoning' | 'fast'; candidates: Array<{ connectionSlug: string; model: string; bindingDigest: string; credentialIdentity: string }> }
-export type DurableReadWorkflowInput = Omit<DurableReadInput, 'prompt'> & { resolvedAgentSlug: string; resolvedTaskModeId?: string; resolvedSteps?: Array<{ id: string; agent: string; taskModeId?: string; systemPrompt: string; modelPlan?: ModelPlan }> };
+export type DurableReadWorkflowInput = Omit<DurableReadInput, 'prompt'> & { resolvedAgentSlug: string; resolvedTaskModeId?: string; resolvedSteps?: Array<{ id: string; agent: string; taskModeId?: string; systemPrompt: string; sourceToolSlugs?: string[]; modelPlan?: ModelPlan }> };
 export interface DurableReadAdmission {
   snapshot: DurableRunSnapshot;
   /** Observed internally; callers may separately await completion or failure. */
@@ -53,6 +55,7 @@ export interface DurableReadBackendArgs {
 type ReadBackend = Pick<AgentBackend, 'chat' | 'abort' | 'destroy'>;
 export interface DurableReadRunnerOptions {
   connectedReads?: DurableWorkflowConnectedReadOptions;
+  sourceTools?: ReturnType<typeof createDurableSourceTools>;
   assertBackgroundFence?: (workspaceId: string, fence: string) => void;
   journal: DurableJournal;
   hostRuntime: BackendHostRuntimeContext;
@@ -83,6 +86,7 @@ export interface DurableReadDecisionResult {
 export interface DurableReadSteeringResult { receipt: DurableSteeringReceipt; execution?: Promise<DurableRunSnapshot> }
 interface ActiveReadExecution { claim?: DurableClaim; backend?: ReadBackend; promise: Promise<DurableRunSnapshot>; replayForSteering?: boolean }
 interface FrozenReadContext {
+  sourceTools?: DurableSourceToolGrant[];
   connectedReads?: FrozenWorkflowConnectedRead[];
   backgroundFence?: string;
   prompt: string; systemPrompt: string; connectionSlug: string; workspaceRoot: string; bindingDigest: string;
@@ -92,7 +96,7 @@ interface FrozenReadContext {
   triggerInputs?: Record<string, unknown>;
   untrustedTriggerInputs?: string[];
   modelPlans?: FrozenModelPlan[];
-  steps?: Array<{ id: string; prompt: string; systemPrompt: string; requireNonEmptyOutput: boolean }>;
+  steps?: Array<{ id: string; prompt: string; systemPrompt: string; requireNonEmptyOutput: boolean; sourceToolSlugs?: string[] }>;
 }
 
 /** Reuse the existing Pi provider driver and runtime resolver, with model fallback disabled. */
@@ -280,6 +284,14 @@ export class DurableReadRunner {
       }
       modelPlans.push({ ...(step.modelPlan.role ? { role: step.modelPlan.role } : {}), candidates });
     }
+    let sourceTools: DurableSourceToolGrant[] | undefined;
+    if (requested.sourceToolSlugs?.length) {
+      if (!workflow || !requested.approvalPrincipalId || !this.options.authorizeRun) throw new Error('unsupported-durable-read-workflow');
+      this.options.authorizeRun({ runId: requested.runId, workspaceId: requested.workspaceId, approvalPrincipalId: requested.approvalPrincipalId });
+      sourceTools = await (this.options.sourceTools ?? createDurableSourceTools()).capture(requested.workspaceId, realpathSync(binding.workspace.rootPath), requested.sourceToolSlugs);
+      this.assertOpen();
+      this.options.authorizeRun({ runId: requested.runId, workspaceId: requested.workspaceId, approvalPrincipalId: requested.approvalPrincipalId });
+    }
     let connectedReads: FrozenWorkflowConnectedRead[] | undefined;
     if (workflow?.metadata.connectedReads !== undefined) {
       if (!requested.approvalPrincipalId || !this.options.authorizeRun || requested.costPolicy.unit !== 'model-requests') throw new Error('unsupported-durable-read-workflow');
@@ -299,9 +311,10 @@ export class DurableReadRunner {
       ...(workflow ? { triggerInputs: requested.triggerInputs ?? {}, untrustedTriggerInputs: requested.untrustedTriggerInputs ?? [] } : {}),
       ...(requested.localSources?.length ? { localSources: requested.localSources } : {}),
       ...(connectedReads ? { connectedReads } : {}),
+      ...(sourceTools?.length ? { sourceTools } : {}),
       ...(roleRouting ? { modelPlans } : {}),
       ...(workflow && (workflow.metadata.steps.length > 1 || roleRouting) ? { steps: workflow.metadata.steps.map((step, i) => ({ id: step.id, prompt: step.input,
-        systemPrompt: resolvedSteps![i]!.systemPrompt, requireNonEmptyOutput: step.completion?.requireNonEmptyOutput !== false })) } : {}) };
+        systemPrompt: resolvedSteps![i]!.systemPrompt, ...(sourceTools?.length ? { sourceToolSlugs: resolvedSteps![i]!.sourceToolSlugs ?? [] } : {}), requireNonEmptyOutput: step.completion?.requireNonEmptyOutput !== false })) } : {}) };
     let createdAt = Date.now();
     try { createdAt = this.options.journal.get(requested.runId, requested.workspaceId).spec.createdAt; }
     catch (error) { if (!(error instanceof Error) || error.message !== 'durable-run-not-found') throw error; }
@@ -312,7 +325,8 @@ export class DurableReadRunner {
     }
     const spec: DurableRunSpec = { engine: 'sqlite-v2-readonly-1', runId: requested.runId, workspaceId: requested.workspaceId,
       credentialIdentity: binding.credentialIdentity, runtimeManifest: { ...DURABLE_RUNTIME_MANIFEST },
-      createdAt, commandId: requested.commandId, model: requested.model, allowedTools: requested.allowedTools,
+      createdAt, commandId: requested.commandId, model: requested.model, allowedTools: [...requested.allowedTools, ...(sourceTools ?? []).map(tool => tool.modelToolName)],
+      ...(sourceTools?.length ? { sourceTools: sourceTools.map(tool => ({ name: tool.modelToolName, description: tool.description, inputSchema: tool.inputSchema, sourceSlug: tool.sourceSlug })) } : {}),
       ...(requested.webReadUrls ? { webReadUrls: requested.webReadUrls } : {}),
       ...(requested.webReadRedirects !== undefined ? { webReadRedirects: requested.webReadRedirects } : {}),
       maxOutputTokens: requested.maxOutputTokens, maxModelAttempts: requested.maxModelAttempts, deadlineAt: requested.deadlineAt,
@@ -457,7 +471,7 @@ export class DurableReadRunner {
       if (current.id !== workspaceId || realpathSync(current.rootPath) !== frozen.workspaceRoot) throw new Error('durable-output-workspace-changed');
       category = 'authorization';
       const approvalPrincipalId = state.spec.approvalPrincipalId;
-      if (frozen.connectedReads?.length) {
+      if (frozen.connectedReads?.length || frozen.sourceTools?.length) {
         const assertPublicationAuthority = () => {
           this.assertBackgroundFence(workspaceId, frozen.backgroundFence);
           journal.bridge(claim); // Fence the immutable publishing owner after every awaited lookup.
@@ -467,7 +481,12 @@ export class DurableReadRunner {
           this.options.authorizeRun({ runId, workspaceId, approvalPrincipalId });
           this.options.authorizePublication!({ workspaceId, approvalPrincipalId });
         };
-        await createDurableWorkflowConnectedReads(this.options.connectedReads).assertCurrent(frozen.connectedReads, frozen.workspaceRoot, assertPublicationAuthority);
+        assertPublicationAuthority();
+        await createDurableWorkflowConnectedReads(this.options.connectedReads).assertCurrent(frozen.connectedReads ?? [], frozen.workspaceRoot, assertPublicationAuthority);
+        assertPublicationAuthority();
+        if (frozen.sourceTools?.length) {
+          await (this.options.sourceTools ?? createDurableSourceTools()).assertCurrent(frozen.sourceTools, workspaceId, frozen.workspaceRoot);
+        }
         assertPublicationAuthority();
       }
       this.options.authorizePublication({ workspaceId, approvalPrincipalId });
@@ -504,14 +523,18 @@ export class DurableReadRunner {
     const primaryCandidate = { connectionSlug: initialFrozen.connectionSlug, model: initial.spec.model,
       credentialIdentity: initial.spec.credentialIdentity, bindingDigest: initialFrozen.bindingDigest };
     const connected = createDurableWorkflowConnectedReads(this.options.connectedReads);
+    const sourceGateway = this.options.sourceTools ?? createDurableSourceTools();
     const assertConnectedAuthority = () => {
       this.assertBackgroundFence(workspaceId, initialFrozen.backgroundFence);
       if (!initial.spec.approvalPrincipalId || !this.options.authorizeRun) throw new Error('durable-authorization-blocked');
       this.options.authorizeRun({ runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId });
     };
     const checkConnected = async (ownedClaim: DurableClaim = claim) => {
-      if (!initialFrozen.connectedReads?.length) return;
-      try { await connected.assertCurrent(initialFrozen.connectedReads, initialFrozen.workspaceRoot, assertConnectedAuthority); }
+      if (!initialFrozen.connectedReads?.length && !initialFrozen.sourceTools?.length) return;
+      try {
+        await connected.assertCurrent(initialFrozen.connectedReads ?? [], initialFrozen.workspaceRoot, assertConnectedAuthority);
+        if (initialFrozen.sourceTools?.length) { assertConnectedAuthority(); await sourceGateway.assertCurrent(initialFrozen.sourceTools, workspaceId, initialFrozen.workspaceRoot); assertConnectedAuthority(); }
+      }
       catch (error) {
         const state = journal.get(runId, workspaceId);
         if (state.status === 'running' && state.controlRevision === ownedClaim.controlRevision) {
@@ -522,7 +545,8 @@ export class DurableReadRunner {
       }
     };
     // Each bridge closes over an immutable claim and candidate, fencing responses from older attempts.
-    const createBridges = (claim: DurableClaim, candidate: FrozenModelPlan['candidates'][number]) => {
+    const createBridges = (claim: DurableClaim, candidate: FrozenModelPlan['candidates'][number], stepIndex = 0) => {
+      const sourceGrants = (initialFrozen.sourceTools ?? []).filter(tool => !initialFrozen.steps || initialFrozen.steps[stepIndex]?.sourceToolSlugs?.includes(tool.sourceSlug));
       const journalBridge = journal.bridge(claim, initial.spec.approvalPrincipalId ? {
       authorizeTool: async request => {
         const frozen = frozenContext(initial.spec);
@@ -539,12 +563,18 @@ export class DurableReadRunner {
           permissionsConfigCache.invalidateDefaults();
           permissionsConfigCache.invalidateWorkspace(frozen.workspaceRoot);
           if (request.tool === 'web_fetch' && !isDurableWebReadInput(request.input, initial.spec.webReadUrls)) throw new Error('durable-web-read-not-authorized');
-          const policyTool = { read: 'Read', grep: 'Grep', find: 'Glob', ls: 'Glob', web_fetch: 'WebFetch' }[request.tool];
+          const sourceGrant = sourceGrants.find(tool => tool.modelToolName === request.tool);
+          if (sourceGrant) { sourceGateway.assertAllowed(sourceGrant, request.input as Record<string, unknown>); return; }
+          const policyTool = ({ read: 'Read', grep: 'Grep', find: 'Glob', ls: 'Glob', web_fetch: 'WebFetch' } as Record<string, string>)[request.tool];
           const policyInputs = request.tool === 'web_fetch' && initial.spec.webReadRedirects === true
             ? initial.spec.webReadUrls!.map(url => ({ url })) : [request.input];
           if (!policyTool || policyInputs.some(input => !shouldAllowToolInMode(policyTool, input, 'safe', { permissionsContext: { workspaceRootPath: frozen.workspaceRoot, activeSourceSlugs: [] } }).allowed)) throw new Error('durable-authorization-blocked');
         };
         await checkCurrent();
+        if (sourceGrants.some(tool => tool.modelToolName === request.tool)) {
+          return { principalId: initial.spec.approvalPrincipalId!, credentialIdentity: candidate.credentialIdentity,
+            policyRevision: this.options.readPolicyRevision?.(frozen.workspaceRoot) ?? digest(sourceGrants), allowed: true, requiresApproval: false, approvalExpiresAt: initial.spec.deadlineAt };
+        }
         if (!this.options.authorizeTool) throw new Error('durable-authorization-blocked');
         const authorization = await this.options.authorizeTool(request, { runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId!, connectionSlug: candidate.connectionSlug, model: candidate.model, credentialIdentity: candidate.credentialIdentity, deadlineAt: initial.spec.deadlineAt, ...(initial.spec.webReadUrls ? { webReadUrls: Object.freeze([...initial.spec.webReadUrls]) } : {}), ...(initial.spec.webReadRedirects !== undefined ? { webReadRedirects: initial.spec.webReadRedirects } : {}) });
         await checkCurrent();
@@ -566,7 +596,18 @@ export class DurableReadRunner {
         throw new Error('durable-authorization-blocked', { cause: error });
       }
     };
-    const bridge: typeof journalBridge = { ...journalBridge, checkpoint: async request => {
+    const bridge: typeof journalBridge = { ...journalBridge,
+      ...(initial.spec.sourceTools ? { descriptor: { ...journalBridge.descriptor,
+        allowedTools: journalBridge.descriptor.allowedTools.filter(name => !initial.spec.sourceTools!.some(tool => tool.name === name) || sourceGrants.some(tool => tool.modelToolName === name)),
+        sourceTools: sourceGrants.length ? initial.spec.sourceTools.filter(tool => sourceGrants.some(grant => grant.modelToolName === tool.name)) : undefined,
+      } } : {}),
+      executeReadTool: async request => {
+        const grant = sourceGrants.find(tool => tool.modelToolName === request.tool);
+        if (!grant) throw new Error('durable-source-tool-unavailable');
+        const guard = () => { journal.assertSourceToolDispatch(claim, request); assertDispatch(); assertConnectedAuthority(); };
+        guard(); await checkConnected(claim); guard();
+        return sourceGateway.execute(grant, request.input as Record<string, unknown>, guard);
+      }, checkpoint: async request => {
       if (request.kind === 'output-published') throw new Error('durable-workflow-host-checkpoint-required');
       if (request.kind === 'tool-start') { await checkConnected(claim); assertDispatch(); }
       if (request.kind === 'model-start') {
@@ -672,7 +713,7 @@ export class DurableReadRunner {
           entry.claim = claim;
         }
         const candidate = plan?.candidates[candidateIndex] ?? primaryCandidate;
-        ({ bridge, journalBridge, assertDispatch } = createBridges(claim, candidate));
+        ({ bridge, journalBridge, assertDispatch } = createBridges(claim, candidate, index));
         const pendingRetry = journal.get(runId, workspaceId).providerAttempts?.at(-1)?.retryAt;
         while (pendingRetry !== undefined && Date.now() < pendingRetry) {
           assertDispatch();
@@ -688,7 +729,7 @@ export class DurableReadRunner {
         const ownedBridge = bridge;
         const assertAttemptDispatch = assertDispatch;
         const attemptClaim = claim;
-        const stepBridge: typeof bridge = !frozen.steps ? ownedBridge : { ...ownedBridge, checkpoint: async request => {
+        const stepBridge: typeof bridge = !frozen.steps ? ownedBridge : { ...ownedBridge, executeReadTool: request => ownedBridge.executeReadTool!({ ...request, turn: request.turn + offset }), checkpoint: async request => {
           if (request.kind === 'complete') {
             await checkConnected(attemptClaim);
             assertAttemptDispatch();
@@ -750,7 +791,7 @@ export class DurableReadRunner {
           claim = journal.recordProviderFailure(claim, { step: index, candidateIndex, code,
             ...(retryAt !== undefined ? { retryAt } : next < 0 ? { exhausted: true } : {}) });
           entry.claim = claim;
-          ({ bridge, journalBridge, assertDispatch } = createBridges(claim, candidate));
+          ({ bridge, journalBridge, assertDispatch } = createBridges(claim, candidate, index));
           if (retryAt === undefined && next < 0) return journal.get(runId, workspaceId);
           if (retryAt === undefined) candidateIndex = next;
         }

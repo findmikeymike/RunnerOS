@@ -25,6 +25,17 @@ export function assertDurableWorkflowAgentMetadata(metadata: AgentMetadata, task
   try { assertDurableWorkflowSkillSlugs(mode?.primarySkillSlugs ?? metadata.skills ?? []); } catch { throw unsupported('skills'); }
   return mode;
 }
+/** Classify selected sources once; API auth/tool capture remains a host admission operation. */
+export function resolveDurableSourceSelection(workspaceRoot: string, required: string[] = [], selected: string[] = []) {
+  const slugs = [...new Set([...required, ...selected])].sort();
+  if (slugs.some(slug => typeof slug !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(slug))) throw unsupported('sources');
+  const sources = getSourcesBySlugs(workspaceRoot, slugs);
+  if (sources.length !== slugs.length || sources.some(source => !isSourceUsable(source) || !['local', 'api'].includes(source.config.type))) throw unsupported('sources');
+  const sourceToolSlugs = sources.filter(source => source.config.type === 'api').map(source => source.config.slug).sort();
+  if (sourceToolSlugs.length > 8) throw unsupported('sources');
+  const localSources = resolveDurableLocalSources(workspaceRoot, sources.filter(source => source.config.type === 'local').map(source => source.config.slug));
+  return { localSources, sourceToolSlugs };
+}
 const defaults = { getWorkspaceByNameOrId, loadWorkspaceConfig, loadGlobalAgent, resolveBackendContext,
   resolveSessionConnection, getMiniModel, getDefaultThinkingLevel, loadConfigDefaults, resolveDurableWorkflowSkills };
 
@@ -61,7 +72,7 @@ export function createDurableWorkflowBundleResolver(deps: typeof defaults = defa
       if (!Array.isArray(options.enabledSourceSlugs) || mode.requiredSourceSlugs.some(slug => !options.enabledSourceSlugs!.includes(slug)) || expected.length !== options.enabledSourceSlugs.length
         || options.enabledSourceSlugs.some(slug => !expected.includes(slug))) throw unsupported('sources');
     }
-    const localSources = resolveDurableLocalSources(workspace.rootPath, mode?.requiredSourceSlugs ?? agent.metadata.sources ?? [], sources ?? []);
+    const { localSources, sourceToolSlugs } = resolveDurableSourceSelection(workspace.rootPath, mode?.requiredSourceSlugs ?? agent.metadata.sources ?? [], sources ?? []);
     const skillPrompt = (deps.resolveDurableWorkflowSkills ?? resolveDurableWorkflowSkills)(workspace.rootPath, skillSlugs);
     const defaultModel = config?.defaults?.model;
     let model = options.model || defaultModel;
@@ -75,7 +86,7 @@ export function createDurableWorkflowBundleResolver(deps: typeof defaults = defa
       workspaceDefaultConnectionSlug: config?.defaults?.defaultLlmConnection, managedModel: model });
     if (context.provider !== 'pi' || context.authType !== 'api_key' || context.connection?.authType !== 'api_key'
       || !context.connection.piAuthProvider || !context.connection.slug || !context.resolvedModel) throw unsupported('provider');
-    return { connectionSlug: context.connection.slug, model: context.resolvedModel, systemPrompt: options.customSystemPrompt + durableLocalSourcesPrompt(localSources) + skillPrompt, ...(localSources.length ? { localSources } : {}) };
+    return { connectionSlug: context.connection.slug, model: context.resolvedModel, systemPrompt: options.customSystemPrompt + durableLocalSourcesPrompt(localSources) + skillPrompt, ...(localSources.length ? { localSources } : {}), ...(sourceToolSlugs.length ? { sourceToolSlugs } : {}) };
   };
 }
 export const resolveDurableWorkflowBundle = createDurableWorkflowBundleResolver();
@@ -88,5 +99,5 @@ export function assertDurableWorkflowSourcesBeforeComposition(workspaceRoot: str
   const required = mode?.requiredSourceSlugs ?? metadata.sources ?? [];
   const declared = mode ? selectTaskModeSourceSlugs(mode, [...required, ...optional]) : [...required, ...optional];
   const inherited = mode || declared.length ? [] : loadWorkspaceConfig(workspaceRoot)?.defaults?.enabledSourceSlugs ?? [];
-  resolveDurableLocalSources(workspaceRoot, declared, inherited);
+  resolveDurableSourceSelection(workspaceRoot, declared, inherited);
 }

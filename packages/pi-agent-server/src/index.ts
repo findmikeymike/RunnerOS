@@ -166,7 +166,7 @@ interface OutboundPreToolUseReq {
   toolCallId?: string;
   input: Record<string, unknown>;
 }
-interface OutboundToolExecReq { type: 'tool_execute_request'; requestId: string; toolName: string; args: Record<string, unknown> }
+interface OutboundToolExecReq { turn?: number; toolCallId?: string; type: 'tool_execute_request'; requestId: string; toolName: string; args: Record<string, unknown> }
 interface OutboundSessionToolCompleted { type: 'session_tool_completed'; toolName: string; args: Record<string, unknown>; isError: boolean }
 interface OutboundMiniResult { type: 'mini_completion_result'; id: string; text: string | null }
 interface OutboundLlmQueryResult {
@@ -575,9 +575,9 @@ async function ensureSession(): Promise<AgentSession> {
     createFindToolDefinition(cwd),
     createLsToolDefinition(cwd),
   ];
-  const proxyTools = initConfig.durableExecution ? [] : buildProxyTools();
+  const proxyTools = initConfig.durableExecution ? buildProxyTools((initConfig.durableExecution.sourceTools ?? []).map(tool => ({ ...tool, inputSchema: tool.inputSchema as Record<string, unknown> }))) : buildProxyTools();
   const permitted = initConfig.durableExecution
-    ? [...builtinDefs, ...(initConfig.durableExecution.webReadUrls ? [createDurableWebFetchTool(initConfig.durableExecution.webReadUrls, initConfig.durableExecution.webReadRedirects)] : [])].filter(tool => initConfig!.durableExecution!.allowedTools.includes(tool.name as 'read'))
+    ? [...builtinDefs, ...proxyTools, ...(initConfig.durableExecution.webReadUrls ? [createDurableWebFetchTool(initConfig.durableExecution.webReadUrls, initConfig.durableExecution.webReadRedirects)] : [])].filter(tool => initConfig!.durableExecution!.allowedTools.includes(tool.name as 'read'))
     : [...builtinDefs, ...webTools, ...proxyTools];
   const wrappedAll = wrapToolsWithHooks(permitted);
   const toolAllowlist = wrappedAll.map(t => t.name);
@@ -848,10 +848,10 @@ function wrapSingleTool(tool: ToolDefinition<any, any>): ToolDefinition<any, any
 // Proxy Tools (tools executed in main process)
 // ============================================================
 
-function buildProxyTools(): ToolDefinition<any, any>[] {
+function buildProxyTools(defs = proxyToolDefs): ToolDefinition<any, any>[] {
   debugLog(`Building proxy tools from ${proxyToolDefs.length} definitions: ${proxyToolDefs.map(t => t.name).join(', ')}`);
 
-  return proxyToolDefs.map<ToolDefinition<any, any>>(def => ({
+  return defs.map<ToolDefinition<any, any>>(def => ({
     name: def.name,
     label: def.name
       .replace(/^mcp__.*?__/, '')
@@ -895,6 +895,7 @@ function buildProxyTools(): ToolDefinition<any, any>[] {
       send({
         type: 'tool_execute_request',
         requestId,
+        ...(durableController ? { turn: durableController.currentTurn, toolCallId } : {}),
         toolName: def.name,
         args: inputObj,
       });

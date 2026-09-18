@@ -2,8 +2,8 @@ import { readProcessIdentity, processIdentityProvesReplacement } from './process
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { chmodSync, closeSync, existsSync, fsyncSync, linkSync, lstatSync, openSync, unlinkSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import type { DurableCheckpoint, DurableCheckpointReply, DurableExecutionBridge, DurableExecutionDescriptor, DurableJson } from '../protocol/durable-execution.ts';
-import { DURABLE_RUNTIME_MANIFEST, isDurableWebReadUrls, isDurableWebReadInput } from '../protocol/durable-execution.ts';
+import type { DurableCheckpoint, DurableCheckpointReply, DurableExecutionBridge, DurableExecutionDescriptor, DurableJson, DurableSourceToolRequest } from '../protocol/durable-execution.ts';
+import { DURABLE_RUNTIME_MANIFEST, isDurableWebReadUrls, isDurableWebReadInput, isDurableToolGrant, isDurableSourceToolInput } from '../protocol/durable-execution.ts';
 import { privateDurableDirectory } from './key-provider.ts';
 import type { DurableOperation, DurableOperationIntent, DurableOperationOutcome, DurableOperationValidator, DurableOperationAttemptToken, DurableOperationStart } from './operation-types.ts';
 export type * from './operation-types.ts';
@@ -127,10 +127,10 @@ export class DurableJournal {
       this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;');
       if (this.db.prepare('PRAGMA journal_mode').get().journal_mode !== 'wal' || this.db.prepare('PRAGMA synchronous').get().synchronous !== 2 || this.db.prepare('PRAGMA foreign_keys').get().foreign_keys !== 1) throw new Error('unsafe-sqlite-settings');
       const version = this.db.prepare('PRAGMA user_version').get().user_version;
-      if (![0, 1, 2, 3, 4, 5, 6, 7].includes(version)) throw new Error('unsupported-durable-schema');
+      if (![0, 1, 2, 3, 4, 5, 6, 7, 8].includes(version)) throw new Error('unsupported-durable-schema');
       this.db.exec('BEGIN IMMEDIATE');
       try {
-        this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, command TEXT NOT NULL, spec_digest TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT, pid INTEGER, payload TEXT NOT NULL, UNIQUE(workspace,command)); CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), version INTEGER NOT NULL, kind TEXT NOT NULL, UNIQUE(run_id,version)); CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES events(sequence), acknowledged INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS control_commands (workspace TEXT NOT NULL, id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(id), payload TEXT NOT NULL, PRIMARY KEY(workspace,id)); PRAGMA user_version=7;');
+        this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, command TEXT NOT NULL, spec_digest TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT, pid INTEGER, payload TEXT NOT NULL, UNIQUE(workspace,command)); CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), version INTEGER NOT NULL, kind TEXT NOT NULL, UNIQUE(run_id,version)); CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES events(sequence), acknowledged INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS control_commands (workspace TEXT NOT NULL, id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(id), payload TEXT NOT NULL, PRIMARY KEY(workspace,id)); PRAGMA user_version=8;');
         if (!this.db.prepare('PRAGMA table_info(runs)').all().some((column: any) => column.name === 'process_identity')) this.db.exec('ALTER TABLE runs ADD COLUMN process_identity TEXT');
         const keyCheck = this.db.prepare("SELECT value FROM metadata WHERE key='key-check'").get();
         if (keyCheck) { if (this.decrypt(keyCheck.value, 'key-check') !== 'artist-os-durable-v1') throw new Error('invalid-key-check'); }
@@ -207,7 +207,7 @@ export class DurableJournal {
       if (!publication || typeof publication !== 'object' || Object.keys(publication).some(key => !['outputId', 'kind', 'title', 'summary', 'stepId'].includes(key)) || typeof publication.outputId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(publication.outputId) || !['report', 'document'].includes(publication.kind) || typeof publication.title !== 'string' || !publication.title.trim() || typeof publication.stepId !== 'string' || !publication.stepId.trim() || publication.summary !== undefined && typeof publication.summary !== 'string' || spec.workflowSteps && publication.stepId !== spec.workflowSteps.at(-1)!.id) throw new Error('invalid-durable-publication');
     }
     if (spec.approvalPrincipalId !== undefined && (typeof spec.approvalPrincipalId !== 'string' || !spec.approvalPrincipalId.trim())) throw new Error('invalid-approval-principal');
-    if (!/^[a-f0-9]{64}$/.test(spec.credentialIdentity) || !spec.runtimeManifest || Object.values(spec.runtimeManifest).some(value => typeof value !== 'string') || spec.engine !== 'sqlite-v2-readonly-1' || !spec.runId || !spec.workspaceId || !spec.commandId || !spec.model || !Number.isSafeInteger(spec.maxOutputTokens) || spec.maxOutputTokens < 1 || !Number.isSafeInteger(spec.maxModelAttempts) || spec.maxModelAttempts < 1 || !Number.isFinite(spec.deadlineAt) || !Array.isArray(spec.allowedTools) || spec.allowedTools.some(t => !['read', 'grep', 'find', 'ls', 'web_fetch'].includes(t)) || (spec.webReadUrls !== undefined && !isDurableWebReadUrls(spec.webReadUrls)) || (spec.allowedTools.includes('web_fetch') !== (spec.webReadUrls !== undefined)) || (spec.webReadUrls !== undefined && !spec.approvalPrincipalId) || (spec.webReadRedirects !== undefined && (typeof spec.webReadRedirects !== 'boolean' || spec.webReadUrls === undefined)) || !policy || !['verified-free', 'trusted-upper-bound', 'model-requests'].includes(policy.unit) || !Number.isSafeInteger(policy.maxTotalUnits) || !Number.isSafeInteger(policy.maxUnitsPerAttempt) || policy.maxTotalUnits < 0 || policy.maxUnitsPerAttempt < 0 || (policy.unit === 'verified-free' ? policy.maxTotalUnits !== 0 || policy.maxUnitsPerAttempt !== 0 : policy.maxUnitsPerAttempt === 0) || (policy.unit === 'model-requests' && (policy.maxUnitsPerAttempt !== 1 || policy.maxTotalUnits !== spec.maxModelAttempts))) throw new Error('invalid-durable-admission');
+    if (!/^[a-f0-9]{64}$/.test(spec.credentialIdentity) || !spec.runtimeManifest || Object.values(spec.runtimeManifest).some(value => typeof value !== 'string') || spec.engine !== 'sqlite-v2-readonly-1' || !spec.runId || !spec.workspaceId || !spec.commandId || !spec.model || !Number.isSafeInteger(spec.maxOutputTokens) || spec.maxOutputTokens < 1 || !Number.isSafeInteger(spec.maxModelAttempts) || spec.maxModelAttempts < 1 || !Number.isFinite(spec.deadlineAt) || !isDurableToolGrant(spec.allowedTools, spec.sourceTools) || (spec.sourceTools !== undefined && !spec.approvalPrincipalId) || (spec.webReadUrls !== undefined && !isDurableWebReadUrls(spec.webReadUrls)) || (spec.allowedTools.includes('web_fetch') !== (spec.webReadUrls !== undefined)) || (spec.webReadUrls !== undefined && !spec.approvalPrincipalId) || (spec.webReadRedirects !== undefined && (typeof spec.webReadRedirects !== 'boolean' || spec.webReadUrls === undefined)) || !policy || !['verified-free', 'trusted-upper-bound', 'model-requests'].includes(policy.unit) || !Number.isSafeInteger(policy.maxTotalUnits) || !Number.isSafeInteger(policy.maxUnitsPerAttempt) || policy.maxTotalUnits < 0 || policy.maxUnitsPerAttempt < 0 || (policy.unit === 'verified-free' ? policy.maxTotalUnits !== 0 || policy.maxUnitsPerAttempt !== 0 : policy.maxUnitsPerAttempt === 0) || (policy.unit === 'model-requests' && (policy.maxUnitsPerAttempt !== 1 || policy.maxTotalUnits !== spec.maxModelAttempts))) throw new Error('invalid-durable-admission');
     return this.transaction(() => {
       const old = this.db.prepare('SELECT * FROM runs WHERE id=? OR (workspace=? AND command=?)').all(spec.runId, spec.workspaceId, spec.commandId);
       if (old.length) { if (old.length !== 1 || old[0].id !== spec.runId || old[0].workspace !== spec.workspaceId || old[0].spec_digest !== digest(spec)) throw new Error('durable-command-conflict'); return this.decrypt(old[0].payload, spec.runId); }
@@ -479,6 +479,7 @@ export class DurableJournal {
     const active = snapshot.providerAttempts?.at(-1);
     const candidate = active && spec.fallbackPlan?.steps[active.step]?.candidates[active.candidateIndex];
     const descriptor: DurableExecutionDescriptor = { credentialIdentity: candidate?.credentialIdentity ?? spec.credentialIdentity, runtimeManifest: Object.freeze({...spec.runtimeManifest}), engine: spec.engine, runId: spec.runId, workspaceId: spec.workspaceId, createdAt: spec.createdAt, allowedTools: [...spec.allowedTools], model: candidate?.model ?? spec.model, maxOutputTokens: spec.maxOutputTokens };
+    if (spec.sourceTools) descriptor.sourceTools = freezeJson(JSON.parse(canonical(spec.sourceTools)));
     if (spec.webReadUrls) { descriptor.webReadUrls = [...spec.webReadUrls]; Object.freeze(descriptor.webReadUrls); }
     if (spec.webReadRedirects !== undefined) descriptor.webReadRedirects = spec.webReadRedirects;
     Object.freeze(descriptor.allowedTools); Object.freeze(descriptor);
@@ -654,6 +655,7 @@ export class DurableJournal {
             }
             if (request.kind === 'tool-disposition') return {};
             if (request.tool === 'web_fetch' && !isDurableWebReadInput(request.input, state.spec.webReadUrls)) throw new Error('durable-web-read-not-authorized');
+            if (state.spec.sourceTools?.some(tool => tool.name === request.tool) && !isDurableSourceToolInput(request.input)) throw new Error('durable-source-read-not-authorized');
             const inputDigest = digest(request.input);
             if (call.inputDigest && call.inputDigest !== inputDigest) throw new Error('durable-tool-input-changed');
             const approval = this.authorize(state, request, call, inputDigest, authorization);
@@ -677,6 +679,7 @@ export class DurableJournal {
     return this.transaction(() => {
       const parent = this.fenced(claim);
       if (parent.spec.costPolicy.unit === 'model-requests') throw new Error('durable-request-budget-children-unsupported');
+      if (parent.spec.sourceTools) throw new Error('durable-source-read-children-unsupported');
       if (parent.spec.webReadUrls) throw new Error('durable-web-read-children-unsupported');
       if (parent.spec.parent) throw new Error('durable-child-depth-exceeded');
       if (!parent.spec.approvalPrincipalId) throw new Error('durable-child-principal-required');
@@ -809,6 +812,16 @@ export class DurableJournal {
       this.save(state, 'operation-started');
       return { operation, dispatch: true, attempt };
     });
+  }
+  /** A source proxy can only dispatch a normalized, journal-started current read. */
+  assertSourceToolDispatch(claim: DurableClaim, request: DurableSourceToolRequest): void {
+    const state = this.fenced(claim);
+    this.operationDispatch(state, claim);
+    if (!Number.isSafeInteger(request.turn) || request.turn < 0 || request.turn !== state.turns.length - 1
+      || !state.spec.sourceTools?.some(tool => tool.name === request.tool) || !isDurableSourceToolInput(request.input)) throw new Error('durable-source-read-not-authorized');
+    const turn = state.turns[request.turn], call = turn?.calls.find(item => item.id === request.callId);
+    if (!turn?.message || !call || call.tool !== request.tool || call.skipped || call.result !== undefined || call.attempts < 1
+      || call.inputDigest !== digest(request.input) || turn.calls.slice(0, turn.calls.indexOf(call)).some(item => item.result === undefined && !item.skipped)) throw new Error('durable-source-tool-not-started');
   }
   /** Recheck the issued attempt immediately before an awaited adapter dispatches I/O. */
   assertOperationDispatch(claim: DurableClaim, token: DurableOperationAttemptToken): void {

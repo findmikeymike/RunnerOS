@@ -179,3 +179,16 @@ test('real bundle guards identify the repair category without exposing context',
   try { f.resolve('w', 'reader', f.options); throw new Error('expected rejection'); }
   catch (error) { expect((error as DurableWorkflowEligibilityError).blocker).toBe('provider'); }
 });
+
+test('selected authenticated API source enters shared tool admission without provider-specific rules', () => {
+  const f = fixture(), root = mkdtempSync(join(tmpdir(), 'durable-bundle-api-')); roots.push(root);
+  f.deps.getWorkspaceByNameOrId = () => ({ id: 'w', name: 'w', slug: 'w', rootPath: root, createdAt: 1 });
+  const folder = join(root, 'sources', 'account'); mkdirSync(folder, { recursive: true });
+  const config = { id: 'account', slug: 'account', name: 'Account', enabled: true, type: 'api', provider: 'custom-service', isAuthenticated: true, api: { baseUrl: 'https://example.test/api/', authType: 'oauth' } };
+  writeFileSync(join(folder, 'config.json'), JSON.stringify(config));
+  f.metadata.sources = ['account'];
+  expect(() => assertDurableWorkflowSourcesBeforeComposition(root, f.metadata)).not.toThrow();
+  expect(f.resolve('w', 'reader', f.options).sourceToolSlugs).toEqual(['account']);
+  writeFileSync(join(folder, 'config.json'), JSON.stringify({ ...config, enabled: false }));
+  expect(() => f.resolve('w', 'reader', f.options)).toThrow('unsupported-durable-agent-bundle');
+});

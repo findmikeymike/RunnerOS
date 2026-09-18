@@ -190,3 +190,33 @@ test('web fetch descriptor requires the exact approved URL grant', () => {
     expect(() => new DurableTurnController({ ...descriptor, allowedTools: ['web_fetch'], webReadUrls: ['https://example.com/'], webReadRedirects } as never, async () => ({}))).toThrow();
   }
 });
+
+test('frozen API proxy reads use journal replay through the real SDK', async () => {
+  const name = 'mcp__calendar__api_calendar';
+  const sourceDescriptor: DurableExecutionDescriptor = { ...descriptor, allowedTools: [name], sourceTools: [{ name, sourceSlug: 'calendar', description: 'Read calendar', inputSchema: { type: 'object', properties: { path: { type: 'string' } } } }] };
+  const saved = new Map<string, any>(); let dispatches = 0, providerCalls = 0;
+  const checkpoint = async (event: DurableCheckpoint): Promise<DurableCheckpointReply> => {
+    if (event.kind === 'model-start') return { cached: saved.get(`model-${event.turn}`) };
+    if (event.kind === 'model-result') saved.set(`model-${event.turn}`, event.message);
+    if (event.kind === 'tool-start') return { cached: saved.get(event.callId) };
+    if (event.kind === 'tool-result') saved.set(event.callId, event.result);
+    return {};
+  };
+  const run = async () => {
+    const controller = new DurableTurnController(sourceDescriptor, checkpoint); let turn = 0;
+    const tool: AgentTool = { name, label: 'Calendar', description: 'Read calendar', parameters: Type.Object({ path: Type.String() }), execute: async (id, input) => {
+      await controller.disposition(id, name);
+      return controller.tool(id, name, input, async () => { expect(controller.currentTurn).toBe(0); dispatches++; return { content: [{ type: 'text', text: 'account result' }], details: {} }; });
+    } };
+    const agent = new Agent({ initialState: { model, tools: [tool] }, streamFn: () => {
+      providerCalls++; const stream = createAssistantMessageEventStream(); const response = message(turn++ === 0);
+      if (response.stopReason === 'toolUse') response.content = [{ type: 'toolCall', id: 'source-read', name, arguments: { path: '/events' } }];
+      stream.push({ type: 'done', reason: response.stopReason as 'stop', message: response }); return stream;
+    } });
+    await controller.run(agent, 'Read my calendar', 'system');
+  };
+  await run(); await run();
+  expect(dispatches).toBe(1); expect(providerCalls).toBe(2);
+  expect(() => new DurableTurnController({ ...sourceDescriptor, allowedTools: [name, 'mcp__session__send'] }, checkpoint)).toThrow('Invalid durable');
+  expect(() => new DurableTurnController({ ...sourceDescriptor, sourceTools: [{ ...sourceDescriptor.sourceTools![0]!, name: 'mcp__other__api_calendar' }] }, checkpoint)).toThrow('Invalid durable');
+});

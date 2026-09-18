@@ -36,8 +36,9 @@ function sidecar(root: string) {
   };
 }
 
-for (const mode of ['success', 'reject-model', 'credential-mismatch', 'runtime-mismatch']) {
+for (const mode of ['success', 'source-read', 'reject-model', 'credential-mismatch', 'runtime-mismatch']) {
   const rejectModelCommit = mode === 'reject-model';
+  const sourceRead = mode === 'source-read', sourceName = 'mcp__calendar__api_calendar';
   test(`real Pi subprocess IPC ${mode}`, async () => {
     const root = mkdtempSync(join(tmpdir(), 'artist-pi-ipc-'));
     const inputPath = join(root, 'fixture.txt');
@@ -51,7 +52,7 @@ for (const mode of ['success', 'reject-model', 'credential-mismatch', 'runtime-m
       const finished = input.messages.some((message: any) => message.role === 'tool');
       const delta = finished
         ? { role: 'assistant', content: 'IPC_READ_FINISHED' }
-        : { role: 'assistant', content: null, tool_calls: [{ index: 0, id: 'ipc-read', type: 'function', function: { name: 'read', arguments: JSON.stringify({ path: inputPath }) } }] };
+        : { role: 'assistant', content: null, tool_calls: [{ index: 0, id: 'ipc-read', type: 'function', function: { name: sourceRead ? sourceName : 'read', arguments: JSON.stringify(sourceRead ? { method: 'GET', path: '/events' } : { path: inputPath }) } }] };
       response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
       const chunk = (change: object, finish: string | null) => ({ id: 'chatcmpl-local', object: 'chat.completion.chunk', created: 1, model: 'durable-ipc-fixture', choices: [{ index: 0, delta: change, finish_reason: finish }] });
       response.write(`data: ${JSON.stringify(chunk(delta, null))}\n\n`);
@@ -64,9 +65,11 @@ for (const mode of ['success', 'reject-model', 'credential-mismatch', 'runtime-m
       await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
       const baseUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}/v1`;
       const spec: DurableRunSpec = { credentialIdentity: await durableCredentialIdentity({provider:'custom-endpoint',credential:{type:'api_key',key:'local-only-fixture'}}), runtimeManifest: {...DURABLE_RUNTIME_MANIFEST}, engine: 'sqlite-v2-readonly-1', runId: randomUUID(), workspaceId: 'ipc-workspace', createdAt: Date.now(), allowedTools: ['read'], model: 'durable-ipc-fixture', maxOutputTokens: 256, commandId: randomUUID(), authority: { scope: 'authorized-local-fixture-read' }, context: { prompt: 'Read the fixture.' }, deadlineAt: Date.now() + 60000, maxModelAttempts: 3, costPolicy: { unit: 'verified-free', maxTotalUnits: 0, maxUnitsPerAttempt: 0 } };
+      if (sourceRead) { spec.allowedTools = [sourceName]; spec.sourceTools = [{ name: sourceName, sourceSlug: 'calendar', description: 'Read account calendar', inputSchema: { type: 'object', properties: { method: { type: 'string' }, path: { type: 'string' } }, required: ['path'] } }]; spec.approvalPrincipalId = 'alice'; }
       journal = new DurableJournal({ configRoot: root, key: randomBytes(32) });
       journal.admit(spec);
-      const bridge = journal.bridge(journal.claim(spec.runId, spec.workspaceId));
+      const claim = journal.claim(spec.runId, spec.workspaceId);
+      const bridge = journal.bridge(claim, { authorizeTool: async () => ({ principalId: 'alice', policyRevision: 'read-1', credentialIdentity: spec.credentialIdentity, allowed: true, requiresApproval: false, approvalExpiresAt: spec.deadlineAt }) });
       child = sidecar(root);
       child.send({ type: 'init', apiKey: mode === 'credential-mismatch' ? 'replacement-key' : 'local-only-fixture', model: spec.model, cwd: root, thinkingLevel: 'off', workspaceRootPath: root, workspaceId: spec.workspaceId, sessionId: 'ipc-session', sessionPath: join(root, 'session'), workingDirectory: root, plansFolderPath: join(root, 'plans'), baseUrl, customEndpoint: { api: 'openai-completions' }, customModels: [spec.model], durableExecution: mode === 'runtime-mismatch' ? { ...spec, runtimeManifest: { ...spec.runtimeManifest, piAi: 'changed' } } : spec });
       if (mode.endsWith('mismatch')) {
@@ -106,13 +109,17 @@ for (const mode of ['success', 'reject-model', 'credential-mismatch', 'runtime-m
         const handled = new Set([initialBoundary.requestId, first.requestId, modelResult.requestId]);
         let complete = false;
         while (!complete) {
-          const item = await child.wait(message => (message.type === 'durable_checkpoint_request' || message.type === 'pre_tool_use_request' || message.type === 'error') && !handled.has(message.requestId));
+          const item = await child.wait(message => (message.type === 'durable_checkpoint_request' || message.type === 'pre_tool_use_request' || message.type === 'tool_execute_request' || message.type === 'error') && !handled.has(message.requestId));
           if (item.type === 'error') throw new Error(item.message);
           handled.add(item.requestId);
           if (item.type === 'pre_tool_use_request') {
-            expect(item.toolName).toBe('Read');
-            expect(item.input.path).toBe(inputPath);
+            expect(item.toolName).toBe(sourceRead ? sourceName : 'Read');
+            expect(item.input.path).toBe(sourceRead ? '/events' : inputPath);
             child.send({ type: 'pre_tool_use_response', requestId: item.requestId, action: 'allow' });
+          } else if (item.type === 'tool_execute_request') {
+            expect(sourceRead).toBe(true); expect(item.turn).toBe(0); expect(item.toolCallId).toBe('ipc-read');
+            journal.assertSourceToolDispatch(claim, { turn: item.turn, callId: item.toolCallId, tool: item.toolName, input: item.args });
+            child.send({ type: 'tool_execute_response', requestId: item.requestId, result: { content: 'NATIVE_IPC_READ_CONTENT', isError: false } });
           } else {
             const checkpoint = item.checkpoint as DurableCheckpoint;
             if (checkpoint.kind === 'tool-result') expect(JSON.stringify(checkpoint.result)).toContain('NATIVE_IPC_READ_CONTENT');
@@ -125,7 +132,7 @@ for (const mode of ['success', 'reject-model', 'credential-mismatch', 'runtime-m
         expect(journal.get(spec.runId, spec.workspaceId).status).toBe('succeeded');
         expect(requests).toHaveLength(2);
         expect(JSON.stringify(requests[1])).toContain('NATIVE_IPC_READ_CONTENT');
-        expect(child.messages.filter(message => message.type === 'tool_execute_request')).toHaveLength(0);
+        expect(child.messages.filter(message => message.type === 'tool_execute_request')).toHaveLength(sourceRead ? 1 : 0);
         expect(existsSync(join(root, 'session', '.pi-sessions'))).toBe(false);
       }
     } finally {

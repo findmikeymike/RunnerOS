@@ -15,7 +15,7 @@ import { isPrivateSkillLoaderTool, privateSkillActivityStatus } from './core/pri
  * and passed to the subprocess during initialization.
  */
 
-import { durableCredentialIdentity } from '../protocol/durable-execution.ts';
+import { durableCredentialIdentity, isDurableSourceToolInput, type DurableSourceToolRequest } from '../protocol/durable-execution.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
 import type { AgentEvent } from '@craft-agent/core/types';
@@ -222,6 +222,8 @@ export class PiAgent extends BaseAgent {
     resolve: (allowed: boolean) => void;
     toolName: string;
   }> = new Map();
+
+  private durableSourceExecutions = new Map<string, { input: string; result: Promise<{ content: string; isError: boolean }> }>();
 
   // Pending tool executions (correlation map for subprocess tool_execute_request -> main process -> tool_execute_response)
   private pendingToolExecutions: Map<string, {
@@ -1295,6 +1297,10 @@ export class PiAgent extends BaseAgent {
       this.debug(`Captured pre-tool metadata for ${toolName} (${toolCallId}, sessionId=${debugSessionId}): intent=${!!preIntent}, displayName=${!!preDisplayName}`);
     }
 
+    if (this.config.durableExecution?.descriptor.sourceTools?.some(tool => tool.name === toolName)) {
+      this.send({ type: 'pre_tool_use_response', requestId, action: 'allow' });
+      return; // The host checkpoint and dispatch callback enforce the frozen source policy.
+    }
     if (this.config.durableExecution && !this.config.durableExecution.descriptor.allowedTools.includes(({ Read: 'read', Grep: 'grep', Find: 'find', Ls: 'ls', Glob: 'find', LS: 'ls', WebFetch: 'web_fetch', web_fetch: 'web_fetch', read: 'read', grep: 'grep', find: 'find', ls: 'ls' } as Record<string, string>)[toolName] as 'read')) {
       this.send({ type: 'pre_tool_use_response', requestId, action: 'block', reason: 'Tool is unsupported for durable execution' });
       return;
@@ -1531,9 +1537,32 @@ export class PiAgent extends BaseAgent {
     requestId: string;
     toolName: string;
     args: Record<string, unknown>;
+    turn?: number;
+    toolCallId?: string;
   }): Promise<void> {
-    if (this.config.durableExecution) {
-      this.send({ type: 'tool_execute_response', requestId: request.requestId, result: { content: 'Proxy tools are unsupported for durable execution', isError: true } });
+    const bridge = this.config.durableExecution;
+    if (bridge) {
+      const child = this.subprocess;
+      let result: { content: string; isError: boolean };
+      try {
+        if (!bridge.executeReadTool || !bridge.descriptor.sourceTools?.some(tool => tool.name === request.toolName)
+          || !Number.isSafeInteger(request.turn) || request.turn! < 0 || typeof request.toolCallId !== 'string' || !request.toolCallId
+          || !isDurableSourceToolInput(request.args)) throw new Error('durable-source-read-not-authorized');
+        const input = JSON.stringify(request.args), key = JSON.stringify([request.turn, request.toolCallId]);
+        let pending = this.durableSourceExecutions.get(key);
+        const identity = JSON.stringify([request.toolName, input]);
+        if (pending && pending.input !== identity) throw new Error('durable-tool-input-changed');
+        if (!pending) {
+          const payload: DurableSourceToolRequest = { turn: request.turn!, callId: request.toolCallId, tool: request.toolName, input: JSON.parse(input) };
+          pending = { input: identity, result: Promise.resolve().then(() => bridge.executeReadTool!(payload)) };
+          this.durableSourceExecutions.set(key, pending);
+        }
+        result = await pending.result;
+        if (!result || typeof result.content !== 'string' || typeof result.isError !== 'boolean') throw new Error('durable-source-invalid-result');
+      } catch (error) {
+        result = { content: error instanceof Error ? error.message : 'durable-source-read-failed', isError: true };
+      }
+      if (child === this.subprocess) this.send({ type: 'tool_execute_response', requestId: request.requestId, result });
       return;
     }
     // Prerequisite check: block source tools until guide.md is read

@@ -14,7 +14,7 @@
 import type { LoadedSource, ApiConfig } from './types.ts';
 import { isMultiHeaderCredential, type ApiCredential } from './credential-manager.ts';
 import { isSourceUsable } from './storage.ts';
-import { createApiServer, type SummarizeCallback } from './api-tools.ts';
+import { createApiServer, type SummarizeCallback, type ApiExecutionGuard } from './api-tools.ts';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { debug } from '../utils/debug.ts';
 
@@ -163,7 +163,8 @@ export class SourceServerBuilder {
     credential: ApiCredential | null,
     getToken?: () => Promise<string>,
     sessionPath?: string,
-    summarize?: SummarizeCallback
+    summarize?: SummarizeCallback,
+    executionGuard?: ApiExecutionGuard
   ): Promise<ReturnType<typeof createSdkMcpServer> | null> {
     if (source.config.type !== 'api') return null;
     if (!source.config.api) {
@@ -186,7 +187,7 @@ export class SourceServerBuilder {
       const config = this.buildApiConfig(source);
       // Pass the token getter function - it will be called before each request
       // to get a fresh token (with auto-refresh if expired)
-      return createApiServer(config, getToken, sessionPath, summarize);
+      return createApiServer(config, getToken, sessionPath, summarize, executionGuard);
     }
 
     // Slack APIs - use token getter with auto-refresh
@@ -200,7 +201,7 @@ export class SourceServerBuilder {
       const config = this.buildApiConfig(source);
       // Pass the token getter function - it will be called before each request
       // to get a fresh token (with auto-refresh if expired)
-      return createApiServer(config, getToken, sessionPath, summarize);
+      return createApiServer(config, getToken, sessionPath, summarize, executionGuard);
     }
 
     // Generic OAuth APIs — use token getter with auto-refresh
@@ -212,21 +213,21 @@ export class SourceServerBuilder {
       }
       debug(`[SourceServerBuilder] Building generic OAuth API server for ${source.config.slug}`);
       const config = this.buildApiConfig(source);
-      return createApiServer(config, getToken, sessionPath, summarize);
+      return createApiServer(config, getToken, sessionPath, summarize, executionGuard);
     }
 
     // Public APIs (no auth) can be used immediately
     if (authType === 'none') {
       debug(`[SourceServerBuilder] Building public API server for ${source.config.slug}`);
       const config = this.buildApiConfig(source);
-      return createApiServer(config, '', sessionPath, summarize);
+      return createApiServer(config, '', sessionPath, summarize, executionGuard);
     }
 
     // Renew-endpoint sources use a token getter for auto-refresh instead of a static credential
     if (getToken && apiConfig.renewEndpoint) {
       debug(`[SourceServerBuilder] Building API server for ${source.config.slug} (auth: ${authType}, renew-endpoint)`);
       const config = this.buildApiConfig(source);
-      return createApiServer(config, getToken, sessionPath, summarize);
+      return createApiServer(config, getToken, sessionPath, summarize, executionGuard);
     }
 
     // API key/bearer/header/query/basic auth - use static credential
@@ -237,7 +238,7 @@ export class SourceServerBuilder {
 
     debug(`[SourceServerBuilder] Building API server for ${source.config.slug} (auth: ${authType})`);
     const config = this.buildApiConfig(source);
-    return createApiServer(config, credential, sessionPath, summarize);
+    return createApiServer(config, credential, sessionPath, summarize, executionGuard);
   }
 
   /**

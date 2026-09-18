@@ -86,6 +86,8 @@ export interface CredentialId {
  * which don't have a clientId.
  */
 export interface StoredCredential {
+  /** Non-secret sign-in identity, opt-in for durable source recovery; stable across guarded refreshes. */
+  durableAuthIdentity?: string;
   /** The secret value (API key, access token, or primary credential) */
   value: string;
   /** OAuth refresh token */

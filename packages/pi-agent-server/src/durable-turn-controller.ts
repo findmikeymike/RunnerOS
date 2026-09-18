@@ -1,7 +1,7 @@
 import piAgentCorePackage from '../../../node_modules/@earendil-works/pi-agent-core/package.json';
 import piAiPackage from '../../../node_modules/@earendil-works/pi-ai/package.json';
 import piCodingAgentPackage from '../../../node_modules/@earendil-works/pi-coding-agent/package.json';
-import { DURABLE_RUNTIME_MANIFEST, isDurableWebReadUrls } from '../../shared/src/protocol/durable-execution.ts';
+import { DURABLE_RUNTIME_MANIFEST, isDurableWebReadUrls, isDurableToolGrant } from '../../shared/src/protocol/durable-execution.ts';
 import type { Agent } from '@earendil-works/pi-agent-core';
 import { createAssistantMessageEventStream, type AssistantMessage, type UserMessage } from '@earendil-works/pi-ai';
 import type { DurableCheckpoint, DurableCheckpointReply, DurableExecutionDescriptor, DurableJson } from '../../shared/src/protocol/durable-execution.ts';
@@ -29,12 +29,13 @@ export class DurableTurnController {
     if (!/^[a-f0-9]{64}$/.test(descriptor.credentialIdentity)) throw new Error('durable-credential-identity-required');
     if (descriptor.engine !== 'sqlite-v2-readonly-1' || !Number.isSafeInteger(descriptor.createdAt)
       || !Number.isSafeInteger(descriptor.maxOutputTokens) || descriptor.maxOutputTokens < 1
-      || descriptor.allowedTools.some(name => !['read', 'grep', 'find', 'ls', 'web_fetch'].includes(name))
+      || !isDurableToolGrant(descriptor.allowedTools, descriptor.sourceTools)
       || (descriptor.webReadRedirects !== undefined && (typeof descriptor.webReadRedirects !== 'boolean' || descriptor.webReadUrls === undefined))
       || (descriptor.allowedTools.includes('web_fetch') ? !isDurableWebReadUrls(descriptor.webReadUrls) : descriptor.webReadUrls !== undefined)) {
       throw new Error('Invalid durable execution descriptor');
     }
   }
+  get currentTurn(): number { return this.turn; }
   fail(error: unknown): never {
     this.failure ??= error instanceof Error ? error : new Error(String(error));
     throw this.failure;

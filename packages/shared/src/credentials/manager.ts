@@ -5,6 +5,7 @@
  * for cross-platform compatibility without OS keychain prompts.
  */
 
+import { randomUUID } from 'node:crypto';
 import { credentialIdToAccount } from './types.ts';
 import type { CredentialBackend } from './backends/types.ts';
 import type { CredentialId, CredentialType, StoredCredential, CredentialHealthStatus, CredentialHealthIssue } from './types.ts';
@@ -116,6 +117,31 @@ export class CredentialManager {
     }));
   }
 
+  /** Opt an existing source sign-in into durable recovery without exposing its secrets. */
+  async captureDurableSourceIdentity(id: CredentialId): Promise<string | null> {
+    if (!['source_oauth', 'source_bearer', 'source_apikey', 'source_basic'].includes(id.type)) throw new Error('durable-source-credential-required');
+    return this.mutate(id, async () => {
+      const current = await this.get(id);
+      if (!current) return null;
+      if (current.durableAuthIdentity && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(current.durableAuthIdentity)) return current.durableAuthIdentity;
+      const identity = randomUUID();
+      await this.setUnlocked(id, { ...current, durableAuthIdentity: identity });
+      return identity;
+    });
+  }
+
+  /** Caller-provided identities never override a stored sign-in or survive replacement. */
+  private async normalizeSourceIdentity(id: CredentialId, replacement: StoredCredential, authentication: boolean): Promise<StoredCredential> {
+    if (!['source_oauth', 'source_bearer', 'source_apikey', 'source_basic'].includes(id.type)) return replacement;
+    const current = await this.get(id);
+    const normalized = structuredClone(replacement);
+    delete normalized.durableAuthIdentity;
+    if (authentication) {
+      if (current?.durableAuthIdentity !== undefined || replacement.durableAuthIdentity !== undefined) normalized.durableAuthIdentity = randomUUID();
+    } else if (current?.durableAuthIdentity !== undefined) normalized.durableAuthIdentity = current.durableAuthIdentity;
+    return normalized;
+  }
+
   private async matchesSnapshot(snapshot: CredentialSnapshot): Promise<boolean> {
     return (this.revisions.get(credentialIdToAccount(snapshot.id)) ?? 0) === snapshot.revision
       && JSON.stringify(await this.get(snapshot.id)) === JSON.stringify(snapshot.credential);
@@ -134,12 +160,13 @@ export class CredentialManager {
         ? (this.authRevisions.get(credentialIdToAccount(snapshot.id)) ?? 0) === snapshot.authRevision
         : await this.matchesSnapshot(snapshot);
       if (!matches || !stillOwned()) return null;
-      await this.setUnlocked(snapshot.id, replacement);
+      const normalized = await this.normalizeSourceIdentity(snapshot.id, replacement, authentication);
+      await this.setUnlocked(snapshot.id, normalized);
       if (authentication) this.bumpAuthRevision(snapshot.id);
       return {
         id: snapshot.id, revision: this.revisions.get(credentialIdToAccount(snapshot.id)) ?? 0,
         authRevision: this.authRevisions.get(credentialIdToAccount(snapshot.id)) ?? 0,
-        credential: structuredClone(replacement),
+        credential: structuredClone(normalized),
       };
     });
   }
@@ -281,7 +308,7 @@ export class CredentialManager {
    * Automatically initializes if needed.
    */
   async set(id: CredentialId, credential: StoredCredential): Promise<void> {
-    return this.mutate(id, async () => { await this.setUnlocked(id, credential); this.bumpAuthRevision(id); });
+    return this.mutate(id, async () => { await this.setUnlocked(id, await this.normalizeSourceIdentity(id, credential, true)); this.bumpAuthRevision(id); });
   }
 
   private async setUnlocked(id: CredentialId, credential: StoredCredential): Promise<void> {

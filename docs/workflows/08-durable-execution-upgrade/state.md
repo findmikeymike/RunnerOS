@@ -1,5 +1,13 @@
 # Build state
 
+## Current checkpoint — shared API source reads, September 17
+
+Normal Start now captures selected API source GET tools and exposes only each step’s frozen tool definitions through durable Pi. Calls/results use the existing journal; current source permissions and credential ownership are rechecked on replay and before publication. Shared OAuth refresh preserves a persisted credential generation; reconnect/replacement invalidates it. Existing shared API/OAuth transport is reused. No extra read approval, per-provider adapter, write-tool adoption or broad workflow migration was introduced.
+
+Verification: 136 runner/bundle/Start/output/fallback regression tests passed; 133 journal/Pi regression tests and five real subprocess IPC tests passed. The API gateway’s 19 focused tests cover refresh/replacement, dispatch fencing, request bounds and credential-echo handling. Cold review found response buffering and encoded credential-filter gaps; both were fixed and independently rechecked with all 18 tests passing. Server-core and Pi typechecks pass. All 11 normal-Start process tests pass, including a real default-Pi source-tool process test using the shared API server/client and synthetic fetch, with no approval prompt or token in model payloads. A real process-kill/reopen/resume test reuses the saved API result, performs exactly one GET across both processes, and completes the pending model turn. Shared-package typechecking is blocked only by the unrelated unfinished `composio-guidance.test.ts:40` type error; it was preserved. No app restart or live connected-account request was made.
+
+Historical sections below describe their original narrower scopes. API read recovery is this completed implementation slice; interrupted writes and final live adoption verification remain separate work.
+
 Revision r10 · 2026-09-09 · **P-03 internal implementation pass finished; phase exit remains open.**
 
 Canonical checkout: `/Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os`, branch `main`; starting HEAD `32d4b000c` matches origin/main. Earlier slices are pushed. This r10 pass is recorded with its source/evidence commit; verify `git log` for the SHA. Remote push is separate. The user authorized the larger integration pass, replacing the small-slice limit. Never restart the user's app without permission.
