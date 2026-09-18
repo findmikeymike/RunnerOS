@@ -1,5 +1,13 @@
 # Build state
 
+## Latest checkpoint — shared interrupted-write contract, September 17
+
+The host effect journal now supports one-attempt writes without claiming provider idempotency. Confirmed receipts are reusable only with current access; uncertain writes cannot be resent through Resume, steering, fallback or child work. The shared adapter checks authorization at final dispatch. Run history presents uncertainty without approval buttons or private inputs. Schema 9 rejects older binaries. A fresh-process SIGKILL test proves exactly one simulated external write despite lost receipt; recovery stays honestly unknown.
+
+Verification: 144 journal/child regression tests passed; six shared write-adapter tests passed, including actual process death and final-dispatch revocation. The final combined write, projection, effect-runner and journal check passes 45 tests / 199 assertions. Cold Rival rechecked the authorization fix with 20 tests and no remaining scoped finding. Server-core typecheck passes; shared-package checking still reports the unrelated Composio test error. Other agents’ changes are preserved. No app restart/live write occurred.
+
+Normal model-called writes are **not enabled** by this checkpoint. The next adoption work must wire an existing authorized action plus an explicit effect budget into this shared contract. Current read workflows retain their Safe/GET admission rules.
+
 ## Current checkpoint — shared API source reads, September 17
 
 Normal Start now captures selected API source GET tools and exposes only each step’s frozen tool definitions through durable Pi. Calls/results use the existing journal; current source permissions and credential ownership are rechecked on replay and before publication. Shared OAuth refresh preserves a persisted credential generation; reconnect/replacement invalidates it. Existing shared API/OAuth transport is reused. No extra read approval, per-provider adapter, write-tool adoption or broad workflow migration was introduced.

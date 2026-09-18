@@ -78,7 +78,7 @@ test('an exhausted model budget does not consume the separate read allowance', a
 });
 test('schema six upgrades to seven while retaining an ungranted run unchanged', () => {
  const f = fixture(); f.journal.admit(f.spec); (f.journal as any).db.exec('PRAGMA user_version=6'); f.reopen();
- expect((f.journal as any).db.prepare('PRAGMA user_version').get().user_version).toBe(8); expect(f.journal.get('r', 'w').spec).toEqual(f.spec);
+ expect((f.journal as any).db.prepare('PRAGMA user_version').get().user_version).toBe(9); expect(f.journal.get('r', 'w').spec).toEqual(f.spec);
  expect(() => f.journal.reserveOperation(f.journal.claim('r', 'w'), readIntent())).toThrow('operations-unsupported');
 });
 

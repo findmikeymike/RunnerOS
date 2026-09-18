@@ -5,7 +5,7 @@ export interface DurableOperationIntent {
   adapterId: string;
   adapterVersion: string;
   credentialIdentity: string;
-  effectClass: 'read' | 'idempotent-write' | 'reconcilable-write';
+  effectClass: 'read' | 'idempotent-write' | 'reconcilable-write' | 'single-attempt-write';
   idempotencyKey: string;
   input: DurableJson;
   outputSchema: { id: string; version: string };

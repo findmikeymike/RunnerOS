@@ -12,6 +12,16 @@ Safe-policy-allowed native/web reads no longer create an extra durable approval 
 
 Selected API source GET tools now reuse `TokenRefreshManager` → `SourceServerBuilder` → `createApiServer` through the durable Pi proxy boundary. Normal Start captures each step’s selected API tools, schema, source configuration and credential ownership. The encrypted journal saves their model calls and results; replay rechecks current access. OAuth refresh preserves a persisted credential generation; reconnecting, replacing or deleting credentials invalidates the old grant. Safe reads use current shared permissions without another approval prompt. The shared dispatch guard fences requests after refresh, restricts them to GET within the source base URL, rejects redirects and bounds responses. This is one API-source path, not per-provider adapters. Arbitrary remote MCP/session tools, sends/writes and automatic migration of existing workflows remain outside this slice. External writes require separate idempotency/reconciliation work; API reads do not require a provider-by-provider certification project.
 
+## Shared interrupted-write contract — September 17
+
+The host effect engine now has an explicit `single-attempt-write` class for actions without a provider deduplication or authoritative lookup contract. `createDurableSingleAttemptWriteAdapter` uses the existing operation journal, saves one dispatch attempt before transport, retains a validated receipt, and returns unknown for lost or unverified receipts. Its local operation key does not promise provider idempotency. Callers retain their existing authorization and must supply a synchronous current-access fence at final I/O; no extra approval mechanism is added.
+
+Unknown/inflight external writes block new model work, ordinary Resume, steering, fallback and fresh/required child dispatch. Current-owner settlement and authorized paused/cancelled observation remain possible. Run history warns that the action may already have completed, preserves earlier outputs, hides private inputs, and blocks misleading Resume. An uncertain action is not an approval request. Schema 9 prevents older binaries from reopening this state without the new guards.
+
+A real subprocess test kills the writer after a simulated external acceptance and before the receipt is saved: fresh-process recovery records unknown and the external write count remains one. Tests also cover current access revocation, lost/malformed receipts, completed-receipt access, child/fallback bypasses and history projections. Cold Rival identified a preparation-time authorization race; the final dispatch access fence and zero-write regression close it.
+
+**Adoption boundary:** this is the shared host write contract, not activation of normal model-called API writes. Current durable workflow admission remains Safe/GET-only, and model-request budgets still reject write operations. Ordinary write adoption must connect an explicitly authorized action and a bounded effect budget through this contract; it must not widen source methods or bypass existing write approvals. No live send/post, app restart, or provider exactly-once guarantee is claimed.
+
 ## Slice 1: admission, history and recovery boundary
 
 Implemented in source:

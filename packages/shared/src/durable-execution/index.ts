@@ -127,10 +127,10 @@ export class DurableJournal {
       this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;');
       if (this.db.prepare('PRAGMA journal_mode').get().journal_mode !== 'wal' || this.db.prepare('PRAGMA synchronous').get().synchronous !== 2 || this.db.prepare('PRAGMA foreign_keys').get().foreign_keys !== 1) throw new Error('unsafe-sqlite-settings');
       const version = this.db.prepare('PRAGMA user_version').get().user_version;
-      if (![0, 1, 2, 3, 4, 5, 6, 7, 8].includes(version)) throw new Error('unsupported-durable-schema');
+      if (![0, 1, 2, 3, 4, 5, 6, 7, 8, 9].includes(version)) throw new Error('unsupported-durable-schema');
       this.db.exec('BEGIN IMMEDIATE');
       try {
-        this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, command TEXT NOT NULL, spec_digest TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT, pid INTEGER, payload TEXT NOT NULL, UNIQUE(workspace,command)); CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), version INTEGER NOT NULL, kind TEXT NOT NULL, UNIQUE(run_id,version)); CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES events(sequence), acknowledged INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS control_commands (workspace TEXT NOT NULL, id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(id), payload TEXT NOT NULL, PRIMARY KEY(workspace,id)); PRAGMA user_version=8;');
+        this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, command TEXT NOT NULL, spec_digest TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT, pid INTEGER, payload TEXT NOT NULL, UNIQUE(workspace,command)); CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), version INTEGER NOT NULL, kind TEXT NOT NULL, UNIQUE(run_id,version)); CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES events(sequence), acknowledged INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS control_commands (workspace TEXT NOT NULL, id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(id), payload TEXT NOT NULL, PRIMARY KEY(workspace,id)); PRAGMA user_version=9;');
         if (!this.db.prepare('PRAGMA table_info(runs)').all().some((column: any) => column.name === 'process_identity')) this.db.exec('ALTER TABLE runs ADD COLUMN process_identity TEXT');
         const keyCheck = this.db.prepare("SELECT value FROM metadata WHERE key='key-check'").get();
         if (keyCheck) { if (this.decrypt(keyCheck.value, 'key-check') !== 'artist-os-durable-v1') throw new Error('invalid-key-check'); }
@@ -304,7 +304,7 @@ export class DurableJournal {
       if (state.version !== command.expectedVersion) throw new Error('durable-control-version-conflict');
       const terminal = !['running', 'paused', 'waiting-approval'].includes(state.status);
       if (terminal && command.action !== 'cancel') throw new Error('durable-run-terminal');
-      if (command.action === 'resume') this.assertChildParent(state);
+      if (command.action === 'resume') { this.assertChildParent(state); this.assertWriteOutcomesKnown(state); }
       if (command.action === 'resume' && Date.now() >= state.spec.deadlineAt && state.publication?.status !== 'pending') throw new Error('durable-dispatch-blocked');
       if (command.action === 'resume' && digest(state.spec.runtimeManifest) !== digest(DURABLE_RUNTIME_MANIFEST)) throw new Error('durable-runtime-manifest-changed');
       // Resume never grants a pending approval. Expired waits may reopen solely to reauthorize.
@@ -335,6 +335,7 @@ export class DurableJournal {
       if (state.version !== command.expectedVersion) throw new Error('durable-control-version-conflict');
       if (!['running', 'paused', 'waiting-approval'].includes(state.status)) throw new Error('durable-run-terminal');
       if (state.publication) throw new Error('durable-publication-model-finished');
+      this.assertWriteOutcomesKnown(state);
       const sequence = (state.continuationRevision ?? 0) + 1;
       state.continuationRevision = sequence;
       (state.steering ??= []).push({ commandId: command.commandId, sequence, text: command.text });
@@ -436,6 +437,7 @@ export class DurableJournal {
     return this.transaction(() => {
       const state = this.fenced(claim);
       this.operationDispatch(state, claim);
+      this.assertWriteOutcomesKnown(state);
       const candidates = state.spec.fallbackPlan?.steps[input.step]?.candidates;
       const step = state.workflowSteps?.[input.step];
       if (!Number.isSafeInteger(input.step) || !Number.isSafeInteger(input.candidateIndex) || !candidates?.[input.candidateIndex] || !step || step.endTurn !== undefined || state.workflowSteps?.slice(0, input.step).some(s => s.endTurn === undefined)) throw new Error('durable-invalid-provider-attempt');
@@ -623,6 +625,7 @@ export class DurableJournal {
         const contextDigest = digest(canonicalContext(request.context));
         if (turn && turn.contextDigest !== contextDigest) throw new Error('durable-context-changed');
         if (turn?.message !== undefined) return { cached: turn.message };
+        this.assertWriteOutcomesKnown(state);
         if (state.turns.slice(0, request.turn).some((t, index) => !abandoned(index) && !priorDone(t)) || request.turn < state.turns.length - 1) throw new Error('durable-predecessor-incomplete');
         if (state.modelAttempts + (state.childReservedModelAttempts ?? 0) >= state.spec.maxModelAttempts || state.reservedUnits + state.spec.costPolicy.maxUnitsPerAttempt > state.spec.costPolicy.maxTotalUnits) throw new Error('durable-budget-exhausted');
         if (!turn) { turn = { contextDigest, calls: [], continuationRevision: state.boundaries!.find(boundary => boundary.afterTurn === request.turn - 1)?.continuationRevision ?? 0 }; state.turns.push(turn); }
@@ -698,6 +701,7 @@ export class DurableJournal {
         return old;
       }
       this.operationDispatch(parent, claim);
+      this.assertWriteOutcomesKnown(parent);
       const hash = digest(['durable-child-v1', parent.spec.workspaceId, parent.spec.runId, request.slotId]);
       const childRunId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
       const context = child.context as Record<string, DurableJson>;
@@ -747,6 +751,12 @@ export class DurableJournal {
     const parent = this.get(lineage.runId, state.spec.workspaceId);
     const edge = parent.children?.find(edge => edge.slotId === lineage.slotId && edge.childRunId === state.spec.runId && edge.mode === 'required');
     if (!edge || parent.status !== 'running') throw new Error('durable-child-parent-blocked');
+    this.assertWriteOutcomesKnown(parent);
+  }
+  /** Uncertain external writes must be observed before any new model/fallback work. */
+  private assertWriteOutcomesKnown(state: DurableRunSnapshot): void {
+    if (state.operations?.some(operation => operation.intent.effectClass !== 'read'
+      && (operation.status === 'inflight' || operation.status === 'unknown'))) throw new Error('durable-write-outcome-unknown');
   }
   private operationDispatch(state: DurableRunSnapshot, claim: DurableClaim): void {
     this.assertExecutionClaim(claim);
@@ -769,7 +779,8 @@ export class DurableJournal {
     const fields = ['slotId','adapterId','adapterVersion','credentialIdentity','effectClass','idempotencyKey','input','outputSchema','maxAttempts','maxUnitsPerAttempt'];
     if (!intent || Array.isArray(intent) || Object.keys(intent).some(key => !fields.includes(key)) ||
       ['slotId','adapterId','adapterVersion','idempotencyKey'].some(key => typeof (intent as any)[key] !== 'string' || !(intent as any)[key].trim()) ||
-      !/^[a-f0-9]{64}$/.test(intent.credentialIdentity) || !['read','idempotent-write','reconcilable-write'].includes(intent.effectClass) ||
+      !/^[a-f0-9]{64}$/.test(intent.credentialIdentity) || !['read','idempotent-write','reconcilable-write','single-attempt-write'].includes(intent.effectClass)
+      || (intent.effectClass === 'single-attempt-write' && intent.maxAttempts !== 1) ||
       !intent.outputSchema || Object.keys(intent.outputSchema).some(key => !['id','version'].includes(key)) ||
       ![intent.outputSchema.id,intent.outputSchema.version].every(value => typeof value === 'string' && value.trim()) ||
       !Number.isSafeInteger(intent.maxAttempts) || intent.maxAttempts < 1 || !Number.isFinite(intent.maxUnitsPerAttempt) || intent.maxUnitsPerAttempt < 0 || !Object.hasOwn(intent,'input')) throw new Error('invalid-durable-operation-intent');

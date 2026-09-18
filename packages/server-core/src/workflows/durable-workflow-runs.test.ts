@@ -135,3 +135,65 @@ test('provider attention exposes safe model receipts and expired-run recovery gu
     expect(expired?.steps[0]?.error?.message).toContain('time limit expired');
   } finally { clock.mockRestore(); }
 });
+
+const writeWarning = 'This action may have completed. Check the connected service before starting another run. It will not be sent again automatically.';
+function issuedOperation(f: ReturnType<typeof fixture>, effectClass: 'read' | 'idempotent-write' | 'reconcilable-write' = 'idempotent-write', runId = 'r') {
+ const claim = f.journal.claim(runId, 'w');
+ f.journal.reserveOperation(claim, { slotId: 'PRIVATE_SLOT', adapterId: 'fixture', adapterVersion: '1', credentialIdentity: f.spec.credentialIdentity, effectClass, idempotencyKey: 'PRIVATE_KEY', input: { secret: 'PRIVATE_INPUT' }, outputSchema: { id: 'fixture', version: '1' }, maxAttempts: 1, maxUnitsPerAttempt: 0 });
+ const started = f.journal.startOperation(claim, 'PRIVATE_SLOT', 'dispatch');
+ return { claim, token: started.attempt! };
+}
+
+test('unfinished external write after owner loss shows truthful attention without an approval or private payload', async () => {
+ const f = fixture(), { claim } = issuedOperation(f);
+ const active = await f.service(true).get('w', 'r', actor);
+ expect(active?.state).toBe('running'); expect(active?.steps[0]?.state).toBe('running'); expect(active?.durable?.resumeBlockedReason).toBeUndefined();
+ f.journal.release(claim); f.reopen();
+ const saved = await f.service().get('w', 'r', actor);
+ expect(saved?.state).toBe('paused'); expect(saved?.steps[0]?.state).toBe('awaiting-human');
+ expect(saved?.steps[0]?.error?.message).toBe(writeWarning); expect(saved?.durable?.resumeBlockedReason).toBe(writeWarning);
+ expect(saved?.durable?.status).toBe('running'); expect(saved?.interruptionReason).toBeUndefined();
+ expect(f.journal.get('r', 'w').approvals).toEqual([]); expect(JSON.stringify(saved)).not.toContain('PRIVATE');
+});
+
+test('unknown external write always warns but does not falsely pause a still-active worker', async () => {
+ const f = fixture(), { claim, token } = issuedOperation(f, 'reconcilable-write');
+ f.journal.settleOperation(claim, token, { kind: 'unknown', reason: 'PRIVATE_PROVIDER_MESSAGE' });
+ const active = await f.service(true).get('w', 'r', actor);
+ expect(active?.state).toBe('running'); expect(active?.steps[0]?.error?.message).toBe(writeWarning); expect(active?.durable?.resumeBlockedReason).toBe(writeWarning);
+ expect(JSON.stringify(active)).not.toContain('PRIVATE');
+ expect((await f.service().get('w', 'r', actor))?.steps[0]?.state).toBe('awaiting-human');
+});
+
+for (const terminal of ['cancelled', 'failed'] as const) test(`uncertain write retains ${terminal} state and warning`, async () => {
+ const f = fixture(), { claim } = issuedOperation(f);
+ if (terminal === 'cancelled') f.journal.command({ runId: 'r', workspaceId: 'w', commandId: 'cancel', expectedVersion: f.journal.get('r', 'w').version, action: 'cancel' });
+ else await f.journal.bridge(claim).fail('test-failure');
+ const run = await f.service().get('w', 'r', actor);
+ expect(run?.state).toBe(terminal); expect(run?.steps[0]?.state).not.toBe('awaiting-human');
+ expect(run?.steps[0]?.error?.message).toBe(writeWarning); expect(run?.durable?.resumeBlockedReason).toBe(writeWarning);
+});
+
+test('known successful writes and uncertain reads do not show external-write warning', async () => {
+ const f = fixture(), { claim, token } = issuedOperation(f);
+ f.journal.settleOperation(claim, token, { kind: 'succeeded', output: {} }, { id: 'fixture', version: '1', validate: () => true });
+ expect((await f.service().get('w', 'r', actor))?.durable?.resumeBlockedReason).toBeUndefined();
+ const read = fixture(); issuedOperation(read, 'read');
+ const run = await read.service().get('w', 'r', actor);
+ expect(run?.state).toBe('interrupted'); expect(run?.steps[0]?.error).toBeUndefined(); expect(run?.durable?.resumeBlockedReason).toBeUndefined();
+});
+
+test('multi-step uncertain write keeps earlier completed output and marks only current step awaiting human', async () => {
+ const f = fixture();
+ const steps = [{ id: 'first', agent: 'reader', input: 'Read' }, { id: 'write', agent: 'writer', input: 'Send' }, { id: 'last', agent: 'reader', input: 'Finish' }];
+ f.journal.admit({ ...f.spec, runId: 'multi-write', commandId: 'multi-write', workflowSteps: steps.map(({ id }) => ({ id })), authority: { adapter: 'pi-local-read-multi-1', stepCount: 3, completion: 'journal-only' }, context: { workflow: { slug: 'multi', body: '', metadata: { steps, name: 'Multi', trigger: { type: 'manual' }, outputs: { mode: 'none' } } } } });
+ const first = f.journal.claim('multi-write', 'w'), bridge = f.journal.bridge(first);
+ await bridge.checkpoint({ kind: 'workflow-step-start', step: 0, input: {} });
+ await bridge.checkpoint({ kind: 'model-start', turn: 0, context: {} });
+ await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'Kept result' }] } });
+ await bridge.checkpoint({ kind: 'workflow-step-complete', step: 0 }); f.journal.release(first);
+ const { claim } = issuedOperation(f, 'idempotent-write', 'multi-write'); f.journal.release(claim);
+ const run = await f.service().get('w', 'multi-write', actor);
+ expect(run?.state).toBe('paused'); expect(run?.steps.map(step => step.state)).toEqual(['succeeded', 'awaiting-human', 'queued']);
+ expect(run?.steps[0]?.output).toBe('Kept result'); expect(run?.steps[0]?.error).toBeUndefined(); expect(run?.steps[1]?.error?.message).toBe(writeWarning);
+});

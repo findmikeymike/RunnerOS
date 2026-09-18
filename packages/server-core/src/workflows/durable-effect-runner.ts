@@ -42,12 +42,10 @@ export class DurableEffectRunner {
     const adapter = this.adapter(pinned, claim.workspaceId);
     let operation = this.journal.reserveOperation(claim, pinned);
     if (operation.status === 'succeeded' || operation.status === 'failed') {
-      // Saved private read data still requires current account/policy access.
-      if (pinned.effectClass === 'read') {
-        await adapter.authorize(pinned);
-        this.adapter(pinned, claim.workspaceId);
-        operation = this.journal.reserveOperation(claim, pinned);
-      }
+      // Saved receipts and private read data still require current account/policy access.
+      await adapter.authorize(pinned);
+      this.adapter(pinned, claim.workspaceId);
+      operation = this.journal.reserveOperation(claim, pinned);
       return operation;
     }
     await adapter.authorize(pinned);

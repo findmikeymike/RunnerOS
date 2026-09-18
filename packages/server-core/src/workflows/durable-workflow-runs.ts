@@ -4,6 +4,8 @@ import type { WorkflowRunSnapshot, WorkflowRunStep } from '../../../shared/src/w
 import type { LoadedWorkflow } from '../../../shared/src/workflows/types.ts';
 import type { DurableWorkflowActor, DurableWorkflowControlsOptions } from './durable-workflow-controls.ts';
 
+const uncertainWriteMessage = 'This action may have completed. Check the connected service before starting another run. It will not be sent again automatically.';
+
 const publicationRemedies = {
   authorization: 'The result is saved. Restore access to this workspace, then Resume to publish its Output.',
   workspace: 'The result is saved. Restore the original workspace folder, then Resume to publish its Output.',
@@ -90,8 +92,12 @@ export class DurableWorkflowRuns {
     };
     const waiting = status === 'waiting-approval';
     const active = status === 'running' && this.options.isActive?.(spec.runId, spec.workspaceId) === true;
-    const state = waiting ? 'paused' : status === 'running' ? active ? 'running' : 'interrupted' : status;
-    const stepState = waiting ? 'awaiting-human' : state === 'paused' || state === 'cancelled' ? 'interrupted' : state;
+    const uncertainWrite = snapshot.operations?.some(operation => operation.intent.effectClass !== 'read'
+      && (operation.status === 'unknown' || operation.status === 'inflight' && !active)) === true;
+    const needsWriteAttention = uncertainWrite && !active && !['cancelled', 'failed', 'succeeded'].includes(status);
+    const writeError = { code: 'durable-external-write-uncertain', message: uncertainWriteMessage };
+    const state = waiting || needsWriteAttention ? 'paused' : status === 'running' ? active ? 'running' : 'interrupted' : status;
+    const stepState = waiting || needsWriteAttention ? 'awaiting-human' : state === 'paused' || state === 'cancelled' ? 'interrupted' : state;
     const message = snapshot.turns.at(-1)?.message as unknown as { content?: Array<{ type?: string; text?: string }> } | undefined;
     const output = snapshot.publication?.content ?? (status === 'succeeded' ? message?.content?.filter(part => part.type === 'text' && typeof part.text === 'string').map(part => part.text).join(definition.outputSchema ? '' : '\n') ?? '' : undefined);
     const firstIncomplete = snapshot.workflowSteps?.findIndex(step => step.endTurn === undefined) ?? -1;
@@ -106,10 +112,12 @@ export class DurableWorkflowRuns {
         ...(completed && typeof saved.output === 'string' ? { output: durableStepOutput(saved.output, step.outputSchema), completion: { outputChars: saved.output.length, toolUseCount: turns.flatMap(turn => turn.calls).filter(call => call.result !== undefined).length, satisfied: true } } : {}),
         ...(index === currentStep && snapshot.providerAttention ? { error: { code: snapshot.providerAttention, message: Date.now() >= spec.deadlineAt ? 'This run’s time limit expired. Stop this saved run, fix provider access, then start again.' : providerRemedies[snapshot.providerAttention] } } : {}),
         ...(projectedState === 'failed' ? { error: { code: 'durable-execution-failed', message: 'The durable workflow could not complete.' } } : {}),
+        ...(uncertainWrite && index === Math.min(currentStep, workflow.metadata.steps.length - 1) ? { error: writeError } : {}),
       };
     }) : [{ id: definition.id, state: snapshot.publication ? 'succeeded' : stepState, attempts: snapshot.modelAttempts > 0 ? 1 : 0,
       ...(output !== undefined ? { output: durableStepOutput(output, definition.outputSchema), completion: { outputChars: output.length, toolUseCount: snapshot.turns.flatMap(turn => turn.calls).filter(call => call.result !== undefined).length, satisfied: true } } : {}),
       ...(status === 'failed' ? { error: { code: 'durable-execution-failed', message: 'The durable workflow could not complete.' } } : {}),
+      ...(uncertainWrite ? { error: writeError } : {}),
     }];
     // The journal currently has no wall-clock mutation timestamps. Do not invent completion times.
     const createdAt = new Date(spec.createdAt).toISOString();
@@ -120,9 +128,9 @@ export class DurableWorkflowRuns {
       workflowSnapshot: JSON.parse(canonical({ metadata: workflow.metadata, body: workflow.body })),
       steps, createdAt, updatedAt: createdAt,
       ...(snapshot.publication?.status === 'published' ? { finalOutputId: snapshot.publication.outputId, outputIds: [snapshot.publication.outputId] } : {}),
-      ...(snapshot.publication?.status === 'pending' && ['paused', 'interrupted'].includes(state) ? { outputError: snapshot.publication.error ? publicationRemedies[snapshot.publication.error] : 'The result is saved, but its final Output still needs to be published. Resume to retry without repeating the model work.' } : {}),
+      ...(snapshot.publication?.status === 'pending' && ['paused', 'interrupted'].includes(state) ? { outputError: uncertainWrite ? uncertainWriteMessage : snapshot.publication.error ? publicationRemedies[snapshot.publication.error] : 'The result is saved, but its final Output still needs to be published. Resume to retry without repeating the model work.' } : {}),
       ...(state === 'interrupted' ? { interruptionReason: 'No worker is currently executing this saved run. Resume to continue.' } : {}),
-      durable: { engine: spec.engine, version: snapshot.version, status, controlRevision: snapshot.controlRevision, continuationRevision: snapshot.continuationRevision ?? 0, ...(providerAttempts?.length ? { providerAttempts } : {}), ...(snapshot.providerAttention && Date.now() >= spec.deadlineAt && snapshot.publication?.status !== 'pending' ? { resumeBlockedReason: 'This run’s time limit expired. Stop this saved run, fix provider access, then start again.' } : {}) },
+      durable: { engine: spec.engine, version: snapshot.version, status, controlRevision: snapshot.controlRevision, continuationRevision: snapshot.continuationRevision ?? 0, ...(providerAttempts?.length ? { providerAttempts } : {}), ...(uncertainWrite ? { resumeBlockedReason: uncertainWriteMessage } : snapshot.providerAttention && Date.now() >= spec.deadlineAt && snapshot.publication?.status !== 'pending' ? { resumeBlockedReason: 'This run’s time limit expired. Stop this saved run, fix provider access, then start again.' } : {}) },
     };
   }
 }
