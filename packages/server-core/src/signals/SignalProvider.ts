@@ -111,7 +111,8 @@ export class LocalSignalProvider implements SignalProvider {
       if (uploads.length > 5) throw new Error('YouTube exceeded the requested upload limit.');
       const videos = uploads.map((row: unknown) => metadata(row, hasUploadsEnvelope ? result.channelId : undefined));
       if (videos.some((video: SignalVideoMetadata) => video.channelId !== channelId)) throw new Error('Channel evidence identity mismatch.');
-      return { videos, complete: videos.length < 5 };
+      // Completeness is scoped to the requested latest-five window, not channel history.
+      return { videos, complete: true };
     } catch (error) {
       signal?.throwIfAborted();
       if (!root) throw error;

@@ -33,7 +33,22 @@ export const LEGACY_MANAGER_TASK_MODES: AgentTaskModeDefinition[] = [
   ]),
 ]
 
-/** Artist OS management coordinates existing work; Builder owns reusable construction. */
-export const MANAGER_TASK_MODES = LEGACY_MANAGER_TASK_MODES
-  .filter(mode => mode.id !== 'build-automate')
-  .map(mode => ({ ...mode, ...(mode.adjacentSkills ? { adjacentSkills: mode.adjacentSkills.filter(skill => !['agent-creator', 'workflow-creator', 'automation-creator', 'skill-scout', 'source-recipe'].includes(skill.slug)) } : {}) }))
+/** Four broad entry points; all specialist capabilities remain available in conversation.
+ * Retain shipped IDs for surviving lenses so saved selections keep working. */
+export const MANAGER_TASK_MODES: AgentTaskModeDefinition[] = [
+  {
+    ...LEGACY_MANAGER_TASK_MODES.find(mode => mode.id === 'general')!,
+    helpText: 'Talk anything through and coordinate the team, including business, rights and releases. Builder owns reusable agents, skills, workflows and automations.',
+    adjacentSkills: LEGACY_MANAGER_TASK_MODES.find(mode => mode.id === 'general')!.adjacentSkills!.filter(skill =>
+      !['agent-creator', 'workflow-creator', 'automation-creator', 'skill-scout', 'source-recipe'].includes(skill.slug)),
+  },
+  focus('this-week', 'Happening Now', 'Find what matters next across your active work.',
+    ['Current priorities, open work, deadlines, active campaigns and Release Kit readiness'],
+    'Use the Manager Brief to resolve priorities, blockers and next actions today and this week. Include active releases and Release Kit readiness when relevant; coordinate the owning specialists.'),
+  focus('content', 'Create', 'Develop music, content, visuals, identity and creative direction.',
+    ['Artist identity, sound, voice, approved direction, campaign intent, ready assets and creative gaps'],
+    'Shape the idea, then coordinate music, writing, content, Artist Direction, Art or production specialists. Reuse artist context and approved decisions. Creation does not grant publishing permission.'),
+  focus('audience', 'Break Through', 'Find distinctive ways to reach people and build lasting audience connection.',
+    ['Dated Intel, artist identity, audience evidence, communities, relationships, channel performance and campaign goals'],
+    'Combine distinctive ideas with practical growth. Separate dated evidence from hypotheses. Coordinate research, content, outreach and ads; involve GRAVITY for deeper exploration. Respect career priorities, permissions and budgets.'),
+]

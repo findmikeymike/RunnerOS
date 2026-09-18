@@ -1,3 +1,4 @@
+import { MANAGER_TASK_MODES } from './task-mode-recipes/manager.ts';
 import { CAMPAIGN_CREATIVE_DIRECTION_AGENT_SLUGS } from '../workspace-context/types.ts';
 import { ARTIST_DIRECTION_AGENT, CAMPAIGN_CREATIVE_DIRECTION, WORLD_BUILDER_AGENT } from './artist-direction.ts';
 import type { AgentTaskModeDefinition, LoadedAgent } from './types.ts';
@@ -54,6 +55,11 @@ export function resolveAgentTaskMode(
   const modes = consolidateManagerGeneralModes(agent.metadata.taskModes ?? []);
   const canonical = (value: unknown) => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).filter(([, value]) => value !== undefined).sort(([a], [b]) => a.localeCompare(b))) : item);
+  if (agent.slug === 'concierge' && !modes.some(mode => mode.id === taskModeId)
+    && canonical(agent.metadata.taskModes) === canonical(MANAGER_TASK_MODES)) {
+    const previous: Record<string, string> = { 'current-release': 'this-week', brand: 'content', business: 'general', 'build-automate': 'general' };
+    if (Object.prototype.hasOwnProperty.call(previous, taskModeId)) taskModeId = previous[taskModeId]!;
+  }
   const hasStockRole = (role: typeof CAMPAIGN_CREATIVE_DIRECTION) => agent.systemPrompt?.trim() === role.systemPrompt.trim()
     && canonical(agent.metadata.skills) === canonical(role.metadata.skills)
     && canonical(agent.metadata.taskModes) === canonical(role.metadata.taskModes);

@@ -1028,3 +1028,22 @@ for (const recoverable of [true, false]) test(`completed report save recovery ne
   expect(provider.transcript).toHaveBeenCalledTimes(before.transcript);
   if (recoverable) expect(workflows.readRun(root, snapshot.id)!.outputError).toBeUndefined();
 });
+
+test('five already analyzed uploads finish quietly without transcript work or a new report', async () => {
+  const videos = Array.from({ length: 5 }, (_, index) => ({ ...metadata,
+    videoId: String(index).padStart(11, '0'), sourceUrl: `https://www.youtube.com/watch?v=${String(index).padStart(11, '0')}` }));
+  provider.recent = mock(async () => ({ videos, complete: true }));
+  const state = readSignals(root, 'hq');
+  state.ledger.push(...videos.map(video => ({ hqWorkspaceId: 'hq', track: 'your-world' as const,
+    videoId: video.videoId, runId: 'previous', outcome: 'examined-no-finding' as const,
+    finalizedAt: now, evidencePacketId: `previous:${video.videoId}` })));
+  writeSignals(root, state);
+  const request = await prepared();
+  expect(request.selected).toEqual([]);
+  expect(provider.transcript).not.toHaveBeenCalled();
+  const snapshot = run(request, undefined); workflows.writeRun(root, snapshot);
+  expect(await service.completeEmpty(snapshot, new AbortController().signal)).toBe(true);
+  const saved = readSignals(root, 'hq').requests[0]!;
+  expect(saved.status).toBe('no-change');
+  expect(saved.outputId).toBeUndefined();
+});

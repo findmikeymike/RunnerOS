@@ -1,3 +1,5 @@
+import { MANAGER_TASK_MODES, LEGACY_MANAGER_TASK_MODES } from './task-mode-recipes/manager.ts'
+import { resolveAgentTaskMode } from './task-modes.ts'
 import { afterEach, expect, spyOn, test } from 'bun:test'
 import * as fs from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -113,4 +115,26 @@ test('archive failure prevents overwriting unreadable user bytes', () => {
     expect(fs.readFileSync(file, 'utf8')).toBe('---\nname: [')
     expect(warn).toHaveBeenCalled()
   } finally { copy.mockRestore(); warn.mockRestore() }
+})
+
+for (const customized of [false, true]) test(`Manager four-focus migration preserves saved work: customized=${customized}`, () => {
+  const { options, starter, file } = fixture('concierge')
+  const oldModes = LEGACY_MANAGER_TASK_MODES.filter(mode => mode.id !== 'build-automate')
+    .map(mode => ({ ...mode, ...(mode.adjacentSkills ? { adjacentSkills: mode.adjacentSkills.filter(skill => !['agent-creator', 'workflow-creator', 'automation-creator', 'skill-scout', 'source-recipe'].includes(skill.slug)) } : {}) }))
+  if (customized) oldModes[0] = { ...oldModes[0]!, label: 'My own priorities' }
+  const updated = { ...starter, metadata: { ...starter.metadata, taskModes: MANAGER_TASK_MODES } }
+  writeGlobalAgent({ ...starter, metadata: { ...starter.metadata, taskModes: oldModes, model: 'saved-model' }, systemPrompt: 'MY SAVED INSTRUCTIONS' }, options)
+  const before = fs.readFileSync(file, 'utf8')
+  expect(migrateBuiltInAgentTaskModes(updated, options).updated).toBe(!customized)
+  const loaded = loadGlobalAgent(starter.slug, options)!
+  expect(loaded.systemPrompt).toBe('MY SAVED INSTRUCTIONS')
+  expect(loaded.metadata.model).toBe('saved-model')
+  if (customized) expect(fs.readFileSync(file, 'utf8')).toBe(before)
+  else {
+    expect(loaded.metadata.taskModes!.map(mode => mode.label)).toEqual(['General', 'Happening Now', 'Create', 'Break Through'])
+    for (const [oldId, newId] of [['current-release', 'this-week'], ['brand', 'content'], ['business', 'general']])
+      expect(resolveAgentTaskMode(loaded, oldId)?.id).toBe(newId)
+    expect(() => resolveAgentTaskMode(loaded, 'invented-focus')).toThrow()
+    expect(migrateBuiltInAgentTaskModes(updated, options).updated).toBe(false)
+  }
 })

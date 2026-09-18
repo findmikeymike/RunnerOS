@@ -64,11 +64,11 @@ test('bundled native metadata envelopes round-trip through the Signals adapter u
     expect(belowCap.videos).toHaveLength(4);
     expect(belowCap.complete).toBe(true);
     // The upstream fixture has more than five uploads; the native command must
-    // honor the bounded scan and the adapter must report incomplete discovery.
+    // honor the bounded scan; completeness is scoped to that window.
     uploadCount = 50;
     const capped = await provider.recent(channelId);
     expect(capped.videos).toHaveLength(5);
-    expect(capped.complete).toBe(false);
+    expect(capped.complete).toBe(true);
     expect(calls.some(path => path.endsWith('/channels'))).toBe(true);
     expect(calls.some(path => path.endsWith('/videos'))).toBe(true);
     expect(calls.some(path => path.endsWith('/playlistItems'))).toBe(true);

@@ -126,8 +126,9 @@ export async function monidRecentVideos(root: string, channelId: string, signal?
       const videos = rows(output, RECENT_LIMIT).map(video);
       if (videos.some(item => item.channelId !== channelId) || new Set(videos.map(item => item.videoId)).size !== videos.length) return fail();
       videos.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || a.videoId.localeCompare(b.videoId));
-      // No rows alone cannot prove an empty channel; reaching the cap is partial.
-      return { videos, complete: videos.length > 0 && videos.length < RECENT_LIMIT };
+      // Complete within the latest-five window. Empty scraper output still cannot
+      // distinguish a genuinely quiet channel from unavailable metadata.
+      return { videos, complete: videos.length > 0 };
     },
   }, signal);
 }

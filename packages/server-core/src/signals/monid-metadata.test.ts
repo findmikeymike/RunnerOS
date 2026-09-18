@@ -103,7 +103,7 @@ test('recent list enforces channel identity, uniqueness, limit and truthful comp
   expect(recent.complete).toBe(true); expect(recent.videos[0]!.videoId).toBe(videoId);
   expect(await monidRecentVideos('/hq', channelId, undefined, fixture([]).deps)).toEqual({ videos: [], complete: false });
   const five = Array.from({ length: 5 }, (_, i) => ({ ...row(), id: String(i).padStart(11, '0'), url: undefined }));
-  expect((await monidRecentVideos('/hq', channelId, undefined, fixture(five).deps)).complete).toBe(false);
+  expect((await monidRecentVideos('/hq', channelId, undefined, fixture(five).deps)).complete).toBe(true);
   for (const output of [[...five, row()], [row(), row()], [{ ...row(), channelId: `UC${'b'.repeat(22)}`, channelUrl: `https://youtube.com/channel/UC${'b'.repeat(22)}` }]]) {
     await expect(monidRecentVideos('/hq', channelId, undefined, fixture(output).deps)).rejects.toThrow();
   }
