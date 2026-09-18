@@ -1,4 +1,4 @@
-import { canonical, type DurableJournal, type DurableRunSnapshot } from '../../../shared/src/durable-execution/index.ts';
+import { canonical, hasDispatchedWriteSince, type DurableJournal, type DurableRunSnapshot } from '../../../shared/src/durable-execution/index.ts';
 import { durableStepOutput } from './durable-workflow-output-schema';
 import type { WorkflowRunSnapshot, WorkflowRunStep } from '../../../shared/src/workflows/run-types.ts';
 import type { LoadedWorkflow } from '../../../shared/src/workflows/types.ts';
@@ -90,6 +90,13 @@ export class DurableWorkflowRuns {
       'credits-exhausted': 'Available connections are out of API credits. Add credits to the selected connection, then resume this saved run.',
       'provider-unavailable': 'The configured models are unavailable. Resume this saved run when the service is back.',
     };
+    const lastAttempt = snapshot.providerAttempts?.at(-1);
+    const writeBoundModel = !!lastAttempt && hasDispatchedWriteSince(snapshot.operations, lastAttempt.startTurn);
+    const expiredProviderMessage = hasDispatchedWriteSince(snapshot.operations, 0)
+      ? 'This run’s time limit expired after an action was sent. Check the connected service before starting another run.'
+      : 'This run’s time limit expired. Stop this saved run, fix provider access, then start again.';
+    const providerMessage = snapshot.providerAttention ? Date.now() >= spec.deadlineAt ? expiredProviderMessage
+      : writeBoundModel ? 'This step already sent an action. Restore access to its current model, then Resume to continue from the saved result without sending again.' : providerRemedies[snapshot.providerAttention] : undefined;
     const waiting = status === 'waiting-approval';
     const active = status === 'running' && this.options.isActive?.(spec.runId, spec.workspaceId) === true;
     const uncertainWrite = snapshot.operations?.some(operation => operation.intent.effectClass !== 'read'
@@ -110,7 +117,7 @@ export class DurableWorkflowRuns {
       const turns = saved ? snapshot.turns.slice(saved.startTurn, saved.endTurn) : [];
       return { id: step.id, state: projectedState, attempts: snapshot.providerAttempts?.filter(attempt => attempt.step === index).reduce((total, attempt) => total + 1 + attempt.retries, 0) ?? (turns.length > 0 ? 1 : 0),
         ...(completed && typeof saved.output === 'string' ? { output: durableStepOutput(saved.output, step.outputSchema), completion: { outputChars: saved.output.length, toolUseCount: turns.flatMap(turn => turn.calls).filter(call => call.result !== undefined).length, satisfied: true } } : {}),
-        ...(index === currentStep && snapshot.providerAttention ? { error: { code: snapshot.providerAttention, message: Date.now() >= spec.deadlineAt ? 'This run’s time limit expired. Stop this saved run, fix provider access, then start again.' : providerRemedies[snapshot.providerAttention] } } : {}),
+        ...(index === currentStep && snapshot.providerAttention ? { error: { code: snapshot.providerAttention, message: providerMessage! } } : {}),
         ...(projectedState === 'failed' ? { error: { code: 'durable-execution-failed', message: 'The durable workflow could not complete.' } } : {}),
         ...(uncertainWrite && index === Math.min(currentStep, workflow.metadata.steps.length - 1) ? { error: writeError } : {}),
       };
@@ -130,7 +137,7 @@ export class DurableWorkflowRuns {
       ...(snapshot.publication?.status === 'published' ? { finalOutputId: snapshot.publication.outputId, outputIds: [snapshot.publication.outputId] } : {}),
       ...(snapshot.publication?.status === 'pending' && ['paused', 'interrupted'].includes(state) ? { outputError: uncertainWrite ? uncertainWriteMessage : snapshot.publication.error ? publicationRemedies[snapshot.publication.error] : 'The result is saved, but its final Output still needs to be published. Resume to retry without repeating the model work.' } : {}),
       ...(state === 'interrupted' ? { interruptionReason: 'No worker is currently executing this saved run. Resume to continue.' } : {}),
-      durable: { engine: spec.engine, version: snapshot.version, status, controlRevision: snapshot.controlRevision, continuationRevision: snapshot.continuationRevision ?? 0, ...(providerAttempts?.length ? { providerAttempts } : {}), ...(uncertainWrite ? { resumeBlockedReason: uncertainWriteMessage } : snapshot.providerAttention && Date.now() >= spec.deadlineAt && snapshot.publication?.status !== 'pending' ? { resumeBlockedReason: 'This run’s time limit expired. Stop this saved run, fix provider access, then start again.' } : {}) },
+      durable: { engine: spec.engine, version: snapshot.version, status, controlRevision: snapshot.controlRevision, continuationRevision: snapshot.continuationRevision ?? 0, ...(providerAttempts?.length ? { providerAttempts } : {}), ...(uncertainWrite ? { resumeBlockedReason: uncertainWriteMessage } : snapshot.providerAttention && Date.now() >= spec.deadlineAt && snapshot.publication?.status !== 'pending' ? { resumeBlockedReason: expiredProviderMessage } : {}) },
     };
   }
 }

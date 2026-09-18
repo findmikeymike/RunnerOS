@@ -53,3 +53,14 @@ export interface DurableOperationStart {
   dispatch: boolean;
   attempt?: DurableOperationAttemptToken;
 }
+
+/** Changing provider context must never repeat a write from the abandoned step. */
+export function hasDispatchedWriteSince(operations: readonly DurableOperation[] | undefined, startTurn: number): boolean {
+  return operations?.some(operation => {
+    if (operation.intent.effectClass === 'read' || operation.attempts.length === 0) return false;
+    const match = /^source-write:(\d+):.+$/.exec(operation.intent.slotId);
+    if (!match) return true; // Generic effects have no reliable model-turn scope.
+    const turn = Number(match[1]);
+    return !Number.isSafeInteger(turn) || !Number.isSafeInteger(startTurn) || turn >= startTurn;
+  }) ?? false;
+}

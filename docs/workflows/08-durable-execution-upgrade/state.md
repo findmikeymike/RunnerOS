@@ -1,5 +1,13 @@
 # Build state
 
+## Latest checkpoint — normal API write adoption, September 17
+
+Normal durable Start now supports explicitly declared `sourceWrites` on selected API sources for Ask-mode agents. The shared API/OAuth path receives exact frozen method grants; the existing approval surface authorizes each write once. Journal schema 10/runtime revision 7 add separate bounded write requests and final approval revalidation. Confirmed receipts are saved before tool completion and replay without sending again. Uncertain responses pause; ordinary Resume cannot resend. Switching models after a dispatched write in the same step is blocked to preserve the conversation and receipts; later-step fallback remains available.
+
+Verification: all 15 real normal-Start process tests / 147 assertions pass, including SIGKILL after saving a write receipt but before returning the tool result: restart completes with one POST and one approval total. Lost responses pause, and credits failure after a confirmed write cannot dispatch a backup model. The combined runner/gateway/parser regression passes 177 tests / 988 assertions; projection checks pass 18 tests / 86 assertions. Cold Rival independently passed 114 tests / 675 assertions; its final expired-run warning finding was fixed with a two-step regression covering a write in an earlier completed step. Server-core and Pi typechecks pass; shared checking reports the unrelated unfinished Composio test type error. No live account write or app restart occurred. Other agents’ unfinished changes are preserved.
+
+This supersedes the previous contract-only adoption boundary below. Remote MCP/session writes and automatic migration of unmarked workflows are not included.
+
 ## Latest checkpoint — shared interrupted-write contract, September 17
 
 The host effect journal now supports one-attempt writes without claiming provider idempotency. Confirmed receipts are reusable only with current access; uncertain writes cannot be resent through Resume, steering, fallback or child work. The shared adapter checks authorization at final dispatch. Run history presents uncertainty without approval buttons or private inputs. Schema 9 rejects older binaries. A fresh-process SIGKILL test proves exactly one simulated external write despite lost receipt; recovery stays honestly unknown.

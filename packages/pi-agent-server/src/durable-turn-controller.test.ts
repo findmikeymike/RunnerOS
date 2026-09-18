@@ -191,9 +191,9 @@ test('web fetch descriptor requires the exact approved URL grant', () => {
   }
 });
 
-test('frozen API proxy reads use journal replay through the real SDK', async () => {
+for (const method of ['GET', 'POST'] as const) test(`frozen API proxy ${method} uses journal replay through the real SDK`, async () => {
   const name = 'mcp__calendar__api_calendar';
-  const sourceDescriptor: DurableExecutionDescriptor = { ...descriptor, allowedTools: [name], sourceTools: [{ name, sourceSlug: 'calendar', description: 'Read calendar', inputSchema: { type: 'object', properties: { path: { type: 'string' } } } }] };
+  const sourceDescriptor: DurableExecutionDescriptor = { ...descriptor, allowedTools: [name], sourceTools: [{ name, sourceSlug: 'calendar', description: 'Read calendar', inputSchema: { type: 'object', properties: { path: { type: 'string' }, method: { type: 'string', enum: method === 'POST' ? ['GET', 'POST'] : ['GET'] } } }, ...(method === 'POST' ? { writeMethods: ['POST'] } : {}) }] };
   const saved = new Map<string, any>(); let dispatches = 0, providerCalls = 0;
   const checkpoint = async (event: DurableCheckpoint): Promise<DurableCheckpointReply> => {
     if (event.kind === 'model-start') return { cached: saved.get(`model-${event.turn}`) };
@@ -204,13 +204,13 @@ test('frozen API proxy reads use journal replay through the real SDK', async () 
   };
   const run = async () => {
     const controller = new DurableTurnController(sourceDescriptor, checkpoint); let turn = 0;
-    const tool: AgentTool = { name, label: 'Calendar', description: 'Read calendar', parameters: Type.Object({ path: Type.String() }), execute: async (id, input) => {
+    const tool: AgentTool = { name, label: 'Calendar', description: 'Read calendar', parameters: Type.Object({ path: Type.String(), method: Type.String() }), execute: async (id, input) => {
       await controller.disposition(id, name);
       return controller.tool(id, name, input, async () => { expect(controller.currentTurn).toBe(0); dispatches++; return { content: [{ type: 'text', text: 'account result' }], details: {} }; });
     } };
     const agent = new Agent({ initialState: { model, tools: [tool] }, streamFn: () => {
       providerCalls++; const stream = createAssistantMessageEventStream(); const response = message(turn++ === 0);
-      if (response.stopReason === 'toolUse') response.content = [{ type: 'toolCall', id: 'source-read', name, arguments: { path: '/events' } }];
+      if (response.stopReason === 'toolUse') response.content = [{ type: 'toolCall', id: 'source-read', name, arguments: { method, path: '/events' } }];
       stream.push({ type: 'done', reason: response.stopReason as 'stop', message: response }); return stream;
     } });
     await controller.run(agent, 'Read my calendar', 'system');

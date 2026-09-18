@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createDurableSourceTools } from './durable-source-tools';
+import { createDurableSourceTools, type DurableSourceWriteMethod } from './durable-source-tools';
 import { loadSource } from '../../../shared/src/sources/storage';
 
 const cleanup: Array<() => void> = [];
@@ -146,4 +146,81 @@ test('effective credential identity tracks its real owner and refuses owner swit
     owner = 'global'; switchOwner = true;
     expect(await sources.captureDurableIdentity(source)).toBeNull();
   } finally { manager.captureDurableSourceIdentity = original; }
+});
+
+test('declared write methods are frozen in tools and require Ask approval while GET stays automatic', async () => {
+  const f = fixture(), [grant] = await f.gateway.capture('workspace', f.root, ['account'], [{ sourceSlug: 'account', methods: ['PATCH', 'POST'] }]);
+  expect(grant!.writeMethods).toEqual(['POST', 'PATCH']);
+  expect((grant!.inputSchema as any).properties.method.enum).toEqual(['GET', 'POST', 'PATCH']);
+  const read = f.gateway.authorize(grant!, { method: 'GET', path: '/items' });
+  const write = f.gateway.authorize(grant!, { method: 'POST', path: '/items' });
+  expect(read.allowed).toBe(true); expect(read.requiresApproval).toBe(false);
+  expect(write.allowed).toBe(true); expect(write.requiresApproval).toBe(true);
+  expect(f.gateway.authorize(grant!, { method: 'DELETE', path: '/items' }).allowed).toBe(false);
+  await f.gateway.assertCurrent([grant!], 'workspace', f.root);
+  await expect(f.gateway.execute(grant!, { method: 'POST', path: '/items' }, () => {})).rejects.toThrow('not-authorized');
+  expect(f.getCalls()).toBe(0);
+  let approvals = 0;
+  const result = await f.gateway.execute(grant!, { method: 'POST', path: '/items', params: { title: 'Draft' } }, () => {}, () => { approvals++; });
+  expect(result.isError).toBe(false); expect(f.getCalls()).toBe(1); expect(approvals).toBeGreaterThanOrEqual(2);
+  expect(f.fetched()!.options!.method).toBe('POST'); expect(f.fetched()!.options!.body).toBe('{"title":"Draft"}');
+});
+
+test.each(['POST', 'PUT', 'PATCH', 'DELETE'])('each declared write uses one guarded dispatch: %s', async method => {
+  const f = fixture('bearer');
+  const [grant] = await f.gateway.capture('workspace', f.root, ['account'], [{ sourceSlug: 'account', methods: [method as DurableSourceWriteMethod] }]);
+  const result = await f.gateway.execute(grant!, { method, path: '/items/one', params: { value: 'updated' } }, () => {}, () => {});
+  expect(result.isError).toBe(false); expect(f.getCalls()).toBe(1); expect(f.fetched()!.options!.redirect).toBe('error');
+});
+
+test('approval policy revision includes source policy and is rechecked after awaited refresh', async () => {
+  const f = fixture(), [grant] = await f.gateway.capture('workspace', f.root, ['account'], [{ sourceSlug: 'account', methods: ['POST'] }]);
+  const args = { method: 'POST', path: '/items' };
+  const approved = f.gateway.authorize(grant!, args).policyRevision;
+  f.onRefresh(() => writeFileSync(join(f.folder, 'permissions.json'), '{"allowedApiEndpoints":[{"method":"POST","path":"/items"}]}'));
+  await expect(f.gateway.execute(grant!, args, () => {}, () => {
+    if (f.gateway.authorize(grant!, args).policyRevision !== approved) throw new Error('approval-policy-changed');
+  })).rejects.toThrow('not-authorized');
+  expect(f.getCalls()).toBe(0);
+});
+
+test.each([400, 429, 500])('write HTTP %s returns uncertainty without a transport retry', async status => {
+  const f = fixture('bearer'), [grant] = await f.gateway.capture('workspace', f.root, ['account'], [{ sourceSlug: 'account', methods: ['POST'] }]);
+  let requests = 0;
+  globalThis.fetch = (async () => { requests++; return new Response('{"error":"not confirmed"}', { status }); }) as unknown as typeof fetch;
+  const result = await f.gateway.execute(grant!, { method: 'POST', path: '/items' }, () => {}, () => {});
+  expect(result.isError).toBe(true); expect(requests).toBe(1);
+});
+
+test('invalid JSON write response cannot certify success; empty 204 remains valid', async () => {
+  const f = fixture('bearer'), [grant] = await f.gateway.capture('workspace', f.root, ['account'], [{ sourceSlug: 'account', methods: ['POST'] }]);
+  globalThis.fetch = (async () => new Response('{invalid', { headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch;
+  expect((await f.gateway.execute(grant!, { method: 'POST', path: '/items' }, () => {}, () => {})).isError).toBe(true);
+  globalThis.fetch = (async () => new Response(null, { status: 204, headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch;
+  expect(await f.gateway.execute(grant!, { method: 'POST', path: '/items' }, () => {}, () => {})).toEqual({ content: '', isError: false });
+});
+
+
+test.each(['pause', 'credential-removal'])('confirmed write response survives late %s after dispatch', async change => {
+  const f = fixture('bearer'), [grant] = await f.gateway.capture('workspace', f.root, ['account'], [{ sourceSlug: 'account', methods: ['POST'] }]);
+  let dispatch!: () => void, finish!: (response: Response) => void, paused = false;
+  const dispatched = new Promise<void>(resolve => { dispatch = resolve; });
+  globalThis.fetch = (async () => { dispatch(); return new Promise<Response>(resolve => { finish = resolve; }); }) as unknown as typeof fetch;
+  const fence = () => { if (paused) throw new Error('paused'); };
+  const result = f.gateway.execute(grant!, { method: 'POST', path: '/items' }, fence, fence);
+  await dispatched;
+  if (change === 'pause') paused = true; else f.revoke();
+  finish(new Response('{"id":"confirmed-write"}', { status: 201, headers: { 'content-type': 'application/json' } }));
+  expect(await result).toEqual({ content: '{"id":"confirmed-write"}', isError: false });
+});
+
+test('read response still checks current access after an awaited response', async () => {
+  const f = fixture('bearer'), [grant] = await f.gateway.capture('workspace', f.root, ['account']);
+  let dispatch!: () => void, finish!: (response: Response) => void, paused = false;
+  const dispatched = new Promise<void>(resolve => { dispatch = resolve; });
+  globalThis.fetch = (async () => { dispatch(); return new Promise<Response>(resolve => { finish = resolve; }); }) as unknown as typeof fetch;
+  const result = f.gateway.execute(grant!, { method: 'GET', path: '/items' }, () => { if (paused) throw new Error('paused'); });
+  await dispatched; paused = true;
+  finish(new Response('{"items":[]}'));
+  await expect(result).rejects.toThrow('paused');
 });

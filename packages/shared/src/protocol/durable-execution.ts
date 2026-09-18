@@ -5,7 +5,7 @@ export interface DurableRuntimeManifest {
 }
 /** Bump adapterRevision whenever replay/normalization/authorization semantics change. */
 export const DURABLE_RUNTIME_MANIFEST: Readonly<DurableRuntimeManifest> = Object.freeze({
-  piAgentCore: '0.84.3', piAi: '0.84.3', piCodingAgent: '0.84.3', adapterRevision: 'pi-readonly-6',
+  piAgentCore: '0.84.3', piAi: '0.84.3', piCodingAgent: '0.84.3', adapterRevision: 'pi-readonly-7',
 });
 export type DurableRunStatus = 'running' | 'paused' | 'waiting-approval' | 'succeeded' | 'cancelled' | 'failed';
 export interface DurableToolAuthorization {
@@ -107,7 +107,7 @@ export function isDurableWebReadInput(input: unknown, urls: unknown): boolean {
   const value = input as Record<string, unknown>;
   return Object.keys(value).every(key => key === 'url') && typeof value.url === 'string' && urls.includes(value.url);
 }
-export interface DurableSourceTool { name: string; description: string; inputSchema: DurableJson; sourceSlug: string }
+export interface DurableSourceTool { name: string; description: string; inputSchema: DurableJson; sourceSlug: string; writeMethods?: string[] }
 export interface DurableSourceToolRequest { turn: number; callId: string; tool: string; input: DurableJson }
 function sourceJson(value: unknown, depth = 0): boolean {
   if (depth > 32) return false;
@@ -117,25 +117,35 @@ function sourceJson(value: unknown, depth = 0): boolean {
   return !!value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype
     && Object.values(value).every(item => sourceJson(item, depth + 1));
 }
+export function isDurableSourceWriteMethods(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.length <= 4 && new Set(value).size === value.length
+    && value.every(method => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method));
+}
 export function isDurableSourceTools(value: unknown): value is DurableSourceTool[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > 8) return false;
   const names = new Set<string>();
   return value.every(tool => {
     if (!tool || typeof tool !== 'object' || Array.isArray(tool) || Object.getPrototypeOf(tool) !== Object.prototype
-      || Object.keys(tool).length !== 4 || Object.keys(tool).some(key => !['name','description','inputSchema','sourceSlug'].includes(key))
+      || Object.keys(tool).length !== (tool.writeMethods === undefined ? 4 : 5) || Object.keys(tool).some(key => !['name','description','inputSchema','sourceSlug','writeMethods'].includes(key))
+      || (tool.writeMethods !== undefined && !isDurableSourceWriteMethods(tool.writeMethods))
       || typeof tool.sourceSlug !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(tool.sourceSlug)
       || tool.name !== `mcp__${tool.sourceSlug}__api_${tool.sourceSlug}` || names.has(tool.name)
       || typeof tool.description !== 'string' || tool.description.length > 32000
       || !tool.inputSchema || typeof tool.inputSchema !== 'object' || Array.isArray(tool.inputSchema)
       || tool.inputSchema.type !== 'object' || !sourceJson(tool.inputSchema) || JSON.stringify(tool.inputSchema).length > 64000) return false;
+    if (tool.writeMethods) {
+      const methods = tool.inputSchema.properties?.method?.enum;
+      if (!Array.isArray(methods) || methods.length !== tool.writeMethods.length + 1 || new Set(methods).size !== methods.length
+        || !methods.includes('GET') || !tool.writeMethods.every((method: string) => methods.includes(method))) return false;
+    }
     names.add(tool.name); return true;
   });
 }
-export function isDurableSourceToolInput(value: unknown): boolean {
+export function isDurableSourceToolInput(value: unknown, writeMethods?: readonly string[]): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return false;
   const input = value as Record<string, unknown>;
   return sourceJson(input) && JSON.stringify(input).length <= 64000 && Object.keys(input).every(key => ['method','path','params','_intent'].includes(key))
-    && (input.method === undefined || input.method === 'GET') && typeof input.path === 'string' && input.path.length > 0
+    && (input.method === undefined || input.method === 'GET' || typeof input.method === 'string' && isDurableSourceWriteMethods(writeMethods) && writeMethods.includes(input.method)) && typeof input.path === 'string' && input.path.length > 0
     && (input._intent === undefined || typeof input._intent === 'string')
     && (input.params === undefined || !!input.params && typeof input.params === 'object' && !Array.isArray(input.params) && Object.getPrototypeOf(input.params) === Object.prototype);
 }

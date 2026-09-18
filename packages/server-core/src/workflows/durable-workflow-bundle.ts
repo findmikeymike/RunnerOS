@@ -60,7 +60,7 @@ export function createDurableWorkflowBundleResolver(deps: typeof defaults = defa
       ) throw unsupported('receipt');
     if (options.trustedWorkerTools?.length) throw unsupported('tools');
     if (thinking !== 'off') throw unsupported('thinking');
-    if (permission !== 'safe') throw unsupported('permission');
+    if (permission !== 'safe' && permission !== 'ask') throw unsupported('permission');
     if (!options.customSystemPrompt?.trim()
       || options.spawnedFromAgent && options.spawnedFromAgent.agentSlug !== agentSlug
       || options.workingDirectory && options.workingDirectory !== 'user_default'
@@ -86,7 +86,7 @@ export function createDurableWorkflowBundleResolver(deps: typeof defaults = defa
       workspaceDefaultConnectionSlug: config?.defaults?.defaultLlmConnection, managedModel: model });
     if (context.provider !== 'pi' || context.authType !== 'api_key' || context.connection?.authType !== 'api_key'
       || !context.connection.piAuthProvider || !context.connection.slug || !context.resolvedModel) throw unsupported('provider');
-    return { connectionSlug: context.connection.slug, model: context.resolvedModel, systemPrompt: options.customSystemPrompt + durableLocalSourcesPrompt(localSources) + skillPrompt, ...(localSources.length ? { localSources } : {}), ...(sourceToolSlugs.length ? { sourceToolSlugs } : {}) };
+    return { ...(permission === 'ask' ? { permissionMode: 'ask' as const } : {}), connectionSlug: context.connection.slug, model: context.resolvedModel, systemPrompt: options.customSystemPrompt + durableLocalSourcesPrompt(localSources) + skillPrompt, ...(localSources.length ? { localSources } : {}), ...(sourceToolSlugs.length ? { sourceToolSlugs } : {}) };
   };
 }
 export const resolveDurableWorkflowBundle = createDurableWorkflowBundleResolver();

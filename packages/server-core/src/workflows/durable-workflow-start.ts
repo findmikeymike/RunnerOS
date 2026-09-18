@@ -1,3 +1,4 @@
+import { isDurableWorkflowSourceWrites } from '../../../shared/src/workflows/source-writes';
 import { durableWorkflowStartError } from './durable-workflow-eligibility';
 import { getLlmConnections, getModelFallbackChain } from '@craft-agent/shared/config';
 import { getCredentialManager } from '../../../shared/src/credentials/index';
@@ -13,7 +14,7 @@ import type { DurableWorkflowHost } from './durable-workflow-host.ts';
 import { durableWorkflowOccurrenceIdentity } from './durable-workflow-occurrence.ts';
 import type { DurableLocalSource } from './durable-workflow-sources.ts';
 
-export interface DurableStartBundle { connectionSlug: string; model: string; systemPrompt: string; localSources?: DurableLocalSource[]; sourceToolSlugs?: string[] }
+export interface DurableStartBundle { permissionMode?: 'ask'; connectionSlug: string; model: string; systemPrompt: string; localSources?: DurableLocalSource[]; sourceToolSlugs?: string[] }
 export interface DurableWorkflowStartOptions {
   host: DurableWorkflowHost;
   /** Null means unsupported capabilities; an explicitly selected durable workflow must reject. */
@@ -61,6 +62,7 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
       // Validate before bundle work, but pass the original scalar values onward so defaults
       // are applied exactly once when admission freezes the normalized inputs.
       normalizeDurableTriggerInputs(workflow, pinned.triggerInputs, pinned.untrustedTriggerInputs);
+      if (workflow.metadata.sourceWrites !== undefined && !isDurableWorkflowSourceWrites(workflow.metadata.sourceWrites)) throw new Error('Invalid durable source writes.');
       const bundles = new Map<string, DurableStartBundle>();
       for (const [stepIndex, step] of workflow.metadata.steps.entries()) {
         const bundleKey = canonical([step.agent, step.taskModeId ?? null]);
@@ -74,6 +76,10 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
         if (!resolved) throw durableWorkflowStartError(null, stepIndex + 1);
         bundles.set(bundleKey, JSON.parse(canonical(resolved)) as DurableStartBundle);
       }
+      for (const write of workflow.metadata.sourceWrites ?? []) {
+        const selected = [...bundles.values()].filter(bundle => bundle.sourceToolSlugs?.includes(write.sourceSlug));
+        if (!selected.length || selected.some(bundle => bundle.permissionMode !== 'ask')) throw new Error('Source writes require Ask mode on every step using the declared connection.');
+      }
       const bundle = bundles.get(canonical([workflow.metadata.steps[0]!.agent, workflow.metadata.steps[0]!.taskModeId ?? null]))!;
       const roleRouting = workflow.metadata.steps.some(step => step.modelRole !== undefined);
       if (!roleRouting && [...bundles.values()].some(candidate => candidate.connectionSlug !== bundle.connectionSlug || candidate.model !== bundle.model)) throw new Error('Durable read steps must use the same model and connection.');
@@ -85,7 +91,7 @@ export function createDurableWorkflowStart(options: DurableWorkflowStartOptions)
       const runId = scheduled ? durableWorkflowOccurrenceIdentity(workspaceId, pinned.occurrence!).runId : randomUUID();
       const resolvedSteps = await Promise.all(workflow.metadata.steps.map(async step => {
         const selected = bundles.get(canonical([step.agent, step.taskModeId ?? null]))!;
-        return { id: step.id, agent: step.agent, ...(step.taskModeId ? { taskModeId: step.taskModeId } : {}), systemPrompt: selected.systemPrompt, ...(selected.sourceToolSlugs?.length ? { sourceToolSlugs: selected.sourceToolSlugs } : {}),
+        return { id: step.id, agent: step.agent, ...(selected.permissionMode ? { permissionMode: selected.permissionMode } : {}), ...(step.taskModeId ? { taskModeId: step.taskModeId } : {}), systemPrompt: selected.systemPrompt, ...(selected.sourceToolSlugs?.length ? { sourceToolSlugs: selected.sourceToolSlugs } : {}),
           ...(roleRouting ? { modelPlan: { ...(step.modelRole ? { role: step.modelRole } : {}), candidates: [
             { connectionSlug: selected.connectionSlug, model: selected.model },
             ...(step.modelRole ? await (options.resolveFallbackCandidates ?? resolveDurableFallbackCandidates)(selected, step.modelRole) : []),

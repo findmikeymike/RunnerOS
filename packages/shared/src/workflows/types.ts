@@ -1,3 +1,4 @@
+import type { DurableWorkflowSourceWrite } from './source-writes.ts';
 /**
  * Workflows — types
  *
@@ -131,6 +132,8 @@ export interface WorkflowMetadata {
   execution?: 'durable-local-read';
   /** Certified connected reads frozen as context before workflow steps execute. */
   connectedReads?: DurableWorkflowConnectedRead[];
+  /** Explicit eligible source methods; writes require Ask mode and exact action approval. */
+  sourceWrites?: DurableWorkflowSourceWrite[];
   /** Exact public HTTPS pages approved for durable text reads; no search or downloads. */
   webReadUrls?: string[];
   /** Follow up to three redirects, exclusively between approved URLs. Default false. */

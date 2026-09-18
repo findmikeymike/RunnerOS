@@ -7,6 +7,8 @@ import { DURABLE_RUNTIME_MANIFEST, isDurableWebReadUrls, isDurableWebReadInput, 
 import { privateDurableDirectory } from './key-provider.ts';
 import type { DurableOperation, DurableOperationIntent, DurableOperationOutcome, DurableOperationValidator, DurableOperationAttemptToken, DurableOperationStart } from './operation-types.ts';
 export type * from './operation-types.ts';
+import { hasDispatchedWriteSince } from './operation-types.ts';
+export { hasDispatchedWriteSince } from './operation-types.ts';
 import type { DurableSteeringCommand, DurableSteeringReceipt, DurableSteeringEntry, DurableApproval, DurableToolAuthorization, DurableDecisionCommand, DurableDecisionReceipt, DurableControlCommand, DurableControlReceipt, DurableRunStatus } from '../protocol/durable-execution.ts';
 export type { DurableSteeringCommand, DurableSteeringReceipt, DurableSteeringEntry, DurableApproval, DurableToolAuthorization, DurableDecisionCommand, DurableDecisionReceipt, DurableControlCommand, DurableControlReceipt } from '../protocol/durable-execution.ts';
 export { loadDurableKey, type DurableSafeStorage } from './key-provider.ts';
@@ -54,6 +56,8 @@ export interface DurableRunSpec extends DurableExecutionDescriptor {
   maxModelAttempts: number;
   /** Separate bounded allowance for host-dispatched read operations; never pays model units. */
   readOperationBudget?: { maxOperations: number; maxAttempts: number };
+  /** Counts host write attempts separately; this does not represent a monetary allowance. */
+  writeOperationBudget?: { maxOperations: number; maxAttempts: number };
   /** model-requests bounds provider attempts only; it is not a monetary spending guarantee. */
   costPolicy: { maxTotalUnits: number; maxUnitsPerAttempt: number; unit: 'verified-free' | 'trusted-upper-bound' | 'model-requests' };
 }
@@ -127,10 +131,10 @@ export class DurableJournal {
       this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;');
       if (this.db.prepare('PRAGMA journal_mode').get().journal_mode !== 'wal' || this.db.prepare('PRAGMA synchronous').get().synchronous !== 2 || this.db.prepare('PRAGMA foreign_keys').get().foreign_keys !== 1) throw new Error('unsafe-sqlite-settings');
       const version = this.db.prepare('PRAGMA user_version').get().user_version;
-      if (![0, 1, 2, 3, 4, 5, 6, 7, 8, 9].includes(version)) throw new Error('unsupported-durable-schema');
+      if (![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(version)) throw new Error('unsupported-durable-schema');
       this.db.exec('BEGIN IMMEDIATE');
       try {
-        this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, command TEXT NOT NULL, spec_digest TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT, pid INTEGER, payload TEXT NOT NULL, UNIQUE(workspace,command)); CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), version INTEGER NOT NULL, kind TEXT NOT NULL, UNIQUE(run_id,version)); CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES events(sequence), acknowledged INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS control_commands (workspace TEXT NOT NULL, id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(id), payload TEXT NOT NULL, PRIMARY KEY(workspace,id)); PRAGMA user_version=9;');
+        this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, command TEXT NOT NULL, spec_digest TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT, pid INTEGER, payload TEXT NOT NULL, UNIQUE(workspace,command)); CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id), version INTEGER NOT NULL, kind TEXT NOT NULL, UNIQUE(run_id,version)); CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES events(sequence), acknowledged INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS control_commands (workspace TEXT NOT NULL, id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(id), payload TEXT NOT NULL, PRIMARY KEY(workspace,id)); PRAGMA user_version=10;');
         if (!this.db.prepare('PRAGMA table_info(runs)').all().some((column: any) => column.name === 'process_identity')) this.db.exec('ALTER TABLE runs ADD COLUMN process_identity TEXT');
         const keyCheck = this.db.prepare("SELECT value FROM metadata WHERE key='key-check'").get();
         if (keyCheck) { if (this.decrypt(keyCheck.value, 'key-check') !== 'artist-os-durable-v1') throw new Error('invalid-key-check'); }
@@ -197,6 +201,13 @@ export class DurableJournal {
         || policy?.unit !== 'model-requests' || !Number.isSafeInteger(budget.maxOperations) || budget.maxOperations < 1 || budget.maxOperations > 8
         || !Number.isSafeInteger(budget.maxAttempts) || budget.maxAttempts < 1 || budget.maxAttempts > 16) throw new Error('invalid-durable-read-operation-budget');
     }
+    if (spec.writeOperationBudget !== undefined) {
+      const budget = spec.writeOperationBudget;
+      if (!budget || typeof budget !== 'object' || Array.isArray(budget) || Object.keys(budget).some(key => !['maxOperations', 'maxAttempts'].includes(key))
+        || policy?.unit !== 'model-requests' || !Number.isSafeInteger(budget.maxOperations) || budget.maxOperations < 1 || budget.maxOperations > 8
+        || !Number.isSafeInteger(budget.maxAttempts) || budget.maxAttempts < 1 || budget.maxAttempts > 8) throw new Error('invalid-durable-write-operation-budget');
+    }
+    if (Array.isArray(spec.sourceTools) && spec.sourceTools.some(tool => tool?.writeMethods !== undefined) && !spec.writeOperationBudget) throw new Error('invalid-durable-write-operation-budget');
     if (spec.workflowSteps !== undefined && (!Array.isArray(spec.workflowSteps) || spec.workflowSteps.length < 1 || spec.workflowSteps.length > 8 || spec.workflowSteps.some(step => !step || typeof step.id !== 'string' || !step.id.trim() || Object.keys(step).some(key => key !== 'id')) || new Set(spec.workflowSteps.map(step => step.id)).size !== spec.workflowSteps.length)) throw new Error('invalid-durable-workflow-steps');
     if (spec.fallbackPlan !== undefined) {
       const plan = spec.fallbackPlan;
@@ -444,6 +455,7 @@ export class DurableJournal {
       const attempts = state.providerAttempts ??= [];
       const previous = attempts.at(-1);
       if (previous?.step === input.step && previous.candidateIndex === input.candidateIndex) return { ...claim };
+      if (previous?.step === input.step && hasDispatchedWriteSince(state.operations, previous.startTurn)) throw new Error('durable-write-provider-switch-blocked');
       if (previous?.step === input.step && (previous.endTurn !== undefined || !previous.error || input.candidateIndex <= previous.candidateIndex)) throw new Error('durable-provider-attempt-order');
       if (previous?.step === input.step) {
         previous.endTurn = state.turns.length; previous.endedAt = Date.now();
@@ -658,7 +670,7 @@ export class DurableJournal {
             }
             if (request.kind === 'tool-disposition') return {};
             if (request.tool === 'web_fetch' && !isDurableWebReadInput(request.input, state.spec.webReadUrls)) throw new Error('durable-web-read-not-authorized');
-            if (state.spec.sourceTools?.some(tool => tool.name === request.tool) && !isDurableSourceToolInput(request.input)) throw new Error('durable-source-read-not-authorized');
+            if (state.spec.sourceTools?.some(tool => tool.name === request.tool) && !isDurableSourceToolInput(request.input, state.spec.sourceTools.find(tool => tool.name === request.tool)?.writeMethods)) throw new Error('durable-source-read-not-authorized');
             const inputDigest = digest(request.input);
             if (call.inputDigest && call.inputDigest !== inputDigest) throw new Error('durable-tool-input-changed');
             const approval = this.authorize(state, request, call, inputDigest, authorization);
@@ -786,12 +798,12 @@ export class DurableJournal {
       !Number.isSafeInteger(intent.maxAttempts) || intent.maxAttempts < 1 || !Number.isFinite(intent.maxUnitsPerAttempt) || intent.maxUnitsPerAttempt < 0 || !Object.hasOwn(intent,'input')) throw new Error('invalid-durable-operation-intent');
     return this.transaction(() => {
       const state = this.fenced(claim);
-      const readBudget = state.spec.readOperationBudget;
-      if (state.spec.costPolicy.unit === 'model-requests' && (!readBudget || intent.effectClass !== 'read' || intent.maxUnitsPerAttempt !== 0 || intent.maxAttempts > readBudget.maxAttempts)) throw new Error('durable-request-budget-operations-unsupported');
+      const operationBudget = intent.effectClass === 'read' ? state.spec.readOperationBudget : state.spec.writeOperationBudget;
+      if (state.spec.costPolicy.unit === 'model-requests' && (!operationBudget || !['read', 'single-attempt-write'].includes(intent.effectClass) || intent.maxUnitsPerAttempt !== 0 || intent.maxAttempts > operationBudget.maxAttempts)) throw new Error('durable-request-budget-operations-unsupported');
       const existing = state.operations?.find(item => item.intent.slotId === intent.slotId);
       if (existing) { if (digest(existing.intent) !== digest(intent)) throw new Error('durable-operation-intent-conflict'); return existing; }
       this.operationDispatch(state, claim);
-      if (readBudget && (state.operations?.length ?? 0) >= readBudget.maxOperations) throw new Error('durable-operation-budget-exhausted');
+      if (operationBudget && (state.operations?.filter(item => (item.intent.effectClass === 'read') === (intent.effectClass === 'read')).length ?? 0) >= operationBudget.maxOperations) throw new Error('durable-operation-budget-exhausted');
       if (state.operations?.some(item => item.intent.idempotencyKey === intent.idempotencyKey)) throw new Error('durable-operation-key-conflict');
       const operation: DurableOperation = { operationId: digest([claim.workspaceId,claim.runId,intent.slotId]), intent,
         inputDigest: digest(intent.input), status: 'intent', attempts: [] };
@@ -813,7 +825,8 @@ export class DurableJournal {
       this.operationDispatch(state, claim);
       if (operation.status !== 'intent') throw new Error('durable-operation-reconciliation-required');
       if (state.operations!.slice(0, state.operations!.indexOf(operation)).some(item => item.status !== 'succeeded')) throw new Error('durable-operation-predecessor-incomplete');
-      if (state.spec.readOperationBudget && state.operations!.reduce((count, item) => count + item.attempts.length, 0) >= state.spec.readOperationBudget.maxAttempts) throw new Error('durable-operation-budget-exhausted');
+      const operationBudget = operation.intent.effectClass === 'read' ? state.spec.readOperationBudget : state.spec.writeOperationBudget;
+      if (operationBudget && state.operations!.filter(item => (item.intent.effectClass === 'read') === (operation.intent.effectClass === 'read')).reduce((count, item) => count + item.attempts.length, 0) >= operationBudget.maxAttempts) throw new Error('durable-operation-budget-exhausted');
       if (operation.attempts.length >= operation.intent.maxAttempts || state.reservedUnits + operation.intent.maxUnitsPerAttempt > state.spec.costPolicy.maxTotalUnits) throw new Error('durable-operation-budget-exhausted');
       const attempt: DurableOperationAttemptToken = { operationId: operation.operationId, slotId, commandId,
         attempt: operation.attempts.length + 1, ownerId: claim.ownerId, epoch: claim.epoch };
@@ -829,10 +842,27 @@ export class DurableJournal {
     const state = this.fenced(claim);
     this.operationDispatch(state, claim);
     if (!Number.isSafeInteger(request.turn) || request.turn < 0 || request.turn !== state.turns.length - 1
-      || !state.spec.sourceTools?.some(tool => tool.name === request.tool) || !isDurableSourceToolInput(request.input)) throw new Error('durable-source-read-not-authorized');
+      || !state.spec.sourceTools?.some(tool => tool.name === request.tool) || !isDurableSourceToolInput(request.input, state.spec.sourceTools.find(tool => tool.name === request.tool)?.writeMethods)) throw new Error('durable-source-read-not-authorized');
     const turn = state.turns[request.turn], call = turn?.calls.find(item => item.id === request.callId);
     if (!turn?.message || !call || call.tool !== request.tool || call.skipped || call.result !== undefined || call.attempts < 1
       || call.inputDigest !== digest(request.input) || turn.calls.slice(0, turn.calls.indexOf(call)).some(item => item.result === undefined && !item.skipped)) throw new Error('durable-source-tool-not-started');
+  }
+  /** Recheck existing exact authorization at I/O time; never create a second prompt. */
+  assertSourceWriteAuthorization(claim: DurableClaim, request: DurableSourceToolRequest, authorization: DurableToolAuthorization): void {
+    this.assertSourceToolDispatch(claim, request);
+    const state = this.fenced(claim), method = (request.input as Record<string, DurableJson>).method;
+    if (typeof method !== 'string' || method === 'GET' || !state.spec.sourceTools?.find(tool => tool.name === request.tool)?.writeMethods?.includes(method)
+      || !state.spec.writeOperationBudget || !authorization || authorization.allowed !== true
+      || !state.spec.approvalPrincipalId || authorization.principalId !== state.spec.approvalPrincipalId
+      || authorization.credentialIdentity !== this.activeCredential(state) || typeof authorization.policyRevision !== 'string' || !authorization.policyRevision
+      || typeof authorization.requiresApproval !== 'boolean' || !Number.isFinite(authorization.approvalExpiresAt)
+      || authorization.approvalExpiresAt <= Date.now()) throw new Error('durable-source-write-authorization-changed');
+    if (!authorization.requiresApproval) return;
+    const operationId = digest([state.spec.runId, state.spec.workspaceId, request.turn, request.callId]);
+    const approval = state.approvals?.filter(item => item.operationId === operationId).at(-1);
+    if (!approval || approval.status !== 'consumed' || approval.expiresAt <= Date.now() || approval.tool !== request.tool
+      || approval.inputDigest !== digest(request.input) || approval.principalId !== authorization.principalId
+      || approval.credentialIdentity !== authorization.credentialIdentity || approval.policyRevision !== authorization.policyRevision) throw new Error('durable-source-write-authorization-changed');
   }
   /** Recheck the issued attempt immediately before an awaited adapter dispatches I/O. */
   assertOperationDispatch(claim: DurableClaim, token: DurableOperationAttemptToken): void {

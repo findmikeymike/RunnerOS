@@ -363,6 +363,9 @@ export function createApiTool(
         if (executionGuard) {
           if (buffer.length > 512 * 1024) return { content: [{ type: 'text' as const, text: 'API response exceeded the durable read limit.' }], isError: true };
           const text = buffer.toString('utf8');
+          if (method !== 'GET' && response.ok && text && /(?:application\/json|\+json)(?:;|$)/i.test(response.headers.get('content-type') ?? '')) {
+            JSON.parse(text); // A malformed declared JSON response cannot certify a write.
+          }
           const secrets = typeof resolvedCredential === 'string' ? [resolvedCredential] : Object.values(resolvedCredential);
           if (headers.Authorization) secrets.push(headers.Authorization, headers.Authorization.replace(/^\S+\s+/, ''));
           const observations: string[] = [text];
@@ -415,7 +418,7 @@ export function createApiTool(
         return { content: [{ type: 'text' as const, text: buffer.toString('utf-8') }] };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        if (executionGuard) return { content: [{ type: 'text' as const, text: 'API read failed. Check the connection and retry.' }], isError: true };
+        if (executionGuard) return { content: [{ type: 'text' as const, text: method === 'GET' ? 'API read failed. Check the connection and retry.' : 'API request failed. Its outcome could not be confirmed.' }], isError: true };
         debug(`[api-tools] ${config.name} request failed${config.name === 'gmail' ? '' : `: ${message}`}`);
         return {
           content: [{

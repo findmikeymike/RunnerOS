@@ -192,3 +192,12 @@ test('selected authenticated API source enters shared tool admission without pro
   writeFileSync(join(folder, 'config.json'), JSON.stringify({ ...config, enabled: false }));
   expect(() => f.resolve('w', 'reader', f.options)).toThrow('unsupported-durable-agent-bundle');
 });
+
+test('Ask mode is preserved for host write gates while safe reads keep their existing bundle shape', () => {
+ const f = fixture();
+ expect(f.resolve('w', 'reader', f.options).permissionMode).toBeUndefined();
+ expect(f.resolve('w', 'reader', { ...f.options, permissionMode: 'ask' }).permissionMode).toBe('ask');
+ f.config.defaults!.permissionMode = 'ask';
+ expect(f.resolve('w', 'reader', f.options).permissionMode).toBe('ask');
+ expect(f.resolve('w', 'reader', { ...f.options, permissionMode: 'safe' }).permissionMode).toBeUndefined();
+});

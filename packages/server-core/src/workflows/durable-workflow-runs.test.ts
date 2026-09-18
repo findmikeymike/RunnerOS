@@ -111,7 +111,7 @@ test('multi-step history keeps completed outputs while later steps are interrupt
   expect(failed?.steps[0]?.output).toBe('Kept result'); expect(failed?.steps[1]?.output).toBeUndefined();
 });
 
-test('provider attention exposes safe model receipts and expired-run recovery guidance', async () => {
+test.each([false, true])('provider attention preserves safe recovery guidance after write=%s', async (sent) => {
   const f = fixture();
   const spec: DurableRunSpec = { ...f.spec, runId: 'fallback', commandId: 'fallback',
     workflowSteps: [{ id: 'read' }], authority: { adapter: 'pi-local-read-multi-1', stepCount: 1, completion: 'journal-only' },
@@ -121,17 +121,22 @@ test('provider attention exposes safe model receipts and expired-run recovery gu
   f.journal.admit(spec); let claim = f.journal.claim('fallback', 'w');
   await f.journal.bridge(claim).checkpoint({ kind: 'workflow-step-start', step: 0, input: {} });
   claim = f.journal.beginStepAttempt(claim, { step: 0, candidateIndex: 0 });
+  if (sent) {
+    f.journal.reserveOperation(claim, { slotId: 'source-write:0:sent', adapterId: 'fixture', adapterVersion: '1', credentialIdentity: f.spec.credentialIdentity, effectClass: 'single-attempt-write', idempotencyKey: 'sent', input: {}, outputSchema: { id: 'fixture', version: '1' }, maxAttempts: 1, maxUnitsPerAttempt: 0 });
+    const started = f.journal.startOperation(claim, 'source-write:0:sent', 'send');
+    f.journal.settleOperation(claim, started.attempt!, { kind: 'succeeded', output: {} }, { id: 'fixture', version: '1', validate: () => true });
+  }
   claim = f.journal.recordProviderFailure(claim, { step: 0, candidateIndex: 0, code: 'credits-exhausted', exhausted: true });
   f.journal.release(claim);
   const available = await f.service().get('w', 'fallback', actor);
-  expect(available?.steps[0]?.error?.message).toContain('Add credits');
+  expect(available?.steps[0]?.error?.message).toContain(sent ? 'without sending again' : 'Add credits');
   expect(available?.durable?.resumeBlockedReason).toBeUndefined();
   expect(available?.durable?.providerAttempts).toEqual([{ step: 'read', role: 'reasoning', connectionSlug: 'saved-connection', model: 'saved-model', candidateIndex: 0, retries: 0, error: 'credits-exhausted' }]);
   expect(JSON.stringify(available)).not.toContain(f.spec.credentialIdentity);
   const clock = spyOn(Date, 'now').mockReturnValue(spec.deadlineAt + 1);
   try {
     const expired = await f.service().get('w', 'fallback', actor);
-    expect(expired?.durable?.resumeBlockedReason).toContain('Stop this saved run');
+    expect(expired?.durable?.resumeBlockedReason).toContain(sent ? 'Check the connected service' : 'Stop this saved run');
     expect(expired?.steps[0]?.error?.message).toContain('time limit expired');
   } finally { clock.mockRestore(); }
 });
@@ -196,4 +201,32 @@ test('multi-step uncertain write keeps earlier completed output and marks only c
  const run = await f.service().get('w', 'multi-write', actor);
  expect(run?.state).toBe('paused'); expect(run?.steps.map(step => step.state)).toEqual(['succeeded', 'awaiting-human', 'queued']);
  expect(run?.steps[0]?.output).toBe('Kept result'); expect(run?.steps[0]?.error).toBeUndefined(); expect(run?.steps[1]?.error?.message).toBe(writeWarning);
+});
+
+test('expired later step warns about confirmed actions from completed earlier steps', async () => {
+  const f = fixture();
+  const candidate = { connectionSlug: 'saved', model: 'fixture', credentialIdentity: f.spec.credentialIdentity };
+  const spec: DurableRunSpec = { ...f.spec, runId: 'prior-write', commandId: 'prior-write', workflowSteps: [{ id: 'send' }, { id: 'read' }],
+    authority: { adapter: 'pi-local-read-multi-1', stepCount: 2, completion: 'journal-only' }, fallbackPlan: { steps: [{ candidates: [candidate] }, { candidates: [candidate] }] },
+    context: { workflow: { slug: 'send-read', body: '', metadata: { name: 'Send then read', trigger: { type: 'manual' }, outputs: { mode: 'none' }, steps: [{ id: 'send', agent: 'sender', input: 'Send' }, { id: 'read', agent: 'reader', input: 'Read' }] } } },
+  };
+  f.journal.admit(spec); let claim = f.journal.claim(spec.runId, 'w');
+  await f.journal.bridge(claim).checkpoint({ kind: 'workflow-step-start', step: 0, input: {} });
+  claim = f.journal.beginStepAttempt(claim, { step: 0, candidateIndex: 0 });
+  await f.journal.bridge(claim).checkpoint({ kind: 'model-start', turn: 0, context: {} });
+  await f.journal.bridge(claim).checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'Sent' }] } });
+  f.journal.reserveOperation(claim, { slotId: 'source-write:0:sent', adapterId: 'fixture', adapterVersion: '1', credentialIdentity: f.spec.credentialIdentity, effectClass: 'single-attempt-write', idempotencyKey: 'sent', input: {}, outputSchema: { id: 'fixture', version: '1' }, maxAttempts: 1, maxUnitsPerAttempt: 0 });
+  const started = f.journal.startOperation(claim, 'source-write:0:sent', 'send');
+  f.journal.settleOperation(claim, started.attempt!, { kind: 'succeeded', output: {} }, { id: 'fixture', version: '1', validate: () => true });
+  await f.journal.bridge(claim).checkpoint({ kind: 'workflow-step-complete', step: 0 });
+  await f.journal.bridge(claim).checkpoint({ kind: 'workflow-step-start', step: 1, input: {} });
+  claim = f.journal.beginStepAttempt(claim, { step: 1, candidateIndex: 0 });
+  claim = f.journal.recordProviderFailure(claim, { step: 1, candidateIndex: 0, code: 'credits-exhausted', exhausted: true });
+  f.journal.release(claim);
+  const clock = spyOn(Date, 'now').mockReturnValue(spec.deadlineAt + 1);
+  try {
+    const projected = await f.service().get('w', spec.runId, actor);
+    expect(projected?.steps[0]?.state).toBe('succeeded');
+    expect(projected?.durable?.resumeBlockedReason).toContain('Check the connected service');
+  } finally { clock.mockRestore(); }
 });

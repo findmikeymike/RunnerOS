@@ -1,3 +1,7 @@
+import { hasDispatchedWriteSince } from '../../../shared/src/durable-execution/operation-types';
+import { isDurableWorkflowSourceWrites } from '../../../shared/src/workflows/source-writes';
+import { DurableEffectRunner } from './durable-effect-runner';
+import { createDurableSingleAttemptWriteAdapter } from './durable-single-attempt-write';
 import { createDurableSourceTools, type DurableSourceToolGrant } from './durable-source-tools';
 import { isDurableWorkflowConnectedReads } from '../../../shared/src/workflows/connected-reads';
 import { createDurableWorkflowConnectedReads, type DurableWorkflowConnectedReadOptions, type FrozenWorkflowConnectedRead } from './durable-workflow-connected-reads';
@@ -36,6 +40,7 @@ export interface DurableReadInput {
   approvalPrincipalId?: string;
   localSources?: DurableLocalSource[];
   sourceToolSlugs?: string[];
+  permissionMode?: 'ask';
   triggerInputs?: Record<string, unknown>;
   untrustedTriggerInputs?: string[];
   /** Certified by the host, never estimated from renderer input. */
@@ -43,7 +48,7 @@ export interface DurableReadInput {
 }
 interface ModelPlan { role?: 'reasoning' | 'fast'; candidates: Array<{ connectionSlug: string; model: string }> }
 interface FrozenModelPlan { role?: 'reasoning' | 'fast'; candidates: Array<{ connectionSlug: string; model: string; bindingDigest: string; credentialIdentity: string }> }
-export type DurableReadWorkflowInput = Omit<DurableReadInput, 'prompt'> & { resolvedAgentSlug: string; resolvedTaskModeId?: string; resolvedSteps?: Array<{ id: string; agent: string; taskModeId?: string; systemPrompt: string; sourceToolSlugs?: string[]; modelPlan?: ModelPlan }> };
+export type DurableReadWorkflowInput = Omit<DurableReadInput, 'prompt'> & { resolvedAgentSlug: string; resolvedTaskModeId?: string; resolvedSteps?: Array<{ id: string; agent: string; taskModeId?: string; systemPrompt: string; sourceToolSlugs?: string[]; permissionMode?: 'ask'; modelPlan?: ModelPlan }> };
 export interface DurableReadAdmission {
   snapshot: DurableRunSnapshot;
   /** Observed internally; callers may separately await completion or failure. */
@@ -146,6 +151,7 @@ export function supportsDurableReadWorkflow(workflow: LoadedWorkflow): boolean {
   try { assertDurableTriggerDeclarations(workflow); } catch { return false; }
   if (workflow.metadata.webReadUrls !== undefined && !isDurableWebReadUrls(workflow.metadata.webReadUrls)) return false;
   if (workflow.metadata.webReadRedirects !== undefined && (typeof workflow.metadata.webReadRedirects !== 'boolean' || workflow.metadata.webReadUrls === undefined)) return false;
+  if (workflow.metadata.sourceWrites !== undefined && (workflow.metadata.execution !== 'durable-local-read' || !isDurableWorkflowSourceWrites(workflow.metadata.sourceWrites))) return false;
   if (workflow.metadata.connectedReads !== undefined && !isDurableWorkflowConnectedReads(workflow.metadata.connectedReads)) return false;
   const triggerNames = new Set((workflow.metadata.trigger.inputs ?? []).map(definition => definition.name));
   if (workflow.parseWarnings?.length || workflow.metadata.trigger.type !== 'manual' || !supportsPublication(workflow)
@@ -284,11 +290,14 @@ export class DurableReadRunner {
       }
       modelPlans.push({ ...(step.modelPlan.role ? { role: step.modelPlan.role } : {}), candidates });
     }
+    const sourceWrites = workflow?.metadata.sourceWrites ?? [];
+    if (sourceWrites.some(write => !requested.sourceToolSlugs?.includes(write.sourceSlug)
+      || (resolvedSteps ? resolvedSteps.some(step => step.sourceToolSlugs?.includes(write.sourceSlug) && step.permissionMode !== 'ask') : requested.permissionMode !== 'ask'))) throw new Error('durable-write-ask-mode-required');
     let sourceTools: DurableSourceToolGrant[] | undefined;
     if (requested.sourceToolSlugs?.length) {
       if (!workflow || !requested.approvalPrincipalId || !this.options.authorizeRun) throw new Error('unsupported-durable-read-workflow');
       this.options.authorizeRun({ runId: requested.runId, workspaceId: requested.workspaceId, approvalPrincipalId: requested.approvalPrincipalId });
-      sourceTools = await (this.options.sourceTools ?? createDurableSourceTools()).capture(requested.workspaceId, realpathSync(binding.workspace.rootPath), requested.sourceToolSlugs);
+      sourceTools = await (this.options.sourceTools ?? createDurableSourceTools()).capture(requested.workspaceId, realpathSync(binding.workspace.rootPath), requested.sourceToolSlugs, sourceWrites);
       this.assertOpen();
       this.options.authorizeRun({ runId: requested.runId, workspaceId: requested.workspaceId, approvalPrincipalId: requested.approvalPrincipalId });
     }
@@ -326,9 +335,10 @@ export class DurableReadRunner {
     const spec: DurableRunSpec = { engine: 'sqlite-v2-readonly-1', runId: requested.runId, workspaceId: requested.workspaceId,
       credentialIdentity: binding.credentialIdentity, runtimeManifest: { ...DURABLE_RUNTIME_MANIFEST },
       createdAt, commandId: requested.commandId, model: requested.model, allowedTools: [...requested.allowedTools, ...(sourceTools ?? []).map(tool => tool.modelToolName)],
-      ...(sourceTools?.length ? { sourceTools: sourceTools.map(tool => ({ name: tool.modelToolName, description: tool.description, inputSchema: tool.inputSchema, sourceSlug: tool.sourceSlug })) } : {}),
+      ...(sourceTools?.length ? { sourceTools: sourceTools.map(tool => ({ name: tool.modelToolName, description: tool.description, inputSchema: tool.inputSchema, sourceSlug: tool.sourceSlug, ...(tool.writeMethods?.length ? { writeMethods: tool.writeMethods } : {}) })) } : {}),
       ...(requested.webReadUrls ? { webReadUrls: requested.webReadUrls } : {}),
       ...(requested.webReadRedirects !== undefined ? { webReadRedirects: requested.webReadRedirects } : {}),
+      ...(sourceWrites.length ? { writeOperationBudget: { maxOperations: 8, maxAttempts: 8 } } : {}),
       maxOutputTokens: requested.maxOutputTokens, maxModelAttempts: requested.maxModelAttempts, deadlineAt: requested.deadlineAt,
       ...(output?.mode === 'final-step' ? { publication: { outputId: publicationId(requested.workspaceId, requested.runId),
         kind: (output.kind ?? 'document') as 'report' | 'document', title: output.title?.trim() || workflow!.metadata.name.trim(),
@@ -545,6 +555,7 @@ export class DurableReadRunner {
       }
     };
     // Each bridge closes over an immutable claim and candidate, fencing responses from older attempts.
+    const sourceWriteSlot = (request: { turn: number; callId: string }) => `source-write:${request.turn}:${request.callId}`;
     const createBridges = (claim: DurableClaim, candidate: FrozenModelPlan['candidates'][number], stepIndex = 0) => {
       const sourceGrants = (initialFrozen.sourceTools ?? []).filter(tool => !initialFrozen.steps || initialFrozen.steps[stepIndex]?.sourceToolSlugs?.includes(tool.sourceSlug));
       const journalBridge = journal.bridge(claim, initial.spec.approvalPrincipalId ? {
@@ -564,16 +575,19 @@ export class DurableReadRunner {
           permissionsConfigCache.invalidateWorkspace(frozen.workspaceRoot);
           if (request.tool === 'web_fetch' && !isDurableWebReadInput(request.input, initial.spec.webReadUrls)) throw new Error('durable-web-read-not-authorized');
           const sourceGrant = sourceGrants.find(tool => tool.modelToolName === request.tool);
-          if (sourceGrant) { sourceGateway.assertAllowed(sourceGrant, request.input as Record<string, unknown>); return; }
+          if (sourceGrant) { if (!sourceGateway.authorize(sourceGrant, request.input as Record<string, unknown>).allowed) throw new Error('durable-authorization-blocked'); return; }
           const policyTool = ({ read: 'Read', grep: 'Grep', find: 'Glob', ls: 'Glob', web_fetch: 'WebFetch' } as Record<string, string>)[request.tool];
           const policyInputs = request.tool === 'web_fetch' && initial.spec.webReadRedirects === true
             ? initial.spec.webReadUrls!.map(url => ({ url })) : [request.input];
           if (!policyTool || policyInputs.some(input => !shouldAllowToolInMode(policyTool, input, 'safe', { permissionsContext: { workspaceRootPath: frozen.workspaceRoot, activeSourceSlugs: [] } }).allowed)) throw new Error('durable-authorization-blocked');
         };
         await checkCurrent();
-        if (sourceGrants.some(tool => tool.modelToolName === request.tool)) {
+        const sourceGrant = sourceGrants.find(tool => tool.modelToolName === request.tool);
+        if (sourceGrant) {
+          const policy = sourceGateway.authorize(sourceGrant, request.input as Record<string, unknown>);
+          const saved = journal.getOperation(runId, workspaceId, sourceWriteSlot(request));
           return { principalId: initial.spec.approvalPrincipalId!, credentialIdentity: candidate.credentialIdentity,
-            policyRevision: this.options.readPolicyRevision?.(frozen.workspaceRoot) ?? digest(sourceGrants), allowed: true, requiresApproval: false, approvalExpiresAt: initial.spec.deadlineAt };
+            ...policy, requiresApproval: policy.requiresApproval && saved?.status !== 'succeeded', approvalExpiresAt: initial.spec.deadlineAt };
         }
         if (!this.options.authorizeTool) throw new Error('durable-authorization-blocked');
         const authorization = await this.options.authorizeTool(request, { runId, workspaceId, approvalPrincipalId: initial.spec.approvalPrincipalId!, connectionSlug: candidate.connectionSlug, model: candidate.model, credentialIdentity: candidate.credentialIdentity, deadlineAt: initial.spec.deadlineAt, ...(initial.spec.webReadUrls ? { webReadUrls: Object.freeze([...initial.spec.webReadUrls]) } : {}), ...(initial.spec.webReadRedirects !== undefined ? { webReadRedirects: initial.spec.webReadRedirects } : {}) });
@@ -606,7 +620,29 @@ export class DurableReadRunner {
         if (!grant) throw new Error('durable-source-tool-unavailable');
         const guard = () => { journal.assertSourceToolDispatch(claim, request); assertDispatch(); assertConnectedAuthority(); };
         guard(); await checkConnected(claim); guard();
-        return sourceGateway.execute(grant, request.input as Record<string, unknown>, guard);
+        const input = request.input as Record<string, unknown>;
+        if (input.method === undefined || input.method === 'GET') return sourceGateway.execute(grant, input, guard);
+        const writeGuard = () => {
+          guard();
+          journal.assertSourceWriteAuthorization(claim, request, { ...sourceGateway.authorize(grant, input),
+            principalId: initial.spec.approvalPrincipalId!, credentialIdentity: candidate.credentialIdentity, approvalExpiresAt: initial.spec.deadlineAt });
+        };
+        const adapter = createDurableSingleAttemptWriteAdapter({ id: 'shared-source-write', version: '1', workspaceId, credentialIdentity: grant.credentialIdentity,
+          outputSchema: { id: 'source-write-receipt', version: '1', validate: output => !!output && typeof output === 'object' && !Array.isArray(output) && typeof output.content === 'string' && output.isError === false },
+          async authorize() { await checkConnected(claim); guard(); if (!sourceGateway.authorize(grant, input).allowed) throw new Error('durable-authorization-blocked'); },
+          assertAuthorized: writeGuard,
+          async invoke(_input, dispatch) { writeGuard(); const result = await sourceGateway.execute(grant, input, () => { dispatch(); guard(); }, writeGuard); return result; },
+        });
+        const operation = await new DurableEffectRunner(journal, [adapter]).execute(claim, {
+          slotId: sourceWriteSlot(request), adapterId: adapter.id, adapterVersion: adapter.version, credentialIdentity: grant.credentialIdentity,
+          effectClass: 'single-attempt-write', idempotencyKey: digest([runId, request.turn, request.callId]), input: request.input,
+          outputSchema: { id: adapter.outputSchema.id, version: adapter.outputSchema.version }, maxAttempts: 1, maxUnitsPerAttempt: 0,
+        });
+        const outcome = operation.attempts.at(-1)?.reconciliation ?? operation.attempts.at(-1)?.outcome;
+        if (operation.status === 'succeeded' && outcome?.kind === 'succeeded') return outcome.output as { content: string; isError: boolean };
+        const current = journal.get(runId, workspaceId);
+        if (current.status === 'running' && current.controlRevision === claim.controlRevision) journal.command({ runId, workspaceId, commandId: randomUUID(), expectedVersion: current.version, action: 'pause' });
+        throw new Error('durable-write-outcome-unknown');
       }, checkpoint: async request => {
       if (request.kind === 'output-published') throw new Error('durable-workflow-host-checkpoint-required');
       if (request.kind === 'tool-start') { await checkConnected(claim); assertDispatch(); }
@@ -787,7 +823,8 @@ export class DurableReadRunner {
             ? Date.now() + delay : undefined;
           const billedConnections = new Set(current.providerAttempts?.filter(item => item.error === 'credits-exhausted').map(item => frozen.modelPlans![item.step]!.candidates[item.candidateIndex]!.connectionSlug));
           if (code === 'credits-exhausted') billedConnections.add(candidate.connectionSlug);
-          const next = plan.candidates.findIndex((item, nextIndex) => nextIndex > candidateIndex && !billedConnections.has(item.connectionSlug));
+          // Restarting a step on another model would lose confirmed write receipts from its context.
+          const next = hasDispatchedWriteSince(current.operations, attempt.startTurn) ? -1 : plan.candidates.findIndex((item, nextIndex) => nextIndex > candidateIndex && !billedConnections.has(item.connectionSlug));
           claim = journal.recordProviderFailure(claim, { step: index, candidateIndex, code,
             ...(retryAt !== undefined ? { retryAt } : next < 0 ? { exhausted: true } : {}) });
           entry.claim = claim;
@@ -808,6 +845,10 @@ export class DurableReadRunner {
         }
         return journal.get(runId, workspaceId);
       }
+      // Pi reports a generic tool failure after the host records an uncertain write.
+      // Preserve that deliberate stop instead of rejecting shutdown as an execution crash.
+      if (['paused', 'cancelled'].includes(pending.status) && pending.controlRevision !== claim.controlRevision
+        && pending.operations?.some(operation => operation.intent.effectClass !== 'read' && ['inflight', 'unknown'].includes(operation.status))) return pending;
       if (error instanceof Error && error.message.includes('durable-steering-pending')) {
         const current = journal.get(runId, workspaceId);
         entry.replayForSteering = current.status === 'running';

@@ -1,11 +1,11 @@
-import { DurableJournal, loadDurableKey } from '../../../../../shared/src/durable-execution';
+import { DurableJournal, loadDurableKey, canonical } from '../../../../../shared/src/durable-execution';
 import { createDurableSourceTools } from '../../durable-source-tools';
 import { createDurableReadAuthorization, readDurablePolicyRevision } from '../../durable-read-authorization';
 import { DurableWorkflowHost } from '../../durable-workflow-host';
 import { WorkflowRunner } from '../../runner';
 import { createDurableWorkflowStart } from '../../durable-workflow-start';
 /** Actual normal Start/default Pi execution, only in supervisor-owned synthetic configuration. */
-import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, appendFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { durableCredentialIdentity } from '../../../../../shared/src/protocol/durable-execution.ts';
 import { getCredentialManager } from '../../../../../shared/src/credentials/manager.ts';
@@ -20,8 +20,10 @@ import { loadSource } from '../../../../../shared/src/sources/storage';
 
 const connectedUrl = 'https://api.spotify.com/v1/artists/0123456789ABCDEFGHIJKL';
 const [root, endpoint, requestedMode] = process.argv.slice(2) as [string, string, string];
-const recovering = requestedMode === 'source-tools-recover';
-const mode = recovering ? 'source-tools' : requestedMode;
+const recovering = requestedMode === 'source-tools-recover' || requestedMode === 'source-write-recover';
+const mode = recovering ? requestedMode === 'source-write-recover' ? 'source-write' : 'source-tools' : requestedMode;
+const sourceWrite = mode.startsWith('source-write');
+const sourceMode = mode === 'source-tools' || sourceWrite;
 if (readFileSync(join(root, 'synthetic-only'), 'utf8') !== 'approval-fixture' || process.env.CRAFT_CONFIG_DIR !== join(root, 'config')) throw new Error('isolated-approval-fixture-required');
 const key = 'synthetic-approval-provider-key';
 getCredentialManager().getLlmApiKey = async slug => { if (!['approval-fixture', 'backup-fixture'].includes(slug)) throw new Error('unexpected-key-read'); return key; };
@@ -38,14 +40,14 @@ const binding: DurableReadBinding = { credentialIdentity: identity,
     slug: 'approval-fixture', name: 'Fixture', providerType: 'pi_compat', authType: 'api_key', piAuthProvider: 'openai', baseUrl: endpoint + '/v1', customEndpoint: { api: 'openai-completions' }, models: ['approval-fixture', 'backup-fixture'], createdAt: 1,
   } },
 };
-if (mode === 'connected' || mode === 'source-tools') {
+if (mode === 'connected' || sourceMode) {
   mkdirSync(join(root, 'sources/account'), { recursive: true });
   writeFileSync(join(root, 'sources/account/config.json'), JSON.stringify({ id: 'account', slug: 'account', name: 'Account', provider: 'spotify', type: 'api', enabled: true, isAuthenticated: true, api: { baseUrl: 'https://api.spotify.com/v1/', authType: 'bearer' } }));
 }
 const connectedResolver = createDurableConnectedReadBindingResolver({ getWorkspaces: () => [binding.workspace], loadSource, loadCredential: async () => ({ value: 'synthetic-account-token' }), now: Date.now });
 const resolveBundle = async () => {
   const systemPrompt = 'Use the native read tool to read fixture.txt, then summarize.\n' + localSources.map(source => source.guide).join('\n');
-  if (mode !== 'skills') return { connectionSlug: 'approval-fixture', model: 'approval-fixture', localSources, systemPrompt, ...(mode === 'source-tools' ? { sourceToolSlugs: ['account'] } : {}) };
+  if (mode !== 'skills') return { connectionSlug: 'approval-fixture', model: 'approval-fixture', localSources, systemPrompt, ...(sourceMode ? { sourceToolSlugs: ['account'], ...(sourceWrite ? { permissionMode: 'ask' as const } : {}) } : {}) };
   const slug = 'artist-belief-system';
   setGlobalSkillEnabled(root, slug, true);
   savePersonalInstruction(root, slug, { scope: 'workspace', text: 'SKILL_PERSONAL_NATIVE_READ keep the answer concise.' });
@@ -66,26 +68,40 @@ const resolveBinding = (_workspace: string, slug: string, model: string) => ({ .
 const sourceTools = createDurableSourceTools({
   getWorkspaces: () => [binding.workspace],
   loadSources: workspaceRoot => { const source = loadSource(workspaceRoot, 'account'); return source ? [source] : []; },
-  captureCredentialIdentity: async () => ({ credentialIdentity: 'fixture-source-signin' }),
+  captureCredentialIdentity: async () => ({ credentialIdentity: 'b'.repeat(64) }),
   getApiCredential: async () => 'synthetic-source-token',
   tokenGetter: () => async () => 'synthetic-refreshed-source-token',
 });
-if (mode === 'source-tools') {
-  const assertAllowed = sourceTools.assertAllowed;
-  sourceTools.assertAllowed = (...args) => {
-    assertAllowed(...args);
-    appendFileSync(join(root, 'source-policy-checks'), recovering ? 'recover\n' : 'start\n');
+if (sourceMode) {
+  const authorize = sourceTools.authorize;
+  sourceTools.authorize = (...args) => {
+    const result = authorize(...args);
+    if (result.allowed) appendFileSync(join(root, 'source-policy-checks'), recovering ? 'recover\n' : 'start\n');
+    return result;
   };
   globalThis.fetch = (async (url: string | URL | Request, options?: RequestInit) => {
-    if (String(url) !== 'https://api.spotify.com/v1/items' || options?.method !== 'GET') throw new Error('unexpected-source-fetch');
-    appendFileSync(join(root, 'source-dispatches'), 'GET\n');
+    if (String(url) !== 'https://api.spotify.com/v1/items' || options?.method !== (sourceWrite ? 'POST' : 'GET')) throw new Error('unexpected-source-fetch');
+    appendFileSync(join(root, 'source-dispatches'), `${options.method}\n`);
+    if (sourceWrite && options.body !== JSON.stringify({ title: 'Fixture item' })) throw new Error('write-payload-mismatch');
+    if (mode === 'source-write-unknown') throw new Error('synthetic-response-lost-after-send');
     return new Response('{"items":["SOURCE_PROXY_NATIVE_READ"]}', { headers: { 'content-type': 'application/json' } });
   }) as typeof fetch;
 }
 const protection = { isEncryptionAvailable: () => true, encryptString: (value: string) => Buffer.from(value), decryptString: (value: Buffer) => value.toString() };
+if (mode === 'source-write-gap') {
+  const settle = DurableJournal.prototype.settleOperation;
+  DurableJournal.prototype.settleOperation = function (...args) {
+    const result = settle.apply(this, args);
+    if (result.intent.adapterId === 'shared-source-write' && result.status === 'succeeded') {
+      console.log(JSON.stringify({ barrier: 'write-receipt-saved' }));
+      process.kill(process.pid, 'SIGSTOP');
+    }
+    return result;
+  };
+}
 const host = DurableWorkflowHost.open({ configRoot: join(root, 'config'), protection, resolvePrincipal: () => 'fixture-principal', runnerOptions: {
   authorizeRun: () => {},
-  ...(mode === 'source-tools' ? { sourceTools } : {}),
+  ...(sourceMode ? { sourceTools } : {}),
   ...(mode === 'connected' ? { connectedReads: { bindingResolver: connectedResolver, transport: async (_binding: unknown, url: string, isAuthorized: () => boolean) => {
     if (url !== connectedUrl || !isAuthorized()) throw new Error('unexpected-connected-dispatch');
     appendFileSync(join(root, 'connected-dispatches'), 'read\n');
@@ -111,10 +127,23 @@ try {
       recoveredState = { id: saved.spec.runId, state: 'running' };
     } finally { journal.close(); }
   }
-  const state = recoveredState ?? await runner.start({ invocation: 'manual-ui', actor, workspaceId: actor.workspaceId, triggerInputs: mode === 'inputs' ? { file: 'fixture.txt' } : {}, workflow: { slug: 'approval-fixture', path: root, source: 'global', body: '', metadata: { execution: 'durable-local-read' as const, ...(mode === 'connected' ? { connectedReads: [{ sourceSlug: 'account', url: connectedUrl }] } : {}), name: 'Fixture', description: '', trigger: { type: 'manual', ...(mode === 'inputs' ? { inputs: [{ name: 'file', type: 'string' as const, required: true }] } : {}) }, outputs: { mode: 'none' }, steps: [{ id: 'read', agent: 'reader', ...(['fallback', 'credits'].includes(mode) ? { modelRole: 'fast' as const } : {}), ...(mode === 'structured' ? { outputSchema: { type: 'object', required: ['summary'], properties: { summary: { type: 'string' } } } } : {}), input: mode === 'inputs' ? 'INPUT_FIXTURE Read {{trigger.file}}.' : 'Read fixture.txt.' }, ...(mode === 'multi' ? [{ id: 'second', agent: 'reader', input: 'Use {{steps.read.output}} and read fixture.txt again.' }] : [])] } } });
+  const state = recoveredState ?? await runner.start({ invocation: 'manual-ui', actor, workspaceId: actor.workspaceId, triggerInputs: mode === 'inputs' ? { file: 'fixture.txt' } : {}, workflow: { slug: 'approval-fixture', path: root, source: 'global', body: '', metadata: { execution: 'durable-local-read' as const, ...(sourceWrite ? { sourceWrites: [{ sourceSlug: 'account', methods: ['POST' as const] }] } : {}), ...(mode === 'connected' ? { connectedReads: [{ sourceSlug: 'account', url: connectedUrl }] } : {}), name: 'Fixture', description: '', trigger: { type: 'manual', ...(mode === 'inputs' ? { inputs: [{ name: 'file', type: 'string' as const, required: true }] } : {}) }, outputs: { mode: 'none' }, steps: [{ id: 'read', agent: 'reader', ...(['fallback', 'credits', 'source-write-credits'].includes(mode) ? { modelRole: 'fast' as const } : {}), ...(mode === 'structured' ? { outputSchema: { type: 'object', required: ['summary'], properties: { summary: { type: 'string' } } } } : {}), input: mode === 'inputs' ? 'INPUT_FIXTURE Read {{trigger.file}}.' : 'Read fixture.txt.' }, ...(mode === 'multi' ? [{ id: 'second', agent: 'reader', input: 'Use {{steps.read.output}} and read fixture.txt again.' }] : [])] } } });
   console.log(JSON.stringify({ barrier: 'admitted', runId: state.id, state: state.state }));
   for (let i = 0; i < 1000; i++) {
     const current = await host.runs.get(actor.workspaceId, state.id, actor);
+    if (sourceWrite) {
+      const attention = await host.controls.listAttention(actor.workspaceId, actor, state.id);
+      if (attention.length) {
+        if (existsSync(join(root, 'source-dispatches')) || existsSync(join(root, 'write-approved'))) throw new Error('unexpected-write-approval-repeat-or-early-send');
+        if (canonical(attention[0]!.toolCall?.args) !== canonical({ method: 'POST', path: '/items', params: { title: 'Fixture item' } })) throw new Error('approval-payload-mismatch');
+        writeFileSync(join(root, 'write-approved'), 'once');
+        await host.controls.resolveAttention(actor.workspaceId, attention[0]!.id, 'approved', { commandId: 'approve-fixture-write', expectedVersion: attention[0]!.durable!.version }, actor);
+      }
+      if (mode === 'source-write-credits' && current?.state === 'paused' && current.steps.some(step => step.error?.code === 'credits-exhausted')) { console.log(JSON.stringify({ result: 'write-provider-paused' })); break; }
+      if (mode === 'source-write-unknown' && current?.durable?.resumeBlockedReason) {
+        console.log(JSON.stringify({ result: 'uncertain-write', warning: current.durable.resumeBlockedReason, state: current.state })); break;
+      }
+    }
     if (current?.state === 'succeeded') { console.log(JSON.stringify({ result: current.state, runId: current.id, providerAttempts: current.durable?.providerAttempts, steps: current.steps.map(step => ({ id: step.id, state: step.state, output: step.output })) })); break; }
     if (current?.state === 'failed') throw new Error(JSON.stringify(current));
     if (i === 999) throw new Error('completion-timeout');

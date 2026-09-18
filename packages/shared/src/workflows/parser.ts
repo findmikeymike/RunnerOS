@@ -1,3 +1,4 @@
+import { isDurableWorkflowSourceWrites, type DurableWorkflowSourceWrite } from './source-writes.ts';
 import { isDurableWorkflowConnectedReads, type DurableWorkflowConnectedRead } from './connected-reads.ts';
 import { isDurableWebReadUrls } from '../protocol/durable-execution';
 import { matter, stringifyFrontmatter, type GrayMatterFile } from '../config/frontmatter';
@@ -337,6 +338,7 @@ export function parseWorkflowFile(
 
   const data = parsed.data as Record<string, unknown>;
   if (hasUnsupportedExecutionField(data)) return null;
+  if (data.sourceWrites !== undefined && (data.execution !== 'durable-local-read' || !isDurableWorkflowSourceWrites(data.sourceWrites))) return null;
   if (data.connectedReads !== undefined && (data.execution !== 'durable-local-read' || !isDurableWorkflowConnectedReads(data.connectedReads))) return null;
   if (data.execution !== undefined && data.execution !== 'durable-local-read') return null;
   if (data.webReadRedirects !== undefined && (typeof data.webReadRedirects !== 'boolean' || data.webReadUrls === undefined)) return null;
@@ -438,6 +440,7 @@ export function parseWorkflowFile(
 
   return {
     metadata: {
+      ...(data.sourceWrites !== undefined ? { sourceWrites: (data.sourceWrites as DurableWorkflowSourceWrite[]).map(write => ({ sourceSlug: write.sourceSlug, methods: [...write.methods] })) } : {}),
       ...(data.connectedReads !== undefined ? { connectedReads: (data.connectedReads as DurableWorkflowConnectedRead[]).map(read => ({ ...read })) } : {}),
       ...(data.execution === 'durable-local-read' ? { execution: data.execution } : {}),
       ...(data.webReadRedirects !== undefined ? { webReadRedirects: data.webReadRedirects as boolean } : {}),
@@ -461,6 +464,7 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
     description: metadata.description,
   };
   if (metadata.avatar) data.avatar = metadata.avatar;
+  if (metadata.sourceWrites !== undefined) data.sourceWrites = metadata.sourceWrites;
   if (metadata.connectedReads !== undefined) data.connectedReads = metadata.connectedReads;
   if (metadata.execution !== undefined) data.execution = metadata.execution;
   if (metadata.webReadRedirects !== undefined) data.webReadRedirects = metadata.webReadRedirects;
@@ -506,6 +510,7 @@ function hasUnsupportedExecutionField(data: Record<string, unknown>): boolean {
 }
 
 function validateSerializableWorkflowMetadata(metadata: WorkflowMetadata): void {
+  if (metadata.sourceWrites !== undefined && (metadata.execution !== 'durable-local-read' || !isDurableWorkflowSourceWrites(metadata.sourceWrites))) throw new Error('Invalid durable source writes.');
   if (metadata.connectedReads !== undefined && (metadata.execution !== 'durable-local-read' || !isDurableWorkflowConnectedReads(metadata.connectedReads))) throw new Error('Invalid durable connected reads.');
   if (metadata.execution !== undefined && metadata.execution !== 'durable-local-read') throw new Error('Unsupported workflow execution engine.');
   if (metadata.webReadRedirects !== undefined && (typeof metadata.webReadRedirects !== 'boolean' || metadata.webReadUrls === undefined)) throw new Error('Invalid web read redirect grant.');

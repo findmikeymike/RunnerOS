@@ -49,7 +49,7 @@ test('unavailable host authorization pauses remote read without dispatch', async
 test('schema four upgrades while preserving old local run contents', () => {
   const f = fixture(); const local = { ...f.spec, allowedTools: ['read'] as const, webReadUrls: undefined };
   f.journal.admit(JSON.parse(JSON.stringify({ ...local, allowedTools: [...local.allowedTools] }))); (f.journal as any).db.exec('PRAGMA user_version=4'); f.reopen();
-  expect((f.journal as any).db.prepare('PRAGMA user_version').get().user_version).toBe(9); expect(f.journal.get('r', 'w').spec.allowedTools).toEqual(['read']);
+  expect((f.journal as any).db.prepare('PRAGMA user_version').get().user_version).toBe(10); expect(f.journal.get('r', 'w').spec.allowedTools).toEqual(['read']);
 });
 
 test('redirect grants are frozen, opt-in, and require an existing URL scope', () => {
@@ -65,6 +65,6 @@ test('redirect grants are frozen, opt-in, and require an existing URL scope', ()
 });
 test('schema five web reads migrate with redirects still disabled by default', () => {
   const f = fixture(); f.journal.admit(f.spec); (f.journal as any).db.exec('PRAGMA user_version=5'); f.reopen();
-  expect((f.journal as any).db.prepare('PRAGMA user_version').get().user_version).toBe(9);
+  expect((f.journal as any).db.prepare('PRAGMA user_version').get().user_version).toBe(10);
   expect(f.journal.get('r', 'w').spec.webReadRedirects).toBeUndefined(); expect(f.journal.get('r', 'w').spec.webReadUrls).toEqual(f.spec.webReadUrls);
 });

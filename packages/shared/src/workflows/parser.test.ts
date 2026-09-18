@@ -96,3 +96,20 @@ test('connected reads refuse noncanonical URLs, query strings, and ambiguous pat
   expect(parseWorkflowFile(serializeWorkflow({ ...metadata, execution: 'durable-local-read' }, '').replace('---\n', `---\nconnectedReads: ${JSON.stringify([{ sourceSlug: 'account', url }])}\n`))).toBeNull();
  }
 });
+
+test('explicit source writes roundtrip only in durable workflows and reject malformed scope', () => {
+ const sourceWrites = [{ sourceSlug: 'account', methods: ['POST', 'PATCH'] as Array<'POST' | 'PATCH'> }];
+ const valid = { ...metadata, execution: 'durable-local-read' as const, sourceWrites };
+ expect(parseWorkflowFile(serializeWorkflow(valid, ''))?.metadata.sourceWrites).toEqual(sourceWrites);
+ expect(Object.hasOwn(parseWorkflowFile(serializeWorkflow(metadata, ''))!.metadata, 'sourceWrites')).toBe(false);
+ expect(() => serializeWorkflow({ ...metadata, sourceWrites }, '')).toThrow('source writes');
+ const invalid = [null, {}, [], [sourceWrites[0], sourceWrites[0]], Array.from({ length: 9 }, (_, i) => ({ sourceSlug: `s${i}`, methods: ['POST'] })),
+  { sourceSlug: 'account', methods: ['POST'] }, [{ ...sourceWrites[0], extra: true }], [{ sourceSlug: 'account' }],
+  ...['', '../account', 'account\n', ' account', 'a/b'].map(sourceSlug => [{ sourceSlug, methods: ['POST'] }]),
+  ...[[], ['GET'], ['post'], ['POST', 'POST'], null, 'POST', [null]].map(methods => [{ sourceSlug: 'account', methods }])];
+ for (const value of invalid) {
+  expect(() => serializeWorkflow({ ...valid, sourceWrites: value } as unknown as WorkflowMetadata, '')).toThrow('source writes');
+  expect(parseWorkflowFile(serializeWorkflow(metadata, '').replace('---\n', `---\nexecution: durable-local-read\nsourceWrites: ${JSON.stringify(value)}\n`))).toBeNull();
+ }
+ expect(parseWorkflowFile(serializeWorkflow(metadata, '').replace('---\n', `---\nsourceWrites: ${JSON.stringify(sourceWrites)}\n`))).toBeNull();
+});

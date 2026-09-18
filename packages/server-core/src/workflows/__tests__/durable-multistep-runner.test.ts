@@ -178,7 +178,7 @@ test('API source proxies stay scoped to their selected workflow step', async () 
   let checks = 0, index = 0;
   const gateway: NonNullable<DurableReadRunnerOptions['sourceTools']> = {
     capture: async (workspaceId, workspaceRoot) => [{ workspaceId, workspaceRoot, sourceSlug: 'account', sourceIdentity: 'source', toolIdentity: 'tool', credentialIdentity: 'credential', toolName: 'api_account', modelToolName: name, description: 'Read account', inputSchema: { type: 'object' } }],
-    assertCurrent: async () => { checks++; }, assertAllowed() {}, execute: async () => { throw new Error('unused'); },
+    assertCurrent: async () => { checks++; }, assertAllowed() {}, authorize: () => ({ allowed: true, requiresApproval: false, policyRevision: 'fixture' }), execute: async () => { throw new Error('unused'); },
   };
   const runner = new DurableReadRunner({ ...f.base(), sourceTools: gateway, authorizeRun() {}, createBackend: args => {
     const step = index++;

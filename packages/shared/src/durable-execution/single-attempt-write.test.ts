@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DurableJournal, digest, type DurableRunSpec, type DurableOperationIntent } from './index';
+import { DurableJournal, digest, hasDispatchedWriteSince, type DurableRunSpec, type DurableOperationIntent } from './index';
 import { DURABLE_RUNTIME_MANIFEST } from '../protocol/durable-execution';
 const cleanup: Array<() => void> = [];
 afterEach(() => cleanup.splice(0).reverse().forEach(fn => fn()));
@@ -12,7 +12,7 @@ function fixture(fallback = false) {
  const root = mkdtempSync(join(tmpdir(), 'single-write-')), key = randomBytes(32); cleanup.push(() => rmSync(root, { recursive: true, force: true }));
  let journal = new DurableJournal({ configRoot: root, key }); cleanup.push(() => journal.close());
  const candidates = [{ model: 'm', connectionSlug: 'a', credentialIdentity: 'a'.repeat(64) }, { model: 'n', connectionSlug: 'b', credentialIdentity: 'b'.repeat(64) }];
- const spec: DurableRunSpec = { runId: 'r', workspaceId: 'w', commandId: 'admit', engine: 'sqlite-v2-readonly-1', credentialIdentity: 'a'.repeat(64), runtimeManifest: { ...DURABLE_RUNTIME_MANIFEST }, createdAt: Date.now(), deadlineAt: Date.now() + 60000, allowedTools: ['read'], model: 'm', maxOutputTokens: 100, maxModelAttempts: 5, costPolicy: { unit: 'verified-free', maxTotalUnits: 0, maxUnitsPerAttempt: 0 }, context: {}, authority: {}, approvalPrincipalId: 'alice', ...(fallback ? { workflowSteps: [{ id: 'first' }], fallbackPlan: { steps: [{ candidates }] } } : {}) };
+ const spec: DurableRunSpec = { runId: 'r', workspaceId: 'w', commandId: 'admit', engine: 'sqlite-v2-readonly-1', credentialIdentity: 'a'.repeat(64), runtimeManifest: { ...DURABLE_RUNTIME_MANIFEST }, createdAt: Date.now(), deadlineAt: Date.now() + 60000, allowedTools: ['read'], model: 'm', maxOutputTokens: 100, maxModelAttempts: 5, costPolicy: { unit: 'verified-free', maxTotalUnits: 0, maxUnitsPerAttempt: 0 }, context: {}, authority: {}, approvalPrincipalId: 'alice', ...(fallback ? { workflowSteps: [{ id: 'first' }, { id: 'second' }], fallbackPlan: { steps: [{ candidates }, { candidates }] } } : {}) };
  journal.admit(spec); let claim = journal.claim('r', 'w');
  const intent: DurableOperationIntent = { slotId: 'write', adapterId: 'api-write', adapterVersion: '1', credentialIdentity: 'a'.repeat(64), effectClass: 'single-attempt-write', idempotencyKey: 'local-correlation-only', input: { method: 'POST', path: '/message', params: { text: 'approved' } }, outputSchema: { id: 'receipt', version: '1' }, maxAttempts: 1, maxUnitsPerAttempt: 0 };
  return { spec, get journal() { return journal; }, get claim() { return claim; }, set claim(value) { claim = value; }, intent,
@@ -104,4 +104,34 @@ test('restart preserves uncertain write and cannot reset its attempt allowance',
  expect(() => f.journal.startOperation(f.claim, 'write', 'new-command')).toThrow('reconciliation-required');
  await expect(f.journal.bridge(f.claim).checkpoint({ kind: 'model-start', turn: 0, context: {} })).rejects.toThrow('write-outcome-unknown');
  expect(f.state().operations![0]!.attempts).toHaveLength(1);
+});
+
+test('confirmed write retains same-provider replay and blocks abandoning its step for a new provider', async () => {
+ const f = fixture(true), response = { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'saved step' }] };
+ await f.journal.bridge(f.claim).checkpoint({ kind: 'workflow-step-start', step: 0, input: 'first' });
+ f.claim = f.journal.beginStepAttempt(f.claim, { step: 0, candidateIndex: 0 });
+ await f.journal.bridge(f.claim).checkpoint({ kind: 'model-start', turn: 0, context: {} });
+ await f.journal.bridge(f.claim).checkpoint({ kind: 'model-result', turn: 0, message: response });
+ f.intent.slotId = 'source-write:0:call'; f.journal.reserveOperation(f.claim, f.intent);
+ const issued = f.journal.startOperation(f.claim, f.intent.slotId, 'issue').attempt!;
+ f.journal.settleOperation(f.claim, issued, { kind: 'succeeded', output: 'confirmed' }, validator);
+ f.claim = f.journal.recordProviderFailure(f.claim, { step: 0, candidateIndex: 0, code: 'provider-unavailable' });
+ expect(f.journal.beginStepAttempt(f.claim, { step: 0, candidateIndex: 0 })).toEqual(f.claim);
+ expect(() => f.journal.beginStepAttempt(f.claim, { step: 0, candidateIndex: 1 })).toThrow('write-provider-switch-blocked');
+ expect(await f.journal.bridge(f.claim).checkpoint({ kind: 'model-start', turn: 0, context: {} })).toEqual({ cached: response });
+ await f.journal.bridge(f.claim).checkpoint({ kind: 'workflow-step-complete', step: 0 });
+ await f.journal.bridge(f.claim).checkpoint({ kind: 'workflow-step-start', step: 1, input: 'second' });
+ f.claim = f.journal.beginStepAttempt(f.claim, { step: 1, candidateIndex: 0 });
+ await f.journal.bridge(f.claim).checkpoint({ kind: 'model-start', turn: 1, context: {} });
+ f.claim = f.journal.recordProviderFailure(f.claim, { step: 1, candidateIndex: 0, code: 'provider-unavailable' });
+ expect(() => f.journal.beginStepAttempt(f.claim, { step: 1, candidateIndex: 1 })).not.toThrow();
+});
+test('write-provider switch scope is conservative for generic and malformed write slots', () => {
+ const f = fixture(); f.start(); const operation = f.state().operations![0]!;
+ expect(hasDispatchedWriteSince([operation], 10)).toBe(true);
+ expect(hasDispatchedWriteSince([{ ...operation, attempts: [] }], 0)).toBe(false);
+ expect(hasDispatchedWriteSince([{ ...operation, intent: { ...operation.intent, effectClass: 'read' } }], 0)).toBe(false);
+ for (const slotId of ['source-write:NaN:call', 'source-write:999999999999999999999:call']) expect(hasDispatchedWriteSince([{ ...operation, intent: { ...operation.intent, slotId } }], 10)).toBe(true);
+ expect(hasDispatchedWriteSince([{ ...operation, intent: { ...operation.intent, slotId: 'source-write:1:call' } }], 2)).toBe(false);
+ expect(hasDispatchedWriteSince([{ ...operation, intent: { ...operation.intent, slotId: 'source-write:2:call' } }], 2)).toBe(true);
 });

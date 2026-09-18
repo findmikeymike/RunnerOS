@@ -504,3 +504,38 @@ test('authorization runs before eligibility diagnostics', async () => {
   await expect(f.createStart(async () => { lookups++; throw new DurableWorkflowEligibilityError('skills'); })(f.input)).rejects.toThrow('access denied');
   expect(lookups).toBe(0);
 });
+
+test('source write declarations require selected sources and Ask mode on every selecting step before admission', async () => {
+ for (const variant of ['missing', 'safe', 'mixed'] as const) {
+  const f = fixture();
+  const workflow = structuredClone(f.workflow) as WorkflowStartInput['workflow'];
+  workflow.metadata.sourceWrites = [{ sourceSlug: 'account', methods: ['POST'] }];
+  if (variant === 'mixed') workflow.metadata.steps.push({ id: 'second', agent: 'other', input: 'Read' });
+  const admitted = spyOn(f.host, 'admitWorkflowForActor').mockRejectedValue(new Error('must-not-admit')); cleanup.push(() => admitted.mockRestore());
+  const start = f.createStart(async (_workspace, agent) => ({ ...f.bundle, ...(variant !== 'missing' ? { sourceToolSlugs: ['account'] } : {}), ...(variant === 'mixed' && agent === 'reader' ? { permissionMode: 'ask' } : {}) }));
+  await expect(start({ ...f.input, workflow })).rejects.toThrow('Ask mode'); expect(admitted).not.toHaveBeenCalled();
+ }
+});
+
+test('explicit source write metadata and per-step Ask selection reach the host unchanged', async () => {
+ const f = fixture(), workflow = structuredClone(f.workflow) as WorkflowStartInput['workflow'];
+ workflow.metadata.sourceWrites = [{ sourceSlug: 'account', methods: ['POST', 'DELETE'] }];
+ workflow.metadata.steps.push({ id: 'second', agent: 'other', input: 'Read' });
+ let captured: Parameters<typeof f.host.admitWorkflowForActor>[1] | undefined;
+ const admit = spyOn(f.host, 'admitWorkflowForActor').mockImplementation(async (selected, input) => {
+  expect(selected.metadata.sourceWrites).toEqual(workflow.metadata.sourceWrites); captured = input; throw new Error('host-admission-reached');
+ }); cleanup.push(() => admit.mockRestore());
+ const start = f.createStart(async (_workspace, agent) => ({ ...f.bundle, ...(agent === 'reader' ? { sourceToolSlugs: ['account'], permissionMode: 'ask' } : {}) }));
+ await expect(start({ ...f.input, workflow })).rejects.toThrow('host-admission-reached');
+ expect(captured?.permissionMode).toBe('ask');
+ expect(captured?.resolvedSteps?.[0]).toMatchObject({ permissionMode: 'ask', sourceToolSlugs: ['account'] });
+ expect(captured?.resolvedSteps?.[1]).not.toHaveProperty('permissionMode');
+});
+
+test('Ask mode alone keeps normal reads working without adding write scope', async () => {
+ const f = fixture(); f.release();
+ const saved = await f.createStart(async () => ({ ...f.bundle, permissionMode: 'ask' }))(f.input);
+ expect(saved).not.toBeNull(); await f.done;
+ const run = await f.host.runs.get('w', saved!.id, f.input.actor!);
+ expect(run?.state).toBe('succeeded'); expect(run?.workflowSnapshot?.metadata.sourceWrites).toBeUndefined();
+});

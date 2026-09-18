@@ -10,7 +10,25 @@ The September 17 correction supersedes the Spotify-only restriction and mandator
 
 Safe-policy-allowed native/web reads no longer create an extra durable approval request. Ask mode also carries current workspace/source permission context into MCP classification, so configured read/search allowances are honored. Existing explicit approvals for sends, writes and other consequential operations remain in the common authorization machinery. Internal access and ownership checks run silently; they are not human approval gates.
 
-Selected API source GET tools now reuse `TokenRefreshManager` → `SourceServerBuilder` → `createApiServer` through the durable Pi proxy boundary. Normal Start captures each step’s selected API tools, schema, source configuration and credential ownership. The encrypted journal saves their model calls and results; replay rechecks current access. OAuth refresh preserves a persisted credential generation; reconnecting, replacing or deleting credentials invalidates the old grant. Safe reads use current shared permissions without another approval prompt. The shared dispatch guard fences requests after refresh, restricts them to GET within the source base URL, rejects redirects and bounds responses. This is one API-source path, not per-provider adapters. Arbitrary remote MCP/session tools, sends/writes and automatic migration of existing workflows remain outside this slice. External writes require separate idempotency/reconciliation work; API reads do not require a provider-by-provider certification project.
+Selected API source GET tools now reuse `TokenRefreshManager` → `SourceServerBuilder` → `createApiServer` through the durable Pi proxy boundary. Normal Start captures each step’s selected API tools, schema, source configuration and credential ownership. The encrypted journal saves their model calls and results; replay rechecks current access. OAuth refresh preserves a persisted credential generation; reconnecting, replacing or deleting credentials invalidates the old grant. Safe reads use current shared permissions without another approval prompt. The shared dispatch guard fences requests after refresh, restricts them to GET within the source base URL, rejects redirects and bounds responses. This is one API-source path, not per-provider adapters. Arbitrary remote MCP/session tools and automatic migration remain outside this slice. Declared API writes are covered by the adoption section below. External writes require separate idempotency/reconciliation work; API reads do not require a provider-by-provider certification project.
+
+## Normal Start adoption — declared API writes, September 17
+
+Ordinary durable Start now routes explicitly declared API writes through the shared single-attempt contract below. An existing selected API source can be granted POST/PUT/PATCH/DELETE with `sourceWrites`; every step selecting a granted source must use Ask mode. Safe agents cannot receive write grants. GET remains automatic under existing read policy. No declaration means no write methods. The source’s existing API/OAuth server performs the request; no separate provider adapter is created.
+
+Example addition to an existing `execution: durable-local-read` workflow (the existing marker is retained for compatibility):
+
+```yaml
+sourceWrites:
+  - sourceSlug: release-service
+    methods: [POST]
+```
+
+This declares capability, not approval. The existing durable approval surface reviews the exact method/path/params once and binds approval to the current actor, model account, source policy and frozen call. Current authorization is checked again at final I/O. Eight write attempts maximum are tracked separately from the eight model requests; these are request caps, not dollar limits or a claim that connected services are free.
+
+A successful receipt is committed before returning the tool result and can be replayed without another send or approval. Lost/invalid responses pause with an honest uncertainty warning; Resume cannot resend. A late confirmed receipt survives Pause/Cancel. Provider fallback may occur before a write, but cannot abandon the same step’s conversation after a write was dispatched; the original model can resume its saved conversation. Later steps retain their own fallback behavior. Remote MCP/session writes and automatic conversion of unmarked workflows remain outside this API-source adoption.
+
+Acceptance uses real default Pi and normal Start with synthetic providers: one approval/one POST; lost response pauses without resend; credit exhaustion after a confirmed write does not switch models and repeat the step. No live send/post or app restart was performed. The tests and latest build-state entry record recovery evidence.
 
 ## Shared interrupted-write contract — September 17
 
@@ -20,7 +38,7 @@ Unknown/inflight external writes block new model work, ordinary Resume, steering
 
 A real subprocess test kills the writer after a simulated external acceptance and before the receipt is saved: fresh-process recovery records unknown and the external write count remains one. Tests also cover current access revocation, lost/malformed receipts, completed-receipt access, child/fallback bypasses and history projections. Cold Rival identified a preparation-time authorization race; the final dispatch access fence and zero-write regression close it.
 
-**Adoption boundary:** this is the shared host write contract, not activation of normal model-called API writes. Current durable workflow admission remains Safe/GET-only, and model-request budgets still reject write operations. Ordinary write adoption must connect an explicitly authorized action and a bounded effect budget through this contract; it must not widen source methods or bypass existing write approvals. No live send/post, app restart, or provider exactly-once guarantee is claimed.
+**Historical boundary of the preceding contract-only slice:** normal API write adoption is now implemented as described above; this paragraph records the earlier scope. At that checkpoint durable workflow admission was Safe/GET-only and model-request budgets rejected writes. The adoption slice above adds explicit source declarations, Ask authorization and a separate bounded write budget. No live send/post, app restart, or provider exactly-once guarantee is claimed.
 
 ## Slice 1: admission, history and recovery boundary
 

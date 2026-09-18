@@ -1547,7 +1547,7 @@ export class PiAgent extends BaseAgent {
       try {
         if (!bridge.executeReadTool || !bridge.descriptor.sourceTools?.some(tool => tool.name === request.toolName)
           || !Number.isSafeInteger(request.turn) || request.turn! < 0 || typeof request.toolCallId !== 'string' || !request.toolCallId
-          || !isDurableSourceToolInput(request.args)) throw new Error('durable-source-read-not-authorized');
+          || !isDurableSourceToolInput(request.args, bridge.descriptor.sourceTools.find(tool => tool.name === request.toolName)?.writeMethods)) throw new Error('durable-source-read-not-authorized');
         const input = JSON.stringify(request.args), key = JSON.stringify([request.turn, request.toolCallId]);
         let pending = this.durableSourceExecutions.get(key);
         const identity = JSON.stringify([request.toolName, input]);
