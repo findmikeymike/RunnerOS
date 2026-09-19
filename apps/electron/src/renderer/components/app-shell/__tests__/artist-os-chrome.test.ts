@@ -61,7 +61,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(topBar).toContain('workspaceNavigationLeftInset - menuLeftPadding')
     expect(rail).toContain('data-testid="artist-place-switcher"')
     expect(rail).toContain("<span className={compact ? 'sr-only' : undefined}>HQ</span>")
-    expect(rail).toContain('<span>Campaigns</span>')
+    expect(rail).toContain("{activeCampaign?.name || 'Campaigns'}")
     expect(rail).toContain('New Campaign')
     expect(rail).toContain("'Creating…' : 'Lab'")
     expect(styles).toContain('.artist-os-workspace-switcher {')

@@ -1,8 +1,8 @@
-/** Stream the original master without a data-URL size limit. */
-export function releaseKitAudioUrl(path: string): string {
+/** Stream original media without a thumbnail or data-URL size limit. */
+export function releaseKitMediaUrl(path: string): string {
   const normalized = path.replace(/\\/g, '/')
   if (/^[A-Za-z]:\//.test(normalized)) return `file:///${normalized.slice(0, 2)}/${normalized.slice(3).split('/').map(encodeURIComponent).join('/')}`
-  if (!normalized.startsWith('/')) throw new Error('Audio requires an absolute file path')
+  if (!normalized.startsWith('/')) throw new Error('Media requires an absolute file path')
   return `file://${normalized.split('/').map(encodeURIComponent).join('/')}`
 }
 export function supportsReleaseKitSocialPost(category: string): boolean {
@@ -15,3 +15,6 @@ export function isReleaseKitAudioAsset(asset: { mimeType?: string; relativePath?
   if (mime && mime !== 'application/octet-stream') return mime.startsWith('audio/')
   return /\.(wav|wave|aif|aiff|flac|mp3|m4a|aac|ogg|oga|opus)$/i.test(asset.relativePath ?? asset.absolutePath ?? '')
 }
+
+/** Compatibility for the existing audio player. */
+export const releaseKitAudioUrl = releaseKitMediaUrl

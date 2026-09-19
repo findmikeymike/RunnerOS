@@ -37,7 +37,7 @@ import type { OutputSummaryDTO } from '@/hooks/useOutputs'
 import type { OutputAsset, OutputManifest, SocialVariantDestinationIntent } from '@craft-agent/shared/outputs'
 import { ReleaseKitAudioLyrics } from './ReleaseKitAudioLyrics'
 import { ReleaseKitAudioPlayer } from './ReleaseKitAudioPlayer'
-import { isReleaseKitAudioAsset, supportsReleaseKitSocialPost } from '@/lib/release-kit-media'
+import { isReleaseKitAudioAsset, supportsReleaseKitSocialPost, releaseKitMediaUrl } from '@/lib/release-kit-media'
 import { Button } from '@/components/ui/button'
 import { CompactPageHeader } from './CompactPageHeader'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -581,7 +581,7 @@ function SingleArtPanel({ items, itemPaths, workspaceId, onChanged, onAdd }: Fin
           <>
             <div className={cn('group relative mt-3 aspect-square overflow-hidden rounded-xl border bg-gradient-to-br from-orange-950/80 via-[#171719] to-[#0d0d0f]', releaseKitStatusRingClass(featured))}>
               <button type="button" onClick={() => void openItem(featured)} className="absolute inset-0 h-full w-full text-left" title="Open Single Art">
-                {itemPaths[featured.id] ? <img src={thumbnailUrl(itemPaths[featured.id]!)} alt={featured.title} className={cn('h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]', isUnverifiedReleaseKitItem(featured) && 'opacity-45')} /> : <Image className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 text-white/14" />}
+                {itemPaths[featured.id] ? <img src={releaseKitMediaUrl(itemPaths[featured.id]!)} alt={featured.title} className={cn('h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]', isUnverifiedReleaseKitItem(featured) && 'opacity-45')} /> : <Image className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 text-white/14" />}
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-14">
                   <div className="flex items-center gap-2"><span className="truncate text-sm font-medium text-white">{featured.title}</span>{shouldShowPrimaryBadge(featured) ? <PrimaryBadge /> : null}<StatusBadge item={featured} /></div>
                   <p className="mt-1 text-[11px] text-white/48">{featured.sizeBytes ? formatFileSize(featured.sizeBytes) : displaySubtype(featured.subtype)}</p>
@@ -608,7 +608,7 @@ function VideoPanel({ items, itemPaths, workspaceId, onChanged, onAdd }: FinalCa
           {items.map((item) => (
             <div key={item.id} className={cn('group relative aspect-[9/16] overflow-hidden rounded-xl border bg-gradient-to-br from-[#232326] to-[#0b0b0d]', releaseKitStatusRingClass(item))}>
               <button type="button" onClick={() => void openItem(item)} className="absolute inset-0 h-full w-full" title={`Open ${item.title}`}>
-                {itemPaths[item.id] ? <img src={thumbnailUrl(itemPaths[item.id]!)} alt={item.title} className={cn('h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]', isUnverifiedReleaseKitItem(item) ? 'opacity-40' : 'opacity-80 group-hover:opacity-95')} /> : null}
+                {itemPaths[item.id] ? <video src={`${releaseKitMediaUrl(itemPaths[item.id]!)}#t=0.1`} aria-label={item.title} muted playsInline preload="metadata" className={cn('h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]', isUnverifiedReleaseKitItem(item) ? 'opacity-40' : 'opacity-80 group-hover:opacity-95')} /> : null}
                 <span className={cn('absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md transition group-hover:scale-110', !isUnverifiedReleaseKitItem(item) && 'group-hover:bg-[#f97316]')}><Play className="ml-0.5 h-4 w-4 fill-current" /></span>
                 <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/65 to-transparent px-3 pb-3 pt-14 text-left">
                   <span className="block truncate text-xs font-medium text-white">{item.title}</span>
@@ -637,7 +637,7 @@ function ImagePanel({ items, itemPaths, workspaceId, onChanged, onAdd }: FinalCa
           {items.map((item) => (
             <div key={item.id} className={cn('group relative h-full overflow-hidden rounded-xl border bg-gradient-to-br from-[#242427] to-[#0d0d0f]', releaseKitStatusRingClass(item))}>
               <button type="button" onClick={() => void openItem(item)} className="absolute inset-0 h-full w-full" title={`Open ${item.title}`}>
-                {itemPaths[item.id] ? <img src={thumbnailUrl(itemPaths[item.id]!)} alt={item.title} className={cn('h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]', isUnverifiedReleaseKitItem(item) ? 'opacity-40' : 'opacity-80 group-hover:opacity-100')} /> : <Image className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-white/12" />}
+                {itemPaths[item.id] ? <img src={releaseKitMediaUrl(itemPaths[item.id]!)} alt={item.title} className={cn('h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]', isUnverifiedReleaseKitItem(item) ? 'opacity-40' : 'opacity-80 group-hover:opacity-100')} /> : <Image className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-white/12" />}
                 <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent px-3 pb-3 pt-10 text-left"><span className="block truncate text-xs font-medium text-white">{item.title}</span></span>
               </button>
               {isUnverifiedReleaseKitItem(item) ? <span className="absolute left-1.5 top-1.5 z-10"><StatusBadge item={item} /></span> : null}
@@ -1032,7 +1032,7 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, autoAnalyzeA
           {mode === 'details' ? (
             <div className="space-y-6">
               {(item.category === 'artwork' || item.category === 'images' || item.category === 'video') && itemPath ? (
-                <div className="max-h-56 overflow-hidden rounded-lg bg-white/[0.025]"><img src={thumbnailUrl(itemPath)} alt={item.title} className="h-full max-h-56 w-full object-contain" /></div>
+                <div className="max-h-56 overflow-hidden rounded-lg bg-white/[0.025]">{item.category === 'video' ? <video src={releaseKitMediaUrl(itemPath)} aria-label={item.title} controls playsInline preload="metadata" className="max-h-56 w-full object-contain" /> : <img src={releaseKitMediaUrl(itemPath)} alt={item.title} className="h-full max-h-56 w-full object-contain" />}</div>
               ) : null}
               {item.category === 'audio' && <><ReleaseKitAudioPlayer path={itemPath} title={item.title} /><ReleaseKitAudioLyrics key={`${workspaceId}:${item.id}`} workspaceId={workspaceId} item={item} autoAnalyze={autoAnalyzeAudio} /></>}
               <div className="flex flex-wrap gap-2">
@@ -1430,9 +1430,6 @@ function useOpenReleaseKitItem(workspaceId: string): (item: ReleaseKitItem) => P
 }
 
 
-function thumbnailUrl(path: string): string {
-  return `thumbnail://thumb/${encodeURIComponent(path)}`
-}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`

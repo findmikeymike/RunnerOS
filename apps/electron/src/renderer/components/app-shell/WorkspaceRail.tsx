@@ -386,7 +386,7 @@ export function WorkspaceRail({
                   )}
                 >
                   {!compact && <Disc3 className="h-3.5 w-3.5" strokeWidth={1.8} />}
-                  <span>Campaigns</span>
+                  <span className="max-w-40 truncate" title={activeCampaign?.name}>{activeCampaign?.name || 'Campaigns'}</span>
                   <ChevronDown className="h-3 w-3 text-white/40" strokeWidth={1.8} />
                   {campaignWorkspaces.some((workspace) => workspaceUnreadMap?.[workspace.id]) ? (
                     <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#fb923c]" />
