@@ -1796,7 +1796,23 @@ export function getPathHint(targetPath: string, plansFolderPath: string, dataFol
  */
 export function isReadOnlyMcpToolWithConfig(toolName: string, config: ToolCheckConfig): boolean {
   const actionSegment = getMcpToolActionSegment(toolName);
-  return config.readOnlyMcpPatterns.some(pattern => patternMatchesMcpAction(pattern, actionSegment));
+  if (config.readOnlyMcpPatterns.some(pattern => {
+    // Only explicitly MCP-prefixed rules inspect the full name. Generic verbs
+    // must never grant access just because the server name contains "read".
+    if (/^\^?mcp__/.test(pattern.source)) {
+      pattern.lastIndex = 0;
+      return pattern.exec(toolName)?.index === 0;
+    }
+    return patternMatchesMcpAction(pattern, actionSegment);
+  })) return true;
+
+  return 'sourceMcpPatterns' in config && (config.sourceMcpPatterns ?? []).some(({ sourceSlug, pattern }) => {
+    const prefix = `mcp__${sourceSlug}__`;
+    if (!toolName.startsWith(prefix)) return false;
+    const action = toolName.slice(prefix.length);
+    // A nested source separator is not an action belonging to this source.
+    return !action.includes('__') && patternMatchesMcpAction(pattern, action);
+  });
 }
 
 function getMcpToolActionSegment(toolName: string): string {

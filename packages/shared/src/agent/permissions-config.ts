@@ -303,6 +303,8 @@ export interface MergedPermissionsConfig {
   /** Command-specific hints for blocked Bash command explanations */
   blockedCommandHints: CompiledBlockedCommandHint[];
   readOnlyMcpPatterns: RegExp[];
+  /** Source rules retain their exact source boundary separately from the action regex. */
+  sourceMcpPatterns?: Array<{ sourceSlug: string; pattern: RegExp }>;
   /** Fine-grained API endpoint rules */
   allowedApiEndpoints: CompiledApiEndpointRule[];
   /** File paths allowed for writes in Explore mode (glob patterns) */
@@ -733,6 +735,7 @@ class PermissionsConfigCache {
       readOnlyBashPatterns: [...defaults.readOnlyBashPatterns],
       blockedCommandHints: [...(defaults.blockedCommandHints ?? [])],
       readOnlyMcpPatterns: [...defaults.readOnlyMcpPatterns],
+      sourceMcpPatterns: [],
       allowedApiEndpoints: [],
       allowedWritePaths: [],
       displayName: defaults.displayName,
@@ -891,8 +894,8 @@ class PermissionsConfigCache {
 
   /**
    * Apply source-specific config with auto-scoped MCP patterns.
-   * MCP patterns in a source's permissions.json are automatically prefixed with
-   * mcp__<sourceSlug>__ so they only apply to that source's tools.
+   * MCP patterns in a source's permissions.json are paired with its exact slug
+   * so they only match action names belonging to that source.
    * This prevents cross-source leakage when using simple patterns like "list".
    */
   private applySourceConfig(
@@ -905,17 +908,15 @@ class PermissionsConfigCache {
       merged.allowedWritePaths.push(pattern);
     }
 
-    // MCP patterns - AUTO-SCOPE to this source
-    // User writes: "list" → becomes: "mcp__<sourceSlug>__.*list"
-    // This ensures patterns only match tools from THIS source
+    // Keep source identity separate so regex alternatives and anchors cannot
+    // escape the source boundary or lose their action-relative meaning.
     for (const pattern of custom.allowedMcpPatterns) {
-      const scopedPattern = `mcp__${sourceSlug}__.*${pattern}`;
-      const regex = validateRegex(scopedPattern);
+      const regex = validateRegex(pattern);
       if (regex) {
-        merged.readOnlyMcpPatterns.push(regex);
-        debug(`[Permissions] Scoped MCP pattern for ${sourceSlug}: ${pattern} → ${scopedPattern}`);
+        merged.sourceMcpPatterns!.push({ sourceSlug, pattern: regex });
+        debug(`[Permissions] Scoped MCP pattern for ${sourceSlug}: ${pattern}`);
       } else {
-        debug(`[Permissions] Invalid MCP pattern after scoping, skipping: ${scopedPattern}`);
+        debug(`[Permissions] Invalid MCP pattern for ${sourceSlug}, skipping: ${pattern}`);
       }
     }
 

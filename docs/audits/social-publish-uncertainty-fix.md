@@ -1,6 +1,6 @@
 # Scheduled social publishing: uncertainty survives cancellation
 
-Reviewed and fixed on canonical `main`, initially `cc0ed4d9e`. Concurrent social/Builder work landed as `03d0c711c` during verification; its changes were preserved. This fix remains uncommitted.
+Reviewed and fixed on canonical `main`, initially `cc0ed4d9e`. Concurrent social/Builder work landed as `03d0c711c` during verification; its changes were preserved. The publishing fix and test repairs were subsequently committed with user authorization as `94403e788`.
 
 ## Confirmed defects
 
@@ -29,10 +29,22 @@ Reproductions and test logs are under `/tmp/artist-os-cross-run-*` and `/tmp/art
 
 ## Limits
 
-No app restart, connected-account action, real publication, saved-profile mutation, commit or push was performed by this task. These checks do not certify live browser behavior. General deduplication across manual chats, provider CLIs, independently created durable workflow runs and Calendar remains the separately parked shared-destination work.
+No app restart, connected-account action, real publication, saved-profile mutation or push was performed by this task. These checks do not certify live browser behavior. General deduplication across manual chats, provider CLIs, independently created durable workflow runs and Calendar remains the separately parked shared-destination work.
 
-## Separate defect discovered during verification (not fixed here)
+## Separate defect discovered during initial verification
 
 `packages/shared/src/agent/mode-manager.ts` matches every MCP allow-pattern against only the action-name segment. Documented workspace full-tool-name patterns and source patterns generated with an MCP/source prefix therefore fail to match. The existing Ask-mode permission regression fails with the suite's disposable profile; a normal isolated run can pass because existing app defaults mask it. This predates the publishing fixes (`228dee4045`). Do not rewrite the test to an action-only rule to conceal the failure.
 
 Next bounded fix: support explicitly prefixed full-name patterns while retaining action-only matching for generic verb rules, with source-isolation and server-name-bypass regressions. Clean-profile reproduction: `/tmp/artist-os-uncertainty-ask-clean-profile.log`. This production path was deliberately left unchanged in the present fix.
+
+## Follow-up: MCP permission matching
+
+Implemented after the publishing commit; this follow-up remains uncommitted.
+
+- Explicit MCP-prefixed workspace rules now match from the beginning of the full tool name. Generic action rules continue to ignore server names.
+- Source rules retain exact source identity separately from their action regex. Regex alternatives and anchors cannot bypass that identity; inactive sources grant no permission.
+- Regressions cover Ask and Explore, cross-source leakage, misleading server names, substring tricks, action anchors/alternatives, and repeated stateful-regex evaluation.
+- Fresh-profile focused checks: 478 passed. Previously failing regular shard 6: 2,172 passed across 165 files, zero failures. Shared and server-core typechecks passed. Independent read-only review found no blocking defect.
+- Combined with earlier reruns, all 65 original test groups now have passing evidence. This is accumulated evidence across focused reruns, not a new complete-suite run. No live app restart or smoke test was performed.
+
+Logs: `/tmp/artist-os-mcp-focused.log`, `/tmp/artist-os-mcp-shard6.log`, `/tmp/artist-os-mcp-types.log`, `/tmp/artist-os-mcp-server-types.log`.

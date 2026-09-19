@@ -220,6 +220,20 @@ const TEST_MODE_CONFIG = {
 };
 
 describe('isReadOnlyMcpToolWithConfig', () => {
+  it('matches explicit full-name rules without broadening generic action rules', () => {
+    const config = { ...TEST_MODE_CONFIG, readOnlyMcpPatterns: [/^mcp__catalog__inspect_snapshot$/g] };
+    for (let i = 0; i < 2; i++) {
+      expect(isReadOnlyMcpToolWithConfig('mcp__catalog__inspect_snapshot', config)).toBe(true);
+    }
+    expect(isReadOnlyMcpToolWithConfig('mcp__other__inspect_snapshot', config)).toBe(false);
+    expect(isReadOnlyMcpToolWithConfig('mcp__catalog__inspect_snapshot_delete', config)).toBe(false);
+    expect(isReadOnlyMcpToolWithConfig('mcp__read__delete_item', TEST_MODE_CONFIG)).toBe(false);
+    expect(isReadOnlyMcpToolWithConfig('mcp__search_catalog__erase_catalog', TEST_MODE_CONFIG)).toBe(false);
+    const unanchored = { ...config, readOnlyMcpPatterns: [/mcp__catalog__inspect_snapshot$/] };
+    expect(isReadOnlyMcpToolWithConfig('mcp__catalog__inspect_snapshot', unanchored)).toBe(true);
+    expect(isReadOnlyMcpToolWithConfig('mcp__other_mcp__catalog__inspect_snapshot', unanchored)).toBe(false);
+  });
+
   it('matches read-only action tokens without allowing mutating substring tricks', () => {
     expect(isReadOnlyMcpToolWithConfig('mcp__craft__search_spaces', TEST_MODE_CONFIG)).toBe(true);
     expect(isReadOnlyMcpToolWithConfig('mcp__craft__folders_list', TEST_MODE_CONFIG)).toBe(true);
