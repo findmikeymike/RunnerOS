@@ -51,14 +51,17 @@ describe('native Instagram collector', () => {
   })
   test('waits through zero and changing placeholders until rendered values stabilize', async () => {
     const f = await fixture()
+    f.options.timeoutMs = 1_000
     f.options.settleMs = 12
     f.options.stableMs = 5
     f.options.zeroWaitMs = 30
     let reads = 0
     f.browser.evaluate = async () => {
       reads++
-      return reads <= 4 ? page({ followers: 0, views: 0, interactions: 0 })
-        : reads <= 7 ? page({ followers: 10815, views: 10, interactions: 0 }) : page()
+      // Repeated interim values can legitimately settle when suite load slows
+      // polling. Keep hydration samples changing until the final page arrives.
+      return reads === 1 ? page({ followers: 0, views: 0, interactions: 0 })
+        : reads <= 7 ? page({ followers: 10815, views: reads, interactions: 0 }) : page()
     }
     const snapshot = await collectInstagramNative(f.options)
     expect(reads).toBeGreaterThanOrEqual(9)

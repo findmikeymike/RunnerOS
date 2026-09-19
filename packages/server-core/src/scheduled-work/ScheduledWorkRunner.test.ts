@@ -1828,7 +1828,7 @@ describe('ScheduledWorkRunner', () => {
     expect(executeCalls).toBe(1)
   })
 
-  test('blocks execution when an equivalent post exists in another artist workspace', async () => {
+  test.each(['pending', 'newer-uncertain'] as const)('blocks execution when a %s equivalent post exists in another artist workspace', async (scenario) => {
     const hqRoot = makeRoot()
     const campaignRoot = makeRoot()
     const hqOrder = buildOrder({
@@ -1836,9 +1836,13 @@ describe('ScheduledWorkRunner', () => {
       owner: { scope: 'hq', workspaceId: 'hq' },
       calendarLink: { calendar: 'hq', itemId: 'hq-social-calendar' },
       type: 'social-publish',
-      status: 'needs-approval',
+      status: scenario === 'newer-uncertain' ? 'needs-attention' : 'needs-approval',
+      ...(scenario === 'newer-uncertain' ? {
+        attention: { reason: 'execution-uncertain' as const, message: 'Response lost after submit' },
+        runs: [{ id: 'prior-attempt', jobId: 'hq-social-existing', status: 'failed' as const, startedAt: '2026-07-10T13:59:00.000Z', error: 'Response lost after submit' }],
+      } : {}),
       execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Out Friday.' },
-      createdAt: '2026-07-09T10:00:00.000Z',
+      createdAt: scenario === 'newer-uncertain' ? '2026-07-09T12:00:00.000Z' : '2026-07-09T10:00:00.000Z',
     })
     const campaignOrder = buildOrder({
       id: 'campaign-social-duplicate',

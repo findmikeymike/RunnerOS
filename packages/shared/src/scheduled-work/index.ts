@@ -702,6 +702,19 @@ export function assertScheduledWorkDocument(work: ScheduledWorkDocument): void {
   if (invalidIndex >= 0) throw new Error(`Scheduled Work item ${invalidIndex + 1} is invalid.`)
 }
 
+/** Queue visibility is not proof that an external submission never happened. */
+export function socialPublishMayHaveExecuted(order: ScheduledWorkOrder): boolean {
+  if (order.execution.type !== 'social-publish') return false
+  if (order.status === 'running' || order.status === 'done'
+    || order.attention?.reason === 'execution-uncertain'
+    || order.result?.type === 'social-publish'
+    || order.runs.some(run => run.status === 'running' || run.status === 'done' || Boolean(run.externalReceipt))) return true
+  // Older cancellations cleared attention. Failed attempts without a retained
+  // pre-submit classification must therefore remain conservative.
+  return order.runs.some(run => run.status === 'failed')
+    && !(order.attention?.reason === 'execution-failed' && order.runs.length === 1)
+}
+
 export function applyScheduledWorkMutation(
   work: ScheduledWorkDocument,
   mutation: ScheduledWorkMutation,
@@ -736,7 +749,11 @@ export function applyScheduledWorkMutation(
   const item = normalizeScheduledWorkOrder({
     ...existing,
     status: mutation.operation === 'cancel' ? 'canceled' : existing.status,
-    attention: mutation.operation === 'cancel' ? undefined : existing.attention,
+    attention: existing.execution.type === 'social-publish'
+      ? existing.status === 'running'
+        ? { reason: 'execution-uncertain', message: 'This post may already have been submitted. Check the connected account before creating a replacement.' }
+        : existing.attention
+      : mutation.operation === 'cancel' ? undefined : existing.attention,
     inputRequest: mutation.operation === 'cancel' ? undefined : existing.inputRequest,
     deletedAt: mutation.operation === 'delete' ? now : existing.deletedAt,
     updatedAt: now,

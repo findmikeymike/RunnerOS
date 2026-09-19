@@ -533,13 +533,22 @@ describe('scheduled-work RPC handler', () => {
     }])
   })
 
-  test('editing a scheduled X candidate cancels the old exact schedule and requires reapproval', async () => {
+  test.each([false, true])('editing an X candidate preserves uncertain evidence=%s while canceling its schedule', async (uncertain) => {
     const { manifest } = seedXEditorialSlate()
     const { invoke } = await registerServer()
     const approved = await invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
       action: 'approve', outputId: manifest.id, candidateId: 'post_1', expectedRevision: 1,
       expectedOutputUpdatedAt: manifest.updatedAt,
     }) as { slate: XEditorialSlate; outputUpdatedAt: string }
+
+    if (uncertain) {
+      const work = readScheduledWork()
+      work.items[0] = { ...work.items[0]!, status: 'needs-attention',
+        attention: { reason: 'execution-uncertain', message: 'Response lost after submit' },
+        runs: [{ id: 'uncertain-attempt', jobId: work.items[0]!.id, status: 'failed', startedAt: work.items[0]!.startAt }],
+      }
+      seedContextDoc(SCHEDULED_WORK_CONTEXT_SLUG, serializeScheduledWorkBody(work), 'Scheduled Work')
+    }
 
     const edited = await invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
       action: 'edit', outputId: manifest.id, candidateId: 'post_1', expectedRevision: 1,
@@ -555,6 +564,7 @@ describe('scheduled-work RPC handler', () => {
     })
     expect(edited.slate.candidates[0]?.scheduledWorkId).toBeUndefined()
     expect(readScheduledWork().items[0]?.status).toBe('canceled')
+    expect(readScheduledWork().items[0]?.attention?.reason).toBe(uncertain ? 'execution-uncertain' : undefined)
     expect(readArtistCalendar().events[0]?.deletedAt).toBeTruthy()
     expect(readOutputManifest(workspaceRoot, manifest.id)?.approval?.state).toBe('pending')
   })
@@ -800,6 +810,24 @@ describe('scheduled-work RPC handler', () => {
     await expect(invoke(RPC_CHANNELS.scheduledWork.APPROVE_CAMPAIGN_SOCIAL, workspace.id, {
       orderId: created.order.id, calendarItemId: created.calendarItem.id, expectedUpdatedAt: created.order.updatedAt,
     })).rejects.toThrow(/authorized when scheduled/i)
+  })
+
+  test.each(['cancel', 'delete'] as const)('%s of an uncertain post cannot authorize an equivalent replacement', async action => {
+    const { invoke } = await registerServer()
+    const prior: ScheduledWorkOrder = { ...buildOrder(), type: 'social-publish', status: 'needs-attention',
+      execution: { type: 'social-publish', platform: 'instagram', profileId: 'artist-main', caption: 'Out now.' },
+      attention: { reason: 'execution-uncertain', message: 'Response lost after submit' },
+      runs: [{ id: 'attempt', jobId: 'scheduled-work-1', status: 'failed', startedAt: '2026-07-10T15:00:00.000Z' }],
+    }
+    seedContextDoc(SCHEDULED_WORK_CONTEXT_SLUG, serializeScheduledWorkBody({ version: 1, workspaceId: workspace.id, items: [prior], updatedAt: prior.updatedAt }), 'Scheduled Work')
+    expect(await invoke(RPC_CHANNELS.scheduledWork.MUTATE, workspace.id, {
+      operation: action, id: prior.id, expectedUpdatedAt: prior.updatedAt,
+    })).toMatchObject({ ok: true })
+    await expect(invoke(RPC_CHANNELS.scheduledWork.MUTATE, workspace.id, {
+      operation: 'upsert', expectedUpdatedAt: null,
+      order: { ...prior, id: 'replacement', status: 'needs-approval', attention: undefined, runs: [] },
+    })).rejects.toThrow(/already scheduled|already.*posted/i)
+    expect(readScheduledWork().items).toHaveLength(1)
   })
 
   test('mutate upserts scheduled-work and broadcasts workspace context changes', async () => {

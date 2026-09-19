@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
+import { applyScheduledWorkMutation, parseScheduledWorkDocResult, serializeScheduledWorkBody, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import {
   assertArtistSocialPublishMayExecute,
   assertNoArtistSocialScheduleConflict,
@@ -31,6 +31,26 @@ function entry(overrides: Partial<ScheduledWorkOrder> = {}, workspaceId = 'hq'):
   }
   return { workspaceId, workspaceName: workspaceId === 'hq' ? 'Artist HQ' : 'Release Campaign', order }
 }
+
+test.each(['cancel', 'delete'] as const)('%s preserves execution evidence but releases never-submitted work', action => {
+  const replacement = entry({ id: 'replacement' }, 'campaign')
+  for (const state of ['running', 'confirmed', 'legacy-canceled', 'pre-submit-failed', 'draft'] as const) {
+    const prior = entry({ id: `prior-${state}`, status: state === 'draft' ? 'draft' : state === 'legacy-canceled' ? 'canceled' : state === 'running' ? 'running' : 'needs-attention' })
+    if (state !== 'draft') prior.order.runs = [{ id: 'attempt', jobId: prior.order.id, startedAt: prior.order.startAt,
+      status: state === 'running' ? 'running' : state === 'confirmed' ? 'done' : 'failed' }]
+    if (state === 'pre-submit-failed') prior.order.attention = { reason: 'execution-failed', message: 'Upload unavailable' }
+    const changed = applyScheduledWorkMutation({ version: 1, workspaceId: 'hq', items: [prior.order], updatedAt: prior.order.updatedAt },
+      { operation: action, id: prior.order.id, expectedUpdatedAt: prior.order.updatedAt }, '2026-09-10T15:02:00.000Z')
+    expect(changed.ok).toBe(true)
+    if (!changed.ok) throw new Error(changed.error)
+    const parsed = parseScheduledWorkDocResult({ body: serializeScheduledWorkBody(changed.work) }, 'hq')
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) throw new Error(parsed.error)
+    expect(findArtistSocialPublishConflicts(replacement, [{ ...prior, order: parsed.work.items[0]! }])).toHaveLength(
+      state === 'pre-submit-failed' || state === 'draft' ? 0 : 1,
+    )
+  }
+})
 
 describe('artist-wide social publish conflicts', () => {
   test('blocks HQ and Campaign posts targeting the same account in the same minute', () => {
@@ -131,4 +151,29 @@ test('an exact replacement can follow a pre-submit failure, but never an uncerta
   expect(findArtistSocialPublishConflicts(replacement, [failed])).toHaveLength(1)
   failed.order.attention = undefined
   expect(findArtistSocialPublishConflicts(replacement, [failed])).toHaveLength(1)
+})
+
+// Independent review reproduction: older pending work vs later uncertain dispatch.
+test('a newer uncertain submission blocks an older duplicate at execution', () => {
+  const older = entry({ id: 'older', status: 'running', createdAt: '2026-09-01T10:00:00.000Z' })
+  const newer = entry({ id: 'newer', status: 'needs-attention', createdAt: '2026-09-01T11:00:00.000Z' }, 'campaign')
+  newer.order.attention = { reason: 'execution-uncertain', message: 'Response lost after submit' }
+  newer.order.runs = [{ id: 'attempt', jobId: 'newer', status: 'failed', startedAt: '2026-09-10T15:00:00.000Z', endedAt: '2026-09-10T15:01:00.000Z', error: 'Response lost after submit' }]
+  expect(findArtistSocialPublishConflicts(older, [newer])).toHaveLength(1)
+  expect(() => assertArtistSocialPublishMayExecute(older, [newer])).toThrow(/Publish blocked/i)
+})
+
+for (const action of ['cancel', 'delete'] as const) test(`${action} cannot erase uncertain-send duplicate protection`, async () => {
+  const prior = entry({ id: 'uncertain', status: 'needs-attention' })
+  prior.order.attention = { reason: 'execution-uncertain', message: 'Response lost after submit' }
+  prior.order.runs = [{ id: 'attempt', jobId: 'uncertain', status: 'failed', startedAt: '2026-09-10T15:00:00.000Z', endedAt: '2026-09-10T15:01:00.000Z', error: 'Response lost after submit' }]
+  const replacement = entry({ id: 'replacement', startAt: '2026-09-10T16:00:00.000Z' }, 'campaign')
+  expect(findArtistSocialPublishConflicts(replacement, [prior])).toHaveLength(1)
+  const result = applyScheduledWorkMutation({ version: 1, workspaceId: 'hq', items: [prior.order], updatedAt: prior.order.updatedAt }, { operation: action, id: prior.order.id, expectedUpdatedAt: prior.order.updatedAt }, '2026-09-10T15:02:00.000Z')
+  expect(result.ok).toBe(true)
+  if (!result.ok) throw new Error(result.error)
+  const reopened = parseScheduledWorkDocResult({ body: serializeScheduledWorkBody(result.work) }, 'hq')
+  expect(reopened.ok).toBe(true)
+  if (!reopened.ok) throw new Error(reopened.error)
+  expect(findArtistSocialPublishConflicts(replacement, [{ ...prior, order: reopened.work.items[0]! }])).toHaveLength(1)
 })

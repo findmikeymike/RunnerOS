@@ -23,11 +23,11 @@ const { getValidClaudeOAuthToken, performTokenRefresh } = await import('../state
 
 afterEach(() => records.clear())
 
-function seed() {
+async function seed() {
   const manager = getCredentialManager()
   const slug = 'claude-max'
-  void manager.setClaudeOAuthCredentials({ accessToken: 'old-access', refreshToken: 'old-refresh', expiresAt: 1, source: 'native' })
-  void manager.setLlmOAuth(slug, { accessToken: 'old-access', refreshToken: 'old-refresh', expiresAt: 1 })
+  await manager.setClaudeOAuthCredentials({ accessToken: 'old-access', refreshToken: 'old-refresh', expiresAt: 1, source: 'native' })
+  await manager.setLlmOAuth(slug, { accessToken: 'old-access', refreshToken: 'old-refresh', expiresAt: 1 })
   return { manager, slug }
 }
 
@@ -38,7 +38,7 @@ function gate() {
 }
 
 test('a routine rotation applies while ownership is unchanged and never reclassifies the sign-in', async () => {
-  const { manager, slug } = seed()
+  const { manager, slug } = await seed()
   const before = await manager.captureSnapshot({ type: 'llm_oauth', connectionSlug: slug })
   const result = await getValidClaudeOAuthToken(slug)
   expect(result.accessToken).toBe('rotated-access')
@@ -53,7 +53,7 @@ test('a routine rotation applies while ownership is unchanged and never reclassi
 })
 
 test('a newer sign-in that lands during a delayed refresh is not clobbered', async () => {
-  const { manager, slug } = seed()
+  const { manager, slug } = await seed()
   const started = gate(), release = gate()
   refresh = async () => { started.resolve(); await release.promise; return { accessToken: 'rotated-access', refreshToken: 'rotated-refresh', expiresAt: Date.now() + 3_600_000 } }
   const refreshing = getValidClaudeOAuthToken(slug)
@@ -66,7 +66,7 @@ test('a newer sign-in that lands during a delayed refresh is not clobbered', asy
 })
 
 test('an incompatible refresh does not clear credentials a newer sign-in replaced', async () => {
-  const { manager, slug } = seed()
+  const { manager, slug } = await seed()
   const expectedGlobal = await manager.getClaudeOAuthCredentials()
   const expectedConnection = await manager.getLlmOAuth(slug)
   await manager.setLlmOAuth(slug, { accessToken: 'newer-sign-in', refreshToken: 'newer-refresh', expiresAt: Date.now() + 3_600_000 })

@@ -39,6 +39,10 @@ async function fixture() {
 describe('native Spotify collector', () => {
   test('normalizes and publishes exact core before bounded enrichment; preserves identity and core', async () => {
     const f = await fixture()
+    // This checks content/order, not timeout behavior. Allow loaded suite runs
+    // to schedule the fixture without exhausting its 30 ms default page budget.
+    f.options.pageTimeoutMs = 1_000
+    f.options.timeoutMs = 3_000
     const result = await collectSpotifyNative(f.options)
     expect(result).toMatchObject({ streams: 179642, listeners: 81259, windowDays: 28, countries: 1, tracks: 1, snapshotsSaved: 2, partial: false })
     expect(f.events[0]).toBe('profile:spotify:{"show":true}')

@@ -1549,12 +1549,13 @@ function cancelXEditorialCandidateSchedule(
   const alreadyCanceled = order.status === 'canceled' && Boolean(event.deletedAt)
   if (alreadyCanceled) return false
   const now = new Date().toISOString()
+  const canceled = applyScheduledWorkMutation(scheduled.work, {
+    operation: 'cancel', id: order.id, expectedUpdatedAt: order.updatedAt,
+  }, now)
+  if (!canceled.ok) throw new Error(canceled.error)
   const nextOrder = {
-    ...order,
-    status: 'canceled' as const,
+    ...canceled.item,
     socialApproval: undefined,
-    attention: undefined,
-    updatedAt: now,
   }
   const nextEvent = { ...event, deletedAt: event.deletedAt ?? now, updatedAt: now }
   writeScheduledWork(rootPath, {

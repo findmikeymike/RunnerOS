@@ -36,7 +36,7 @@ describe('Composio runtime guidance', () => {
 
 test('saved Assistants get hosted Gmail setup guidance without Gmail execution tools', () => {
   const persona = { slug: 'setup-concierge', metadata: {}, systemPrompt: 'My saved Assistant instructions.' };
-  for (const scope of ['hq', 'campaign']) {
+  for (const scope of ['hq', 'campaign'] as const) {
     const result = composeAgentSystemPrompt(persona, [], [], [], [], { artistWorkspaceScope: scope });
     expect(result.startsWith(persona.systemPrompt)).toBe(true);
     expect(result).toContain('Gmail setup — Composio hosted connection:');

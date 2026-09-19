@@ -1,4 +1,4 @@
-import type { ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
+import { socialPublishMayHaveExecuted, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 
 const SAME_SLOT_MS = 60_000
 const DUPLICATE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
@@ -32,8 +32,8 @@ export function findArtistSocialPublishConflicts(
 
   for (const existing of entries) {
     if (sameOrder(existing, proposed)
-      || existing.order.deletedAt
-      || !isConflictRelevant(existing.order)
+      || (!socialPublishMayHaveExecuted(existing.order)
+        && (existing.order.deletedAt || !isConflictRelevant(existing.order)))
       || existing.order.execution.type !== 'social-publish'
       || !sameDestination(existing.order, proposed.order)) continue
 
@@ -86,10 +86,7 @@ export function assertArtistSocialPublishMayExecute(
   entries: ArtistSocialWorkEntry[],
 ): void {
   for (const conflict of findArtistSocialPublishConflicts(current, entries)) {
-    const existingMayAlreadyHavePublished = conflict.existing.order.status === 'running'
-      || conflict.existing.order.status === 'done'
-      || conflict.existing.order.result?.type === 'social-publish'
-      || conflict.existing.order.runs.some((run) => Boolean(run.externalReceipt))
+    const existingMayAlreadyHavePublished = socialPublishMayHaveExecuted(conflict.existing.order)
     if (existingMayAlreadyHavePublished || compareEntryPrecedence(conflict.existing, current) <= 0) {
       throw new Error(`Publish blocked: ${conflictMessage(conflict)}`)
     }
