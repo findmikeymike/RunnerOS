@@ -135,7 +135,7 @@ function buildPlan(options: CampaignCleanupOptions) {
   const byPath = new Map(files.map(file => [file.relativePath, file]));
   const externalLinks: DeclaredRecord[] = [];
   const savedMetadata: Record<string, unknown> = {};
-  function retainDeclaredFile(record: DeclaredRecord, base: string, reason: string): void {
+  function retainDeclaredFile(record: DeclaredRecord, base: string, reason: string, retain = true): void {
     const raw = record.relativePath ?? record.absolutePath;
     if (typeof raw !== 'string' || !raw || raw.includes('\0')) throw new Error('A saved campaign asset has no valid file path. Repair it before finishing.');
     const path = canonicalPath(resolve(base, raw));
@@ -147,8 +147,10 @@ function buildPlan(options: CampaignCleanupOptions) {
     assertPathWithinRealRoot(root, path);
     const file = byPath.get(relative(root, path).split(sep).join('/'));
     if (!file) throw new Error(`A saved campaign asset is missing: ${raw}. Restore or remove its broken record before finishing.`);
-    file.retained = true;
-    file.reason = reason;
+    if (retain) {
+      file.retained = true;
+      file.reason = reason;
+    }
   }
   for (const [manifestPath, field] of [['assets/manifest.json', 'files'], ['release-kit/manifest.json', 'items'], ['vault/manifest.json', 'assets']] as const) {
     if (!byPath.has(manifestPath)) continue;
@@ -175,10 +177,9 @@ function buildPlan(options: CampaignCleanupOptions) {
       // Missing output attachments also block deletion: a missing file might be the only finished copy.
       const path = asset.path;
       const local = { relativePath: path };
-      retainDeclaredFile(local, dirname(join(root, file.relativePath)), finished ? 'Finished output' : 'Saved output attachment');
-      const resolved = relative(root, resolve(dirname(join(root, file.relativePath)), path)).split(sep).join('/');
-      const inventoryFile = byPath.get(resolved)!;
-      if (!finished && !retentionReason(resolved)) { inventoryFile.retained = false; inventoryFile.reason = 'Campaign working data'; }
+      // Drafts still require valid attachments, but cannot revoke preservation
+      // requested by a saved asset, a finished output, or the file policy.
+      retainDeclaredFile(local, dirname(join(root, file.relativePath)), 'Finished output', finished);
     }
     if (finished) {
       // A finished HTML/model/project may depend on siblings absent from output.assets.

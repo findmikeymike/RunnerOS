@@ -27,6 +27,37 @@ function assetManifest(relativePath: string) {
 }
 
 describe('campaign preservation', () => {
+  test.each(['saved-vault', 'finished-output'] as const)('draft attachments cannot revoke %s preservation', async retainedBy => {
+    const options = fixture();
+    const savedId = '11111111-1111-4111-8111-111111111111';
+    const draftId = '22222222-2222-4222-8222-222222222222';
+    const savedPath = `outputs/${savedId}/copy.md`;
+    write(options.campaignRootPath, savedPath, 'Artist deliberately saved this copy');
+    for (const id of [savedId, draftId]) {
+      write(options.campaignRootPath, `outputs/${id}/output.json`, {
+        schemaVersion: 1, id, workspaceId: options.campaignId, title: 'Copy', slug: 'copy', kind: 'report',
+        status: retainedBy === 'finished-output' && id === savedId ? 'published' : 'draft', summary: '',
+        createdAt: '2026-05-01T10:00:00.000Z', updatedAt: '2026-05-01T10:00:00.000Z',
+        origin: { source: 'workflow' },
+        assets: [{ id: 'file', label: 'Copy', role: 'primary', path: id === savedId ? 'copy.md' : `../${savedId}/copy.md` }],
+        receipts: [], links: [],
+      });
+    }
+    if (retainedBy === 'saved-vault') {
+      const manifest = emptyArtistVaultManifest(options.campaignId);
+      manifest.assets.push({ id: 'saved-copy', label: 'Saved Copy', category: 'campaigns', kind: 'release-asset',
+        absolutePath: join(options.campaignRootPath, savedPath), source: 'linked-file', status: 'approved',
+        rightsStatus: 'private', usableByAgents: false, createdAt: '2026-01-01', updatedAt: '2026-01-01' });
+      write(options.campaignRootPath, 'vault/manifest.json', manifest);
+    }
+    const preview = previewCampaignCleanup(options);
+    expect(preview.retainedFiles.map(file => file.relativePath)).toContain(savedPath);
+    await preserveCampaignForDeletion(options, preview.previewToken);
+    const preserved = loadArtistVaultManifest(options.hqRootPath).assets.find(asset => asset.label === 'copy.md');
+    expect(preserved).toBeDefined();
+    expect(readFileSync(join(options.hqRootPath, preserved!.relativePath!), 'utf8')).toBe('Artist deliberately saved this copy');
+  });
+
   test('keeps lyric drafts and timed captions even before they are marked final', () => {
     const options = fixture();
     for (const path of ['outputs/song/lyrics.txt', 'outputs/clip/captions.srt', 'context/lyrics/CONTEXT.md', 'outputs/plan/draft.md']) write(options.campaignRootPath, path, 'draft');
