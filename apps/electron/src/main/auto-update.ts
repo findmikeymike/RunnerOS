@@ -38,6 +38,8 @@ let eventSink: EventSink | null = null
 
 // Flag to indicate update is in progress — used to prevent force exit during quitAndInstall
 let __isUpdating = false
+let preparingInstall = false
+let preparationError: Error | null = null
 let beforeUpdateQuitHook: (() => void) | null = null
 let beforeUpdateInstallHook: (() => Promise<void>) | null = null
 let installQuitFailedHook: (() => void) | null = null
@@ -183,8 +185,11 @@ autoUpdater.on('update-downloaded', async (info) => {
 
 function recordUpdaterError(error: Error): void {
   autoUpdateLog.error('electron-updater error', error)
-  const installNeedsRecovery = __isUpdating
-  __isUpdating = false
+  // Recovery exits the process. Never invoke it while the durable journal and
+  // pending session writes are still draining in the pre-install hook.
+  if (preparingInstall) preparationError ??= error
+  const installNeedsRecovery = __isUpdating && !preparingInstall
+  if (!preparingInstall) __isUpdating = false
   updateInfo = {
     ...updateInfo,
     downloadState: 'error',
@@ -255,6 +260,7 @@ export async function checkForUpdates(options: CheckOptions = {}): Promise<Updat
  * Then relaunches the app automatically.
  */
 export async function installUpdate(): Promise<void> {
+  if (__isUpdating) throw new Error('Update installation is already in progress')
   if (updateInfo.downloadState !== 'ready') {
     throw new Error('No update ready to install')
   }
@@ -269,6 +275,8 @@ export async function installUpdate(): Promise<void> {
 
   // Set flag to prevent force exit from breaking electron-updater's shutdown sequence
   __isUpdating = true
+  preparingInstall = true
+  preparationError = null
 
   autoUpdateLog.info('installUpdate pre-quit', {
     electronWindowCount: BrowserWindow.getAllWindows().length,
@@ -285,9 +293,19 @@ export async function installUpdate(): Promise<void> {
     await beforeUpdateInstallHook?.()
   } catch (error) {
     autoUpdateLog.error('beforeUpdateInstall cleanup hook failed', error)
+    preparingInstall = false
     __isUpdating = false
-    updateInfo = { ...updateInfo, downloadState: 'ready' }
+    updateInfo = { ...updateInfo, downloadState: preparationError ? 'error' : 'ready' }
+    preparationError = null
     broadcastUpdateInfo()
+    throw error
+  }
+
+  preparingInstall = false
+  if (preparationError) {
+    const error = preparationError
+    preparationError = null
+    recordUpdaterError(error)
     throw error
   }
 

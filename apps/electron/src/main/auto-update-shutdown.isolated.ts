@@ -58,6 +58,7 @@ test('failed shutdown prevents update install and leaves the downloaded update r
   expect(updates.getUpdateInfo().downloadState).toBe('ready');
   updates.setBeforeUpdateInstallHook(async () => {});
   await updates.installUpdate(); expect(installs).toBe(before + 1);
+  handlers.get('error')!(new Error('reset completed fixture handoff'));
 });
 
 test('hung cleanup reports waiting and cannot install until the original cleanup settles', async () => {
@@ -69,4 +70,43 @@ test('hung cleanup reports waiting and cannot install until the original cleanup
   const before = installs, installation = updates.installUpdate(); await notice;
   expect(installs).toBe(before); expect(updates.isUpdating()).toBe(true);
   finish(); await installation; expect(installs).toBe(before + 1);
+  handlers.get('error')!(new Error('reset completed fixture handoff'));
+});
+
+test('an updater error during cleanup cannot restart the process before work drains', async () => {
+  await handlers.get('update-downloaded')!({ version: '4.0.0' });
+  let finish!: () => void;
+  updates.setBeforeUpdateInstallHook(() => new Promise<void>(resolve => { finish = resolve; }));
+  const beforeInstalls = installs, beforeRecoveries = failedInstallRecoveries;
+  const installation = updates.installUpdate();
+  const outcome = installation.then(() => null, error => error);
+  handlers.get('error')!(new Error('native download failed'));
+  const earlyRecoveries = failedInstallRecoveries;
+  const updatingDuringCleanup = updates.isUpdating();
+  // A repeated native notification must not admit a second install while the
+  // first request still owns cleanup.
+  await handlers.get('update-downloaded')!({ version: '4.0.0' });
+  await expect(updates.installUpdate()).rejects.toThrow('already in progress');
+  finish();
+  const error = await outcome;
+  expect(earlyRecoveries).toBe(beforeRecoveries);
+  expect(updatingDuringCleanup).toBe(true);
+  expect(failedInstallRecoveries).toBe(beforeRecoveries + 1);
+  expect(installs).toBe(beforeInstalls);
+  expect(error?.message).toBe('native download failed');
+});
+
+test('failed cleanup after an updater error keeps the process alive and does not install', async () => {
+  await handlers.get('update-downloaded')!({ version: '5.0.0' });
+  let fail!: (error: Error) => void;
+  updates.setBeforeUpdateInstallHook(() => new Promise<void>((_resolve, reject) => { fail = reject; }));
+  const beforeInstalls = installs, beforeRecoveries = failedInstallRecoveries;
+  const outcome = updates.installUpdate().then(() => null, error => error);
+  handlers.get('error')!(new Error('native download failed'));
+  fail(new Error('journal did not drain'));
+  expect((await outcome)?.message).toBe('journal did not drain');
+  expect(installs).toBe(beforeInstalls);
+  expect(failedInstallRecoveries).toBe(beforeRecoveries);
+  expect(updates.isUpdating()).toBe(false);
+  expect(updates.getUpdateInfo().downloadState).toBe('error');
 });

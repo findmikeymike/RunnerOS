@@ -24,4 +24,6 @@ Release/update code is integrated into main. Public distribution is not yet conf
 
 Current observed blocker: `bun run release` rejects missing `ARTIST_OS_UPDATE_URL`. No public feed has been selected by this integration work, and no release was published.
 
+Code review after `26b0c94cc` reproduced premature process recovery when the updater errors during shutdown cleanup. The bounded fix and fixture evidence are recorded in [update cleanup error recovery](../audits/update-cleanup-error-recovery.md); this does not complete the real upgrade, signing or public-distribution gates above.
+
 Implementation and commands: [Release preflight](../updates/artist-os-release-preflight.md). Passing preflight alone is not public-release acceptance.
