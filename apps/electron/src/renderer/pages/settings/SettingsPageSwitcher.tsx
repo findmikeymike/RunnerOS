@@ -42,20 +42,20 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
     pages: [{ id: 'ai', label: 'Models' }],
   },
   {
-    id: 'conversation',
-    label: 'Conversation',
-    description: 'Voice and hearing',
-    icon: Mic,
-    landing: 'conversation',
-    pages: [{ id: 'conversation', label: 'Conversation' }],
-  },
-  {
     id: 'connections',
     label: 'Connections',
     description: 'Apps and services',
     icon: KeyRound,
     landing: 'secrets',
     pages: CONNECTION_PAGES,
+  },
+  {
+    id: 'conversation',
+    label: 'Conversation',
+    description: 'Voice and hearing',
+    icon: Mic,
+    landing: 'conversation',
+    pages: [{ id: 'conversation', label: 'Conversation' }],
   },
   {
     id: 'messaging',

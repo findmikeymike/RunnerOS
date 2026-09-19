@@ -591,14 +591,6 @@ export const SERVICES: SecretService[] = [
     presetNames: ['GENIUS_ACCESS_TOKEN'],
   },
   {
-    id: 'google-workspace',
-    group: 'Essential',
-    title: 'Gmail',
-    description: 'Connect your Google account to use Gmail in Artist OS.',
-    presetNames: ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_WORKSPACE_PRIMARY_CALENDAR_ID'],
-    optionalPresetNames: ['GOOGLE_WORKSPACE_PRIMARY_CALENDAR_ID'],
-  },
-  {
     id: 'resend-email',
     group: 'Community',
     title: 'Community Email',
@@ -687,7 +679,7 @@ export const SERVICES: SecretService[] = [
   },
 ]
 
-const ESSENTIAL_SERVICE_IDS = ['google-workspace', 'inworld-tts'] as const
+const ESSENTIAL_SERVICE_IDS = ['inworld-tts'] as const
 const SECRET_GROUPS = [
   'Essential',
   'General',

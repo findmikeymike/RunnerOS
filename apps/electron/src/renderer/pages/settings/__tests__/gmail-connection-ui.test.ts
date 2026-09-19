@@ -6,8 +6,8 @@ describe('Google Gmail connection UI', () => {
   const settings = readFileSync(join(import.meta.dir, '..', 'SecretsSettingsPage.tsx'), 'utf8')
   const source = readFileSync(join(import.meta.dir, '..', '..', 'SourceInfoPage.tsx'), 'utf8')
 
-  it('shows a simple account connection instead of developer OAuth controls', () => {
-    expect(settings).toContain("title: 'Gmail'")
+  it('uses Composio for Gmail setup while preserving existing native source support', () => {
+    expect(settings).not.toContain("title: 'Gmail'")
     expect(settings).toContain("performOAuth({ sourceSlug: 'gmail'")
     expect(settings).not.toContain("You're connected")
     expect(settings).toContain('Connect Google')
@@ -35,7 +35,7 @@ describe('Google Gmail connection UI', () => {
   })
 
   it('keeps core services in Essential and Zero installation and spending in General', () => {
-    expect(settings).toContain("const ESSENTIAL_SERVICE_IDS = ['google-workspace', 'inworld-tts']")
+    expect(settings).toContain("const ESSENTIAL_SERVICE_IDS = ['inworld-tts']")
     expect(settings).toContain("id: 'youtube-research',\n    group: 'Promotion'")
     expect(settings).toContain('Intel can use Zero when this is not connected.')
     expect(settings).toContain("const SECRET_GROUPS = [\n  'Essential'")
