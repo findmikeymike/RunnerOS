@@ -24,6 +24,9 @@ import { useWorkflows } from '@/hooks/useWorkflows'
 import { cn } from '@/lib/utils'
 import {
   composerDefinitionDigest,
+  isPublishingPlatform,
+  socialPublishDestinations,
+  submitComposerDestinations,
   composerReviewSentence,
   createScheduledWorkComposerDraft,
   applyWorkflowRunComposerPrefill,
@@ -79,7 +82,7 @@ const QUEUE_OPTIONS: Array<{
   { type: 'event', label: 'Event / Reminder', description: 'Date, deadline, meeting, or checkpoint', icon: CalendarDays },
   { type: 'agent-task', label: 'Agent Task', description: 'One agent completes a defined deliverable', icon: Bot },
   { type: 'workflow-run', label: 'Workflow Run', description: 'Run an activated multi-step workflow', icon: Workflow },
-  { type: 'social-publish', label: 'Social Publish', description: 'Publish one exact asset to one profile', icon: Send },
+  { type: 'social-publish', label: 'Social Publish', description: 'Publish an exact asset to selected social profiles', icon: Send },
   { type: 'review', label: 'Review / Approval', description: 'Request a decision on an Output or Final', icon: CheckCircle2 },
 ]
 
@@ -89,6 +92,7 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
   const [draft, setDraft] = React.useState(() => createEntryDraft(entry))
   const [section, setSection] = React.useState<ComposerSection>(() => initialSection(entry))
   const [busy, setBusy] = React.useState(false)
+  const submittedProfiles = React.useRef(new Set<string>())
   const [error, setError] = React.useState<string | null>(null)
   const [profiles, setProfiles] = React.useState<SocialProfile[]>([])
   const [vaultAssets, setVaultAssets] = React.useState<VaultAssetRecord[]>([])
@@ -100,7 +104,9 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
   const workflowLocked = Boolean(entry.workflow)
 
   React.useEffect(() => {
-    if (!open) return
+    if (!open) { submittedProfiles.current.clear(); return }
+    if (busy || submittedProfiles.current.size) return
+    submittedProfiles.current.clear()
     setDraft(createEntryDraft(entry))
     setSection(initialSection(entry))
     setError(null)
@@ -114,7 +120,7 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
       window.electronAPI.getArtistVaultManifest(entry.owner.workspaceId),
     ]).then(([doctor, manifest]) => {
       if (!active) return
-      setProfiles(doctor.platforms.flatMap((group) => group.profiles.map((profile) => ({
+      setProfiles(doctor.platforms.flatMap((group) => group.profiles.filter(profile => isPublishingPlatform(profile.platform)).map((profile) => ({
         platform: profile.platform,
         profileId: profile.profile,
         label: `${profile.platform} @${profile.profile}`,
@@ -172,7 +178,7 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
     setBusy(true)
     setError(null)
     try {
-      await onSubmit(submittedDraft)
+      await submitComposerDestinations(submittedDraft, onSubmit, submittedProfiles.current)
       onOpenChange(false)
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError))
@@ -201,7 +207,7 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={value => { if (!busy) onOpenChange(value) }}>
       <DialogContent
         className="flex max-h-[80vh] w-[min(620px,calc(100vw-24px))] max-w-none flex-col gap-0 overflow-hidden border-white/[0.08] bg-[#090909] p-0 text-white shadow-modal-small max-sm:h-[100dvh] max-sm:max-h-none max-sm:w-screen max-sm:rounded-none"
       >
@@ -210,7 +216,7 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
           <DialogDescription className="sr-only">{timingMode === 'triggered' ? 'Choose work to run whenever this automation fires.' : 'Create a calendar event or queue executable work.'}</DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        <fieldset disabled={busy || submittedProfiles.current.size > 0} className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           <div className="mb-5 flex items-start gap-3">
             {activeIndex > 0 ? (
               <button type="button" onClick={goBack} className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border border-white/10 text-white/50 hover:bg-white/[0.05] hover:text-white" aria-label="Previous step">
@@ -250,7 +256,7 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
             <ThenSection draft={draft} agents={activeAgents} workflows={activeWorkflows} profiles={profiles} onChange={setDraft} />
           ) : null}
           {activeSection === 'safeguards' && draft.type !== 'event' ? <SafeguardsSection draft={draft} onChange={setDraft} /> : null}
-        </div>
+        </fieldset>
 
         <div className="shrink-0 border-t border-white/[0.07] bg-[#0b0b0b] px-5 py-4">
           {isLastSection ? <p className="mb-3 text-xs leading-5 text-white/48">{composerReviewSentence(timingMode === 'triggered' ? { ...draft, date: '', time: '' } : draft)}</p> : null}
@@ -259,8 +265,8 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
             {isLastSection ? (
               <Button type="button" onClick={submit} disabled={disabled || busy}>{busy ? 'Saving...' : draft.type === 'event' ? 'Add event' : 'Queue work'}</Button>
-            ) : activeSection !== 'what' && activeSection !== 'runner' ? (
-              <Button type="button" onClick={goNext}>Next</Button>
+            ) : activeSection !== 'what' && (activeSection !== 'runner' || draft.type === 'social-publish') ? (
+              <Button type="button" onClick={goNext} disabled={busy || (activeSection === 'runner' && draft.type === 'social-publish' && socialPublishDestinations(draft).length === 0)}>Next</Button>
             ) : null}
           </div>
         </div>
@@ -345,11 +351,16 @@ function RunnerSection({ draft, agents, workflows, profiles, loading, onChange, 
     }} />
   }
   if (draft.type === 'social-publish') {
-    return <ChoiceList choices={profiles.map((profile) => ({ id: `${profile.platform}/${profile.profileId}`, label: profile.label, description: profile.ready ? 'Ready' : 'Login or setup required', disabled: !profile.ready }))} selected={draft.profileId ? `${draft.platform}/${draft.profileId}` : ''} empty="No social profiles configured." onSelect={(id) => {
-      const profile = profiles.find((candidate) => `${candidate.platform}/${candidate.profileId}` === id)
+    const selected = socialPublishDestinations(draft)
+    return <ChoiceList choices={profiles.map(profile => ({ id: `${profile.platform}/${profile.profileId}`, label: profile.label, description: profile.ready ? 'Ready' : 'Login or setup required', disabled: !profile.ready }))} selected={selected.map(profile => `${profile.platform}/${profile.profileId}`)} empty="No publishing profiles configured." onSelect={id => {
+      const profile = profiles.find(candidate => `${candidate.platform}/${candidate.profileId}` === id)
       if (!profile) return
-      onChange({ ...draft, platform: profile.platform, profileId: profile.profileId, profileLabel: profile.label, accountSetId: profile.accountSetId, platformOptions: defaultSocialPlatformOptions(profile.platform) })
-      onComplete()
+      const targets = selected.some(target => `${target.platform}/${target.profileId}` === id)
+        ? selected.filter(target => `${target.platform}/${target.profileId}` !== id)
+        : [...selected, { ...profile, profileLabel: profile.label }]
+      const first = targets[0]
+      onChange({ ...draft, destinations: targets, platform: first?.platform ?? '', profileId: first?.profileId ?? '', profileLabel: first?.profileLabel ?? '', accountSetId: first?.accountSetId ?? '',
+        platformOptions: targets.some(target => target.platform === 'youtube') ? (Object.keys(draft.platformOptions).length ? draft.platformOptions : defaultSocialPlatformOptions('youtube')) : {} })
     }} />
   }
   return (
@@ -397,10 +408,10 @@ function InputsSection({ draft, outputs, vaultAssets, releaseKitItems, loading, 
       {draft.type === 'workflow-run' ? <WorkflowInputs draft={draft} onChange={onChange} /> : null}
       {draft.type === 'social-publish' ? (
         <>
-          <Field label={draft.platform === 'youtube' ? 'Title' : 'Caption'}>
-            <Textarea className="min-h-24 border-white/[0.08] bg-white/[0.025] text-white/80" value={draft.caption} onChange={(event) => update({ caption: event.target.value })} placeholder={draft.platform === 'youtube' ? 'Final video title' : 'Final post text'} />
+          <Field label={socialPublishDestinations(draft).some(target => target.platform === 'youtube') ? 'Caption / YouTube title' : 'Caption'}>
+            <Textarea className="min-h-24 border-white/[0.08] bg-white/[0.025] text-white/80" value={draft.caption} onChange={(event) => update({ caption: event.target.value })} placeholder={socialPublishDestinations(draft).some(target => target.platform === 'youtube') ? 'Final video title' : 'Final post text'} />
           </Field>
-          {draft.platform === 'youtube' ? (
+          {socialPublishDestinations(draft).some(target => target.platform === 'youtube') ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Field label="Post type">
                 <select className={INPUT_CLASS} value={String(draft.platformOptions.postType ?? 'video')} onChange={(event) => update({ platformOptions: { ...draft.platformOptions, postType: event.target.value } })}>
@@ -624,7 +635,7 @@ function TimePicker({ value, onChange }: { value: string; onChange: (value: stri
 }
 
 function SafeguardsSection({ draft, onChange }: { draft: Exclude<ScheduledWorkComposerDraft, { type: 'event' }>; onChange: React.Dispatch<React.SetStateAction<ScheduledWorkComposerDraft>> }) {
-  if (draft.type === 'social-publish') return <EmptyLine icon={ShieldCheck}>Exact approval will be required near publish time.</EmptyLine>
+  if (draft.type === 'social-publish') return <EmptyLine icon={ShieldCheck}>Queue work approves the selected asset, caption, accounts, and publish time. No additional approval is needed.</EmptyLine>
   if (draft.type === 'agent-task' || draft.type === 'workflow-run') {
     return (
       <div className="grid grid-cols-3 gap-2">
@@ -731,14 +742,14 @@ function defaultSocialPlatformOptions(platform: string): Record<string, unknown>
   return platform === 'youtube' ? { postType: 'video', visibility: 'private', madeForKids: 'no' } : {}
 }
 
-function ChoiceList({ choices, selected, empty, onSelect }: { choices: Array<{ id: string; label: string; description: string; disabled?: boolean }>; selected: string; empty: string; onSelect: (id: string) => void }) {
+function ChoiceList({ choices, selected, empty, onSelect }: { choices: Array<{ id: string; label: string; description: string; disabled?: boolean }>; selected: string | string[]; empty: string; onSelect: (id: string) => void }) {
   if (choices.length === 0) return <EmptyLine>{empty}</EmptyLine>
   return (
     <div className="divide-y divide-white/[0.05] border-y border-white/[0.06]">
       {choices.map((choice) => (
-        <button key={choice.id} type="button" disabled={choice.disabled} onClick={() => onSelect(choice.id)} className="flex w-full items-center gap-3 px-2 py-3 text-left disabled:opacity-35">
-          <span className={cn('flex size-4 items-center justify-center rounded-full border', selected === choice.id ? 'border-emerald-300/50 bg-emerald-300/15' : 'border-white/15')}>
-            {selected === choice.id ? <span className="size-1.5 rounded-full bg-emerald-200" /> : null}
+        <button key={choice.id} type="button" disabled={choice.disabled} onClick={() => onSelect(choice.id)} role={Array.isArray(selected) ? 'checkbox' : undefined} aria-checked={Array.isArray(selected) ? selected.includes(choice.id) : undefined} className="flex w-full items-center gap-3 px-2 py-3 text-left disabled:opacity-35">
+          <span className={cn('flex size-4 items-center justify-center border', Array.isArray(selected) ? 'rounded-[3px]' : 'rounded-full', (Array.isArray(selected) ? selected.includes(choice.id) : selected === choice.id) ? 'border-emerald-300/50 bg-emerald-300/15' : 'border-white/15')}>
+            {(Array.isArray(selected) ? selected.includes(choice.id) : selected === choice.id) ? <span className="size-1.5 rounded-full bg-emerald-200" /> : null}
           </span>
           <div className="min-w-0">
             <div className="text-sm text-white/74">{choice.label}</div>
@@ -780,7 +791,7 @@ function sectionTitle(section: ComposerSection, draft: ScheduledWorkComposerDraf
   if (section === 'runner') {
     if (draft.type === 'agent-task') return 'Choose an agent'
     if (draft.type === 'workflow-run') return 'Choose a workflow'
-    if (draft.type === 'social-publish') return 'Choose a social profile'
+    if (draft.type === 'social-publish') return 'Choose social profiles'
     return 'Choose a reviewer'
   }
   if (section === 'inputs') {
@@ -841,8 +852,8 @@ function validateLiveTarget(
     if (missing) return `Add ${missing.name} before scheduling this workflow.`
   }
   if (draft.type === 'social-publish') {
-    const profile = profiles.find((candidate) => candidate.platform === draft.platform && candidate.profileId === draft.profileId)
-    if (!profile?.ready) return 'That social profile is no longer ready. Choose another profile or fix its login.'
+    const targets = socialPublishDestinations(draft)
+    if (!targets.length || targets.some(target => !profiles.find(candidate => candidate.platform === target.platform && candidate.profileId === target.profileId)?.ready)) return 'That social profile is no longer ready. Choose another profile or fix its login.'
   }
   return undefined
 }

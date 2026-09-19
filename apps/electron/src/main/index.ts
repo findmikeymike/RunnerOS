@@ -142,6 +142,7 @@ import {
   prepareScheduledSocialWork,
 } from './campaign-social-job-preparer'
 import { executeScheduledSocialBrowser } from './scheduled-social-browser-executor'
+import { SocialConnectionObservations } from './handlers/social-connection-observations'
 import { executeScheduledSocialAuto } from './scheduled-social-auto-executor'
 import { createScheduledSocialProviderRoutes } from './scheduled-social-provider-executors'
 import { runSocialJson } from './social-cli'
@@ -944,6 +945,11 @@ app.whenReady().then(async () => {
               }),
               executeBrowser: (browserInput) => executeScheduledSocialBrowser(browserInput, {
                 browserPaneManager: browserPaneManager!,
+                assertSavedConnection: async (verification) => {
+                  const current = await runSocialJson(['profile', 'status', String(verification.platform), '--profile', String(verification.profile), '--json']) as Record<string, unknown>
+                  new SocialConnectionObservations(join(RUNTIME_IDENTITY.integrationCacheRoot, 'social-verification.json'))
+                    .assertVerifiedConnection({ ...current, platform: verification.platform, profile: verification.profile }, verification)
+                },
                 resolveMediaPath: (rootPath, order) => resolveScheduledSocialMediaPath(rootPath, order, getWorkspaceByNameOrId),
               }),
               log: (message) => console.info(`[ScheduledSocial] ${message}`),

@@ -24,7 +24,7 @@ export function socialConnectionObservation(row: Row): Row {
   return result
 }
 
-/** Historical UI observations, never authorization or a substitute for a fresh check. */
+/** Saved Settings verification. Publication approval remains a separate requirement. */
 export class SocialConnectionObservations {
   private revisions = new Map<string, number>()
   constructor(private filePath: string) {}
@@ -74,6 +74,16 @@ export class SocialConnectionObservations {
     saved[id(row)] = socialConnectionObservation(result)
     this.write(saved)
     return result
+  }
+  assertVerifiedConnection(row: Row, expected: Row): void {
+    const observed = this.merge(row)
+    if (!observed.savedVerification || observed.ready !== true || observed.loggedIn !== true
+      || observed.matchesExpected !== true || !Number.isFinite(Date.parse(observed.lastCheckedAt))
+      || row.platform !== expected.platform || row.profile !== expected.profile
+      || (row.accountHandle || null) !== (expected.expectedHandle || null)
+      || (row.accountUrl || null) !== (expected.expectedAccountUrl || null)) {
+      throw new Error('This social connection needs verification in Settings before posting. Open the saved account and verify it, then retry.')
+    }
   }
   merge(row: Row): Row {
     const observed = this.read()[id(row)]

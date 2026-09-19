@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
+import { runInNewContext } from 'node:vm'
 
 // Mock logger before import
 mock.module('../logger', () => {
@@ -344,7 +345,7 @@ describe('BrowserCDP', () => {
   })
 
   describe('fillElement', () => {
-    it('focuses, clears, and types characters', async () => {
+    it('focuses, clears, and inserts text', async () => {
       const sentCommands: string[] = []
       const wc = createMockWebContents(async (method) => {
         sentCommands.push(method)
@@ -371,10 +372,38 @@ describe('BrowserCDP', () => {
 
       expect(sentCommands).toContain('DOM.focus')
       expect(sentCommands).toContain('Runtime.callFunctionOn')
-      // Two characters typed: 2 keyDown + 2 keyUp = 4 key events
-      const keyEvents = sentCommands.filter(c => c === 'Input.dispatchKeyEvent')
-      expect(keyEvents.length).toBe(4)
+      expect(wc.debugger.sendCommand).toHaveBeenCalledWith('Input.insertText', { text: 'ab' })
     })
+  })
+
+  it('clears rich-text editors through native deletion before inserting the caption', async () => {
+    const sent: Array<{ method: string; params: any }> = []
+    const richEditor = { isContentEditable: true }
+    let selected: unknown
+    const wc = createMockWebContents(async (method, params) => {
+      sent.push({ method, params })
+      if (method === 'Accessibility.getFullAXTree') return { nodes: [{ role: { value: 'textbox' }, name: { value: 'Caption' }, backendDOMNodeId: 10 }] }
+      if (method === 'DOM.resolveNode') return { object: { objectId: 'obj-10' } }
+      if (method === 'DOM.getBoxModel') return { model: { content: [10, 10, 50, 10, 50, 50, 10, 50] } }
+      if (method === 'Runtime.callFunctionOn' && params.returnByValue) {
+        const fn = runInNewContext('(' + params.functionDeclaration + ')', {
+          document: { createRange: () => ({ selectNodeContents: (node: unknown) => { selected = node } }) },
+          window: { getSelection: () => ({ removeAllRanges() {}, addRange() {} }) },
+        })
+        return { result: { value: fn.call(richEditor) } }
+      }
+      return {}
+    })
+    const cdp = new BrowserCDP(wc as any)
+    await cdp.getAccessibilitySnapshot()
+    await cdp.fillElement('@e1', 'boop 🎵')
+    const deleteIndex = sent.findIndex(command => command.params?.key === 'Backspace')
+    const insertIndex = sent.findIndex(command => command.method === 'Input.insertText')
+    expect(deleteIndex).toBeGreaterThan(-1)
+    expect(insertIndex).toBeGreaterThan(deleteIndex)
+    expect(sent[insertIndex]!.params.text).toBe('boop 🎵')
+    expect(selected).toBe(richEditor)
+    expect('value' in richEditor).toBe(false)
   })
 
   describe('selectOption', () => {

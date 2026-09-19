@@ -51,3 +51,20 @@ describe('host social connection observations', () => {
     store.remember(status, store.begin(status)); expect(JSON.parse(fs.readFileSync(file, 'utf8'))['instagram/main'].ready).toBe(true)
   })
 })
+
+
+test('posting reuses verification only for the unchanged saved account and session', () => {
+  const status = { ...row(), matchesExpected: true }
+  const expected = { platform: status.platform, profile: status.profile, expectedHandle: status.accountHandle, expectedAccountUrl: null }
+  store.remember(status, store.begin(status))
+  const current = { ...status, liveChecked: false, ready: false, loggedIn: null, matchesExpected: null }
+  expect(() => new SocialConnectionObservations(file).assertVerifiedConnection(current, expected)).not.toThrow()
+  for (const change of [{ accountHandle: 'other' }, { sessionPath: '/new' }, { localSessionExists: false }]) {
+    expect(() => store.assertVerifiedConnection({ ...current, ...change }, expected)).toThrow(/Settings/)
+  }
+  expect(() => store.assertVerifiedConnection(current, { ...expected, expectedHandle: 'other' })).toThrow(/Settings/)
+  store.remember({ ...status, ready: false, loggedIn: false, matchesExpected: false }, store.begin(status))
+  expect(() => store.assertVerifiedConnection(current, expected)).toThrow(/Settings/)
+  store.invalidate(status)
+  expect(() => store.assertVerifiedConnection(current, expected)).toThrow(/Settings/)
+})

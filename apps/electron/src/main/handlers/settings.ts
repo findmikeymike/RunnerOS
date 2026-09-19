@@ -118,7 +118,7 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
       return { platform: input.platform, profile: input.profile, spotifySurface: input.spotifySurface, opened: Boolean(result.browserInstanceId), message: 'The saved account browser is open. The artist must sign in and select the intended profile, then ask to verify. Opening is not verification.' }
     }
     if (input.action === 'list') {
-      return { accounts: (result.platforms ?? []).flatMap((item: any) => item.profiles ?? []).filter((row: any) => (!input.platform || row.platform === input.platform) && (!input.profile || row.profile === input.profile)).map((row: any) => ({ ...socialConnectionObservation(row), sessionPath: undefined, historical: true })), message: 'Saved status is historical. Verify again before account-sensitive work, especially after switching profiles.' }
+      return { accounts: (result.platforms ?? []).flatMap((item: any) => item.profiles ?? []).filter((row: any) => (!input.platform || row.platform === input.platform) && (!input.profile || row.profile === input.profile)).map((row: any) => ({ ...socialConnectionObservation(row), sessionPath: undefined, historical: true })), message: 'Scheduled posting reuses Settings verification for the unchanged saved account and browser session. Verify again after switching accounts, reconnecting, or a failed connection check.' }
     }
     if (input.action === 'verify' && input.platform === 'spotify') {
       return {

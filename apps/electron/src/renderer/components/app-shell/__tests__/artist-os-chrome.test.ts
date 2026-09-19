@@ -449,13 +449,12 @@ describe('Artist OS persistent shell chrome', () => {
     expect(dial).not.toContain('#242428')
   })
 
-  test('closes the Release Kit audio versions menu when clicking outside it', () => {
+  test('offers playback and explicit replacement for the selected final audio', () => {
     const releaseKit = readFileSync(join(import.meta.dir, '..', 'ReleaseKitPage.tsx'), 'utf8')
 
-    expect(releaseKit).toContain("document.addEventListener('pointerdown', closeVersions)")
-    expect(releaseKit).toContain('versions.contains(event.target)')
-    expect(releaseKit).toContain('versions.open = false')
-    expect(releaseKit).toContain('ref={versionsRef}')
+    expect(releaseKit).toContain('<ReleaseKitAudioPlayer path={itemPaths[featured.id]} title={featured.title} />')
+    expect(releaseKit).toContain('"Replace final audio" : "Add final audio"')
+    expect(releaseKit).toContain('Use as final audio')
   })
 
   test('gives Release Board assets and agent actions a dedicated campaign page', () => {

@@ -1764,6 +1764,22 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     return instance.cdp.setFileInputFiles(ref, safePaths)
   }
 
+  prepareScheduledSocialViewport(id: string): { width: number; height: number } {
+    const instance = this.requireAliveInstance(id)
+    // Never take over a browser the user is editing or watching. In particular,
+    // resizing a docked sidecar cannot give social composers a desktop viewport.
+    if (instance.isVisible || instance.sidecarHost || instance.pendingShowOnReady || instance.showOnCreate) {
+      throw new Error('This social browser is open. Hide it before running the scheduled post; its current page has been preserved.')
+    }
+
+    const [width, height] = instance.window.getContentSize()
+    const viewport = this.windowResize(id, Math.max(1280, width), Math.max(900, height - TOOLBAR_HEIGHT))
+    if (viewport.width < 1280 || viewport.height < 900) {
+      throw new Error('The background social browser could not provide the required desktop viewport. No navigation was attempted.')
+    }
+    return viewport
+  }
+
   windowResize(id: string, width: number, height: number): { width: number; height: number } {
     const instance = this.requireAliveInstance(id)
 

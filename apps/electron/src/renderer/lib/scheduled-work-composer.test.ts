@@ -1,3 +1,4 @@
+import { expandSocialPublishDraft, isPublishingPlatform, submitComposerDestinations } from './scheduled-work-composer'
 import { describe, expect, test } from 'bun:test'
 import {
   composerReviewSentence,
@@ -318,4 +319,53 @@ describe('scheduled work composer drafts', () => {
       design_file: { mode: 'ask' },
     })
   })
+})
+
+test('multiple destinations retain exact accounts, approval and retry identities', () => {
+  const initial = createScheduledWorkComposerDraft({ ...defaults, suggestedType: 'social-publish' })
+  if (initial.type !== 'social-publish') throw new Error('Expected social draft')
+  const destinations = [
+    { platform: 'instagram', profileId: 'main', profileLabel: 'Instagram main', accountSetId: 'artist' },
+    { platform: 'youtube', profileId: 'music', profileLabel: 'YouTube music', accountSetId: 'artist' },
+  ]
+  const draft = { ...initial, ...destinations[0]!, destinations, title: 'New video', caption: 'Out now', time: '10:00',
+    inputRefs: [{ kind: 'release-kit' as const, itemId: 'video', sha256: 'abc' }],
+    platformOptions: { postType: 'video', visibility: 'private', madeForKids: 'no' } }
+  const jobs = expandSocialPublishDraft(draft)
+  expect(jobs).toHaveLength(2)
+  for (const job of jobs) expect(job.requestId).toMatch(/^[a-zA-Z0-9_-]{1,128}$/)
+  expect(new Set(jobs.map(job => job.requestId)).size).toBe(2)
+  expect(expandSocialPublishDraft({ ...draft, destinations: [...destinations].reverse() }).map(job => job.requestId)).toEqual(jobs.map(job => job.requestId).reverse())
+  for (const job of jobs) {
+    if (job.type !== 'social-publish') throw new Error('Expected social job')
+    const plan = buildCampaignScheduleFromComposer(job)
+    expect(plan.order.status).toBe('needs-approval')
+    expect(plan.order.execution).toMatchObject({ platform: job.platform, profileId: job.profileId, caption: 'Out now' })
+    expect(job.platformOptions).toEqual(job.platform === 'youtube' ? draft.platformOptions : {})
+  }
+  expect(isPublishingPlatform('spotify')).toBe(false)
+  expect(() => expandSocialPublishDraft({ ...draft, destinations: [{ ...destinations[0]!, platform: 'spotify' }] })).toThrow('supported')
+  expect(() => expandSocialPublishDraft({ ...draft, destinations: [destinations[0]!, destinations[0]!] })).toThrow('distinct')
+  expect(() => expandSocialPublishDraft({ ...draft, destinations: [] })).toThrow('at least one')
+})
+
+test('partial scheduling stops and retry skips confirmed destinations', async () => {
+  const draft = createScheduledWorkComposerDraft({ ...defaults, suggestedType: 'social-publish' })
+  if (draft.type !== 'social-publish') throw new Error('Expected social draft')
+  draft.destinations = ['instagram', 'x', 'youtube'].map(platform => ({ platform, profileId: 'main', profileLabel: platform, accountSetId: 'artist' }))
+  const completed = new Set<string>()
+  const calls: string[] = []
+  let failing = true
+  const submit = async (job: import('./scheduled-work-composer').ScheduledWorkComposerDraft) => {
+    calls.push(job.requestId)
+    if (job.type === 'social-publish' && job.platform === 'x' && failing) throw new Error('Timed out')
+  }
+  await expect(submitComposerDestinations(draft, submit, completed)).rejects.toThrow('1 destination(s) scheduled')
+  expect(calls).toHaveLength(2)
+  expect(completed.size).toBe(1)
+  failing = false
+  await submitComposerDestinations(draft, submit, completed)
+  expect(calls).toHaveLength(4)
+  expect(calls[2]).toBe(calls[1])
+  expect(completed.size).toBe(3)
 })

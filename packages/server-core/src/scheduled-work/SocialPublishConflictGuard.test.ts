@@ -120,3 +120,15 @@ describe('artist-wide social publish conflicts', () => {
     expect(events).toEqual(['first-start', 'first-end', 'second'])
   })
 })
+
+
+test('an exact replacement can follow a pre-submit failure, but never an uncertain submission', () => {
+  const failed = entry({ status: 'needs-attention' })
+  failed.order.attention = { reason: 'execution-failed', message: 'Upload control unavailable' }
+  const replacement = entry({ id: 'replacement', startAt: '2026-09-10T16:00:00.000Z' }, 'campaign')
+  expect(findArtistSocialPublishConflicts(replacement, [failed])).toEqual([])
+  failed.order.attention!.reason = 'execution-uncertain'
+  expect(findArtistSocialPublishConflicts(replacement, [failed])).toHaveLength(1)
+  failed.order.attention = undefined
+  expect(findArtistSocialPublishConflicts(replacement, [failed])).toHaveLength(1)
+})

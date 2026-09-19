@@ -10,6 +10,7 @@ export interface CalendarDayMenuItem {
   label: string
   detail?: string
   markerClass?: string
+  labelClass?: string
 }
 
 export interface CalendarDayAction {
@@ -36,6 +37,7 @@ export function CalendarMonthGrid({
   onSelectItem,
   compact = false,
   appearance = 'dark',
+  itemDisplay = 'markers',
 }: {
   visibleMonth: Date
   selectedDate: string
@@ -47,6 +49,7 @@ export function CalendarMonthGrid({
   onSelectItem?: (date: string, itemId: string) => void
   compact?: boolean
   appearance?: 'dark' | 'paper'
+  itemDisplay?: 'markers' | 'labels'
 }) {
   const [menu, setMenu] = React.useState<{ date: string; x: number; y: number } | null>(null)
   const days = React.useMemo(() => buildMonthDays(visibleMonth), [visibleMonth])
@@ -134,7 +137,7 @@ export function CalendarMonthGrid({
           const dots = meta?.dots ?? (count > 0 ? ['bg-orange-400/80'] : [])
           const items = meta?.items ?? []
           const highlights = meta?.highlights ?? []
-          const visibleItems = items.slice(0, MAX_VISIBLE_DAY_ITEMS)
+          const visibleItems = items.slice(0, itemDisplay === 'labels' ? Math.max(1, (compact ? 1 : 2) - highlights.length) : MAX_VISIBLE_DAY_ITEMS)
           const hiddenItemCount = items.length - visibleItems.length
           const isSelected = key === selectedDate
           const isToday = key === todayKey
@@ -147,6 +150,7 @@ export function CalendarMonthGrid({
               tabIndex={0}
               onClick={(event) => openMenu(key, event.clientX, event.clientY)}
               onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return
                 if (event.key !== 'Enter' && event.key !== ' ') return
                 event.preventDefault()
                 const bounds = event.currentTarget.getBoundingClientRect()
@@ -158,7 +162,7 @@ export function CalendarMonthGrid({
               }}
               aria-haspopup={dayActions.length > 0 || items.length > 0 ? 'menu' : undefined}
               className={cn(
-                'flex flex-col p-1.5 text-left transition-colors',
+                'flex min-w-0 flex-col p-1.5 text-left transition-colors',
                 paper ? 'rounded-none' : 'rounded-[10px] border',
                 compact ? 'min-h-[48px]' : 'min-h-[56px]',
                 paper && dayIndex % 7 !== 6 && 'border-r border-white/[0.10]',
@@ -210,20 +214,24 @@ export function CalendarMonthGrid({
                 </div>
               ) : null}
               {items.length > 0 ? (
-                <div className={cn('flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden pt-1.5', highlights.length === 0 && 'mt-auto')}>
+                <div className={cn('flex min-w-0 gap-1 pt-1', itemDisplay === 'labels' ? 'flex-col' : 'flex-nowrap items-center overflow-hidden', highlights.length === 0 && 'mt-auto')}>
                   {visibleItems.map((item, index) => (
                     <button
                       key={item.id}
                       type="button"
-                      title={item.label}
+                      title={[item.label, item.detail].filter(Boolean).join(' — ')}
                       aria-label={`Open ${item.label}`}
                       onClick={(event) => {
                         event.stopPropagation()
                         onSelectDate(key)
                         onSelectItem?.(key, item.id)
                       }}
-                      className={cn('size-2.5 shrink-0 rounded-[2px] ring-1 transition-transform hover:scale-125', paper ? 'ring-white/10' : 'ring-white/15', item.markerClass ?? dots[index % Math.max(dots.length, 1)] ?? 'bg-orange-400/85')}
-                    />
+                      className={itemDisplay === 'labels'
+                        ? cn('block w-full min-w-0 truncate rounded-[3px] px-1.5 py-0.5 text-left text-[9px] font-semibold leading-3 ring-1 ring-inset transition-[filter] hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white', item.labelClass ?? 'bg-zinc-100 text-zinc-800 ring-white/60')
+                        : cn('size-2.5 shrink-0 rounded-[2px] ring-1 transition-transform hover:scale-125', paper ? 'ring-white/10' : 'ring-white/15', item.markerClass ?? dots[index % Math.max(dots.length, 1)] ?? 'bg-orange-400/85')}
+                    >
+                      {itemDisplay === 'labels' ? item.label : null}
+                    </button>
                   ))}
                   {hiddenItemCount > 0 ? (
                     <button
@@ -234,7 +242,7 @@ export function CalendarMonthGrid({
                         event.stopPropagation()
                         openMenu(key, event.clientX, event.clientY)
                       }}
-                      className={cn('shrink-0 text-[9px] font-semibold', paper ? 'text-white/42 hover:text-white/75' : 'text-white/48 hover:text-white/80')}
+                      className={cn('shrink-0 text-left text-[9px] font-semibold', paper ? 'text-white/42 hover:text-white/75' : 'text-white/48 hover:text-white/80')}
                     >
                       +{hiddenItemCount}
                     </button>

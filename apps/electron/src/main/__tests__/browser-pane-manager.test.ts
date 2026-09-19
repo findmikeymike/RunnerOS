@@ -1306,6 +1306,56 @@ describe('BrowserPaneManager', () => {
     ).rejects.toThrow('Resolved screenshot region is outside the current viewport')
   })
 
+  it('prepares a desktop viewport for scheduled social work without showing or navigating', () => {
+    manager.createInstance('scheduled-hidden', { show: false })
+    const instance = (manager as any).instances.get('scheduled-hidden')
+    instance.pageView.webContents.loadURL.mockClear()
+
+    expect(manager.prepareScheduledSocialViewport('scheduled-hidden')).toEqual({ width: 1280, height: 900 })
+    expect(instance.window.show).not.toHaveBeenCalled()
+    expect(instance.window.showInactive).not.toHaveBeenCalled()
+    expect(instance.window.focus).not.toHaveBeenCalled()
+    expect(instance.pageView.webContents.loadURL).not.toHaveBeenCalled()
+    expect(instance.pageView.setBounds).toHaveBeenLastCalledWith({ x: 0, y: 48, width: 1280, height: 900 })
+    expect(instance.isVisible).toBe(false)
+  })
+
+  it('preserves a visible sidecar and draft when scheduled social work requests its viewport', () => {
+    manager.createInstance('scheduled-docked')
+    const host = createMockWindow({ width: 1000, height: 800 })
+    manager.dock('scheduled-docked', host as any, { x: 520, y: 80, width: 460, height: 650 })
+    const instance = (manager as any).instances.get('scheduled-docked')
+    const bounds = { ...instance.sidecarBounds }
+    instance.pageView.webContents.loadURL.mockClear()
+
+    expect(() => manager.prepareScheduledSocialViewport('scheduled-docked')).toThrow('current page has been preserved')
+    expect(instance.sidecarHost).toBe(host)
+    expect(instance.sidecarBounds).toEqual(bounds)
+    expect(instance.window.setContentSize).not.toHaveBeenCalled()
+    expect(instance.pageView.webContents.loadURL).not.toHaveBeenCalled()
+    expect(instance.isVisible).toBe(true)
+  })
+
+  it('refuses scheduled viewport preparation while a popup is visible or waiting to show', () => {
+    manager.createInstance('scheduled-popup')
+    const instance = (manager as any).instances.get('scheduled-popup')
+    for (const field of ['isVisible', 'pendingShowOnReady', 'showOnCreate']) {
+      instance[field] = true
+      expect(() => manager.prepareScheduledSocialViewport('scheduled-popup')).toThrow('social browser is open')
+      instance[field] = false
+    }
+    expect(instance.window.setContentSize).not.toHaveBeenCalled()
+  })
+
+  it('preserves larger background viewports and rejects ineffective resizing', () => {
+    manager.createInstance('scheduled-size')
+    manager.windowResize('scheduled-size', 1600, 1000)
+    expect(manager.prepareScheduledSocialViewport('scheduled-size')).toEqual({ width: 1600, height: 1000 })
+    const instance = (manager as any).instances.get('scheduled-size')
+    instance.window.getContentSize = () => [700, 500]
+    expect(() => manager.prepareScheduledSocialViewport('scheduled-size')).toThrow('required desktop viewport')
+  })
+
   it('resizes browser window viewport and returns effective applied size', () => {
     manager.createInstance('resize-1')
     const resized = manager.windowResize('resize-1', 1280, 720)

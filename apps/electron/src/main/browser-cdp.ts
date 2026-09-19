@@ -817,25 +817,31 @@ export class BrowserCDP {
 
       // Clear existing content
       const { object } = await this.send('DOM.resolveNode', { backendNodeId })
-      await this.send('Runtime.callFunctionOn', {
+      const editable = await this.send('Runtime.callFunctionOn', {
         objectId: object.objectId,
+        returnByValue: true,
         functionDeclaration: `function() {
+          if (this.isContentEditable) {
+            const range = document.createRange();
+            range.selectNodeContents(this);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            return true;
+          }
           this.value = '';
           this.dispatchEvent(new Event('input', { bubbles: true }));
+          return false;
         }`,
       })
-
-      // Type the new value character by character for realistic input
-      for (const char of value) {
-        await this.send('Input.dispatchKeyEvent', {
-          type: 'keyDown',
-          text: char,
-        })
-        await this.send('Input.dispatchKeyEvent', {
-          type: 'keyUp',
-          text: char,
-        })
+      if (editable.result?.value === true) {
+        // Use a real edit so React/DraftJS sees the deletion and updates state.
+        await this.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 })
+        await this.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 })
       }
+
+      // Native text insertion supports rich editors, Unicode, and background views.
+      await this.send('Input.insertText', { text: value })
 
       // Dispatch change event
       await this.send('Runtime.callFunctionOn', {

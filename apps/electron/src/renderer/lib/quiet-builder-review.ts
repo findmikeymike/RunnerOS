@@ -5,5 +5,8 @@ export function isQuietBuilderReview(session: {
 }): boolean {
   if (session.spawnedFromAgent?.agentSlug !== 'builder') return false
   const final = session.messages.findLast(message => (message.role === 'assistant' || message.role === 'plan') && !message.isIntermediate)
-  return final?.content?.trim() === 'NO_USEFUL_CAPABILITY'
+  // Providers sometimes append an explanation to the explicit status line.
+  // Recognize that line, not arbitrary mentions/quotes of the token in prose.
+  const firstLine = final?.content?.trim().split(/\r?\n/, 1)[0]?.trim()
+  return firstLine === 'NO_USEFUL_CAPABILITY'
 }

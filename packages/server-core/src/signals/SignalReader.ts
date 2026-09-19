@@ -39,7 +39,7 @@ export class SignalReader {
       if (!workspace || workspace.remoteServer || !slug || !(SIGNAL_RETRIEVAL_WORKERS as readonly string[]).includes(slug)
         || !isAgentAllowedInArtistWorkspace(slug, workspace.artistWorkspaceScope)
         || !(this.deps.activeAgents ?? (root => loadActivatedAgents(root).map(agent => agent.slug)))(workspace.rootPath).includes(slug)) throw new Error();
-      return await this.find(workspaceId, slug === 'builder' ? { ...input, lookbackDays: input.lookbackDays ?? 60 } : input);
+      return await this.findEntries(workspaceId, slug === 'builder' ? { ...input, lookbackDays: input.lookbackDays ?? 60 } : input, slug === 'builder');
     } catch { return unavailable('search'); }
   }
   private scope(workspaceId: string): Workspace {
@@ -112,6 +112,9 @@ export class SignalReader {
     return result;
   }
   async find(workspaceId: string, input: FindSignalIdeasInput = {}): Promise<SignalLookupResult> {
+    return this.findEntries(workspaceId, input);
+  }
+  private async findEntries(workspaceId: string, input: FindSignalIdeasInput, browseAllTracks = false): Promise<SignalLookupResult> {
     let mode: SignalLookupResult['mode'] = 'search';
     try {
       const args = findSignalIdeasSchema.parse(input);
@@ -141,7 +144,9 @@ export class SignalReader {
               if (Date.parse(entry.createdAt) < cutoff || Date.parse(entry.createdAt) > now) continue;
               if (entry.temporalKind === 'time-sensitive' && (!date || date < cutoff || date > now)) continue;
             }
-            if (mode === 'browse' && !args.track && entry.track !== 'your-world') continue;
+            // Builder reviews the full capability intel pool; ordinary inspiration
+            // browsing keeps its established Your World default.
+            if (mode === 'browse' && !args.track && !browseAllTracks && entry.track !== 'your-world') continue;
           }
           const words = new Set(terms(`${entry.title} ${entry.topics.join(' ')} ${entry.excerpt}`));
           const score = query.filter(term => words.has(term)).length;

@@ -9,6 +9,7 @@ import type {
   ScheduledWorkOrder,
 } from '@craft-agent/shared/scheduled-work'
 import { ScheduledSocialExecutionUncertainError, isXEditorialSocialAuthorizationDefinition } from '@craft-agent/shared/scheduled-work'
+import { instagramAdvanceScript, instagramDestinationScript, instagramReelsNotice, tikTokDraftRecoveryScript } from './scheduled-social-compose'
 
 export type NativeSocialPlatform = 'x' | 'instagram' | 'tiktok' | 'youtube'
 
@@ -25,6 +26,7 @@ export interface ScheduledSocialBrowserPaneManager {
   getInstance(id: string): ScheduledSocialBrowserInstance | undefined
   createInstance(id?: string, options?: { show?: boolean; partition?: string }): string
   focus(id: string): void
+  prepareScheduledSocialViewport?(id: string): { width: number; height: number }
   navigate(id: string, url: string): Promise<{ url: string; title: string }>
   evaluate(id: string, expression: string): Promise<unknown>
   getAccessibilitySnapshot(id: string): Promise<ScheduledSocialAccessibilitySnapshot>
@@ -35,6 +37,8 @@ export interface ScheduledSocialBrowserPaneManager {
 
 export interface ScheduledSocialBrowserExecutorDeps {
   browserPaneManager: ScheduledSocialBrowserPaneManager
+  /** Host-owned Settings verification; never supplied by the scheduled action. */
+  assertSavedConnection?(verification: Record<string, unknown>): Promise<void>
   resolveMediaPath?(workspaceRootPath: string, order: ScheduledWorkOrder): string | undefined
   fingerprintMediaPath?(path: string): string
   now?(): Date
@@ -93,14 +97,14 @@ const PLATFORM_CONTRACTS: Record<NativeSocialPlatform, PlatformContract> = {
     composeUrl: 'https://www.instagram.com/create/select/',
     captionSelectors: ['textarea[aria-label*="caption" i]', '[contenteditable="true"][aria-label*="caption" i]'],
     uploadSelectors: ['input[type="file"]'],
-    submitSelectors: ['button'],
+    submitSelectors: ['button', '[role="button"]'],
     submitText: ['Share'],
     successUrl: /^https:\/\/(?:www\.)?instagram\.com\/(?:p|reel)\/[^/?#]+\/?(?:[?#].*)?$/i,
     mediaPreviewSelectors: ['[role="dialog"] img[src^="blob:"]', '[role="dialog"] video[src^="blob:"]', '[role="dialog"] canvas'],
   },
   tiktok: {
     composeUrl: 'https://www.tiktok.com/tiktokstudio/upload?from=webapp',
-    captionSelectors: ['[contenteditable="true"][data-e2e*="caption" i]', '[contenteditable="true"][aria-label*="caption" i]'],
+    captionSelectors: ['[contenteditable="true"][data-e2e*="caption" i]', '[contenteditable="true"][aria-label*="caption" i]', '[contenteditable="true"][role="textbox"]', '.public-DraftEditor-content[contenteditable="true"]'],
     uploadSelectors: ['input[type="file"]'],
     submitSelectors: ['button[data-e2e*="post" i]', 'button'],
     submitText: ['Post'],
@@ -139,21 +143,64 @@ export async function executeScheduledSocialBrowser(
     throw new Error(`Refusing social publish: browser instance ${instanceId} uses the wrong persisted partition.`)
   }
   if (!instance) {
-    manager.createInstance(instanceId, { show: true, partition })
+    manager.createInstance(instanceId, { show: false, partition })
     instance = manager.getInstance(instanceId)
   }
   if (!instance || instance.partition !== partition) {
     throw new Error(`Could not open the approved persisted browser session ${partition}.`)
   }
 
-  manager.focus(instanceId)
+  if (deps.assertSavedConnection) await deps.assertSavedConnection(verification)
+  manager.prepareScheduledSocialViewport?.(instanceId)
+  // A hidden browser can still contain the user's in-memory draft. Do not
+  // navigate it away just to capture a receipt baseline or start a new upload.
+  if (instance.currentUrl && instance.currentUrl !== 'about:blank') {
+    const occupied = await manager.evaluate(instanceId, `/* runner-social:occupied:${platform} */(() => {
+      const visible = el => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden'; };
+      const editors = [...document.querySelectorAll('textarea,[contenteditable="true"]')].filter(visible);
+      const filled = editors.some(el => String(el.value || el.textContent || '').trim());
+      const upload = [...document.querySelectorAll('input[type="file"]')].some(el => el.files?.length);
+      const composer = /\\/(?:compose|create|tiktokstudio\\/upload)(?:[/?#]|$)/.test(location.pathname)
+        || [...document.querySelectorAll('[role="heading"],h1,h2,h3')].some(el => visible(el) && /^(?:New reel|Crop|Edit|Create new post)$/.test(el.textContent?.trim() || ''));
+      return composer && (filled || upload || Boolean(document.querySelector('video[src^="blob:"],[role="dialog"] canvas')));
+    })()`)
+    if (occupied === true) throw new Error('This social browser contains an unfinished draft. It has been preserved. Finish or save that draft before retrying the scheduled post.')
+  }
+
+  // Scheduled work must not steal focus. The registered browser remains
+  // available in the top bar for the user to open whenever they want.
+  let tikTokReceiptContext: TikTokReceiptContext | undefined
+  if (platform === 'tiktok') {
+    // Studio returns to its content list after posting, not the public video URL.
+    // Capture existing links so an older post can never satisfy this run's receipt.
+    await manager.navigate(instanceId, 'https://www.tiktok.com/tiktokstudio/content')
+    const baseline = asRecord(await manager.evaluate(instanceId, tikTokReceiptBaselineScript()))
+    if (baseline.ready !== true || !Array.isArray(baseline.urls)) {
+      throw new Error('TikTok Studio did not load its existing posts. No upload or submission was attempted.')
+    }
+    tikTokReceiptContext = { existingUrls: baseline.urls.filter((url): url is string => typeof url === 'string'), caption: String(payload.text), handle: String(verification.expectedHandle || '') }
+    if (!tikTokReceiptContext.handle) throw new Error('The saved TikTok account has no verified handle.')
+  }
   await manager.navigate(instanceId, contract.composeUrl)
 
-  const identity = asIdentityInspection(await manager.evaluate(instanceId, identityScript(platform)))
-  assertExpectedIdentity(identity, verification)
+  if (deps.assertSavedConnection) {
+    // Reuse Settings identity in the exact persisted partition. A login redirect
+    // is a session failure, not a reason to scrape account menus on every post.
+    const expired = await manager.evaluate(instanceId, `/* runner-social:session:${platform} */(() =>
+      /\\/(?:login|signin|sign-in|accounts\\/login|challenge|checkpoint)(?:[/?#]|$)/i.test(location.pathname)
+      || location.hostname === 'accounts.google.com'
+      || Boolean(document.querySelector('input[type="password"]')))()`)
+    if (expired === true) throw new Error('Your saved social session has expired. Reconnect this account in Settings, then retry.')
+  } else {
+    const identity = asIdentityInspection(await manager.evaluate(instanceId, identityScript(platform)))
+    assertExpectedIdentity(identity, verification)
+  }
 
   const mediaPath = resolveApprovedMediaPath(input, deps)
   if (mediaPath) {
+    if (platform === 'tiktok') {
+      await assertComposeReady(manager, instanceId, tikTokDraftRecoveryScript(basename(mediaPath), String(payload.text)))
+    }
     const uploadTarget = await resolveTarget(manager, instanceId, platform, 'upload', contract.uploadSelectors, [])
     await manager.uploadFile(instanceId, uploadTarget, [mediaPath])
     const attached = asMediaInspection(await manager.evaluate(
@@ -165,13 +212,16 @@ export async function executeScheduledSocialBrowser(
     }
     await waitForMediaPreview(manager, instanceId, platform, contract.mediaPreviewSelectors, deps)
     if (platform === 'instagram') {
-      await resolveAndClickAdvance(manager, instanceId, platform, 'Next')
-      await resolveAndClickAdvance(manager, instanceId, platform, 'Next')
+      await assertComposeReady(manager, instanceId, instagramAdvanceScript())
     }
   }
 
   const captionTarget = await resolveTarget(manager, instanceId, platform, 'caption', contract.captionSelectors, [])
   await manager.fillElement(instanceId, captionTarget, String(payload.text))
+
+  if (platform === 'instagram') {
+    await assertComposeReady(manager, instanceId, instagramDestinationScript())
+  }
 
   if (platform === 'youtube') {
     await configureYouTubePublish(manager, instanceId, payload)
@@ -201,11 +251,13 @@ export async function executeScheduledSocialBrowser(
   // platform received it. Never report a safely repeatable failure past here.
   try {
     await manager.clickElement(instanceId, submitTarget, { waitFor: 'none' })
-    const proof = await waitForSuccessProof(manager, instanceId, platform, contract, deps)
+    const proof = await waitForSuccessProof(manager, instanceId, platform, contract, deps, tikTokReceiptContext)
     return {
       receiptId: platformReceiptId(platform, proof.externalUrl),
       externalUrl: proof.externalUrl,
-      summary: `Published to ${platform}/${input.preview.profileId}; positive platform evidence was verified.`,
+      summary: platform === 'tiktok'
+        ? `Submitted to TikTok/${input.preview.profileId}; Studio confirmed the new post. ${proof.underReview ? 'TikTok is reviewing it; it is not yet confirmed publicly visible.' : 'Public visibility remains controlled by TikTok.'}`
+        : `Published to ${platform}/${input.preview.profileId}; positive platform evidence was verified.`,
     }
   } catch (cause) {
     throw new ScheduledSocialExecutionUncertainError(
@@ -213,6 +265,11 @@ export async function executeScheduledSocialBrowser(
       { cause },
     )
   }
+}
+
+async function assertComposeReady(manager: ScheduledSocialBrowserPaneManager, instanceId: string, script: string): Promise<void> {
+  const result = asRecord(await manager.evaluate(instanceId, script))
+  if (result.ready !== true) throw new Error(String(result.reason || 'The social composer is not ready. No post was submitted.'))
 }
 
 async function configureYouTubePublish(
@@ -487,18 +544,19 @@ async function waitForSuccessProof(
   platform: NativeSocialPlatform,
   contract: PlatformContract,
   deps: ScheduledSocialBrowserExecutorDeps,
-): Promise<{ externalUrl: string }> {
+  tikTokReceiptContext?: TikTokReceiptContext,
+): Promise<{ externalUrl: string; underReview?: boolean }> {
   const timeoutMs = Math.max(0, deps.successTimeoutMs ?? 30_000)
   const pollMs = Math.max(1, deps.successPollMs ?? 500)
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
   const started = Date.now()
   do {
-    const proof = asSuccessInspection(await manager.evaluate(instanceId, successScript(platform)))
+    const proof = asSuccessInspection(await manager.evaluate(instanceId, successScript(platform, tikTokReceiptContext)))
     if (proof.proven) {
       if (!proof.externalUrl || !contract.successUrl.test(proof.externalUrl)) {
         throw new Error(`Refusing social receipt: ${platform} returned an invalid success URL.`)
       }
-      return { externalUrl: proof.externalUrl }
+      return { externalUrl: proof.externalUrl, underReview: proof.underReview }
     }
     if (Date.now() - started >= timeoutMs) break
     await sleep(Math.min(pollMs, timeoutMs - (Date.now() - started)))
@@ -532,29 +590,69 @@ function identityScript(platform: NativeSocialPlatform): string {
   })()`
 }
 
-function targetScript(platform: NativeSocialPlatform, kind: string, selectors: string[], text: string[], marker: string): string {
-  return `/* runner-social:target:${platform}:${kind} */(() => {
+function tikTokUploadDismissals(): string {
+  return `
+      for (const tooltip of document.querySelectorAll('.tutorial-tooltip')) {
+        if (!tooltip.textContent?.includes('New editing features added')) continue;
+        const dismiss = [...tooltip.querySelectorAll('button')].filter(button => button.textContent?.trim() === 'Got it');
+        if (dismiss.length === 1) dismiss[0].click();
+      }
+      const heading = [...document.querySelectorAll('div, p, h2, h3')].find(node => node.textContent?.trim() === 'Turn on automatic content checks?');
+      for (let parent = heading, depth = 0; parent && depth < 8; parent = parent.parentElement, depth++) {
+        const buttons = [...parent.querySelectorAll('button')];
+        const cancel = buttons.filter(button => button.textContent?.trim() === 'Cancel');
+        if (cancel.length === 1 && buttons.some(button => button.textContent?.trim() === 'Turn on')) { cancel[0].click(); break; }
+      }
+  `
+}
+
+export function targetScript(platform: NativeSocialPlatform, kind: string, selectors: string[], text: string[], marker: string): string {
+  return `/* runner-social:target:${platform}:${kind} */(async () => {
     const visible = (el) => { const style = getComputedStyle(el); const box = el.getBoundingClientRect(); return style.display !== 'none' && style.visibility !== 'hidden' && box.width > 0 && box.height > 0 && !el.disabled; };
-    const nodes = new Set();
     const isUpload = ${JSON.stringify(kind)} === 'upload';
+    for (let attempt = 0; attempt < 60; attempt++) {
+    ${platform === 'tiktok' && kind === 'submit' ? tikTokUploadDismissals() : ''}
+    const nodes = new Set();
     for (const selector of ${JSON.stringify(selectors)}) document.querySelectorAll(selector).forEach((el) => { if ((isUpload || visible(el)) && !el.disabled) nodes.add(el); });
     const wanted = ${JSON.stringify(text)}.map((value) => value.toLowerCase());
     const filtered = [...nodes].filter((el) => wanted.length === 0 || wanted.includes(String(el.textContent || el.getAttribute('aria-label') || '').trim().toLowerCase()));
-    if (filtered.length !== 1) return { status: filtered.length === 0 ? 'missing' : 'ambiguous', count: filtered.length };
-    const target = filtered[0]; target.setAttribute('aria-label', ${JSON.stringify(marker)}); target.removeAttribute('aria-hidden');
+    if (filtered.length > 1) return { status: 'ambiguous', count: filtered.length };
+    if (filtered.length === 0) { await new Promise(resolve => setTimeout(resolve, 250)); continue; }
+    const target = filtered[0];
+    if (${JSON.stringify(kind)} === 'submit') {
+      target.scrollIntoView({ block: 'center', inline: 'center' });
+      const box = target.getBoundingClientRect();
+      const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      if (!top || !target.contains(top)) { await new Promise(resolve => setTimeout(resolve, 250)); continue; }
+    }
+    if (isUpload) {
+      window.__runnerSocialUploadEvidence = [];
+      target.addEventListener('change', () => {
+        window.__runnerSocialUploadEvidence = Array.from(target.files || []).map(file => file.name);
+      }, { capture: true, once: true });
+    }
+    target.setAttribute('aria-label', ${JSON.stringify(marker)}); target.removeAttribute('aria-hidden');
     if (isUpload && !visible(target)) { target.style.position = 'fixed'; target.style.left = '0'; target.style.top = '0'; target.style.width = '1px'; target.style.height = '1px'; target.style.display = 'block'; target.style.visibility = 'visible'; target.style.opacity = '0.01'; }
     return { status: 'ok', count: 1 };
+    }
+    return { status: 'missing', count: 0 };
   })()`
 }
 
-function mediaScript(platform: NativeSocialPlatform, previewSelectors: string[]): string {
+export function mediaScript(platform: NativeSocialPlatform, previewSelectors: string[]): string {
   return `/* runner-social:media:${platform} */(() => {
     const uploadNode = document.querySelector('[aria-label="runner-social-upload"]');
-    const fileNames = uploadNode?.files ? Array.from(uploadNode.files).map((file) => file.name) : [];
+    const currentFiles = uploadNode?.files ? Array.from(uploadNode.files).map((file) => file.name) : [];
+    const fileNames = currentFiles.length ? currentFiles : (window.__runnerSocialUploadEvidence || []);
+    ${platform === 'tiktok' ? tikTokUploadDismissals() : ''}
+    ${platform === 'instagram' ? instagramReelsNotice() : ''}
     const visible = (el) => { const style = getComputedStyle(el); const box = el.getBoundingClientRect(); return style.display !== 'none' && style.visibility !== 'hidden' && box.width > 0 && box.height > 0; };
     const previews = new Set();
     for (const selector of ${JSON.stringify(previewSelectors)}) document.querySelectorAll(selector).forEach((el) => { if (visible(el)) previews.add(el); });
-    return { fileNames, hasMediaPreview: previews.size > 0 };
+    const uploadedTikTokVideo = ${JSON.stringify(platform)} === 'tiktok' && fileNames.length === 1
+      && document.body.innerText.includes(fileNames[0]) && /Uploaded[（(]/.test(document.body.innerText)
+      && [...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Replace');
+    return { fileNames, hasMediaPreview: previews.size > 0 || uploadedTikTokVideo };
   })()`
 }
 
@@ -567,10 +665,35 @@ function draftScript(platform: NativeSocialPlatform): string {
   })()`
 }
 
-function successScript(platform: NativeSocialPlatform): string {
+type TikTokReceiptContext = { existingUrls: string[]; caption: string; handle: string }
+
+export function tikTokReceiptBaselineScript(): string {
+  return `/* runner-social:baseline:tiktok */(async () => {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const urls = [...document.querySelectorAll('a[href]')].map(link => link.href).filter(url => ${platformSuccessUrlSource('tiktok')}.test(url));
+      if (urls.length || /Posts\\s+0(?:\\s|$)/.test(document.body.innerText)) return { ready: true, urls };
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    return { ready: false, urls: [] };
+  })()`
+}
+
+export function successScript(platform: NativeSocialPlatform, tikTokReceiptContext?: TikTokReceiptContext): string {
   return `/* runner-social:success:${platform} */(() => {
     const url = location.href;
     const successUrl = ${platformSuccessUrlSource(platform)};
+    const context = ${JSON.stringify(tikTokReceiptContext ?? null)};
+    if (context && location.pathname === '/tiktokstudio/content') {
+      const expectedHandle = context.handle.replace(/^@/, '').toLowerCase();
+      const matches = [...document.querySelectorAll('a[href]')].filter(link => {
+        if (!successUrl.test(link.href) || context.existingUrls.includes(link.href) || link.textContent?.trim() !== context.caption) return false;
+        return new URL(link.href).pathname.split('/')[1]?.toLowerCase() === '@' + expectedHandle;
+      });
+      const urls = [...new Set(matches.map(link => link.href))];
+      if (urls.length === 1) return { proven: true, externalUrl: urls[0], underReview: document.body.innerText.includes('Content under review') };
+      return { proven: false };
+    }
+    if (context) return { proven: false };
     const evidence = document.querySelector('[role="alert"], [data-testid="toast"], ytcp-video-upload-progress, ytcp-video-upload-completion');
     const linkedUrl = Array.from(evidence?.querySelectorAll?.('a[href]') || []).map((link) => link.href).find((href) => successUrl.test(href)) || null;
     const externalUrl = successUrl.test(url) ? url : linkedUrl;
@@ -610,7 +733,7 @@ type IdentityInspection = { loggedIn: boolean; candidates: Array<{ handle?: stri
 type DraftInspection = { caption: string | null; hasMediaPreview: boolean }
 type MediaInspection = { fileNames: string[]; hasMediaPreview: boolean }
 type TargetInspection = { status: 'ok' | 'missing' | 'ambiguous' }
-type SuccessInspection = { proven: boolean; externalUrl?: string }
+type SuccessInspection = { proven: boolean; externalUrl?: string; underReview?: boolean }
 
 function asIdentityInspection(value: unknown): IdentityInspection {
   const record = asRecord(value)
@@ -638,7 +761,7 @@ function asTargetInspection(value: unknown): TargetInspection {
 
 function asSuccessInspection(value: unknown): SuccessInspection {
   const record = asRecord(value)
-  return { proven: record.proven === true, externalUrl: cleanString(record.externalUrl) ?? undefined }
+  return { proven: record.proven === true, externalUrl: cleanString(record.externalUrl) ?? undefined, underReview: record.underReview === true }
 }
 
 function platformReceiptId(platform: NativeSocialPlatform, externalUrl: string): string {

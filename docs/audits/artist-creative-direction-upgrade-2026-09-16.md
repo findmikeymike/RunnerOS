@@ -1,6 +1,6 @@
 # Artist Direction and Creative Direction
 
-Status: implemented in the working tree; startup and scoped UI smoke verified; not yet committed or provider-behavior accepted.
+Status: implementation committed in `fc91256fd`; startup and scoped UI smoke verified. Bounded HQ response acceptance passed September 18; Campaign brief-save/handoff acceptance remains open.
 
 ## Agreed behavior
 
@@ -45,4 +45,17 @@ Live relaunch authorized and completed September 16 using the rebuilt canonical 
 - Final repository typecheck and main, preload, renderer builds pass. The final focused rerun passes 25 tests / 99 assertions; separate isolated approval checks also pass. Earlier focused suites additionally cover routing, context access, migrations, and trusted drafting. This is not a claim that every repository test was rerun.
 - Live verification September 16: real Artist Direction session `260916-tall-wren` created one supporting-only QA proposal in Approval Mode. Brain → Branding showed it pending; Apply added it, preview and Close worked, and X removed it. Core DNA remained unchanged. The disposable attachment is no longer active. No real DNA edit was applied during live testing; core-edit preservation is covered by fixtures.
 - Live testing exposed a stale preload bridge after building only main/renderer. Rebuilding preload and reloading resolved the page crash; all three build components are now current. App remains open on Branding with the existing profile.
-- Working-tree implementation remains uncommitted. Creative strategy quality and Campaign brief-save behavior remain separate acceptance work.
+- The implementation above was committed in `fc91256fd`. Campaign brief-save behavior remains separate acceptance work.
+
+## September 18: bounded HQ response acceptance
+
+Live Artist Direction session `260918-lively-falls`, using `deepseek-v4-pro` in Approval Mode, received a read-only request for one grounded expression and a Campaign/World Builder handoff. No external research, delegation, saving, scheduling, or publishing was requested or observed.
+
+- Used existing HQ bio, audience, themes, and reaction-hook context without starting another identity interview.
+- Recommended a direct-line/voicemail expression grounded in the artist's previous public phone-number activity. Explicitly marked current number availability, willingness, and time/spam costs as assumptions.
+- Supplied a concrete Campaign handoff and kept World Builder optional until there is an experience worth developing.
+- Quality limitation: this develops a known artist behavior; it is not evidence of consistently novel breakthrough strategy. Any actual fan-voicemail production would still need permission from the people featured.
+
+Homebody Creative Direction session `260918-aware-shoal` then passed a read-only context-inheritance check with the same model. It read campaign material, distinguished HQ identity from release facts and assumptions, acknowledged it had not heard the audio, and proposed a release-specific hotline/chorus concept. Its World Builder handoff called out budget, moderation, fan-voice consent, and a simpler route that skips World Builder. The UI reported three read steps and explicitly stated nothing was saved or delegated.
+
+No branding or campaign brief was changed. Next acceptance slice: live proposed brief persistence and actual World Builder consumption; the chat-only handoff above does not establish either. Social posting acceptance remains parked separately.

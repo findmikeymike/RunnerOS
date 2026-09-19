@@ -57,6 +57,10 @@ export function findArtistSocialPublishConflicts(
 }
 
 function isConflictRelevant(order: ScheduledWorkOrder): boolean {
+  // The runner separates pre-submit failures from uncertain submissions.
+  // Failed preparation/upload must not permanently block an exact replacement.
+  if (order.status === 'needs-attention' && order.attention?.reason === 'execution-failed'
+    && !order.result && order.runs.length <= 1 && order.runs.every(run => run.status === 'failed' && !run.externalReceipt)) return false
   return order.status === 'scheduled'
     || order.status === 'needs-approval'
     || order.status === 'running'

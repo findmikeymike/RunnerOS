@@ -21,9 +21,10 @@ class FakeBrowserPaneManager implements ScheduledSocialBrowserPaneManager {
     ['caption', 'ok'], ['upload', 'ok'], ['submit', 'ok'], ['audience', 'ok'], ['visibility', 'ok'],
   ])
 
-  getInstance() { return { currentUrl: 'about:blank', partition: this.partition } }
+  getInstance(): { currentUrl: string; partition: string } | undefined { return { currentUrl: 'about:blank', partition: this.partition } }
   createInstance() { return 'social-x-artist-main' }
   focus() {}
+  prepareScheduledSocialViewport() { return { width: 1280, height: 900 } }
   async navigate(_id: string, url: string) { this.navigations.push(url); return { url, title: 'Compose' } }
   async evaluate(_id: string, expression: string) {
     const marker = /runner-social:([^* ]+)/.exec(expression)?.[1] ?? ''
@@ -364,4 +365,115 @@ describe('executeScheduledSocialBrowser', () => {
       summary: 'Published to youtube/artist-main; positive platform evidence was verified.',
     })
   })
+})
+
+
+test('Settings-verified posting never probes the account menu', async () => {
+  const browser = new FakeBrowserPaneManager()
+  browser.responses.set('session:x', [false])
+  browser.responses.set('draft:x', [{ caption: 'Out Friday.', hasMediaPreview: false }])
+  browser.responses.set('success:x', [{ proven: false }, { proven: true, externalUrl: 'https://x.com/artist-main/status/123' }])
+  let verified = false
+  const result = await executeScheduledSocialBrowser({ workspaceRootPath: '/workspace', ...approvedXTuple() }, {
+    ...depsFor(browser), assertSavedConnection: async expected => { expect(expected.profile).toBe('artist-main'); verified = true },
+  })
+  expect(verified).toBe(true)
+  expect(result.receiptId).toBe('x:123')
+})
+
+test('missing Settings verification and expired sessions stop before draft edits', async () => {
+  for (const expired of [false, true]) {
+    const browser = new FakeBrowserPaneManager()
+    browser.responses.set('session:x', [expired])
+    await expect(executeScheduledSocialBrowser({ workspaceRootPath: '/workspace', ...approvedXTuple() }, {
+      ...depsFor(browser), assertSavedConnection: async () => { if (!expired) throw new Error('Verify in Settings') },
+    })).rejects.toThrow(/Settings/)
+    expect(browser.mutations).toEqual([])
+  }
+})
+
+
+test('Settings verification never permits a different browser partition', async () => {
+  const browser = new FakeBrowserPaneManager()
+  browser.partition = 'persist:social-x-other'
+  await expect(executeScheduledSocialBrowser({ workspaceRootPath: '/workspace', ...approvedXTuple() }, {
+    ...depsFor(browser), assertSavedConnection: async () => {},
+  })).rejects.toThrow(/wrong persisted partition/)
+  expect(browser.navigations).toEqual([])
+  expect(browser.mutations).toEqual([])
+})
+
+
+test.each([false, true])('scheduled posting stays in the background (existing browser: %s)', async existing => {
+  const browser = new FakeBrowserPaneManager()
+  let created = existing
+  browser.getInstance = () => created ? { currentUrl: 'about:blank', partition: browser.partition } : undefined
+  browser.createInstance = (id?: string, options?: { show?: boolean; partition?: string }) => {
+    expect(options).toEqual({ show: false, partition: 'persist:social-x-artist-main' })
+    created = true
+    return id!
+  }
+  browser.focus = () => { throw new Error('Scheduled posting must not steal focus') }
+  browser.responses.set('session:x', [false])
+  browser.responses.set('draft:x', [{ caption: 'Out Friday.', hasMediaPreview: false }])
+  browser.responses.set('success:x', [{ proven: false }, { proven: true, externalUrl: 'https://x.com/artist-main/status/123' }])
+  const result = await executeScheduledSocialBrowser({ workspaceRootPath: '/workspace', ...approvedXTuple() }, {
+    ...depsFor(browser), assertSavedConnection: async () => {},
+  })
+  expect(created).toBe(true)
+  expect(result.receiptId).toBe('x:123')
+})
+
+test('TikTok records its new Studio post receipt once, including pending platform review', async () => {
+  const browser = new FakeBrowserPaneManager()
+  browser.partition = 'persist:social-tiktok-artist-main'
+  browser.focus = () => { throw new Error('Must stay in background') }
+  browser.responses.set('baseline:tiktok', [{ ready: true, urls: ['https://www.tiktok.com/@artist-main/video/100'] }])
+  browser.responses.set('session:tiktok', [false])
+  browser.responses.set('recovery:tiktok', [{ ready: true }])
+  browser.responses.set('media:tiktok', [
+    { fileNames: ['teaser.mp4'], hasMediaPreview: false },
+    { fileNames: ['teaser.mp4'], hasMediaPreview: true },
+  ])
+  browser.responses.set('draft:tiktok', [{ caption: 'Out Friday.', hasMediaPreview: true }])
+  browser.responses.set('success:tiktok', [{ proven: false }, { proven: true, externalUrl: 'https://www.tiktok.com/@artist-main/video/123', underReview: true }])
+  const mediaPath = '/workspace/finals/teaser.mp4'
+  const result = await executeScheduledSocialBrowser({ workspaceRootPath: '/workspace', ...approvedXTuple('tiktok', mediaPath) }, {
+    ...depsFor(browser), assertSavedConnection: async () => {}, resolveMediaPath: () => mediaPath, fingerprintMediaPath: () => 'sha256:test-media',
+  })
+  expect(browser.navigations).toEqual(['https://www.tiktok.com/tiktokstudio/content', 'https://www.tiktok.com/tiktokstudio/upload?from=webapp'])
+  expect(browser.mutations).toEqual(['upload:@upload:/workspace/finals/teaser.mp4', 'fill:@caption:Out Friday.', 'click:@submit'])
+  expect(result.receiptId).toBe('tiktok:123')
+  expect(result.summary).toContain('not yet confirmed publicly visible')
+})
+
+test('preserves an existing hidden draft before any receipt-baseline navigation', async () => {
+  const browser = new FakeBrowserPaneManager()
+  browser.getInstance = () => ({ currentUrl: 'https://x.com/compose/post', partition: browser.partition })
+  browser.responses.set('occupied:x', [true])
+  await expect(executeScheduledSocialBrowser({ workspaceRootPath: '/workspace', ...approvedXTuple() }, {
+    ...depsFor(browser), assertSavedConnection: async () => {},
+  })).rejects.toThrow('unfinished draft')
+  expect(browser.navigations).toEqual([])
+  expect(browser.mutations).toEqual([])
+})
+
+test('Instagram enforces destination check and caption readback before final submit', async () => {
+  for (const ready of [true, false]) {
+    const browser = new FakeBrowserPaneManager()
+    browser.partition = 'persist:social-instagram-artist-main'
+    browser.responses.set('session:instagram', [false])
+    browser.responses.set('media:instagram', [{ fileNames: ['teaser.mp4'], hasMediaPreview: true }, { fileNames: ['teaser.mp4'], hasMediaPreview: true }])
+    browser.responses.set('compose:instagram', [{ ready: true }])
+    browser.responses.set('destinations:instagram', [{ ready, reason: 'Facebook still enabled' }])
+    browser.responses.set('draft:instagram', [{ caption: 'Out Friday.', hasMediaPreview: true }])
+    browser.responses.set('success:instagram', [{ proven: false }, { proven: true, externalUrl: 'https://www.instagram.com/reel/abc/' }])
+    const path = '/workspace/teaser.mp4'
+    const run = executeScheduledSocialBrowser({ workspaceRootPath: '/workspace', ...approvedXTuple('instagram', path) }, {
+      ...depsFor(browser), assertSavedConnection: async () => {}, resolveMediaPath: () => path, fingerprintMediaPath: () => 'sha256:test-media',
+    })
+    if (ready) await run
+    else await expect(run).rejects.toThrow('Facebook still enabled')
+    expect(browser.mutations.filter(value => value === 'click:@submit').length).toBe(ready ? 1 : 0)
+  }
 })

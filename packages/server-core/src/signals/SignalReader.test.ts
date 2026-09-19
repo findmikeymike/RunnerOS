@@ -316,3 +316,33 @@ test('Builder gets bounded sixty-day dated history including reference lookups',
   delete f.metadata.sources[0]!.sourcePublishedAt; f.persist();
   expect((await builder.findForWorker('hq', 'builder', { freshness: 'evergreen' })).entries).toHaveLength(0);
 });
+
+test('Builder default browse includes Industry and Your World while preserving explicit track and other workers', async () => {
+  const industry = publish({ track: 'industry', title: 'Industry capability', sourceAge: 2 });
+  const world = publish({ track: 'your-world', title: 'World capability', sourceAge: 2 });
+  const workerReader = new SignalReader({ workspaces: () => workspaces, permission, now: () => now,
+    activeAgents: () => ['builder', 'content-genius'] });
+  const all = await workerReader.findForWorker('hq', 'builder', { lookbackDays: 60 });
+  expect(all.ok).toBe(true);
+  expect(new Set(all.entries.map(entry => entry.reference.outputId))).toEqual(new Set([industry.output.id, world.output.id]));
+  for (const track of ['industry', 'your-world'] as const) {
+    const selected = await workerReader.findForWorker('hq', 'builder', { track });
+    expect(selected.entries.length).toBeGreaterThan(0);
+    expect(selected.entries.every(entry => entry.track === track)).toBe(true);
+  }
+  const other = await workerReader.findForWorker('hq', 'content-genius', {});
+  expect(other.entries.length).toBeGreaterThan(0);
+  expect(other.entries.every(entry => entry.track === 'your-world')).toBe(true);
+  expect((await reader.find('hq')).entries.every(entry => entry.track === 'your-world')).toBe(true);
+});
+
+test('Builder unfiltered browse finds Industry-only intel and still excludes stale or undated sources', async () => {
+  const fresh = publish({ track: 'industry', age: 45, sourceAge: 45 });
+  publish({ track: 'industry', sourceAge: 61 });
+  publish({ track: 'industry', sourceAge: null });
+  const workerReader = new SignalReader({ workspaces: () => workspaces, permission, now: () => now, activeAgents: () => ['builder'] });
+  const result = await workerReader.findForWorker('campaign', 'builder', {});
+  expect(result.ok).toBe(true);
+  expect(result.entries.length).toBeGreaterThan(0);
+  expect(result.entries.every(entry => entry.reference.outputId === fresh.output.id)).toBe(true);
+});

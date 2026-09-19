@@ -63,7 +63,10 @@ export interface WorkflowRunComposerDraft extends WorkComposerBase {
   triggerInputs: Record<string, unknown>
 }
 
+export interface SocialPublishDestination { platform: string; profileId: string; profileLabel: string; accountSetId: string }
+
 export interface SocialPublishComposerDraft extends WorkComposerBase {
+  destinations?: SocialPublishDestination[]
   type: 'social-publish'
   platform: string
   profileId: string
@@ -71,6 +74,48 @@ export interface SocialPublishComposerDraft extends WorkComposerBase {
   accountSetId: string
   caption: string
   platformOptions: Record<string, unknown>
+}
+
+export function isPublishingPlatform(platform: string): boolean {
+  return ['instagram', 'tiktok', 'x', 'youtube'].includes(platform)
+}
+
+export function socialPublishDestinations(draft: SocialPublishComposerDraft): SocialPublishDestination[] {
+  return draft.destinations ?? (draft.profileId ? [{ platform: draft.platform, profileId: draft.profileId, profileLabel: draft.profileLabel, accountSetId: draft.accountSetId }] : [])
+}
+
+/** Independent exact-account jobs, with stable IDs for safe retries after partial admission. */
+export function expandSocialPublishDraft(draft: ScheduledWorkComposerDraft): ScheduledWorkComposerDraft[] {
+  if (draft.type !== 'social-publish') return [draft]
+  const targets = socialPublishDestinations(draft)
+  if (!targets.length) throw new Error('Choose at least one ready social profile.')
+  const seen = new Set<string>()
+  return targets.map(target => {
+    const key = `${target.platform}/${target.profileId}`
+    if (!isPublishingPlatform(target.platform) || !target.profileId || seen.has(key)) throw new Error('Choose distinct supported publishing profiles.')
+    seen.add(key)
+    return { ...draft, ...target, destinations: undefined,
+      requestId: draft.destinations ? `${draft.requestId}-${composerDefinitionDigest(key).replace(/[^a-zA-Z0-9_-]/g, '-')}` : draft.requestId,
+      platformOptions: target.platform === 'youtube' ? draft.platformOptions : {},
+    }
+  })
+}
+
+export async function submitComposerDestinations(
+  draft: ScheduledWorkComposerDraft,
+  submit: (job: ScheduledWorkComposerDraft) => void | Promise<void>,
+  completed: Set<string>,
+): Promise<void> {
+  const jobs = expandSocialPublishDraft(draft)
+  for (const job of jobs) {
+    if (completed.has(job.requestId)) continue
+    try { await submit(job) }
+    catch (error) {
+      if (job.type !== 'social-publish') throw error
+      throw new Error(`${completed.size} destination(s) scheduled. Could not confirm ${job.profileLabel}: ${error instanceof Error ? error.message : String(error)}. Retry keeps the same request IDs.`)
+    }
+    completed.add(job.requestId)
+  }
 }
 
 export interface ReviewComposerDraft extends WorkComposerBase {
@@ -179,8 +224,8 @@ export function composerReviewSentence(draft: ScheduledWorkComposerDraft): strin
     return `${draft.workflowName || 'The selected workflow'} will run${when ? ` ${when}` : ''}.`
   }
   if (draft.type === 'social-publish') {
-    const target = draft.profileLabel || 'the selected social profile'
-    return `The selected asset will be prepared for ${target}${when ? ` ${when}` : ''}. Exact approval is required before publishing.`
+    const target = socialPublishDestinations(draft).map(target => target.profileLabel).join(', ') || 'the selected social profiles'
+    return `The selected asset will be prepared for ${target}${when ? ` ${when}` : ''}. Queue work approves this post for the selected accounts and time.`
   }
   return `Review will be requested from ${draft.reviewerName || 'the selected reviewer'}${when ? ` ${when}` : ''}.`
 }
@@ -196,13 +241,13 @@ export function validateComposerDraft(draft: ScheduledWorkComposerDraft): string
   }
   if (draft.type === 'workflow-run' && !draft.workflowSlug) return 'Choose an active workflow.'
   if (draft.type === 'social-publish') {
-    if (!draft.profileId) return 'Choose one ready social profile.'
+    if (!socialPublishDestinations(draft).length) return 'Choose at least one ready social profile.'
     if (!draft.caption.trim()) return 'Add the final caption.'
     const allowedKind = draft.owner.scope === 'campaign' ? 'release-kit' : undefined
     if (draft.inputRefs.length !== 1 || (allowedKind ? draft.inputRefs[0]?.kind !== allowedKind : (draft.inputRefs[0]?.kind !== 'final' && draft.inputRefs[0]?.kind !== 'output'))) {
       return allowedKind ? 'Choose one ready Release Kit item.' : 'Choose one exact Output or Final.'
     }
-    const platformError = validateSocialPlatformOptions(draft.platform, draft.platformOptions)
+    const platformError = validateSocialDestinations(draft)
     if (platformError) return platformError
   }
   if (draft.type === 'review') {
@@ -229,7 +274,7 @@ export function validateComposerSection(
       if (draft.inputRefs.length !== 1 || (allowedKind ? draft.inputRefs[0]?.kind !== allowedKind : (draft.inputRefs[0]?.kind !== 'final' && draft.inputRefs[0]?.kind !== 'output'))) {
         return allowedKind ? 'Choose one ready Release Kit item.' : 'Choose one exact Output or Final.'
       }
-      return validateSocialPlatformOptions(draft.platform, draft.platformOptions)
+      return validateSocialDestinations(draft)
     }
     if (draft.type === 'review' && (
       draft.inputRefs.length === 0
@@ -242,7 +287,7 @@ export function validateComposerSection(
   if (section === 'runner') {
     if (draft.type === 'agent-task' && !draft.agentSlug) return 'Choose an active agent.'
     if (draft.type === 'workflow-run' && !draft.workflowSlug) return 'Choose an active workflow.'
-    if (draft.type === 'social-publish' && !draft.profileId) return 'Choose one ready social profile.'
+    if (draft.type === 'social-publish' && !socialPublishDestinations(draft).length) return 'Choose at least one ready social profile.'
     if (draft.type === 'review' && !draft.reviewerId && draft.reviewerType !== 'user') return 'Choose a reviewer.'
     return undefined
   }
@@ -548,7 +593,20 @@ function validateFollowUp(draft: Exclude<ScheduledWorkComposerDraft, EventCompos
   return undefined
 }
 
+function validateSocialDestinations(draft: SocialPublishComposerDraft): string | undefined {
+  try {
+    for (const target of expandSocialPublishDraft(draft)) {
+      if (target.type === 'social-publish') {
+        const error = validateSocialPlatformOptions(target.platform, target.platformOptions)
+        if (error) return error
+      }
+    }
+  } catch (error) { return error instanceof Error ? error.message : 'Invalid destinations.' }
+  return undefined
+}
+
 function validateSocialPlatformOptions(platform: string, options: Record<string, unknown>): string | undefined {
+  if (!isPublishingPlatform(platform)) return 'Choose a supported publishing platform.'
   if (platform !== 'youtube') return undefined
   if (options.postType !== 'video') return 'Scheduled YouTube Shorts are blocked until Shorts classification can be verified.'
   if (options.visibility !== 'private' && options.visibility !== 'unlisted' && options.visibility !== 'public') {

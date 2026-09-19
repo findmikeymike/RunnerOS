@@ -718,14 +718,14 @@ function CampaignCalendarSurface({
       metaByDate.set(item.date, {
         count: (current.count ?? 0) + 1,
         dots: [...new Set([...(current.dots ?? []), statusDotClass(status)])],
-        items: [...(current.items ?? []), { id: item.id, label: item.title, detail: `${item.time || 'All day'} - ${status.replace(/-/g, ' ')}`, markerClass: statusDotClass(status) }],
+        items: [...(current.items ?? []), { id: item.id, label: item.title, detail: `${item.time || 'All day'} - ${status.replace(/-/g, ' ')}`, markerClass: statusDotClass(status), labelClass: linkedWork?.execution.type === 'social-publish' || item.job?.actionType === 'post-asset' ? 'bg-yellow-200 text-yellow-950 ring-yellow-300/60' : 'bg-zinc-100 text-zinc-800 ring-white/60' }],
       })
     }
     if (releaseDate) {
       const current = metaByDate.get(releaseDate) ?? { count: 0, dots: [], items: [] }
       metaByDate.set(releaseDate, {
         ...current,
-        highlights: [{ id: 'campaign-release-day', label: 'Release day' }],
+        highlights: [{ id: 'campaign-release-day', label: 'Release day', className: 'bg-orange-400 text-orange-950 ring-orange-300/60' }],
       })
     }
     return metaByDate
@@ -749,6 +749,7 @@ function CampaignCalendarSurface({
           visibleMonth={visibleMonth}
           selectedDate={selectedDate}
           dayMetaByDate={dayMetaByDate}
+          itemDisplay="labels"
           dayActions={CAMPAIGN_DAY_ACTIONS}
           onSelectDate={onSelectDate}
           onChangeMonth={onChangeMonth}
@@ -1114,12 +1115,13 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
       ) : null}
       {work.execution.type === 'social-publish' && work.socialAction ? (
         <div className="mt-2.5 rounded-[6px] border border-yellow-200/10 bg-yellow-200/[0.04] px-2.5 py-2 text-[11px] leading-4 text-yellow-100/65">
-          <div>{work.socialAction.summary ?? `Prepared ${work.socialAction.platform}/${work.socialAction.profileId}`}</div>
-          <div className="mt-1 font-mono text-[9px] text-white/30">{work.socialAction.actionId} · {work.socialAction.actionDigest.slice(0, 20)}...</div>
-          {work.socialApproval ? (
-            <div className="mt-1.5 text-emerald-100/65">Approved until {formatCompactDateTime(work.socialApproval.expiresAt)}</div>
-          ) : work.authorizationPolicy === 'durable-v1' && work.authorization ? (
-            <div className="mt-1.5 text-emerald-100/65">Authorized when scheduled · publishing will be verified automatically</div>
+          <div>{work.authorizationPolicy === 'durable-v1' && work.authorization
+            ? `${work.socialAction.platform} post for ${work.socialAction.profileId}`
+            : work.socialAction.summary ?? `Prepared ${work.socialAction.platform}/${work.socialAction.profileId}`}</div>
+          {work.authorizationPolicy === 'durable-v1' && work.authorization ? (
+            <div className="mt-1.5 text-emerald-100/65">Approved when you scheduled it · no additional approval needed</div>
+          ) : work.socialApproval ? (
+            <div className="mt-1.5 text-emerald-100/65">Post approved</div>
           ) : work.status === 'needs-approval' ? (
             <button type="button" disabled={busy} onClick={() => {
               setBusy(true)

@@ -33,3 +33,21 @@ describe('Composio runtime guidance', () => {
     expect(prompt).toContain('retain the existing native Gmail path');
   });
 });
+
+test('saved Assistants get hosted Gmail setup guidance without Gmail execution tools', () => {
+  const persona = { slug: 'setup-concierge', metadata: {}, systemPrompt: 'My saved Assistant instructions.' };
+  for (const scope of ['hq', 'campaign']) {
+    const result = composeAgentSystemPrompt(persona, [], [], [], [], { artistWorkspaceScope: scope });
+    expect(result.startsWith(persona.systemPrompt)).toBe(true);
+    expect(result).toContain('Gmail setup — Composio hosted connection:');
+    expect(result).toContain('Save and verify, then Connect Gmail');
+    expect(result).toContain('never in chat');
+    expect(result).toContain('A verified project key alone does not mean Gmail is connected');
+    expect(result).toContain('not a generic source_test');
+    expect(result).toContain('It does not connect YouTube/Signals');
+    expect(deriveSessionToolFilterOptions('setup-concierge', scope, 'artist-os').includeComposioTools).toBe(false);
+  }
+  expect(buildComposioGuidance('setup-concierge', 'lab')).toBe('');
+  expect(buildComposioGuidance('setup-concierge', undefined)).toBe('');
+  expect(buildComposioGuidance('setup-concierge', 'hq', 'runner')).toBe('');
+});

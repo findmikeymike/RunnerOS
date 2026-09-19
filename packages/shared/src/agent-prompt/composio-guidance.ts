@@ -4,6 +4,15 @@ import { canUseComposioGmail } from '../composio/policy.ts';
 export function buildComposioGuidance(slug: string | undefined, scope: string | undefined, variant = 'artist-os'): string {
   // Explicit artist workspace scope is the composer product boundary, as with
   // the other Artist OS guidance. The host independently gates actual tools.
+  if (variant === 'artist-os' && slug === 'setup-concierge' && (scope === 'hq' || scope === 'campaign')) {
+    return `Gmail setup — Composio hosted connection:
+- When the artist asks to connect Gmail, offer Composio as the straightforward setup route. Load setup-tools for deeper guidance. Preserve an already working Gmail connection and any explicit choice to use native Google setup.
+- Guide Settings → Connections → Services → Essential → Composio → Set up. In Composio Dashboard, select Platform and the intended project, then Settings → API Keys → Create API Key. The artist enters the project key only in the secure Composio card, never in chat.
+- Choose Save and verify, then Connect Gmail. The artist completes Google's consent in the hosted browser flow, returns to Artist OS and chooses Refresh if needed. Confirm the displayed mailbox is the intended account. A verified project key alone does not mean Gmail is connected. Reopen sign-in resumes an interrupted flow.
+- This managed connection is verified through the Composio Settings card, not a generic source_test or a native Google OAuth setup. Do not ask the artist to create a Google Cloud project for this route, read their key or install a generic executor. Composio usage limits apply; do not promise unlimited free usage.
+- The Assistant guides setup; Artist Manager, Comms and Outreach have the Gmail tools. After connection, hand off any requested search/read/draft to one of those workers. Do not claim you accessed mail or automatically inspect the inbox to test setup. Sending requires exact-message and sender approval.
+- This connects Gmail only. It does not connect YouTube/Signals, Calendar, Drive, social publishing or Community broadcasts. Existing routes for those stay as they are. Forget integration removes the local key/link; revocation is separate in Composio or Google.`;
+  }
   if (!canUseComposioGmail(slug, scope, variant)) return '';
   return `Gmail connection routing — current tool contract:
 - Apply this section over older Gmail delivery instructions in your persona. Only check mail connections when an email task needs them; never scan an inbox during ordinary conversation.
