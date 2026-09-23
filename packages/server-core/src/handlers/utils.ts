@@ -1,6 +1,6 @@
-import { normalize, isAbsolute, sep } from 'path'
+import { normalize, isAbsolute, sep, dirname, basename, join } from 'path'
 import { homedir, tmpdir } from 'os'
-import { realpath } from 'fs/promises'
+import { realpath, lstat } from 'fs/promises'
 import { getWorkspaceByNameOrId, type Workspace } from '@craft-agent/shared/config'
 import { assertWorkspaceOpenable, loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import type { PlatformServices } from '../runtime/platform'
@@ -66,6 +66,33 @@ export function getWorkspaceAllowedDirs(workspaceId?: string | null): string[] {
   return dirs
 }
 
+/** Resolve the existing ancestor, keeping absent children in the same canonical boundary. */
+async function canonicalizeFileBoundary(path: string): Promise<string> {
+  let ancestor = normalize(path)
+  const missing: string[] = []
+  while (true) {
+    try {
+      return join(await realpath(ancestor), ...missing.reverse())
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      // realpath also reports ENOENT for a dangling symlink. Never treat that
+      // link as an ordinary absent filename: its eventual target may escape.
+      try {
+        if ((await lstat(ancestor)).isSymbolicLink()) {
+          throw new Error('Access denied: unresolved symbolic link in file path')
+        }
+      } catch (statError) {
+        if ((statError as NodeJS.ErrnoException).code !== 'ENOENT') throw statError
+      }
+      const parent = dirname(ancestor)
+      // An absent drive/root has no symlinks to resolve (e.g. offline Windows drive).
+      if (parent === ancestor) return join(ancestor, ...missing.reverse())
+      missing.push(basename(ancestor))
+      ancestor = parent
+    }
+  }
+}
+
 /**
  * Validates that a file path is within allowed directories to prevent path traversal attacks.
  * Allowed directories: user's home directory, /tmp, and any additional dirs passed by the caller
@@ -88,27 +115,21 @@ export async function validateFilePath(
     throw new Error('Only absolute file paths are allowed')
   }
 
-  // Resolve symlinks to get the real path
-  let realFilePath: string
-  try {
-    realFilePath = await realpath(normalizedPath)
-  } catch {
-    // File doesn't exist or can't be resolved - use normalized path
-    realFilePath = normalizedPath
-  }
+  const realFilePath = await canonicalizeFileBoundary(normalizedPath)
 
   // Define allowed base directories
   const allowedDirs = [
     homedir(),
     tmpdir(),
     ...(additionalAllowedDirs ?? []),
-  ].filter(Boolean)
+  ].filter(dir => Boolean(dir) && isAbsolute(dir))
 
   // Compare canonical paths on both sides: macOS /tmp and symlinked workspace
   // roots otherwise reject their own files after the file resolves via realpath.
-  const canonicalAllowedDirs = await Promise.all(allowedDirs.map(async dir => {
-    try { return await realpath(dir) } catch { return normalize(dir) }
-  }))
+  // An unavailable extra root grants nothing, but must not disable healthy roots.
+  const canonicalAllowedDirs = (await Promise.all(allowedDirs.map(async dir => {
+    try { return await canonicalizeFileBoundary(dir) } catch { return null }
+  }))).filter((dir): dir is string => dir !== null)
 
   // Check if the real path is within an allowed directory (cross-platform).
   const isAllowed = canonicalAllowedDirs.some(dir => {
