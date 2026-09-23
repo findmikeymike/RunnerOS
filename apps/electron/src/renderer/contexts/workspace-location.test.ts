@@ -59,3 +59,28 @@ test('an invalid saved route falls back to destination home instead of leaving o
   expect(result.searchParams.get('route')).toBe('campaign')
   expect(result.hash).toBe('')
 })
+
+test('HQ repairs a campaign route left behind by campaign creation', () => {
+  const result = restoreWorkspaceLocation(origin + '?ws=boop&route=agents', '?ws=my-workspace&route=campaign', 'my-workspace', 'hq')
+  expect(result.searchParams.get('route')).toBe('allSessions')
+  expect(result.hash).toBe('#artist-hq/home')
+})
+
+test('foreign workspace panels cannot reopen under HQ or another workspace kind', () => {
+  for (const [kind, foreign, expected] of [['hq', 'campaign/calendar', 'allSessions'], ['hq', 'lab', 'allSessions'], ['campaign', 'lab', 'campaign'], ['lab', 'campaign', 'lab']] as const) {
+    const result = restoreWorkspaceLocation(origin, `?route=agents&panels=agents:0.5,${foreign}:0.5&fi=1`, 'target', kind)
+    expect(result.searchParams.get('route')).toBe(expected)
+    expect(result.searchParams.has('panels')).toBe(false)
+    expect(result.searchParams.has('fi')).toBe(false)
+  }
+})
+
+test('valid shared HQ pages and campaign pages retain their saved routes', () => {
+  for (const route of ['agents', 'settings/ai', 'vault', 'allSessions']) {
+    const result = restoreWorkspaceLocation(origin, `?route=${route}`, 'hq', 'hq')
+    expect(result.searchParams.get('route')).toBe(route)
+  }
+  const campaign = restoreWorkspaceLocation(origin, '?route=campaign/release-kit', 'boop', 'campaign')
+  expect(campaign.searchParams.get('route')).toBe('campaign/release-kit')
+  expect(campaign.hash).toBe('')
+})

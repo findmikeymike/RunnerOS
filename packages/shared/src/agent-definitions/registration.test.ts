@@ -40,7 +40,7 @@ describe('built-in registration policy', () => {
     for (const scope of ['hq', 'campaign', 'lab', 'general', undefined] as const) {
       expect(initialAgentSlugsForWorkspace(scope, true)).toEqual([])
     }
-    expect(initialAgentSlugsForWorkspace('hq', false)).toHaveLength(9)
+    expect(initialAgentSlugsForWorkspace('hq', false)).toHaveLength(15)
     expect(initialAgentSlugsForWorkspace('campaign', false)).toHaveLength(25)
     expect(initialAgentSlugsForWorkspace('lab', false)).toHaveLength(6)
   })
@@ -64,6 +64,7 @@ describe('built-in registration policy', () => {
     expect(isAgentAllowedInArtistWorkspace('website-agent', 'campaign')).toBe(true)
     expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([
       'content-genius', 'builder', 'anything-agent', 'scriptwriter', 'site-builder', 'website-agent', 'catalog-royalty-agent', 'legal-agent', 'gravity',
+      'branding-agent', 'world-builder', 'college-radio-agent', 'spotify-playlist-creator', 'x-editorial', 'update-system-agent',
     ])
     expect(initialAgentSlugsForWorkspace('lab', false)).toEqual([
       'the-excavator', 'reverse-magic', 'hooker', 'legendary-writer', 'reference-master', 'record-doctor',

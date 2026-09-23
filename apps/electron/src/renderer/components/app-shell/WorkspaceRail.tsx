@@ -21,7 +21,6 @@ import { WorkspaceCreationScreen } from "@/components/workspace"
 import { waitForTransportConnected } from "@/lib/transport-wait"
 import { useWorkspaceIcons } from "@/hooks/useWorkspaceIcon"
 import { useTransportConnectionState } from "@/hooks/useTransportConnectionState"
-import { navigate, routes } from "@/lib/navigate"
 import { isArtistHQWorkspace, isLabWorkspace } from "@/lib/artist-workspace"
 import type { Workspace } from "../../../shared/types"
 import { CampaignCleanupDialog } from './CampaignCleanupDialog'
@@ -162,11 +161,8 @@ export function WorkspaceRail({
     toast.success(t('toast.createdWorkspace', { name: workspace.name }))
     onWorkspaceCreated?.(workspace)
     void Promise.resolve(onSelect(workspace.id)).then(() => {
-      if (creationKind === 'lab') {
-        navigate(routes.view.lab())
-      } else if (creationKind === 'campaign') {
-        navigate(routes.view.campaign())
-      }
+      // The destination's NavigationProvider opens its home after React has
+      // switched workspaces. Navigating here can still target the outgoing HQ.
       setCreationKind(null)
       setCreationName('')
     })
@@ -175,7 +171,6 @@ export function WorkspaceRail({
   const handleNewLab = useCallback(async () => {
     if (labWorkspace) {
       await Promise.resolve(onSelect(labWorkspace.id))
-      navigate(routes.view.lab())
       return
     }
 
@@ -186,7 +181,6 @@ export function WorkspaceRail({
       toast.success(t('toast.createdWorkspace', { name: workspace.name }))
       onWorkspaceCreated?.(workspace)
       await Promise.resolve(onSelect(workspace.id))
-      navigate(routes.view.lab())
     } catch (error) {
       toast.error(t('toast.failedToCreateWorkspace'), {
         description: error instanceof Error ? error.message : 'Unknown error',
