@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { LicensePanel } from './LicensePanel';
+import { LicensePanel, useLicenseSnapshot } from './LicensePanel';
 import { shouldOpenFirstRunActivation } from '@/lib/license-display';
 
 const ACTIVATION_DISMISSED_KEY = 'artistOsLicenseActivationDismissedV1';
@@ -32,19 +32,22 @@ async function writeActivationDismissed(): Promise<void> {
 
 export function LicenseDialogHost() {
   const [open, setOpen] = useState(false);
+  const { snapshot, error: readError } = useLicenseSnapshot();
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
   useEffect(() => {
     let active = true;
-    void Promise.all([window.electronAPI.getLicenseState(), readActivationDismissed()]).then(([snapshot, dismissed]) => {
-      if (!active) return;
-      if (shouldOpenFirstRunActivation(snapshot, dismissed)) setOpen(true);
-    });
+    void readActivationDismissed().then((value) => { if (active) setDismissed(value); });
     const unsubscribe = window.electronAPI.onLicenseRequired(() => setOpen(true));
     return () => { active = false; unsubscribe(); };
   }, []);
 
+  useEffect(() => {
+    if ((readError && dismissed === false) || (snapshot && dismissed !== null && shouldOpenFirstRunActivation(snapshot, dismissed))) setOpen(true);
+  }, [snapshot, readError, dismissed]);
+
   const changeOpen = (next: boolean) => {
     setOpen(next);
-    if (!next) void writeActivationDismissed();
+    if (!next) { setDismissed(true); void writeActivationDismissed(); }
   };
 
   return <Dialog open={open} onOpenChange={changeOpen}>

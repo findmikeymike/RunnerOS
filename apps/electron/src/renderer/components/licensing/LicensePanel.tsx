@@ -1,23 +1,26 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyRound, RefreshCw, ShieldCheck, TriangleAlert } from 'lucide-react';
-import { validateArtistOSActivateInput, type ArtistOSLicenseLinkKind, type ArtistOSLicenseSnapshotV1 } from '@craft-agent/shared/licensing';
+import { validateArtistOSActivateInput, type ArtistOSLicenseLinkKind } from '@craft-agent/shared/licensing';
 import { describeLicense } from '@/lib/license-display';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { createLicenseSnapshotReader, type LicenseSnapshotReadState } from './license-snapshot-reader';
 
-export function useLicenseSnapshot(): ArtistOSLicenseSnapshotV1 | null {
-  const [snapshot, setSnapshot] = useState<ArtistOSLicenseSnapshotV1 | null>(null);
+export function useLicenseSnapshot() {
+  const [state, setState] = useState<LicenseSnapshotReadState>({ snapshot: null, error: null, loading: true });
+  const reader = useRef<ReturnType<typeof createLicenseSnapshotReader> | null>(null);
   useEffect(() => {
-    let active = true;
-    void window.electronAPI.getLicenseState().then((next) => { if (active) setSnapshot(next); });
-    const unsubscribe = window.electronAPI.onLicenseStateChanged((next) => { if (active) setSnapshot(next); });
-    return () => { active = false; unsubscribe(); };
+    const current = createLicenseSnapshotReader(window.electronAPI, setState);
+    reader.current = current;
+    void current.retry();
+    return () => { current.dispose(); if (reader.current === current) reader.current = null; };
   }, []);
-  return snapshot;
+  const retry = useCallback(() => { void reader.current?.retry(); }, []);
+  return { ...state, retry };
 }
 
 export function LicensePanel({ onActivated }: { onActivated?: () => void }) {
-  const snapshot = useLicenseSnapshot();
+  const { snapshot, error: readError, loading, retry } = useLicenseSnapshot();
   const [email, setEmail] = useState('');
   const [licenseKey, setLicenseKey] = useState('');
   const [busy, setBusy] = useState(false);
@@ -60,7 +63,11 @@ export function LicensePanel({ onActivated }: { onActivated?: () => void }) {
     finally { setBusy(false); }
   }, []);
 
-  if (!snapshot || !display) return <div className="text-sm text-white/45" role="status">Loading license…</div>;
+  if (readError) return <div className="space-y-3">
+    <p className="text-sm text-orange-300" role="alert">{readError}</p>
+    <Button variant="outline" size="sm" onClick={retry}>Retry</Button>
+  </div>;
+  if (loading || !snapshot || !display) return <div className="text-sm text-white/45" role="status">Loading license…</div>;
   const Icon = snapshot.authorized ? ShieldCheck : snapshot.state === 'UNLICENSED' ? KeyRound : TriangleAlert;
   const edition = snapshot.edition === 'basic' ? 'Basic' : snapshot.edition === 'premium' ? 'Premium' : null;
 

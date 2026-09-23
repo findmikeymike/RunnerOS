@@ -1,0 +1,37 @@
+import { expect, test } from 'bun:test';
+import type { ArtistOSLicenseSnapshotV1 } from '@craft-agent/shared/licensing';
+import { createLicenseSnapshotReader, type LicenseSnapshotReadState } from './license-snapshot-reader';
+const unlicensed: ArtistOSLicenseSnapshotV1 = { schemaVersion: 1, state: 'UNLICENSED', authorized: false, development: false, maskedEmail: null, licenseLastFour: null, edition: null, plan: null, seatLimit: null, lastValidatedAt: null, refreshAfter: null, safeMessage: null };
+test('rejected read exposes safe retry; retry recovers real state', async () => {
+  const states: LicenseSnapshotReadState[] = [];
+  let fail = true;
+  const reader = createLicenseSnapshotReader({ getLicenseState: async () => { if (fail) throw new Error('private transport'); return unlicensed; }, onLicenseStateChanged: () => () => {} }, (state) => states.push(state));
+  await reader.retry();
+  expect(states.at(-1)).toEqual({ snapshot: null, loading: false, error: 'Could not load license status. Please try again.' });
+  expect(JSON.stringify(states)).not.toContain('private transport');
+  fail = false;
+  await reader.retry();
+  expect(states.at(-1)).toEqual({ snapshot: unlicensed, loading: false, error: null });
+  reader.dispose();
+});
+test('subscription beats stale read; disposal cancels in-flight updates', async () => {
+  const states: LicenseSnapshotReadState[] = [];
+  let resolve!: (snapshot: ArtistOSLicenseSnapshotV1) => void;
+  let emit!: (snapshot: ArtistOSLicenseSnapshotV1) => void;
+  let unsubscribed = false;
+  const reader = createLicenseSnapshotReader({ getLicenseState: () => new Promise((done) => { resolve = done; }), onLicenseStateChanged: (listener) => { emit = listener; return () => { unsubscribed = true; }; } }, (state) => states.push(state));
+  const first = reader.retry();
+  const active = { ...unlicensed, state: 'ACTIVE' as const, authorized: true };
+  emit(active);
+  resolve(unlicensed);
+  await first;
+  expect(states.at(-1)?.snapshot).toEqual(active);
+  const second = reader.retry();
+  reader.dispose();
+  const count = states.length;
+  resolve(unlicensed);
+  emit(unlicensed);
+  await second;
+  expect(states).toHaveLength(count);
+  expect(unsubscribed).toBe(true);
+});

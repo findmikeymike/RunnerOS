@@ -49,6 +49,37 @@ describe('LIC3 desktop entitlement authority', () => {
     expect(fixture.store.value).toMatchObject({ licenseKey: 'LICENSE-KEY-1234', signedEntitlement: token });
   });
 
+  test('restores a retryable state when saving activation fails, then activates on retry', async () => {
+    const fixture = await createFixture();
+    const token = await fixture.sign({ refreshAfter: '2026-09-22T18:00:00.000Z' });
+    const authority = fixture.authority({
+      activate: async () => ({ ok: true, signedEntitlement: token, maskedEmail: 'w***@example.com', lastFour: '1234', seatLimit: 3, status: 'active', refreshAfter: '2026-09-22T18:00:00.000Z' }),
+    });
+    await authority.initialize();
+    fixture.store.beforeWrite = async () => { throw new Error('protected-store unavailable: private details'); };
+    const input = { schemaVersion: 1 as const, email: 'writer@example.com', licenseKey: 'LICENSE-KEY-1234' };
+    const failed = await authority.activate(input);
+    expect(failed).toMatchObject({ ok: false, snapshot: { state: 'UNLICENSED', authorized: false } });
+    expect(JSON.stringify(failed)).not.toContain('private details');
+    expect(fixture.store.value).toBeNull();
+    expect(authority.isPaidExecutionAuthorized()).toBe(false);
+
+    fixture.store.beforeWrite = null;
+    expect(await authority.activate(input)).toMatchObject({ ok: true, snapshot: { state: 'ACTIVE', authorized: true } });
+    expect(fixture.store.value).toMatchObject({ signedEntitlement: token });
+  });
+
+  test('recovers from an unexpected activation service exception without losing prior offline access', async () => {
+    const fixture = await createFixture();
+    fixture.store.value = await fixture.record();
+    const authority = fixture.authority({ activate: async () => { throw new Error('private transport details'); } });
+    const prior = await authority.initialize();
+    const result = await authority.activate({ schemaVersion: 1, email: 'writer@example.com', licenseKey: 'LICENSE-KEY-1234' });
+    expect(result).toMatchObject({ ok: false, snapshot: { state: prior.state, authorized: true } });
+    expect(JSON.stringify(result)).not.toContain('private transport details');
+    expect(fixture.store.value).toMatchObject({ signedEntitlement: expect.stringContaining('.') });
+  });
+
   test('quarantines an invalid protected record instead of replacing it', async () => {
     const fixture = await createFixture();
     fixture.store.value = { schemaVersion: 1, licenseKey: 'secret' };
@@ -59,7 +90,7 @@ describe('LIC3 desktop entitlement authority', () => {
     expect(fixture.store.removed).toBe(0);
   });
 
-  test('durably records terminal revocation before denying paid execution', async () => {
+  test('records terminal revocation and denies paid execution', async () => {
     const fixture = await createFixture();
     fixture.store.value = await fixture.record();
     let writeFinished = false;
@@ -73,6 +104,22 @@ describe('LIC3 desktop entitlement authority', () => {
     expect(writeFinished).toBe(true);
     expect(result).toMatchObject({ ok: false, snapshot: { state: 'REVOKED', authorized: false } });
     expect(fixture.store.value).toMatchObject({ revocationCode: 'LICENSE_DISABLED' });
+  });
+
+  test.each(['LICENSE_DISABLED', 'LICENSE_EXPIRED', 'INVALID_LICENSE', 'INSTANCE_NOT_FOUND'] as const)('denies %s even when revocation cannot be persisted', async (code) => {
+    const fixture = await createFixture();
+    fixture.store.value = await fixture.record();
+    const authority = fixture.authority({ activate: async () => ({ ok: false, code, retryable: false }) });
+    await authority.initialize();
+    expect(authority.isPaidExecutionAuthorized()).toBe(true);
+    fixture.store.beforeWrite = async () => {
+      expect(authority.isPaidExecutionAuthorized()).toBe(false);
+      throw new Error('private storage failure');
+    };
+    const result = await authority.activate({ schemaVersion: 1, email: 'writer@example.com', licenseKey: 'LICENSE-KEY-1234' });
+    expect(result).toMatchObject({ ok: false, snapshot: { state: 'REVOKED', authorized: false } });
+    expect(authority.isPaidExecutionAuthorized()).toBe(false);
+    expect(JSON.stringify(result)).not.toContain('private storage failure');
   });
 
   test('coalesces concurrent activation commands into one service request', async () => {

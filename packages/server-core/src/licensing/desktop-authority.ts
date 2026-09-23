@@ -131,29 +131,37 @@ export class DesktopEntitlementAuthority {
 
   activate(input: ArtistOSActivateInputV1): Promise<ArtistOSLicenseCommandResultV1> {
     return this.runExclusive(`activate:${input.email.toLowerCase()}:${input.licenseKey}`, async () => {
-      await this.ensureInstallation();
-      this.setSnapshot({ ...this.snapshot, state: 'ACTIVATING', safeMessage: null });
-      const response = await this.options.service.activate(this.request(input.email, input.licenseKey));
-      if (!response.ok) return await this.applyFailure(response);
-      const verified = await this.verify(response.signedEntitlement);
-      if (!verified.ok || verified.entitlement.status !== 'active') return this.corruptResult();
-      if (response.lastFour !== input.licenseKey.slice(-4)) return this.corruptResult();
-      const record: DesktopLicenseRecordV1 = {
-        schemaVersion: 1,
-        installationId: this.installationId!,
-        purchaseEmail: input.email,
-        licenseKey: input.licenseKey,
-        signedEntitlement: response.signedEntitlement,
-        maskedEmail: response.maskedEmail,
-        licenseLastFour: response.lastFour,
-        revokedAt: null,
-        revocationCode: null,
-      };
-      await this.options.recordStore.write(record);
-      this.record = record;
-      const state = Date.parse(verified.entitlement.refreshAfter) <= this.now() ? 'REFRESH_DUE' : 'ACTIVE';
-      this.setSnapshot(snapshotFromRecord(state, true, record, verified.entitlement));
-      return { ok: true, snapshot: this.getSnapshot() };
+      const previousSnapshot = this.getSnapshot();
+      try {
+        await this.ensureInstallation();
+        this.setSnapshot({ ...this.snapshot, state: 'ACTIVATING', safeMessage: null });
+        const response = await this.options.service.activate(this.request(input.email, input.licenseKey));
+        if (!response.ok) return await this.applyFailure(response);
+        const verified = await this.verify(response.signedEntitlement);
+        if (!verified.ok || verified.entitlement.status !== 'active') return this.corruptResult();
+        if (response.lastFour !== input.licenseKey.slice(-4)) return this.corruptResult();
+        const record: DesktopLicenseRecordV1 = {
+          schemaVersion: 1,
+          installationId: this.installationId!,
+          purchaseEmail: input.email,
+          licenseKey: input.licenseKey,
+          signedEntitlement: response.signedEntitlement,
+          maskedEmail: response.maskedEmail,
+          licenseLastFour: response.lastFour,
+          revokedAt: null,
+          revocationCode: null,
+        };
+        await this.options.recordStore.write(record);
+        this.record = record;
+        const state = Date.parse(verified.entitlement.refreshAfter) <= this.now() ? 'REFRESH_DUE' : 'ACTIVE';
+        this.setSnapshot(snapshotFromRecord(state, true, record, verified.entitlement));
+        return { ok: true, snapshot: this.getSnapshot() };
+      } catch {
+        // A failed service call or protected-store write must leave activation
+        // retryable, without granting access before the entitlement is saved.
+        this.setSnapshot({ ...previousSnapshot, safeMessage: 'Activation could not be completed. Please try again.' });
+        return { ok: false, snapshot: this.getSnapshot() };
+      }
     });
   }
 
@@ -207,9 +215,15 @@ export class DesktopEntitlementAuthority {
   private async applyFailure(response: Extract<EntitlementServiceResult, { ok: false }>): Promise<ArtistOSLicenseCommandResultV1> {
     if (TERMINAL_CODES.has(response.code) && this.record) {
       const revoked = { ...this.record, revokedAt: new Date(this.now()).toISOString(), revocationCode: response.code };
-      await this.options.recordStore.write(revoked);
       this.record = revoked;
       this.setSnapshot(snapshotFromRecord('REVOKED', false, revoked, null, 'License is no longer active.'));
+      try {
+        await this.options.recordStore.write(revoked);
+      } catch {
+        // A definitive revocation remains authoritative even if local storage
+        // is unavailable. Never restore prior offline access on this path.
+        this.setSnapshot({ ...this.snapshot, safeMessage: 'License is no longer active. Its status could not be saved locally; please try again.' });
+      }
     } else if (response.code === 'SEAT_LIMIT_REACHED') {
       this.setSnapshot({ ...this.snapshot, state: 'SEAT_LIMIT_REACHED', safeMessage: 'All licensed installations are already in use.' });
     } else if (TERMINAL_CODES.has(response.code)) {
