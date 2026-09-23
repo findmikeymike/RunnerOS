@@ -25,6 +25,7 @@ import {
 import type { RpcServer, HandlerFn, RequestContext } from './types'
 import { serializeEnvelope, deserializeEnvelope } from './codec'
 import { createLogger } from '@craft-agent/shared/utils'
+import { clientCapabilityTimeout, isClientDialog, rpcHandlerTimeout } from './timeout-policy'
 
 // ---------------------------------------------------------------------------
 // Client connection state
@@ -245,12 +246,15 @@ export class WsRpcServer implements RpcServer {
       }
 
       const id = randomUUID()
+      const timeoutMs = clientCapabilityTimeout(channel)
       const timeout = setTimeout(() => {
         this.pendingInvokes.delete(id)
-        const err = new Error(`Client request timeout: ${channel} (30000ms)`)
+        const err = new Error(isClientDialog(channel)
+          ? 'The dialog timed out after 10 minutes. Close it and try choosing your files or confirming again.'
+          : `Client request timeout: ${channel} (${timeoutMs}ms)`)
         ;(err as any).code = 'CLIENT_REQUEST_TIMEOUT'
         reject(err)
-      }, 30_000)
+      }, timeoutMs)
 
       this.pendingInvokes.set(id, { clientId, resolve, reject, timeout })
 
@@ -682,6 +686,7 @@ export class WsRpcServer implements RpcServer {
     }
 
     let timeout: ReturnType<typeof setTimeout> | undefined
+    const handlerTimeoutMs = rpcHandlerTimeout(channel, WsRpcServer.HANDLER_TIMEOUT_MS)
     try {
       if (this.campaignCleanupFenced) throw new Error('Campaign cleanup is in progress. Try again when it finishes.')
       // Count authorization too: a request awaiting it must not start writing after
@@ -698,8 +703,8 @@ export class WsRpcServer implements RpcServer {
       const result = await Promise.race([
         execution,
         new Promise<never>((_, reject) => {
-          timeout = setTimeout(() => reject(new Error(`Handler timeout: ${channel} (${WsRpcServer.HANDLER_TIMEOUT_MS}ms)`)),
-            WsRpcServer.HANDLER_TIMEOUT_MS)
+          timeout = setTimeout(() => reject(new Error(`Handler timeout: ${channel} (${handlerTimeoutMs}ms)`)),
+            handlerTimeoutMs)
         }),
       ])
       const response: MessageEnvelope = {
