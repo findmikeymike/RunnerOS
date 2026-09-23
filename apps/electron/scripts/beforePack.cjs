@@ -2,6 +2,7 @@ const { execFileSync } = require('node:child_process')
 const { existsSync } = require('node:fs')
 const { join } = require('node:path')
 const { assertPublicArtistOsUpdateUrl } = require('./artist-os-release-config.cjs')
+const { assertBundledBun } = require('./bun-runtime-gate.cjs')
 
 exports.default = async function beforePack(context) {
   assertPublicArtistOsUpdateUrl(process.env.ARTIST_OS_UPDATE_URL)
@@ -10,6 +11,7 @@ exports.default = async function beforePack(context) {
   if (typeof projectDir !== 'string' || !projectDir) {
     throw new Error('electron-builder did not provide the project directory')
   }
+  assertBundledBun(projectDir, context.electronPlatformName || process.platform)
   const runtimeDir = join(projectDir, 'vendor', 'omniroute-runtime')
   const serverPath = join(runtimeDir, 'node_modules', 'omniroute', 'dist', 'server-ws.mjs')
   if (existsSync(serverPath)) return

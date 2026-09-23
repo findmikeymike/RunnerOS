@@ -95,7 +95,7 @@ describe('Pi transport reliability', () => {
         if (mode === 'stop') await a.abort();
         const outcome = await Promise.race([start, new Promise<string>(resolve => { watchdog = setTimeout(() => resolve('hung'), 1500); })]);
         expect(outcome).not.toBe('hung');
-        expect(outcome).toMatch(mode === 'exit' ? /exited|code.?7/ : mode === 'timeout' ? /timed out/ : mode === 'spawn-error' ? /ENOENT/ : /abort/i);
+        expect(outcome).toMatch(mode === 'exit' ? /exited|code.?7/ : mode === 'timeout' ? /timed out/ : mode === 'spawn-error' ? /Bun runtime.*unavailable/ : /abort/i);
       } finally {
         clearTimeout(watchdog!);
         a.destroy();

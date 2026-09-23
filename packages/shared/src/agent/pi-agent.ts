@@ -17,6 +17,7 @@ import { isPrivateSkillLoaderTool, privateSkillActivityStatus } from './core/pri
 
 import { durableCredentialIdentity, isDurableSourceToolInput, type DurableSourceToolRequest } from '../protocol/durable-execution.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { requirePiBunRuntime } from './backend/internal/pi-runtime.ts';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
@@ -468,7 +469,7 @@ export class PiAgent extends BaseAgent {
       throw new Error('piServerPath not configured. Cannot spawn Pi subprocess.');
     }
 
-    const nodePath = runtime.paths?.node || process.execPath;
+    const nodePath = requirePiBunRuntime(runtime.paths?.node);
     const cwd = this.resolvedCwd();
 
     this.debug(`Spawning Pi subprocess: ${nodePath} ${piServerPath}`);

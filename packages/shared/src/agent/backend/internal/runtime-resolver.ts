@@ -250,7 +250,8 @@ export function resolveBackendRuntimePaths(hostRuntime: BackendHostRuntimeContex
     sessionServerPath: resolveServerPath(hostRuntime, 'session-mcp-server'),
     bridgeServerPath: resolveServerPath(hostRuntime, 'bridge-mcp-server'),
     piServerPath: resolveServerPath(hostRuntime, 'pi-agent-server'),
-    nodeRuntimePath: hostRuntime.nodeRuntimePath || bundledRuntimePath || process.execPath,
+    // The Pi bundle targets Bun. Electron and plain Node are not substitutes.
+    nodeRuntimePath: hostRuntime.nodeRuntimePath || bundledRuntimePath || (!hostRuntime.isPackaged && process.versions.bun ? process.execPath : undefined),
     bundledRuntimePath,
   };
 }

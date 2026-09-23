@@ -35,6 +35,9 @@ describe('resolveServerPath fallback', () => {
 
     const paths = resolveBackendRuntimePaths(hostRuntime);
     expect(paths.piServerPath).toBe(join(serverDir, 'index.js'));
+    // An incomplete package must not silently spawn its Electron executable.
+    expect(paths.nodeRuntimePath).toBeUndefined();
+    expect(paths.bundledRuntimePath).toBeUndefined();
   });
 
   it('prefers resources/ over dist/resources/ when both exist', () => {
