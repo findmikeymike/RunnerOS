@@ -253,6 +253,9 @@ describe('composeAgentSystemPrompt', () => {
     expect(result).toContain('HQ Vault is the reusable career library');
     expect(result).toContain('Campaign Assets are source files and works in progress');
     expect(result).toContain('Outputs are usable results worth reviewing, reusing, or handing off');
+    expect(result).toContain('Working Outputs do not have automatic same-ID revision history');
+    expect(result).toContain('explain that unsupported combination before editing');
+    expect(result).toContain('prior version is not automatically retained');
     expect(result).toContain('Final approval never supplies a date or starts distribution');
     expect(result).toContain('Ask only for missing or ambiguous details');
     expect(result).toContain('Release Kit is the approved campaign canon');

@@ -2106,6 +2106,8 @@ Use this for a usable result worth reviewing, reusing, or handing off. The artis
 
 Good outputs include research reports, generated media, exported datasets, code review reports, deployment receipts, published-post receipts, sent-message receipts, and final workflow deliverables.
 
+Revision limits: create_output always creates a new Output ID. There is no update_output tool or automatic same-ID revision history. File-backed Outputs reference working files; editing a source in place changes its preview and does not preserve the old bytes or refresh its recorded file metadata. Do not claim version history or version continuity from that edit. When preserving history, keep the original source intact, write a separate revision file, create a new Output, and explain the new ID. If the user explicitly requires BOTH the same ID and preserved history, explain that unsupported combination and resolve the conflict BEFORE editing; do not silently substitute a second Output. Honor an explicit in-place edit request, while clearly disclosing that prior content is not automatically retained. Approved Release Kit snapshots are independent immutable copies; never edit those files in place.
+
 Use \`context.scope\` / \`context.campaignId\` for HQ or campaign placement, and \`approval.state\` when the Output needs a user decision.
 
 For visual work, create the image/video/web/report Output first. Set \`showInCanvas: true\` when the user asks to see, preview, compare, review, present, open, or iterate on the artifact immediately beside chat. Do not set it for scratch files, internal logs, transient plans, or ordinary text answers.

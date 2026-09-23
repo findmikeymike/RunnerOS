@@ -213,6 +213,9 @@ describe('session tool filtering helpers', () => {
 
     expect(createOutput?.description).toContain('Set `showInCanvas: true` when the user asks to see, preview, compare, review, present, open, or iterate');
     expect(createOutput?.description).toContain('Canvas preview format rules');
+    expect(createOutput?.description).toContain('There is no update_output tool or automatic same-ID revision history');
+    expect(createOutput?.description).toContain('resolve the conflict BEFORE editing');
+    expect(createOutput?.description).toContain('keep the original source intact');
     expect(createOutput?.description).toContain('Local/generated web: attach the HTML file as the primary file');
     expect(createOutput?.description).toContain('The Output system infers the Canvas web preview');
     expect(createOutput?.description).toContain('Workflow diagrams: `.workflow.json`');
