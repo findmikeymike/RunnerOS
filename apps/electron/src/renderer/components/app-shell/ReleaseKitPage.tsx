@@ -38,6 +38,7 @@ import type { OutputAsset, OutputManifest, SocialVariantDestinationIntent } from
 import { ReleaseKitAudioLyrics } from './ReleaseKitAudioLyrics'
 import { ReleaseKitAudioPlayer } from './ReleaseKitAudioPlayer'
 import { isReleaseKitAudioAsset, supportsReleaseKitSocialPost, releaseKitMediaUrl } from '@/lib/release-kit-media'
+import { releaseKitPlacement, releaseKitTypeForCategory } from '@/lib/release-kit-placement'
 import { Button } from '@/components/ui/button'
 import { CompactPageHeader } from './CompactPageHeader'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -123,7 +124,7 @@ export function ReleaseKitPage({
   const [error, setError] = React.useState<string | null>(null)
   const [tab, setTab] = React.useState<'finals' | 'variants' | 'outputs'>('finals')
   const [addOpen, setAddOpen] = React.useState(false)
-  const [addingAudio, setAddingAudio] = React.useState(false)
+  const [addingCategory, setAddingCategory] = React.useState<ReleaseKitCategory | null>(null)
   const [scheduleIntent, setScheduleIntent] = React.useState<PendingReleaseKitOutput | null>(null)
   const [schedulingPromotion, setSchedulingPromotion] = React.useState(false)
   const [prefillOutput, setPrefillOutput] = React.useState<OutputSummaryDTO | null>(null)
@@ -395,7 +396,7 @@ export function ReleaseKitPage({
                 itemPaths={itemPaths}
                 workspaceId={workspaceId}
                 onChanged={setManifest}
-                onAdd={(audioOnly = false) => { setAddingAudio(audioOnly); setAddOpen(true) }}
+                onAdd={(category) => { setAddingCategory(category); setPrefillOutput(null); setAddOpen(true) }}
               />
             </ReleaseKitInspectContext.Provider>
           ) : tab === 'variants' ? (
@@ -427,8 +428,8 @@ export function ReleaseKitPage({
 
       <AddFinalDialog
         open={addOpen}
-        audioOnly={addingAudio}
-        onOpenChange={(next) => { setAddOpen(next); if (!next) { setPrefillOutput(null); setSchedulingPromotion(false); setAddingAudio(false) } }}
+        initialCategory={addingCategory}
+        onOpenChange={(next) => { setAddOpen(next); if (!next) { setPrefillOutput(null); setSchedulingPromotion(false); setAddingCategory(null) } }}
         workspaceId={workspaceId}
         hqWorkspaceId={hqWorkspaceId}
         campaignName={workspaces.find((workspace) => workspace.id === workspaceId)?.name}
@@ -482,19 +483,19 @@ function FinalsGallery({ manifest, visibleCategories, itemPaths, workspaceId, on
   itemPaths: Record<string, string>
   workspaceId: string
   onChanged: (manifest: ReleaseKitManifest) => void
-  onAdd: (audioOnly?: boolean) => void
+  onAdd: (category: ReleaseKitCategory) => void
 }) {
   const itemsFor = (category: ReleaseKitCategory) => manifest?.items.filter((item) => item.category === category) ?? []
   const quieterCategories = visibleCategories.filter((category) => !VISUAL_CATEGORIES.has(category))
   return (
     <div className="mx-auto max-w-[1240px] space-y-4">
       <ReadinessStrip manifest={manifest} />
-      <AudioPanel items={itemsFor('audio')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={() => onAdd(true)} />
+      <AudioPanel items={itemsFor('audio')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={() => onAdd('audio')} />
       <div className="grid items-stretch gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <SingleArtPanel items={itemsFor('artwork')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={() => onAdd()} />
-        <ImagePanel items={itemsFor('images')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={() => onAdd()} />
+        <SingleArtPanel items={itemsFor('artwork')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={() => onAdd('artwork')} />
+        <ImagePanel items={itemsFor('images')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={() => onAdd('images')} />
       </div>
-      <VideoPanel items={itemsFor('video')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={() => onAdd()} />
+      <VideoPanel items={itemsFor('video')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={() => onAdd('video')} />
       {quieterCategories.length ? (
         <div className="grid gap-4 xl:grid-cols-2">
           {quieterCategories.map((category) => (
@@ -504,7 +505,7 @@ function FinalsGallery({ manifest, visibleCategories, itemPaths, workspaceId, on
               items={itemsFor(category)}
               workspaceId={workspaceId}
               onChanged={onChanged}
-              onAdd={() => onAdd()}
+              onAdd={() => onAdd(category)}
             />
           ))}
         </div>
@@ -1117,9 +1118,9 @@ function releaseKitScheduleRestriction(item: ReleaseKitItem): string | undefined
   return undefined
 }
 
-function AddFinalDialog({ open, audioOnly, onOpenChange, workspaceId, hqWorkspaceId, campaignName, outputs, prefillOutput, onAdded }: {
+function AddFinalDialog({ open, initialCategory, onOpenChange, workspaceId, hqWorkspaceId, campaignName, outputs, prefillOutput, onAdded }: {
   open: boolean
-  audioOnly: boolean
+  initialCategory: ReleaseKitCategory | null
   onOpenChange: (open: boolean) => void
   workspaceId: string
   hqWorkspaceId?: string
@@ -1128,6 +1129,8 @@ function AddFinalDialog({ open, audioOnly, onOpenChange, workspaceId, hqWorkspac
   campaignName?: string
   onAdded: (manifest: ReleaseKitManifest, audioItemId?: string) => void
 }) {
+  const audioOnly = initialCategory === 'audio'
+  const [subtypeCustomized, setSubtypeCustomized] = React.useState(false)
   const [stage, setStage] = React.useState<AddStage>('source')
   const [sourceKind, setSourceKind] = React.useState<SourceKind | null>(null)
   const [campaignAssets, setCampaignAssets] = React.useState<MissionAssetRecord[]>([])
@@ -1150,11 +1153,13 @@ function AddFinalDialog({ open, audioOnly, onOpenChange, workspaceId, hqWorkspac
 
   const selectSource = React.useCallback((next: SelectedSource) => {
     setSelected(next)
-    setCategory(next.suggested.category)
-    setSubtype(next.suggested.subtype)
-    setTitle(next.suggested.category === 'audio' && next.suggested.subtype === 'master' && campaignName?.trim() ? campaignName.trim() : next.label)
+    const placement = releaseKitPlacement(next.suggested, initialCategory)
+    setCategory(placement.category)
+    setSubtype(placement.subtype)
+    setSubtypeCustomized(false)
+    setTitle(placement.category === 'audio' && placement.subtype === 'master' && campaignName?.trim() ? campaignName.trim() : next.label)
     setStage('details')
-  }, [campaignName])
+  }, [campaignName, initialCategory])
 
   React.useEffect(() => {
     if (!open || !prefillOutput) return
@@ -1282,13 +1287,13 @@ function AddFinalDialog({ open, audioOnly, onOpenChange, workspaceId, hqWorkspac
             <div className="grid grid-cols-[1fr_1.15fr] gap-3">
               <label className="block space-y-1.5 text-xs text-white/42">
                 <span>Category</span>
-                <select value={category} onChange={(event) => setCategory(event.target.value as ReleaseKitCategory)} className={INPUT_CLASS}>
+                <select value={category} onChange={(event) => { const next = event.target.value as ReleaseKitCategory; setCategory(next); setSubtype(releaseKitTypeForCategory(next, subtype, subtypeCustomized)) }} className={INPUT_CLASS}>
                   {CATEGORY_ORDER.map((option) => <option key={option} value={option}>{displayCategory(option)}</option>)}
                 </select>
               </label>
               <label className="block space-y-1.5 text-xs text-white/42">
                 <span>Type</span>
-                <input value={subtype} onChange={(event) => setSubtype(event.target.value)} placeholder="master, cover-art, lyric-video…" className={INPUT_CLASS} />
+                <input value={subtype} onChange={(event) => { setSubtype(event.target.value); setSubtypeCustomized(true) }} placeholder="master, cover-art, lyric-video…" className={INPUT_CLASS} />
               </label>
             </div>
             {category !== 'audio' && <label className="flex cursor-pointer items-center gap-2.5 rounded-[6px] border border-white/[0.07] px-3 py-2.5 text-sm text-white/62">

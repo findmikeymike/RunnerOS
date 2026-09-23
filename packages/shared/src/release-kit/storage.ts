@@ -1,3 +1,4 @@
+import { assertReleaseKitMediaCompatibility } from './media-compatibility.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { hostname } from 'node:os';
@@ -98,6 +99,7 @@ export function materializeReleaseKitItem(
     const sourceInfo = statSync(sourcePath);
     if (!sourceInfo.isFile()) throw new Error('Release Kit promotion source must be a file.');
 
+    assertReleaseKitMediaCompatibility(input.category, sourcePath, input.mimeType);
     const manifest = loadReleaseKitManifest(workspaceRootPath, input.workspaceId, input.campaignId);
     if (manifest.workspaceId !== input.workspaceId || manifest.campaignId !== input.campaignId) {
       throw new Error('Release Kit manifest belongs to a different workspace or campaign.');

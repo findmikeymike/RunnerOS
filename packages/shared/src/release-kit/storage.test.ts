@@ -426,3 +426,25 @@ function writeFileWithParents(path: string, body: string): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, body);
 }
+
+test('media mismatch is rejected before replacement callbacks or manifest mutation', () => {
+  const workspace = tempWorkspace();
+  try {
+    const audio = join(workspace, 'master.wav'); writeFileSync(audio, 'master');
+    const first = materializeReleaseKitItem(workspace, {
+      workspaceId: 'workspace-1', campaignId: 'campaign-1', source: { type: 'output', outputId: 'audio-output' },
+      sourcePath: audio, category: 'audio', subtype: 'alternate-master', makePrimary: true, promotedBy: 'user',
+    });
+    const saved = readFileSync(getReleaseKitManifestPath(workspace), 'utf8');
+    const image = join(workspace, 'cover.png'); writeFileSync(image, 'picture');
+    let replacementCalled = false;
+    expect(() => materializeReleaseKitItem(workspace, {
+      workspaceId: 'workspace-1', campaignId: 'campaign-1', source: { type: 'upload', originalFileName: 'cover.png' },
+      sourcePath: image, category: 'audio', subtype: 'master', mimeType: 'audio/wav', promotedBy: 'user',
+    }, () => { replacementCalled = true; })).toThrow(/requires a compatible audio file/);
+    expect(replacementCalled).toBe(false);
+    expect(readFileSync(getReleaseKitManifestPath(workspace), 'utf8')).toBe(saved);
+    expect(existsSync(join(workspace, 'release-kit', '.replaced-audio.json'))).toBe(false);
+    expect(readFileSync(resolveReleaseKitItemPath(workspace, first.item.relativePath), 'utf8')).toBe('master');
+  } finally { rmSync(workspace, { recursive: true, force: true }); }
+});

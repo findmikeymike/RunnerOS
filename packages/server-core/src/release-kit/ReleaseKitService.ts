@@ -16,6 +16,7 @@ import {
   type MissionAssetRecord,
 } from '@craft-agent/shared/mission-assets'
 import {
+  assertReleaseKitMediaCompatibility,
   hashFileSha256,
   defaultReleaseKitUsage,
   getReleaseKitRoot,
@@ -137,6 +138,7 @@ export class ReleaseKitService {
     const workspace = this.getCampaignWorkspace(workspaceId)
     this.assertWritePermission(workspace.rootPath)
     const resolved = this.resolveSource(workspace.id, workspace.rootPath, input, actor)
+    assertReleaseKitMediaCompatibility(input.category, resolved.path, resolved.mimeType)
     this.prepareContextSync(workspace.rootPath)
     const sourceSha256 = hashFileSha256(resolved.path)
     const existing = loadReleaseKitManifest(workspace.rootPath, workspace.id, workspace.id).items.find(item =>
@@ -161,7 +163,7 @@ export class ReleaseKitService {
       category: input.category,
       subtype: input.subtype,
       title: input.title,
-      mimeType: input.mimeType ?? resolved.mimeType,
+      mimeType: resolved.mimeType ?? input.mimeType,
       makePrimary: input.makePrimary,
       promotedBy: actor,
       note: input.note,
@@ -183,6 +185,7 @@ export class ReleaseKitService {
     const hq = headquarters[0]!
     this.assertWritePermission(hq.rootPath)
     const resolved = this.resolveSource(workspace.id, workspace.rootPath, input, 'user')
+    assertReleaseKitMediaCompatibility(input.category, resolved.path, resolved.mimeType)
     this.prepareContextSync(workspace.rootPath)
     const sha256 = hashFileSha256(resolved.path)
     return withArtistVaultMutex(hq.rootPath, async () => {

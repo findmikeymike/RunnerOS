@@ -684,3 +684,28 @@ test('legacy multiple audio slots collapse to valid primary and archived files n
     expect(kit.get('campaign-1').items.map(item => item.id)).toEqual([second.item.id])
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
+
+test('rejects a PNG labeled audio before changing active audio, recovery history or HQ Vault', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'release-audio-mismatch-'))
+  const hq = join(root, 'hq'); mkdirSync(hq)
+  workspaces.set('hq-1', { id: 'hq-1', name: 'HQ', rootPath: hq, artistWorkspaceScope: 'hq' })
+  workspaces.set('campaign-1', { id: 'campaign-1', name: 'Campaign', rootPath: root, artistWorkspaceScope: 'campaign' })
+  try {
+    const path = join(root, 'master.wav'); writeFileSync(path, 'original master')
+    const kit = service()
+    const first = await kit.promoteUserUpload('campaign-1', { source: { type: 'upload', originalFileName: 'master.wav' }, uploadPath: path, category: 'audio', subtype: 'custom-clean-master' })
+    const savedManifest = readFileSync(join(root, 'release-kit', 'manifest.json'), 'utf8')
+    const savedVault = loadArtistVaultManifest(hq, 'hq-1')
+    const image = join(root, 'cover.png'); writeFileSync(image, 'image bytes')
+    const bad = { source: { type: 'upload' as const, originalFileName: 'cover.png' }, uploadPath: image, category: 'audio' as const, subtype: 'master', mimeType: 'audio/wav' }
+    await expect(kit.promoteUserUpload('campaign-1', bad)).rejects.toThrow(/requires a compatible audio file/)
+    expect(() => kit.promote('campaign-1', bad, 'user')).toThrow(/requires a compatible audio file/)
+    expect(readFileSync(join(root, 'release-kit', 'manifest.json'), 'utf8')).toBe(savedManifest)
+    expect(loadArtistVaultManifest(hq, 'hq-1')).toEqual(savedVault)
+    expect(existsSync(join(root, 'release-kit', '.replaced-audio.json'))).toBe(false)
+    expect(readFileSync(resolveReleaseKitItemPath(root, first.item.relativePath), 'utf8')).toBe('original master')
+    const doc = kit.promote('campaign-1', { ...bad, category: 'references', subtype: 'mood-reference', mimeType: 'image/png' }, 'user')
+    expect(doc.item.category).toBe('references')
+    expect(doc.manifest.items.find(item => item.category === 'audio')?.id).toBe(first.item.id)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
