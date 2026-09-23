@@ -369,6 +369,7 @@ export class PiAgent extends BaseAgent {
       runtime: { ...getBackendRuntime(this.config), ...buildPiConnectionRuntime(connection) } };
   }
   private utilityOperations = new Set<Promise<unknown>>();
+  private destroyed = false;
 
   private async credentialFingerprint(): Promise<string | undefined> {
     if (!this.config.connectionSlug || this.config.durableExecution) return undefined;
@@ -398,7 +399,9 @@ export class PiAgent extends BaseAgent {
   }
 
   private async withCurrentUtility<T>(run: (agent: PiAgent) => Promise<T>): Promise<T> {
+    if (this.destroyed) throw new Error('PiAgent destroyed');
     const current = await this.credentialFingerprint();
+    if (this.destroyed) throw new Error('PiAgent destroyed');
     if (this.subprocessCredentials !== undefined && current !== this.subprocessCredentials) {
       if (this._isProcessing || this.utilityOperations.size > 0) {
         // call_llm may be a tool in the active turn, so waiting for that turn
@@ -406,7 +409,7 @@ export class PiAgent extends BaseAgent {
         const config = this.currentConnectionConfig();
         const utility = new PiAgent({ provider: 'pi', providerType: config.providerType,
           authType: config.authType, connectionSlug: config.connectionSlug, runtime: config.runtime,
-          workspace: config.workspace, model: this.getModel(), miniModel: config.miniModel,
+          workspace: config.workspace, model: this.getModel(), miniModel: config.miniModel, strictModelSelection: config.strictModelSelection,
           envOverrides: config.envOverrides, isHeadless: true, skipConfigWatcher: true });
         try { return await run(utility); } finally { utility.destroy(); }
       }
@@ -420,6 +423,7 @@ export class PiAgent extends BaseAgent {
 
   /** Ensure the subprocess is spawned and ready; lazy on first use. */
   private async ensureSubprocess(): Promise<void> {
+    if (this.destroyed) throw new Error('PiAgent destroyed');
     if (this.subprocessStartup) return this.subprocessStartup;
     if (this.subprocess && this.subprocessReady) {
       await this.subprocessReady;
@@ -626,6 +630,7 @@ export class PiAgent extends BaseAgent {
       workingDirectory,
       plansFolderPath,
       miniModel: this.config.miniModel,
+      strictModelSelection: this.config.strictModelSelection,
       providerType: this.config.providerType,
       authType: this.config.authType,
       workspaceId: this.config.workspace.id,
@@ -2458,6 +2463,7 @@ export class PiAgent extends BaseAgent {
   }
 
   destroy(): void {
+    this.destroyed = true;
     this.gmailPreparationGeneration++;
     this.stopConfigWatcher();
 

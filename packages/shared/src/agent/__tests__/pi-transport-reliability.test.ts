@@ -9,6 +9,18 @@ function agent(): any {
 }
 
 describe('Pi transport reliability', () => {
+  it('does not start a timed-out utility after delayed credential fingerprinting finishes', async () => {
+    const a = agent();
+    let release!: () => void;
+    a.credentialFingerprint = () => new Promise<void>(resolve => { release = resolve; });
+    let ran = false;
+    const pending = a.withCurrentUtility(async () => { ran = true; return 'late'; }).then(() => 'unexpected success', (error: Error) => error.message);
+    a.destroy();
+    release();
+    expect(await pending).toContain('destroyed');
+    expect(ran).toBe(false);
+    await expect(a.ensureSubprocess()).rejects.toThrow('destroyed');
+  });
   it('finishes a real subprocess ready/auto-compaction handshake before concurrent callers proceed', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'pi-handshake-'));
     const server = join(dir, 'server.js');

@@ -179,6 +179,9 @@ export interface CoreBackendConfig {
   /** Mini/utility model for summarization/title generation/mini-completions */
   miniModel?: string;
 
+  /** Connection probes must fail rather than substitute another utility model. */
+  strictModelSelection?: boolean;
+
   /** Initial thinking level */
   thinkingLevel?: ThinkingLevel;
 

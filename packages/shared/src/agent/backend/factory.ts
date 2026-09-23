@@ -51,8 +51,9 @@ import { parseValidationError, type LlmValidationResult } from '../../config/llm
 import type { ModelFetchResult } from '../../config/model-fetcher.ts';
 // Model resolution utilities
 import { getModelById, getModelProvider, DEFAULT_MODEL } from '../../config/models.ts';
-import { homedir } from 'node:os';
-import { rm } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
+import { rm, mkdtemp } from 'node:fs/promises';
+import { probeStoredConnection } from './internal/stored-connection-probe.ts';
 import { join } from 'node:path';
 import { getCredentialManager } from '../../credentials/index.ts';
 import type {
@@ -610,6 +611,31 @@ export async function validateStoredBackendConnection(args: {
       hostRuntime: args.hostRuntime,
       resolvedPaths,
     });
+
+    if (provider === 'pi') {
+      // Use the saved auth route (including OAuth, environment and no-auth local
+      // gateways), not a synthetic API-key connection or an unrelated fallback.
+      const context = resolveBackendContext({ sessionConnectionSlug: args.slug, managedModel: connection.defaultModel });
+      if (context.connection?.slug !== args.slug) return { success: false, error: 'Connection changed. Try again.' };
+      // A stale advertised model list must not silently substitute a different test model.
+      if (connection.defaultModel) context.resolvedModel = connection.defaultModel;
+      const root = await mkdtemp(join(tmpdir(), 'artist-os-connection-test-'));
+      try {
+        const agent = createBackendFromResolvedContext({
+          context,
+          coreConfig: {
+            workspace: { id: '__connection-test', name: 'Connection Test', slug: '__connection-test', rootPath: root, createdAt: 0 },
+            isHeadless: true,
+            miniModel: context.resolvedModel,
+            strictModelSelection: true,
+          },
+          hostRuntime: args.hostRuntime,
+        });
+        return await probeStoredConnection(agent);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
 
     if (!driver.validateStoredConnection) {
       return { success: true };

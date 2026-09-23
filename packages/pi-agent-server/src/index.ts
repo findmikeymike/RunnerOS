@@ -80,6 +80,7 @@ import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
 import { adaptCredentialForPiSdk, type PiCredential } from './adapt-credential.ts';
 import { applySystemPromptOverride } from './system-prompt-override.ts';
+import { setQueryModel } from './set-query-model.ts';
 
 // ============================================================
 // Types — JSONL Protocol
@@ -103,6 +104,7 @@ interface InitMessage {
   workingDirectory: string;
   plansFolderPath: string;
   miniModel?: string;
+  strictModelSelection?: boolean;
   agentDir?: string;
   providerType?: string;
   authType?: string;
@@ -943,6 +945,7 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
     const resolvedProvider = (resolved as any)?.provider;
     const isCompatible = resolvedProvider === authProvider || resolvedProvider === 'custom-endpoint';
     if (!resolved || !isCompatible || isDeniedMiniModelId(model, piAuthProvider)) {
+      if (initConfig.strictModelSelection) throw new Error('The selected model is unavailable for this provider.');
       // Anthropic: keep Haiku (the cheap/fast mini). For every other provider
       // Haiku is unresolvable, so walk PI_PREFERRED_DEFAULTS for a model that
       // actually works under the user's auth.
@@ -982,9 +985,7 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
 
     // Pi SDK ignores options.model for ephemeral sessions (same issue as options.tools).
     // Explicitly set the model after creation to ensure the mini model is used.
-    try {
-      await ephemeralSession.setModel(piModel);
-    } catch {
+    if (!await setQueryModel(ephemeralSession, piModel, initConfig!.strictModelSelection === true)) {
       debugLog(`[queryLlm] Failed to set model on ephemeral session, proceeding with default`);
     }
 
@@ -1075,7 +1076,7 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
       return { text, model: currentModel };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      const shouldRetry = isModelNotFoundError(errorMsg);
+      const shouldRetry = !initConfig.strictModelSelection && isModelNotFoundError(errorMsg);
 
       if (!shouldRetry) {
         throw error;

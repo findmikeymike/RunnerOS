@@ -531,9 +531,10 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
       return { tone: 'bad', label: 'Reconnect' }
     }
     if (!connection.isAuthenticated) return { tone: 'bad', label: t("settings.ai.notAuthenticated") }
+    if (connection.piAuthProvider === 'omniroute' && connection.authType === 'none') return { tone: 'muted', label: 'Model access unverified' }
     if (connection.credentialSource === 'environment') return { tone: 'muted', label: 'Env' }
     return { tone: 'good', label: 'Ready' }
-  }, [connection.credentialSource, connection.isAuthenticated, connection.modelFallbackAttention?.reason, t, validationError, validationState])
+  }, [connection.authType, connection.piAuthProvider, connection.credentialSource, connection.isAuthenticated, connection.modelFallbackAttention?.reason, t, validationError, validationState])
 
   const providerLabel = getConnectionProviderLabel(connection)
   const showProviderLabel = providerLabel !== connection.name
@@ -563,6 +564,11 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
             {showProviderLabel && `${providerLabel} · `}{endpointLabel}
             {connection.credentialSource === 'environment' && ' · Read from environment'}
           </div>
+          {connection.piAuthProvider === 'omniroute' && connection.authType === 'none' && (
+            <p className="mt-1 text-xs text-white/50">
+              Free routes depend on provider access and availability. If a route is restricted, add your own model provider.
+            </p>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
@@ -960,11 +966,19 @@ export default function AiSettingsPage() {
     [llmConnections],
   )
 
+  const handleConnectionConfigSaved = useCallback(() => {
+    if (editingConnectionSlug) {
+      setValidationStates(prev => ({ ...prev, [editingConnectionSlug]: { state: 'idle' } }))
+    }
+    refreshLlmConnections?.()
+  }, [editingConnectionSlug, refreshLlmConnections])
+
   // OnboardingWizard hook for editing API connection
   const apiSetupOnboarding = useOnboarding({
     initialStep: 'provider-select',
-    onConfigSaved: refreshLlmConnections,
+    onConfigSaved: handleConnectionConfigSaved,
     onComplete: () => {
+      handleConnectionConfigSaved()
       closeApiSetup()
       refreshLlmConnections?.()
       apiSetupOnboarding.reset()
@@ -978,6 +992,7 @@ export default function AiSettingsPage() {
   })
 
   const handleApiSetupFinish = useCallback(() => {
+    handleConnectionConfigSaved()
     closeApiSetup()
     refreshLlmConnections?.()
     apiSetupOnboarding.reset()
@@ -985,7 +1000,7 @@ export default function AiSettingsPage() {
     setCredentialHealthIssues([])
     setIsDirectEdit(false)
     setEditInitialValues(undefined)
-  }, [closeApiSetup, refreshLlmConnections, apiSetupOnboarding])
+  }, [closeApiSetup, refreshLlmConnections, apiSetupOnboarding, handleConnectionConfigSaved])
 
   // Handler for closing the modal via X button or Escape - resets state and cancels OAuth
   const handleCloseApiSetup = useCallback(() => {
@@ -1150,28 +1165,21 @@ export default function AiSettingsPage() {
 
       if (result.success) {
         setValidationStates(prev => ({ ...prev, [slug]: { state: 'success' } }))
-        // Auto-clear success state after 3 seconds
-        setTimeout(() => {
-          setValidationStates(prev => ({ ...prev, [slug]: { state: 'idle' } }))
-        }, 3000)
+        // Preserve this check result until a retry or configuration save.
+        // A timer from an earlier success must not erase a later failure.
       } else {
         setValidationStates(prev => ({
           ...prev,
           [slug]: { state: 'error', error: result.error }
         }))
-        // Auto-clear error state after 5 seconds
-        setTimeout(() => {
-          setValidationStates(prev => ({ ...prev, [slug]: { state: 'idle' } }))
-        }, 5000)
+        // Keep failed verification visible until the user retries or edits the connection.
       }
     } catch (error) {
       setValidationStates(prev => ({
         ...prev,
         [slug]: { state: 'error', error: t("settings.ai.validationFailed") }
       }))
-      setTimeout(() => {
-        setValidationStates(prev => ({ ...prev, [slug]: { state: 'idle' } }))
-      }, 5000)
+      // A failed check must not silently revert to a Ready badge.
     }
   }, [t])
 
