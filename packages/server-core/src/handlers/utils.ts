@@ -104,8 +104,14 @@ export async function validateFilePath(
     ...(additionalAllowedDirs ?? []),
   ].filter(Boolean)
 
-  // Check if the real path is within an allowed directory (cross-platform)
-  const isAllowed = allowedDirs.some(dir => {
+  // Compare canonical paths on both sides: macOS /tmp and symlinked workspace
+  // roots otherwise reject their own files after the file resolves via realpath.
+  const canonicalAllowedDirs = await Promise.all(allowedDirs.map(async dir => {
+    try { return await realpath(dir) } catch { return normalize(dir) }
+  }))
+
+  // Check if the real path is within an allowed directory (cross-platform).
+  const isAllowed = canonicalAllowedDirs.some(dir => {
     const normalizedDir = normalize(dir)
     const normalizedReal = normalize(realFilePath)
     return normalizedReal.startsWith(normalizedDir + sep) || normalizedReal === normalizedDir
