@@ -100,6 +100,10 @@ describe('native Spotify collector', () => {
   })
   test('waits for both Location tables instead of saving the first countries-only response', async () => {
     const f = await fixture()
+    // This asserts hydration and two matching reads, not the timeout fallback.
+    // The 30 ms fixture budget can expire between reads on a loaded suite runner.
+    f.options.pageTimeoutMs = 1_000
+    f.options.timeoutMs = 3_000
     const evaluate = f.browser.evaluate
     let locationReads = 0
     f.browser.evaluate = async () => {
