@@ -1059,7 +1059,14 @@ body
       'catalog-royalty-agent',
       'legal-agent',
       'gravity',
+      'branding-agent',
+      'world-builder',
+      'college-radio-agent',
+      'spotify-playlist-creator',
+      'x-editorial',
+      'update-system-agent',
     ])
+    expect(initialAgentSlugsForWorkspace('hq', true)).toEqual([])
     expect(initialAgentSlugsForWorkspace('general', false)).toEqual([])
     expect(isAgentAllowedInArtistWorkspace('legal-agent', 'hq')).toBe(true)
     expect(isAgentAllowedInArtistWorkspace('legal-agent', 'campaign')).toBe(false)

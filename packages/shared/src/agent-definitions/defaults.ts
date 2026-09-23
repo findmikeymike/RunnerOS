@@ -43,10 +43,11 @@ export function initialAgentSlugsForWorkspace(
     ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
     ...defaultWorkerSlugs(true),
   ])]
-  if (scope === 'hq') return [
+  if (scope === 'hq') return [...new Set([
     'content-genius',
     ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
     ...HQ_DEFAULT_ACTIVATED_AGENT_SLUGS,
-  ]
+    ...defaultWorkerSlugs(false),
+  ])]
   return []
 }

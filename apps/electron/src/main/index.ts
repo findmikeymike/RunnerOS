@@ -402,7 +402,14 @@ async function createInitialWindows(): Promise<void> {
       saveConfig({ workspaces: [], activeWorkspaceId: null, activeSessionId: null })
     }
     const defaultPath = join(getDefaultWorkspacesDir(), 'my-workspace')
-    addWorkspace({ rootPath: defaultPath, name: 'My Workspace' })
+    const rootAlreadyExisted = existsSync(defaultPath)
+    const workspace = addWorkspace({ rootPath: defaultPath, name: 'My Workspace' })
+    // This first-run path bypasses the workspace RPC's starter activation.
+    // Never reseed an existing directory: its empty list may be intentional.
+    if (RUNTIME_IDENTITY.variant === 'artist-os' && !rootAlreadyExisted) {
+      const { initialAgentSlugsForWorkspace, writeActivatedAgents } = await import('@craft-agent/shared/agent-definitions')
+      writeActivatedAgents(workspace.rootPath, [...initialAgentSlugsForWorkspace('hq', false)])
+    }
     workspaces = getWorkspaces() // Refresh after creation
     mainLog.info('Created default workspace on first run')
   }
