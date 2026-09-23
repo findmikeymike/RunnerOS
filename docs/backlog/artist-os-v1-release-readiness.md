@@ -1,7 +1,7 @@
 ---
 status: active-release-gate
 owner: unassigned
-last_verified: 2026-08-27
+last_verified: 2026-09-23
 source_of_truth: true
 ---
 
@@ -15,6 +15,21 @@ The short, release-level checklist for selling and distributing Artist OS Premiu
 - The licensing backend, signed entitlements, refund/revocation behavior, seat recovery, desktop activation UI, and test-mode Lemon Squeezy flow are implemented and tested.
 - The branch is still open for product edits. Do **not** begin final packaging until those edits are approved.
 - Basic is deferred. It must remain unavailable until its capabilities and backend enforcement are defined.
+
+## September 23 checkpoint — not yet distributable
+
+Current evidence: [release smoke audit](../audits/release-smoke-2026-09-23.md). Fresh HQ defaults, campaign navigation, Composio Gmail setup/persistence/send/search/read/draft, and Release Kit media previews have live development-build evidence. Native file-dialog timing, invalid-media promotion, license recovery, and real saved-model validation received bounded fixes and regression coverage. See the audit for exact build/test boundaries; this is not packaged acceptance.
+
+Before a friend demo, the practical gates are:
+
+1. Restore/verify the production entitlement host and provide valid demo seats. `license.artistos.app` did not resolve in the September 23 check.
+2. Choose the existing Developer ID fingerprint, notarization credentials, and public HTTPS update feed; build the actual current arm64 candidate. Existing September 6 artifacts are stale and unnotarized.
+3. Test Finder install, activation, first useful response, quit/reopen, and data/connection preservation on a clean Apple Silicon Mac. Intel remains uncertified because runtime artifacts are missing.
+4. Present model setup honestly: the shipped free OmniRoute route returned a provider restriction. Supported BYOK worked. Never include developer credentials, saved accounts, test profiles, or user workspaces in the demo artifact.
+
+Working Outputs do not currently provide automatic same-ID revision history. Preserve an old version by keeping its file and creating a separate revision Output; immutable Release Kit snapshots are a different guarantee. Agent guidance now states this boundary, but broader revision UX remains a product decision. This pass also does not certify final Instagram/TikTok publishing or physical voice.
+
+The public paid-release checklist below remains open. Do not equate local tests, an executable build, or signed historical artifacts with release readiness.
 
 ## Now — Finish The Editable App
 
