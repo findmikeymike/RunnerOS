@@ -2585,7 +2585,11 @@ export class SessionManager implements ISessionManager {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Campaign not found.')
     const campaignAutomations = this.automationSystems.get(workspace.rootPath)
-    const assertIdle = () => {
+    const assertIdle = async () => {
+      if (!this.scheduledWorkflowStartup.allowsScheduledWork()) {
+        throw new Error('Workflow recovery is unavailable. Restore it before deleting this campaign.')
+      }
+      const durableWork = await this.durableWorkflowHost?.hasUnfinishedWorkspace(workspaceId)
       const activeRun = this.workflowRunner?.getActiveRuns(workspaceId).some((run) =>
         !['succeeded', 'failed', 'cancelled', 'interrupted'].includes(run.state))
       const persistedActiveRun = listWorkflowRuns(workspace.rootPath).some((run) =>
@@ -2593,15 +2597,15 @@ export class SessionManager implements ISessionManager {
       const work = parseScheduledWorkDocResult(loadContextDoc(workspace.rootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspaceId)
       if (!work.ok) throw new Error('The campaign schedule could not be read safely. Repair it before deleting this campaign.')
       const researchRunning = listDeepResearchRuns(workspace.rootPath).some((run) => run.state === 'running')
-      if (activeRun || persistedActiveRun || researchRunning || campaignAutomations?.hasPendingExecutions() || this.scheduledWorkRunner?.isWorkspaceScanInFlight(workspace.rootPath)
+      if (durableWork || activeRun || persistedActiveRun || researchRunning || campaignAutomations?.hasPendingExecutions() || this.scheduledWorkRunner?.isWorkspaceScanInFlight(workspace.rootPath)
         || work.work.items.some((item) => !item.deletedAt && item.status === 'running')) {
         throw new Error('Stop active campaign workflows, research, and scheduled work before deleting this campaign.')
       }
     }
-    assertIdle()
+    await assertIdle()
     const lease = await this.quiesceWorkspaceForMigration(workspaceId)
     try {
-      assertIdle()
+      await assertIdle()
       return lease
     } catch (error) {
       await this.resumeWorkspaceAfterMigration(lease)

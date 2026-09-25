@@ -90,6 +90,53 @@ describe('Campaign deletion storage journey', () => {
 })
 
 describe('Campaign deletion runtime', () => {
+  test('durable work blocks deletion even when the legacy runner and schedule are idle', async () => {
+    const { SessionManager } = await import('../sessions/SessionManager.ts')
+    const campaign = config.addWorkspace({ name: 'Durable cleanup', rootPath: join(testRoot, 'durable-cleanup'), artistWorkspaceScope: 'campaign' })
+    const manager = new SessionManager()
+    const internals = manager as any
+    let quiesced = false
+    internals.durableWorkflowHost = { hasUnfinishedWorkspace: async (id: string) => id === campaign.id }
+    internals.quiesceWorkspaceForMigration = async () => { quiesced = true; return { workspaceId: campaign.id, sourceRootPath: campaign.rootPath, released: false } }
+    await expect(manager.quiesceCampaignForDeletion(campaign.id)).rejects.toThrow('Stop active campaign')
+    expect(quiesced).toBe(false)
+    expect(existsSync(campaign.rootPath)).toBe(true)
+    await config.removeWorkspace(campaign.id)
+  })
+
+  test.each(['late-work', 'journal-unavailable', 'idle'] as const)('rechecks durable state after acquiring the deletion lease: %s', async scenario => {
+    const { SessionManager } = await import('../sessions/SessionManager.ts')
+    const campaign = config.addWorkspace({ name: scenario, rootPath: join(testRoot, scenario), artistWorkspaceScope: 'campaign' })
+    const manager = new SessionManager()
+    const internals = manager as any
+    let checks = 0, resumed = false
+    const lease = { workspaceId: campaign.id, sourceRootPath: campaign.rootPath, released: false }
+    internals.durableWorkflowHost = { hasUnfinishedWorkspace: async () => {
+      checks++
+      if (checks === 2 && scenario === 'journal-unavailable') throw new Error('journal unavailable')
+      return checks === 2 && scenario === 'late-work'
+    } }
+    internals.quiesceWorkspaceForMigration = async () => lease
+    internals.resumeWorkspaceAfterMigration = async (received: unknown) => { expect(received).toBe(lease); resumed = true }
+    if (scenario === 'idle') expect(await manager.quiesceCampaignForDeletion(campaign.id)).toBe(lease)
+    else await expect(manager.quiesceCampaignForDeletion(campaign.id)).rejects.toThrow(scenario === 'late-work' ? 'Stop active campaign' : 'journal unavailable')
+    expect(checks).toBe(2)
+    expect(resumed).toBe(scenario !== 'idle')
+    expect(existsSync(campaign.rootPath)).toBe(true)
+    await config.removeWorkspace(campaign.id)
+  })
+
+  test('unavailable durable recovery cannot be mistaken for an idle campaign', async () => {
+    const { SessionManager } = await import('../sessions/SessionManager.ts')
+    const campaign = config.addWorkspace({ name: 'Recovery blocked', rootPath: join(testRoot, 'recovery-blocked'), artistWorkspaceScope: 'campaign' })
+    const manager = new SessionManager()
+    manager.deferScheduledWorkForDurableHost()
+    manager.finishDurableWorkflowStartup()
+    await expect(manager.quiesceCampaignForDeletion(campaign.id)).rejects.toThrow('Workflow recovery is unavailable')
+    expect(existsSync(campaign.rootPath)).toBe(true)
+    await config.removeWorkspace(campaign.id)
+  })
+
   test('blocks active workflows, then freezes idle campaign runtime without deleting source data', async () => {
     const { SessionManager } = await import('../sessions/SessionManager.ts')
     const campaignRoot = join(testRoot, 'cleanup-runtime')

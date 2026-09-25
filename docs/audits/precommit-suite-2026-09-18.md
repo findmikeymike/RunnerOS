@@ -11,3 +11,7 @@ The full isolated-profile runner completed all 65 processes: 62 passed and 3 fai
 Logs: `/tmp/artist-os-precommit-20260918-unrestricted.log`, `/tmp/artist-os-precommit-shard3-fixed-20260918.log`, `/tmp/artist-os-ask-policy-recheck.log`, `/tmp/artist-os-rotation-recheck.log`.
 
 All planned test processes ran, but the repository suite is **not green**. Remaining permission/rotation failures are the next bounded test-maintenance slice. This is not release certification. Social posting's separate live acceptance remains parked.
+
+## Follow-up on current main
+
+The failures above are historical: `94403e788` awaited credential fixture setup, and `26b0c94cc` repaired full-name and source-scoped MCP permission matching. Fresh disposable-profile checks at `ce7c1e437` passed all three rotation tests and all three Ask-source-policy tests (31 assertions combined). The previously failing shard 6 also has a recorded full passing rerun: 2,172 tests, zero failures (`/tmp/artist-os-mcp-shard6.log`). See `social-publish-uncertainty-fix.md` for the accumulated 65-group evidence; this follow-up did not repeat the entire repository suite.

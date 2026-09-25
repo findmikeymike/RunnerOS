@@ -83,6 +83,13 @@ export class DurableWorkflowHost {
     }));
   }
 
+  /** Deletion guard: include every run and child, including terminal backends still draining. */
+  hasUnfinishedWorkspace(workspaceId: string): Promise<boolean> {
+    return this.track(async () => this.journal.listInternal(workspaceId).some(state =>
+      ['running', 'paused', 'waiting-approval'].includes(state.status)
+      || this.runner.isActive(state.spec.runId, workspaceId)));
+  }
+
   /** Normal manual Start supplies only its authenticated transport actor, never a principal. */
   admitWorkflowForActor(workflow: LoadedWorkflow, input: Omit<DurableReadWorkflowInput, 'approvalPrincipalId'>, actor: DurableWorkflowActor): Promise<DurableReadAdmission> {
     const pinnedWorkflow = JSON.parse(canonical(workflow)) as LoadedWorkflow;

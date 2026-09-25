@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { DurableJournal, loadDurableKey, type DurableSafeStorage } from '../../../shared/src/durable-execution/index.ts';
 import { DurableWorkflowHost } from './durable-workflow-host.ts';
 import type { DurableReadBinding, DurableReadInput, DurableReadRunnerOptions } from './durable-read-runner.ts';
+import { durableChildRunId } from './durable-child-runner.ts';
 
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => { for (const fn of cleanup.splice(0).reverse()) await fn(); });
@@ -63,6 +64,7 @@ test('repeated close remains safe and rejects all control operations after shutd
   await expect(host.controls.control('w', 'r', { commandId: 'late', expectedVersion: 1, action: 'cancel' }, actor)).rejects.toThrow();
   await expect(host.controls.resolveAttention('w', 'missing', 'approved', { commandId: 'late-decision', expectedVersion: 1 }, actor)).rejects.toThrow();
   await expect(host.start(f.input)).rejects.toThrow(); expect(f.creations()).toBe(0);
+  await expect(host.hasUnfinishedWorkspace('w')).rejects.toThrow('durable-host-closing');
 });
 
 test('close pauses a live backend before draining and preserves restartable state', async () => {
@@ -75,10 +77,15 @@ test('close pauses a live backend before draining and preserves restartable stat
     await bridge.checkpoint({ kind: 'complete' });
   }, async abort() {}, destroy() {} });
   const host = f.open(), running = host.start(f.input); await ready;
+  expect(await host.hasUnfinishedWorkspace('w')).toBe(true);
+  expect(await host.hasUnfinishedWorkspace('other')).toBe(false);
   let closed = false; const closing = host.close().then(() => { closed = true; });
   const key = loadDurableKey(f.root, protection), observer = new DurableJournal({ configRoot: f.root, key }); key.fill(0);
   try { expect(observer.get(f.input.runId, 'w').status).toBe('paused'); expect(closed).toBe(false); release(); expect((await running).status).toBe('paused'); await closing; expect(observer.get(f.input.runId, 'w').turns[0]!.message).toBeDefined(); } finally { release(); observer.close(); }
-  const reopened = f.open(); expect(await reopened.controls.listAttention('w', actor)).toEqual([]); await reopened.close();
+  const reopened = f.open(); expect(await reopened.controls.listAttention('w', actor)).toEqual([]);
+  expect(await reopened.hasUnfinishedWorkspace('w')).toBe(true);
+  expect(await reopened.hasUnfinishedWorkspace('other')).toBe(false);
+  await reopened.close();
 });
 
 test('host facade pins caller arguments before returning a promise', async () => {
@@ -232,7 +239,67 @@ test('cancelled durable backend keeps workflow admission blocked until actual ba
   const cancelled = await host.controls.control('w', f.input.runId, { action: 'cancel', commandId: 'cancel', expectedVersion: run.durable!.version }, actor);
   expect(cancelled.state.status).toBe('cancelled'); expect(aborts).toBe(1); expect(destroyed).toBe(false);
   expect(await host.hasUnfinishedWorkflow('w', 'read')).toBe(true);
+  expect(await host.hasUnfinishedWorkspace('w')).toBe(true);
   release(); await admitted.execution; expect(destroyed).toBe(true); expect(await host.hasUnfinishedWorkflow('w', 'read')).toBe(false);
+  expect(await host.hasUnfinishedWorkspace('w')).toBe(false);
+});
+
+test('workspace deletion guard retains a cancelled child until its backend drains', async () => {
+  const f = fixture(); f.input.maxModelAttempts = 6;
+  let parentReady!: () => void, childReady!: () => void, releaseParent!: () => void, releaseChild!: () => void;
+  const parentEntered = new Promise<void>(resolve => parentReady = resolve);
+  const childEntered = new Promise<void>(resolve => childReady = resolve);
+  const parentGate = new Promise<void>(resolve => releaseParent = resolve);
+  const childGate = new Promise<void>(resolve => releaseChild = resolve);
+  f.runnerOptions.createBackend = args => {
+    const bridge = args.coreConfig.durableExecution!, parent = bridge.descriptor.runId === f.input.runId;
+    return { async *chat() {
+      await bridge.checkpoint({ kind: 'model-start', turn: 0, context: {} });
+      (parent ? parentReady : childReady)(); await (parent ? parentGate : childGate);
+      await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: '{"summary":"done"}' }] } });
+      await bridge.checkpoint({ kind: 'complete' });
+    }, async abort() { if (parent) releaseParent(); }, destroy() {} };
+  };
+  const host = f.open();
+  const parent = host.start(f.input); await parentEntered;
+  const child = host.startChild(f.input.runId, 'w', {
+    slotId: 'child', mode: 'required', prompt: 'Child', systemPrompt: 'Read only', allowedTools: ['read'],
+    maxOutputTokens: 100, maxModelAttempts: 2, deadlineAt: f.input.deadlineAt, costPolicy: f.input.costPolicy,
+    outputSchema: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] },
+  });
+  const childOutcome = child.then(() => null, error => error);
+  try {
+    await childEntered;
+    await host.controls.control('w', f.input.runId, { action: 'cancel', commandId: 'cancel-parent',
+      expectedVersion: observeRun(f.root, f.input.runId).version }, actor);
+    expect((await parent).status).toBe('cancelled');
+    expect(observeRun(f.root, durableChildRunId('w', f.input.runId, 'child')).status).toBe('cancelled');
+    expect(await host.hasUnfinishedWorkspace('w')).toBe(true);
+    expect(await host.hasUnfinishedWorkspace('other')).toBe(false);
+    releaseChild(); expect((await childOutcome)?.message).toContain('child-cancelled');
+    expect(await host.hasUnfinishedWorkspace('w')).toBe(false);
+  } finally { releaseParent(); releaseChild(); await Promise.allSettled([parent, child]); }
+});
+
+test('workspace deletion guard retains approval-waiting runs after reopening the host', async () => {
+  const f = fixture();
+  f.runnerOptions.authorizeTool = async (_request, context) => ({ principalId: context.approvalPrincipalId,
+    credentialIdentity: context.credentialIdentity, policyRevision: 'fixture-policy', allowed: true,
+    requiresApproval: true, approvalExpiresAt: Date.now() + 30000 });
+  f.runnerOptions.createBackend = args => ({ async *chat() {
+    const bridge = args.coreConfig.durableExecution!;
+    await bridge.checkpoint({ kind: 'model-start', turn: 0, context: {} });
+    await bridge.checkpoint({ kind: 'model-result', turn: 0, message: { role: 'assistant', stopReason: 'toolUse',
+      content: [{ type: 'toolCall', id: 'read-1', name: 'read', arguments: { path: '/notes' } }] } });
+    await bridge.checkpoint({ kind: 'tool-start', turn: 0, callId: 'read-1', tool: 'read', input: { path: '/notes' } });
+  }, async abort() {}, destroy() {} });
+  const host = f.open();
+  expect((await host.start(f.input)).status).toBe('waiting-approval');
+  expect(await host.hasUnfinishedWorkspace('w')).toBe(true);
+  await host.close();
+  const reopened = f.open();
+  expect(await reopened.hasUnfinishedWorkspace('w')).toBe(true);
+  expect(await reopened.hasUnfinishedWorkspace('other')).toBe(false);
 });
 
 

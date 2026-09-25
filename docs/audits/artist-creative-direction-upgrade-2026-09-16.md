@@ -1,6 +1,6 @@
 # Artist Direction and Creative Direction
 
-Status: implementation committed in `fc91256fd`; startup and scoped UI smoke verified. Bounded HQ response acceptance passed September 18; Campaign brief-save/handoff acceptance remains open.
+Status: implementation committed in `fc91256fd`; startup and scoped UI smoke verified. Bounded HQ response and live Campaign proposed-brief save/retrieval acceptance passed September 18. This does not certify production execution or acceptance of the proposed creative idea.
 
 ## Agreed behavior
 
@@ -59,3 +59,11 @@ Live Artist Direction session `260918-lively-falls`, using `deepseek-v4-pro` in 
 Homebody Creative Direction session `260918-aware-shoal` then passed a read-only context-inheritance check with the same model. It read campaign material, distinguished HQ identity from release facts and assumptions, acknowledged it had not heard the audio, and proposed a release-specific hotline/chorus concept. Its World Builder handoff called out budget, moderation, fan-voice consent, and a simpler route that skips World Builder. The UI reported three read steps and explicitly stated nothing was saved or delegated.
 
 No branding or campaign brief was changed. Next acceptance slice: live proposed brief persistence and actual World Builder consumption; the chat-only handoff above does not establish either. Social posting acceptance remains parked separately.
+
+## September 18: live proposed-brief handoff
+
+Following authorization to continue, Creative Direction session `260918-aware-shoal` read the existing context and saved a new `campaign-creative-direction` document with `save_release_creative_brief`, `status: proposed`, and `expectedBody: null`. The ordinary one-time write approval was allowed; persistent permission settings were not changed. The saved file was independently read at `~/.artist-os/workspaces/homebody/context/campaign-creative-direction/CONTEXT.md` and contains `Direction status: proposed`, assumptions, consent/budget/moderation questions, and the simpler route that skips World Builder.
+
+A fresh World Builder session, `260918-bright-plain`, was asked to retrieve the brief without being told its idea. Its sole recorded tool call was `get_workspace_context` for `campaign-creative-direction` with `maxChars: 12000`. It correctly identified "Opt out loud" and the Homebody Hotline, recognized the proposal was not accepted, retained unresolved decisions, and described the optional simpler route. No downstream execution or write was observed.
+
+This passes bounded live persistence and cross-worker retrieval. The proposed brief remains saved in Homebody for review; the test does not accept its idea or approve production. HQ identity was not edited. No app restart, publication, external service activation, or new schedule occurred. Actual production execution and social posting acceptance remain separate work.
