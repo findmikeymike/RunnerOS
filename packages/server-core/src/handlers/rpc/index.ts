@@ -24,6 +24,7 @@ import { registerReleaseKitHandlers } from './release-kit'
 import { registerWorkflowsHandlers } from './workflows'
 import { registerWorkflowRunsHandlers } from './workflow-runs'
 import { registerDeepResearchHandlers } from './deep-research'
+import { registerLabInspirationHandlers } from './lab-inspiration'
 import { registerArtistProfileEnrichmentHandlers } from './artist-profile-enrichment'
 import { registerVideoStudioHandlers } from './video-studio'
 import { registerFilesHandlers } from './files'
@@ -77,6 +78,7 @@ export function registerCoreRpcHandlers(
   registerWorkflowsHandlers(server, deps)
   registerWorkflowRunsHandlers(server, deps)
   registerDeepResearchHandlers(server, deps)
+  registerLabInspirationHandlers(server, deps)
   if (FEATURE_FLAGS.artistProfileEnrichmentV2) registerArtistProfileEnrichmentHandlers(server, deps)
   registerVideoStudioHandlers(server, deps)
   registerFilesHandlers(server, deps)

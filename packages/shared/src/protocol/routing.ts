@@ -15,6 +15,11 @@ import { RPC_CHANNELS } from './channels'
 // ---------------------------------------------------------------------------
 
 export const LOCAL_ONLY_CHANNELS = new Set<string>([
+  // First Lab inspiration slice uses the registered local Lab and its sources.
+  RPC_CHANNELS.lab.INSPIRATION_START,
+  RPC_CHANNELS.lab.INSPIRATION_LIST,
+  RPC_CHANNELS.lab.INSPIRATION_CANCEL,
+  RPC_CHANNELS.lab.INSPIRATION_SAVE,
   // Artist Signals resolves the local Artist HQ and local evidence/credential stores.
   RPC_CHANNELS.signals.GET,
   RPC_CHANNELS.signals.RESOLVE_CHANNEL,

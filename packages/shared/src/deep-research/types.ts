@@ -35,6 +35,10 @@ export interface DeepResearchOwnerBinding {
 }
 
 export interface DeepResearchExecutionContract {
+  /** Host-only restriction to recognized discovery and page-read tools. */
+  researchToolsOnly?: boolean;
+  /** Host-only native web tools; excludes configured source integrations. */
+  nativePublicWebOnly?: boolean;
   overallTimeoutMs: number;
   maxSearchCalls: number;
   maxPageReads: number;

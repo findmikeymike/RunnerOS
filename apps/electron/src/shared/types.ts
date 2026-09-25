@@ -725,6 +725,10 @@ export interface ElectronAPI {
   checkWorkspaceSlug(slug: string): Promise<{ exists: boolean; path: string }>
   updateWorkspaceRemoteServer(workspaceId: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }): Promise<{ success: boolean }>
   getLabState(workspaceId: string): Promise<import('@craft-agent/shared/lab').LabState>
+  startLabInspiration(workspaceId: string, input: import('@craft-agent/shared/lab').LabInspirationStartInput): Promise<import('@craft-agent/shared/lab').LabInspirationEdition>
+  listLabInspiration(workspaceId: string): Promise<import('@craft-agent/shared/lab').LabInspirationEdition[]>
+  cancelLabInspiration(workspaceId: string, editionId: string): Promise<import('@craft-agent/shared/lab').LabInspirationEdition>
+  saveLabInspiration(workspaceId: string, input: import('@craft-agent/shared/lab').LabInspirationSaveInput): Promise<import('@craft-agent/shared/lab').LabInspirationSaveResult>
   saveLabState(workspaceId: string, state: import('@craft-agent/shared/lab').LabState): Promise<import('@craft-agent/shared/lab').LabState>
   onLabStateChanged(callback: (workspaceId: string) => void): () => void
 

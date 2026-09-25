@@ -4,7 +4,6 @@ import {
   Copy,
   Eye,
   EyeOff,
-  FlaskConical,
   Gem,
   HelpCircle,
   Info,
@@ -18,6 +17,7 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { CompactPageHeader } from './CompactPageHeader'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import { useAgents } from '@/hooks/useAgents'
@@ -1264,20 +1264,18 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
           ) : null}
         </div>
       ) : null}
-      <div className="shrink-0 px-3 pt-3">
-        <div className="relative flex w-full items-center justify-between gap-4 overflow-hidden rounded-xl bg-white/[0.045] px-4 py-2.5 shadow-card-lift backdrop-blur-xl before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_12%_-80%,rgba(251,146,60,0.13),transparent_48%)]">
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-center gap-1.5 text-[8px] font-medium uppercase tracking-[0.17em] text-white/34">
-              <FlaskConical className="h-3 w-3" />
-              Song Pad
-            </div>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              className="w-full border-0 bg-transparent text-lg font-medium tracking-normal text-white/88 outline-none placeholder:text-white/25"
-              placeholder="Untitled"
-            />
-          </div>
+      <div className="shrink-0 px-5 pt-4 xl:px-8 xl:pt-5">
+        <CompactPageHeader
+          eyebrow="Song Pad"
+          tone="blue"
+          title={<input
+            aria-label="Song title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            className="w-full min-w-0 border-0 bg-transparent text-[26px] font-medium tracking-tight text-white/92 outline-none placeholder:text-white/50"
+            placeholder="Untitled"
+          />}
+          actions={
           <div className="relative flex shrink-0 items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl bg-black/15 px-3 py-2 text-xs text-white/45 backdrop-blur-md">
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: projectColor }} />
@@ -1344,16 +1342,17 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
               </PopoverContent>
             </Popover>
           </div>
-        </div>
+          }
+        />
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
         <div className="grid w-full gap-3 xl:grid-cols-[minmax(0,1.12fr)_minmax(440px,0.88fr)]">
           <section className={cn(
-            'min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.05] bg-[#080808] shadow-minimal',
+            'min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.075] bg-[#080808] shadow-minimal',
             compactPane === 'rough' ? 'flex' : 'hidden xl:flex',
           )}>
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.04] px-3 py-2">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.065] px-3 py-2">
               <div className="flex min-w-0 items-center gap-2">
                 <div
                   title="Highlight text and click to send to song section."
@@ -1447,17 +1446,17 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
               />
             </div>
 
-            <div className="flex shrink-0 items-center justify-between border-t border-white/[0.04] px-4 py-3 text-[11px] text-white/34">
+            <div className="flex shrink-0 items-center justify-between border-t border-white/[0.065] px-4 py-3 text-[11px] text-white/34">
               <span>{selectedText.trim() ? `${selectedCount} selected word${selectedCount === 1 ? '' : 's'} from ${selectionSource}` : 'Select a line or phrase to move it.'}</span>
               <span>Send copies. Your rough pad stays intact.</span>
             </div>
           </section>
 
           <section className={cn(
-            'min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.05] bg-[#080808] shadow-minimal',
+            'min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.075] bg-[#080808] shadow-minimal',
             compactPane === 'final' ? 'flex' : 'hidden xl:flex',
           )}>
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.04] px-3 py-2">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.065] px-3 py-2">
               <div className="flex min-w-0 items-center gap-2">
                 <div className="flex items-center gap-1.5 text-[8px] font-medium uppercase tracking-[0.14em] text-white/50">
                   <Layers className="h-2.5 w-2.5 text-white/32" />
@@ -1489,7 +1488,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
                 <article
                   key={section.id}
                   className={cn(
-                    'border-b border-white/[0.045] py-2.5 last:border-b-0',
+                    'border-b border-white/[0.07] py-2.5 last:border-b-0',
                     !section.text.trim() && 'opacity-55',
                   )}
                 >

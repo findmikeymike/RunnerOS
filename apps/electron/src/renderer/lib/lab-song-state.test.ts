@@ -97,3 +97,59 @@ function makeSong(id: string): LabSong {
     updatedAt: '2026-08-29T00:00:00.000Z',
   }
 }
+
+// Isolate the browser globals and module caches from the rest of the Bun suite.
+test('Lab host-save barrier drains queued writes, propagates recovery failures, and reloads read-only', async () => {
+  const moduleUrl = new URL('./lab-song-state.ts', import.meta.url).href
+  const script = `
+    import assert from 'node:assert/strict';
+    const { flushLabState, reloadLabState, saveLabUiSongs } = await import(${JSON.stringify(moduleUrl)});
+    const values = new Map();
+    let canonical = ${JSON.stringify(makeState())};
+    let writes = 0;
+    let fail = false;
+    let gate;
+    globalThis.window = {
+      localStorage: { getItem: k => values.get(k) ?? null, setItem: (k,v) => values.set(k,v), removeItem: k => values.delete(k) },
+      dispatchEvent: () => {},
+      electronAPI: {
+        getLabState: async () => structuredClone(canonical),
+        saveLabState: async (_id, state) => { writes++; if (fail) throw new Error('disk unavailable'); if (gate) await gate; canonical = structuredClone(state); return canonical; }
+      }
+    };
+    const key = id => 'lab:pending-state:v2:' + id;
+    values.set(key('failed'), JSON.stringify(canonical));
+    fail = true;
+    await assert.rejects(flushLabState('failed'), /disk unavailable/);
+    assert.ok(values.has(key('failed')), 'retain failed recovery draft');
+    fail = false;
+    await flushLabState('failed');
+    assert.equal(values.has(key('failed')), false);
+
+    let release;
+    gate = new Promise(resolve => { release = resolve; });
+    const first = saveLabUiSongs('queued', [canonical.songs[0]]);
+    const second = saveLabUiSongs('queued', [{ ...canonical.songs[1], title: 'latest edit' }]);
+    let drained = false;
+    const barrier = flushLabState('queued').then(() => { drained = true; });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(drained, false, 'must await in-flight queue');
+    release();
+    await Promise.all([first, second, barrier]);
+    gate = undefined;
+    assert.equal(canonical.songs[0].title, 'latest edit');
+    assert.equal(values.has(key('queued')), false);
+
+    const stale = { ...canonical, songs: [] };
+    values.set(key('read'), JSON.stringify(stale));
+    const before = writes;
+    const loaded = await reloadLabState('read');
+    assert.equal(loaded.songs[0].title, 'latest edit');
+    assert.equal(writes, before, 'reload must never replay stale state');
+    assert.ok(values.has(key('read')), 'read must preserve recovery data');
+  `
+  const child = Bun.spawn([process.execPath, '-e', script], { stdout: 'pipe', stderr: 'pipe' })
+  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()])
+  expect(stderr).toBe('')
+  expect(code).toBe(0)
+})

@@ -322,6 +322,10 @@ export const RPC_CHANNELS = {
     GET_STATE: 'lab:getState',
     SAVE_STATE: 'lab:saveState',
     UPDATED: 'lab:updated',
+    INSPIRATION_START: 'lab:inspirationStart',
+    INSPIRATION_LIST: 'lab:inspirationList',
+    INSPIRATION_CANCEL: 'lab:inspirationCancel',
+    INSPIRATION_SAVE: 'lab:inspirationSave',
   },
   records: {
     LIST_CONFLICTS: 'records:conflicts:list',

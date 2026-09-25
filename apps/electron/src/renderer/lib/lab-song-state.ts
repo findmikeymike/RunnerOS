@@ -219,6 +219,35 @@ export async function hydrateLabState(workspaceId?: string): Promise<LabState> {
   return hydration
 }
 
+/** Drain local writes before an external host append; never swallow recovery failures. */
+export async function flushLabState(workspaceId: string): Promise<void> {
+  await hydrationByWorkspace.get(workspaceId)
+  for (;;) {
+    const tail = saveTailByWorkspace.get(workspaceId)
+    // A rejected queued save may be recoverable from the retained draft below.
+    let failed: unknown
+    try { await tail } catch (error) { failed = error }
+    if (tail !== saveTailByWorkspace.get(workspaceId)) continue
+    const pending = window.localStorage.getItem(localStorageKey(PENDING_STATE_KEY_PREFIX, workspaceId))
+    if (pending) {
+      // persistState serializes this replay with ordinary Pad writes and only
+      // removes the recovery draft when its revision is still current.
+      await persistState(workspaceId, normalizeState(JSON.parse(pending) as LabState))
+      continue
+    }
+    if (failed) throw failed
+    return
+  }
+}
+
+/** Read canonical state after a host write without replaying any old recovery draft. */
+export async function reloadLabState(workspaceId: string): Promise<LabState> {
+  const state = normalizeState(await window.electronAPI.getLabState(workspaceId))
+  stateByWorkspace.set(workspaceId, state)
+  emitUpdate()
+  return state
+}
+
 export function subscribeLabSongs(callback: () => void): () => void {
   if (!remoteChangeCleanup) {
     remoteChangeCleanup = window.electronAPI.onLabStateChanged((workspaceId) => {

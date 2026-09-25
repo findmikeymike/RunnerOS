@@ -17,7 +17,7 @@ import {
   Check,
   X,
   Pencil,
-  PenLine,
+  TextCursorInput,
   Search,
   Plus,
   Trash2,
@@ -2523,9 +2523,9 @@ function AppShellContent({
 
     if (isLabWorkspace) {
       result.push({ id: 'nav:lab', type: 'nav', action: handleLabHomeClick })
+      result.push({ id: 'nav:pad', type: 'nav', action: handleLabPadClick })
       result.push({ id: 'nav:songs', type: 'nav', action: handleLabSongsClick })
       result.push({ id: 'nav:sequence', type: 'nav', action: handleLabSequenceClick })
-      result.push({ id: 'nav:pad', type: 'nav', action: handleLabPadClick })
       result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
       result.push({ id: 'nav:create', type: 'nav', action: () => toggleMainNavGroup('work') })
       if (workExpanded) {
@@ -2838,6 +2838,13 @@ function AppShellContent({
           onClick: handleLabHomeClick,
         },
         {
+          id: "nav:pad",
+          title: "Pad",
+          icon: TextCursorInput,
+          variant: labPadActive ? "default" : "ghost",
+          onClick: handleLabPadClick,
+        },
+        {
           id: "nav:songs",
           title: "Songs",
           icon: FileText,
@@ -2850,13 +2857,6 @@ function AppShellContent({
           icon: ListMusic,
           variant: labSequenceActive ? "default" : "ghost",
           onClick: handleLabSequenceClick,
-        },
-        {
-          id: "nav:pad",
-          title: "Pad",
-          icon: PenLine,
-          variant: labPadActive ? "default" : "ghost",
-          onClick: handleLabPadClick,
         },
         {
           id: "nav:chat",
