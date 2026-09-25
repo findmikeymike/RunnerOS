@@ -1,7 +1,14 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
+import { useOptionalAppShellContext } from '@/context/AppShellContext'
+import { isLabWorkspace } from '@/lib/artist-workspace'
 
 export type CompactPageHeaderTone = 'orange' | 'blue' | 'emerald' | 'violet' | 'red'
+
+export const LAB_HERO_BACKGROUND = [
+  'radial-gradient(70% 54% at 50% 118%, rgba(10, 24, 115, 0.72) 0%, rgba(15, 42, 145, 0.22) 42%, rgba(15, 42, 145, 0) 72%)',
+  'linear-gradient(90deg, #173FC4 0%, #2465ED 20%, #38A4F5 50%, #2465ED 80%, #173FC4 100%)',
+].join(', ')
 
 const GLOBAL_HERO_BACKGROUND = [
   'radial-gradient(70% 54% at 50% 118%, rgba(155, 0, 24, 0.72) 0%, rgba(190, 0, 24, 0.22) 42%, rgba(190, 0, 24, 0) 72%)',
@@ -43,6 +50,7 @@ export function CompactPageHeader({
   className,
   titleClassName,
   backgroundImage,
+  backgroundGradient,
   dimBackgroundImage = false,
 }: {
   eyebrow: React.ReactNode
@@ -51,6 +59,7 @@ export function CompactPageHeader({
   actions?: React.ReactNode
   eyebrowAccessory?: React.ReactNode
   backgroundImage?: string | null
+  backgroundGradient?: string
   dimBackgroundImage?: boolean
   borderless?: boolean
   compact?: boolean
@@ -58,6 +67,9 @@ export function CompactPageHeader({
   className?: string
   titleClassName?: string
 }) {
+  const shell = useOptionalAppShellContext()
+  const workspace = shell?.workspaces.find(item => item.id === shell.activeWorkspaceId)
+  const labTheme = !!workspace && isLabWorkspace(workspace, shell?.workspaces ?? [])
   const colors = toneClasses[tone]
 
   return (
@@ -66,7 +78,7 @@ export function CompactPageHeader({
         'relative overflow-hidden rounded-[22px]',
         hero ? 'min-h-[240px]' : compact ? 'min-h-[80px]' : 'min-h-[108px]',
         !borderless && 'border',
-        colors.surface,
+        labTheme ? 'border-sky-100/[0.12]' : colors.surface,
         className,
       )}
     >
@@ -74,7 +86,7 @@ export function CompactPageHeader({
         className="absolute inset-0 bg-cover bg-center"
         style={backgroundImage
           ? { backgroundImage: `url(${JSON.stringify(backgroundImage)})` }
-          : { background: GLOBAL_HERO_BACKGROUND }}
+          : { background: backgroundGradient ?? (labTheme ? LAB_HERO_BACKGROUND : GLOBAL_HERO_BACKGROUND) }}
       />
       {backgroundImage ? (
         <div

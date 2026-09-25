@@ -62,6 +62,19 @@ void _missingFromMap
 void _extraInMap
 
 describe('CHANNEL_MAP runtime contract', () => {
+  it('keeps Lab inspiration research and capture on the local host', () => {
+    const methods = [
+      ['startLabInspiration', RPC_CHANNELS.lab.INSPIRATION_START],
+      ['listLabInspiration', RPC_CHANNELS.lab.INSPIRATION_LIST],
+      ['cancelLabInspiration', RPC_CHANNELS.lab.INSPIRATION_CANCEL],
+      ['saveLabInspiration', RPC_CHANNELS.lab.INSPIRATION_SAVE],
+    ] as const
+    for (const [method, channel] of methods) {
+      expect(CHANNEL_MAP[method]).toMatchObject({ type: 'invoke', channel })
+      expect(LOCAL_ONLY_CHANNELS.has(channel)).toBe(true)
+      expect(REMOTE_ELIGIBLE_CHANNELS.has(channel)).toBe(false)
+    }
+  })
   it('routes saved Signals audio locally with a three-argument API', () => {
     const channel = RPC_CHANNELS.outputs.READ_SIGNAL_BRIEFING_AUDIO
     expect(CHANNEL_MAP.readSignalBriefingAudio).toMatchObject({ type: 'invoke', channel })

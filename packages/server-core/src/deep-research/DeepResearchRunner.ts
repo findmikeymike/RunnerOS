@@ -160,6 +160,8 @@ function executionContractForDepth(
       1,
       24 * 60 * 60 * 1000,
     ),
+    ...(requested?.researchToolsOnly === true ? { researchToolsOnly: true } : {}),
+    ...(requested?.nativePublicWebOnly === true ? { nativePublicWebOnly: true } : {}),
     maxSearchCalls,
     maxPageReads,
     maxConcurrentPageReads: boundedInteger(
@@ -267,13 +269,18 @@ function sourceSlugFromToolName(toolName: string): string | undefined {
     : undefined
 }
 
+function normalizeResearchToolName(toolName: string): string {
+  const name = toolName.toLowerCase()
+  return name === 'websearch' ? 'web_search' : name === 'webfetch' ? 'web_fetch' : name
+}
+
 function classifyResearchTool(
   toolName: string,
   sourceProfiles: DeepResearchSourceProfile[],
   input: Record<string, unknown> = {},
 ): DeepResearchToolKind | null {
   if (!isRelevantResearchToolName(toolName, sourceProfiles)) return null
-  const normalized = toolName.toLowerCase()
+  const normalized = normalizeResearchToolName(toolName)
   const leaf = normalized.split('__').at(-1) ?? normalized
   const apiPath = typeof input.path === 'string' ? input.path.toLowerCase() : ''
   if (leaf.startsWith('api_') && /(?:^|\/)(?:search|query|discover|lookup)(?:\/|$)/.test(apiPath)) {
@@ -404,7 +411,7 @@ function requiresResearchToolUse(run: DeepResearchRunSnapshot, step: DeepResearc
 }
 
 function isRelevantResearchToolName(toolName: string, sourceProfiles: DeepResearchSourceProfile[]): boolean {
-  const normalized = toolName.toLowerCase()
+  const normalized = normalizeResearchToolName(toolName)
   if (
     normalized === 'web_search' ||
     normalized === 'web_fetch'
@@ -470,19 +477,25 @@ export class DeepResearchRunner {
     }
 
     const policy = input.planPolicy ?? 'approve'
-    const sourceSlugs = uniqueStrings(input.sourceSlugs)
-    const sourceReadiness = this.deps.resolveSourceReadiness(workspaceId, sourceSlugs)
+    const nativePublicWebOnly = hostOptions.executionContract?.nativePublicWebOnly === true
+    const sourceSlugs = nativePublicWebOnly ? [] : uniqueStrings(input.sourceSlugs)
+    const sourceReadiness: DeepResearchSourceReadiness = nativePublicWebOnly
+      ? { requested: [], usable: [], missing: [], unusable: [] }
+      : this.deps.resolveSourceReadiness(workspaceId, sourceSlugs)
     const unavailable = [...sourceReadiness.missing, ...sourceReadiness.unusable]
     if (unavailable.length > 0) {
       throw new Error(`Deep research cannot start; unavailable source(s): ${unavailable.join(', ')}`)
     }
     const effectiveSourceSlugs = sourceSlugs.length > 0 ? sourceSlugs : sourceReadiness.usable
-    if (effectiveSourceSlugs.length === 0) {
+    if (!nativePublicWebOnly && effectiveSourceSlugs.length === 0) {
       throw new Error('Deep research requires at least one usable source. Activate or authenticate a source first.')
     }
     const depth = input.depth ?? 'standard'
     const reportFormat = input.reportFormat ?? 'standard'
-    const sourceProfiles = this.deps.resolveSourceProfiles(workspaceId, effectiveSourceSlugs)
+    const sourceProfiles: DeepResearchSourceProfile[] = nativePublicWebOnly
+      ? [{ slug: 'native-public-web', name: 'Built-in web_search and web_fetch', provider: 'native', type: 'builtin',
+        capabilities: ['search', 'browser'], tagline: 'Use web_search for public discovery and web_fetch to read source pages. No connected-source tools are enabled.' }]
+      : this.deps.resolveSourceProfiles(workspaceId, effectiveSourceSlugs)
     const hasDiscoverySource = sourceProfiles.some((source) => (
       source.capabilities.includes('search') || source.capabilities.includes('browser')
     ))
@@ -654,8 +667,22 @@ export class DeepResearchRunner {
         if (active.toolBudget.admittedToolUseIds.has(admissionKey)) return { allowed: true }
 
         const kind = classifyResearchTool(toolName, active.snapshot.plan.sourceProfiles ?? [], input)
-        if (!kind) return { allowed: true }
         const contract = this.executionContract(active.snapshot)
+        if (contract.nativePublicWebOnly && !['web_search', 'web_fetch'].includes(normalizeResearchToolName(toolName))) {
+          return { allowed: false, reason: 'This research run permits only built-in web_search and web_fetch.' }
+        }
+        if (contract.researchToolsOnly || contract.nativePublicWebOnly) {
+          // Prefix membership alone classifies arbitrary source tools as source-read.
+          // That is useful for accounting, but does not establish read-only intent.
+          const method = typeof input.method === 'string' ? input.method.toUpperCase() : undefined
+          const leaf = toolName.toLowerCase().split('__').at(-1) ?? ''
+          const apiPath = typeof input.path === 'string' ? input.path : ''
+          const recognizedApiPath = !leaf.startsWith('api_') || /^\/(?:search|query|discover|lookup|contents?|pages?|fetch|open|read|inspect|visit|browse)\/?$/.test(apiPath)
+          if (!kind || kind === 'source-read' || !recognizedApiPath || (method !== undefined && !['GET', 'HEAD', 'POST'].includes(method))) {
+            return { allowed: false, reason: 'This research run permits only recognized search and page-read tools.' }
+          }
+        }
+        if (!kind) return { allowed: true }
         if (active.toolBudget.totalCalls >= contract.maxTotalResearchToolCalls) {
           return { allowed: false, reason: 'Deep research tool-call limit reached.' }
         }
@@ -749,7 +776,9 @@ export class DeepResearchRunner {
         permissionMode: active.snapshot.planPolicy === 'auto' ? 'safe' : 'ask',
         enabledSourceSlugs: active.snapshot.sourceReadiness.usable,
         sessionStatus: 'in-progress',
-        customSystemPrompt: DEEP_RESEARCH_SYSTEM_PROMPT,
+        customSystemPrompt: this.executionContract(active.snapshot).nativePublicWebOnly
+          ? `${DEEP_RESEARCH_SYSTEM_PROMPT}\nUse only the built-in web_search and web_fetch tools. Search public web sources, then read their pages. Do not discover, activate, or call connected-source integrations.`
+          : DEEP_RESEARCH_SYSTEM_PROMPT,
         launchReceipt: {
           createdAt: Date.now(),
           origin: 'deep-research',

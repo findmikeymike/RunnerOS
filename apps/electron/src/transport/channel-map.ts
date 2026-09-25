@@ -365,6 +365,10 @@ export const CHANNEL_MAP = {
   // Creative Lab — workspace-scoped canonical song/project state
   getLabState: invoke(RPC_CHANNELS.lab.GET_STATE),
   saveLabState: invoke(RPC_CHANNELS.lab.SAVE_STATE),
+  startLabInspiration: invoke(RPC_CHANNELS.lab.INSPIRATION_START),
+  listLabInspiration: invoke(RPC_CHANNELS.lab.INSPIRATION_LIST),
+  cancelLabInspiration: invoke(RPC_CHANNELS.lab.INSPIRATION_CANCEL),
+  saveLabInspiration: invoke(RPC_CHANNELS.lab.INSPIRATION_SAVE),
   onLabStateChanged: listener(RPC_CHANNELS.lab.UPDATED),
 
   // Theme

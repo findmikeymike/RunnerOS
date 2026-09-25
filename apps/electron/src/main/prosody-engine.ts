@@ -5,6 +5,8 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { getBundledAssetsDir } from '@craft-agent/shared/utils'
 import type { ProsodyLookupRequest, ProsodyLookupResult, ProsodyRhymeItem } from '../shared/types'
 
+import { buildProsodyQuery, MAX_RHYMES } from './prosody-query'
+
 type ActiveLookup = {
   token: number
   child?: ChildProcessWithoutNullStreams
@@ -16,9 +18,6 @@ type ProcessResult = {
 }
 
 const CHANNEL = 'prosody:lookup'
-const MAX_SELECTION_LENGTH = 120
-const MAX_LINE_LENGTH = 500
-const MAX_RHYMES = 18
 
 const activeLookups = new Map<number, ActiveLookup>()
 let pythonPromise: Promise<string> | null = null
@@ -45,9 +44,7 @@ async function lookupProsody(
   webContentsId: number,
   token: number,
 ): Promise<ProsodyLookupResult> {
-  const selection = cleanInput(input?.selection, MAX_SELECTION_LENGTH)
-  const line = cleanInput(input?.line, MAX_LINE_LENGTH)
-  const target = extractTargetWord(selection)
+  const { selection, line, target, args } = buildProsodyQuery(input)
   const empty = emptyResult(target, selection, line)
 
   if (!target) return empty
@@ -56,21 +53,7 @@ async function lookupProsody(
     const python = await ensureProsodyPython()
     const enginePath = getEnginePath()
 
-    const selectionScan = await runJsonProcess(
-      python,
-      [enginePath, 'scan', selection, '--json'],
-      webContentsId,
-      token,
-    )
-    if (!isCurrent(webContentsId, token)) return empty
-
-    const syllables = Number.isFinite(selectionScan.syllables) ? Number(selectionScan.syllables) : undefined
-    const rhymeArgs = [enginePath, 'rhymes', target, '--type', 'all', '--max', String(MAX_RHYMES), '--json']
-    if (syllables && syllables > 0 && syllables <= 5) {
-      rhymeArgs.push('--syllables', String(syllables))
-    }
-
-    const rhymes = await runJsonProcess(python, rhymeArgs, webContentsId, token)
+    const rhymes = await runJsonProcess(python, [enginePath, ...args], webContentsId, token)
     if (!isCurrent(webContentsId, token)) return empty
 
     if (!rhymes.in_dictionary) {
@@ -87,7 +70,7 @@ async function lookupProsody(
       selection,
       line,
       inDictionary: true,
-      syllables: typeof rhymes.syllables === 'number' ? rhymes.syllables : syllables,
+      syllables: typeof rhymes.syllables === 'number' ? rhymes.syllables : undefined,
       stress: typeof rhymes.stress === 'string' ? rhymes.stress : undefined,
       perfect: normalizePerfectRhymes(rhymes.perfect, target),
       slant: normalizeSlantRhymes(rhymes.slant, target),
@@ -271,15 +254,6 @@ function normalizeSlantKind(kind: unknown): ProsodyRhymeItem['kind'] {
 function isUsefulRhyme(word: string, target: string): boolean {
   const clean = word.toLowerCase()
   return clean !== target && /^[a-z][a-z'-]{1,}$/.test(clean)
-}
-
-function extractTargetWord(selection: string): string {
-  const words = selection.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) ?? []
-  return (words.at(-1) ?? '').toLowerCase()
-}
-
-function cleanInput(value: unknown, maxLength: number): string {
-  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, maxLength)
 }
 
 function emptyResult(target: string, selection: string, line: string): ProsodyLookupResult {

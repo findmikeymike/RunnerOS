@@ -4,7 +4,6 @@ import {
   Copy,
   Eye,
   EyeOff,
-  FlaskConical,
   Gem,
   HelpCircle,
   Info,
@@ -18,6 +17,7 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { CompactPageHeader } from './CompactPageHeader'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import { useAgents } from '@/hooks/useAgents'
@@ -1150,8 +1150,8 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
   const selectedCount = selectedText.trim().split(/\s+/).filter(Boolean).length
   const prosodyPosition = prosodySelection ? prosodyPopoverPosition(prosodySelection.anchor) : null
   const hasProsodyMatches = Boolean((prosodyResult?.perfect.length ?? 0) + (prosodyResult?.slant.length ?? 0))
-  const primarySlants = prosodyResult?.slant.slice(0, 12) ?? []
-  const moreSlants = prosodyResult?.slant.slice(12, 60) ?? []
+  const perfectRhymes = prosodyResult?.perfect ?? []
+  const slantRhymes = prosodyResult?.slant ?? []
 
   return (
     <div className="runneros-glass-route flex h-full min-h-0 flex-col overflow-hidden bg-[#050505] text-white">
@@ -1162,10 +1162,10 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
         >
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="min-w-0 truncate text-[9px] font-semibold uppercase tracking-[0.14em] text-white/52">
-              Forward rhymes · {prosodySelection.selectedText.trim()}
+              Rhymes · {prosodyResult?.target || prosodySelection.selectedText.trim().split(/\s+/).at(-1)}
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              {moreSlants.length ? (
+              {slantRhymes.length ? (
                 <button
                   type="button"
                   onClick={() => setProsodyMorePage((current) => !current)}
@@ -1173,7 +1173,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
                       'flex h-5 w-5 items-center justify-center rounded-full text-white/38 hover:bg-white/[0.08] hover:text-white/76',
                     prosodyMorePage && 'rotate-180 bg-white/[0.06] text-white/68',
                   )}
-                  title={prosodyMorePage ? 'Show first page' : 'Show more rhymes'}
+                  title={prosodyMorePage ? 'Show perfect rhymes' : 'Show slant rhymes'}
                 >
                   <ChevronRight className="h-3 w-3" />
                 </button>
@@ -1191,7 +1191,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
 
           {prosodyBusy ? (
             <div className="rounded-lg border border-white/[0.1] bg-white/[0.055] px-2.5 py-2 text-[11px] font-medium text-white/58">
-              Preparing rhyme tools…
+              Finding rhymes…
             </div>
           ) : null}
 
@@ -1207,11 +1207,15 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
             </div>
           ) : null}
 
-          {!prosodyBusy && prosodyResult?.perfect.length && !prosodyMorePage ? (
+          {!prosodyBusy && !prosodyMorePage && prosodyResult && !prosodyResult.error && !perfectRhymes.length && slantRhymes.length ? (
+            <div className="text-[11px] text-white/54">No perfect matches. Use the arrow for slant rhymes.</div>
+          ) : null}
+
+          {!prosodyBusy && !prosodyMorePage && perfectRhymes.length ? (
             <div className="mb-2">
               <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white/48">Perfect</div>
               <div className="flex flex-wrap gap-1.5">
-                {prosodyResult.perfect.slice(0, 10).map((item) => (
+                {perfectRhymes.map((item) => (
                   <button
                     key={`perfect-${item.word}`}
                     type="button"
@@ -1226,29 +1230,11 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
             </div>
           ) : null}
 
-          {!prosodyBusy && primarySlants.length && !prosodyMorePage ? (
-            <div>
+          {!prosodyBusy && slantRhymes.length && prosodyMorePage ? (
+            <div className="max-h-[250px] overflow-auto pr-1">
               <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white/48">Slant</div>
               <div className="flex flex-wrap gap-1.5">
-                {primarySlants.map((item) => (
-                  <button
-                    key={`slant-${item.word}-${item.kind}`}
-                    type="button"
-                    title={item.kind}
-                    onClick={() => copyProsodyRhyme(item)}
-                    className="rounded-full border border-[#fb923c]/35 bg-[#3a281a] px-2.5 py-1 text-[11px] font-medium text-[#ffe0b0]/88 hover:bg-[#4a311d] hover:text-[#fff0d2]"
-                  >
-                    {prosodyCopiedWord === item.word ? 'Copied' : item.word}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {!prosodyBusy && moreSlants.length && prosodyMorePage ? (
-            <div className="max-h-[250px] overflow-auto pr-1">
-              <div className="flex flex-wrap gap-1.5">
-                {moreSlants.map((item) => (
+                {slantRhymes.map((item) => (
                   <button
                     key={`more-slant-${item.word}-${item.kind}`}
                     type="button"
@@ -1264,20 +1250,18 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
           ) : null}
         </div>
       ) : null}
-      <div className="shrink-0 px-3 pt-3">
-        <div className="relative flex w-full items-center justify-between gap-4 overflow-hidden rounded-xl bg-white/[0.045] px-4 py-2.5 shadow-card-lift backdrop-blur-xl before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_12%_-80%,rgba(251,146,60,0.13),transparent_48%)]">
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-center gap-1.5 text-[8px] font-medium uppercase tracking-[0.17em] text-white/34">
-              <FlaskConical className="h-3 w-3" />
-              Song Pad
-            </div>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              className="w-full border-0 bg-transparent text-lg font-medium tracking-normal text-white/88 outline-none placeholder:text-white/25"
-              placeholder="Untitled"
-            />
-          </div>
+      <div className="shrink-0 px-5 pt-4 xl:px-8 xl:pt-5">
+        <CompactPageHeader
+          eyebrow="Song Pad"
+          tone="blue"
+          title={<input
+            aria-label="Song title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            className="w-full min-w-0 border-0 bg-transparent text-[26px] font-medium tracking-tight text-white/92 outline-none placeholder:text-white/50"
+            placeholder="Untitled"
+          />}
+          actions={
           <div className="relative flex shrink-0 items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl bg-black/15 px-3 py-2 text-xs text-white/45 backdrop-blur-md">
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: projectColor }} />
@@ -1344,16 +1328,17 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
               </PopoverContent>
             </Popover>
           </div>
-        </div>
+          }
+        />
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
         <div className="grid w-full gap-3 xl:grid-cols-[minmax(0,1.12fr)_minmax(440px,0.88fr)]">
           <section className={cn(
-            'min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.05] bg-[#080808] shadow-minimal',
+            'min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.075] bg-[#080808] shadow-minimal',
             compactPane === 'rough' ? 'flex' : 'hidden xl:flex',
           )}>
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.04] px-3 py-2">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.065] px-3 py-2">
               <div className="flex min-w-0 items-center gap-2">
                 <div
                   title="Highlight text and click to send to song section."
@@ -1447,17 +1432,17 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
               />
             </div>
 
-            <div className="flex shrink-0 items-center justify-between border-t border-white/[0.04] px-4 py-3 text-[11px] text-white/34">
+            <div className="flex shrink-0 items-center justify-between border-t border-white/[0.065] px-4 py-3 text-[11px] text-white/34">
               <span>{selectedText.trim() ? `${selectedCount} selected word${selectedCount === 1 ? '' : 's'} from ${selectionSource}` : 'Select a line or phrase to move it.'}</span>
               <span>Send copies. Your rough pad stays intact.</span>
             </div>
           </section>
 
           <section className={cn(
-            'min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.05] bg-[#080808] shadow-minimal',
+            'min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.075] bg-[#080808] shadow-minimal',
             compactPane === 'final' ? 'flex' : 'hidden xl:flex',
           )}>
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.04] px-3 py-2">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.065] px-3 py-2">
               <div className="flex min-w-0 items-center gap-2">
                 <div className="flex items-center gap-1.5 text-[8px] font-medium uppercase tracking-[0.14em] text-white/50">
                   <Layers className="h-2.5 w-2.5 text-white/32" />
@@ -1489,7 +1474,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
                 <article
                   key={section.id}
                   className={cn(
-                    'border-b border-white/[0.045] py-2.5 last:border-b-0',
+                    'border-b border-white/[0.07] py-2.5 last:border-b-0',
                     !section.text.trim() && 'opacity-55',
                   )}
                 >

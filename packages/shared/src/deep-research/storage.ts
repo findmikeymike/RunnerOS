@@ -155,6 +155,8 @@ function isDeepResearchRunSnapshot(value: unknown, expectedRunId: string): value
   const executionContract = value.executionContract;
   if (executionContract !== undefined) {
     if (!isRecord(executionContract)) return false;
+    if (executionContract.nativePublicWebOnly !== undefined && typeof executionContract.nativePublicWebOnly !== 'boolean') return false;
+    if (executionContract.researchToolsOnly !== undefined && typeof executionContract.researchToolsOnly !== 'boolean') return false;
     if (!isNonNegativeInteger(executionContract.overallTimeoutMs) || executionContract.overallTimeoutMs === 0) return false;
     if (!isNonNegativeInteger(executionContract.maxSearchCalls)) return false;
     if (!isNonNegativeInteger(executionContract.maxPageReads)) return false;

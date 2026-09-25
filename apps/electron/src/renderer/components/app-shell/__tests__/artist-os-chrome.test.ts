@@ -422,7 +422,7 @@ describe('Artist OS persistent shell chrome', () => {
       'CampaignCalendarPage.tsx',
       'AgendaPage.tsx',
       'VaultPage.tsx',
-      'LabWorkspaceHome.tsx',
+      'LabInspirationHome.tsx',
       'LabSongsPage.tsx',
       'LabSequencePage.tsx',
     ]
@@ -562,22 +562,25 @@ describe('Artist OS persistent shell chrome', () => {
     expect(dock).toContain('Delete this Spark? This cannot be undone.')
   })
 
-  test('connects Lab Home to the canonical Spark Bank and bounded songwriting team', () => {
+  test('routes Lab Home through the inspiration journal into the Pad and keeps its songwriting team bounded', () => {
     const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
     const home = readFileSync(join(import.meta.dir, '..', 'LabWorkspaceHome.tsx'), 'utf8')
+    const inspiration = readFileSync(join(import.meta.dir, '..', 'LabInspirationHome.tsx'), 'utf8')
     const main = readFileSync(join(import.meta.dir, '..', 'MainContentPanel.tsx'), 'utf8')
+    const workers = readFileSync(join(import.meta.dir, '..', 'AgentsLaunchpad.tsx'), 'utf8')
 
     expect(shell).not.toContain('title: "Drafts"')
-    expect(home).toContain('loadLabUiSparks')
-    expect(home).toContain('openLabSparkBank')
-    expect(home).toContain('LAB_DEFAULT_WORKER_SLUGS')
-    expect(home).toContain('title="Continue writing"')
-    expect(home).toContain('title="Spark bank"')
-    expect(home).toContain('compact')
-    expect(home).not.toContain('title="Lab Team"')
+    expect(home).toContain('<LabInspirationHome workspaceId={workspaceId} />')
+    expect(main).toContain('<LabWorkspaceHome workspaceId={activeWorkspaceId || \'\'} workspaceName={activeWorkspace?.name} />')
+    expect(inspiration).toContain('title="The Lab"')
+    expect(inspiration).toContain('window.electronAPI.listLabInspiration(workspaceId)')
+    expect(inspiration).toContain('window.electronAPI.startLabInspiration(workspaceId,')
+    expect(inspiration).toContain('window.electronAPI.saveLabInspiration(workspaceId,')
+    expect(inspiration).toContain("navigate(routes.view.lab('pad'))")
+    expect(inspiration).toContain("navigate(routes.view.lab('pad', result.songId))")
     expect(main).toContain('labOnly={isLabWorkspace(activeWorkspace, workspaces)}')
-    expect(home).toContain("routes.view.agents('reference-master')")
-    expect(home).not.toContain('song.rememberText')
+    expect(workers).toContain('const allowedAgentSlugs = labOnly ? LAB_DEFAULT_WORKER_SLUGS : undefined')
+    expect(inspiration).not.toContain('song.rememberText')
   })
 
   test('self-heals declared songwriting skills before a Pad worker launches', () => {

@@ -151,7 +151,7 @@ describe('DeepResearchRunner', () => {
       runId: forgedId,
       purpose: 'forged',
       owner: { type: 'forged', id: 'forged' },
-      executionContract: { overallTimeoutMs: 1 },
+      executionContract: { overallTimeoutMs: 1, researchToolsOnly: true, nativePublicWebOnly: true },
       outputSchema: { type: 'string' },
     } as unknown as Parameters<DeepResearchRunner['start']>[1])
     expect(run.id).not.toBe(forgedId)
@@ -159,6 +159,8 @@ describe('DeepResearchRunner', () => {
     expect(run.owner).toBeUndefined()
     expect(run.outputSchema).toBeUndefined()
     expect(run.executionContract?.overallTimeoutMs).toBe(15 * 60 * 1000)
+    expect(run.executionContract?.researchToolsOnly).toBeUndefined()
+    expect(run.executionContract?.nativePublicWebOnly).toBeUndefined()
   })
 
   test('host guard blocks search, concurrency, and per-page retry overflow before execution', async () => {
@@ -229,6 +231,99 @@ describe('DeepResearchRunner', () => {
       { name: 'page-retry', allowed: false },
       { name: 'page-2', allowed: true },
     ])
+  })
+
+  test('host-only research restriction rejects unrelated and source mutation tools without changing default runs', async () => {
+    workspaceRoot = mkdtempSync(join(tmpdir(), 'deep-research-tools-only-'))
+    for (const strict of [true, false]) {
+      let guard: HostToolExecutionGuard | undefined
+      const events: DeepResearchRunnerEvent[] = []
+      const decisions: boolean[] = []
+      let sessionCount = 0
+      const runner = new DeepResearchRunner({
+        createSession: async (_workspaceId, _options, executionGuard) => {
+          guard = executionGuard
+          return { id: `strict-${strict}-${++sessionCount}` }
+        },
+        sendMessage: async (sessionId) => {
+          if (sessionCount !== 1) return
+          const calls: Array<[string, Record<string, unknown>]> = [
+            ['Bash', { command: 'echo unsafe' }],
+            ['mcp__exa__delete_collection', {}],
+            ['mcp__exa__api_exa', { path: '/contents', method: 'DELETE' }],
+            ['mcp__exa__api_exa', { path: '/search/delete', method: 'POST' }],
+            ['web_search', { query: 'research' }],
+            ['mcp__exa__api_exa', { path: '/contents', method: 'POST' }],
+          ]
+          for (const [index, [toolName, input]] of calls.entries()) {
+            const toolUseId = `call-${index}`
+            decisions.push(guard!.beforeToolUse({ sessionId, toolUseId, toolName, input }).allowed)
+            guard!.onToolUseCompleted?.({ sessionId, toolUseId, toolName, isError: false })
+          }
+        },
+        getLastAssistantText: () => 'complete',
+        getSessionToolUseSummary: () => ({ count: 1, names: ['web_search'] }),
+        abortSession: async () => {},
+        getWorkspaceRootPath: () => workspaceRoot,
+        resolveSourceReadiness: () => ({ requested: ['exa'], usable: ['exa'], missing: [], unusable: [] }),
+        resolveSourceProfiles: () => [{ slug: 'exa', name: 'Exa', provider: 'exa', type: 'api', capabilities: ['search', 'browser'] }],
+        emit: (event) => events.push(event),
+      })
+      const prepared = runner.prepare('workspace-1', {
+        topic: 'research restriction', planPolicy: 'auto', sourceSlugs: ['exa'],
+      }, { executionContract: { researchToolsOnly: strict } })
+      expect(readDeepResearchRun(workspaceRoot, prepared.id)?.executionContract?.researchToolsOnly).toBe(strict || undefined)
+      runner.begin('workspace-1', prepared.id)
+      await waitFor(() => events.some(event => event.type === 'run.completed'))
+      expect(decisions).toEqual(strict ? [false, false, false, false, true, true] : [true, true, true, true, true, true])
+      expect(readDeepResearchRun(workspaceRoot, prepared.id)?.executionContract?.researchToolsOnly).toBe(strict || undefined)
+    }
+  })
+
+  test('host native public-web mode excludes integrations and recognizes real Pi hook aliases', async () => {
+    workspaceRoot = mkdtempSync(join(tmpdir(), 'deep-research-native-web-'))
+    const events: DeepResearchRunnerEvent[] = []
+    const created: CreateSessionOptions[] = []
+    let guard: HostToolExecutionGuard | undefined
+    let sessionCount = 0
+    const runner = new DeepResearchRunner({
+      createSession: async (_workspaceId, options, executionGuard) => {
+        created.push(options)
+        guard = executionGuard
+        return { id: `native-${++sessionCount}` }
+      },
+      sendMessage: async sessionId => {
+        for (const toolName of ['WebSearch', 'WebFetch', 'web_search', 'web_fetch']) {
+          expect(guard!.beforeToolUse({ sessionId, toolUseId: toolName, toolName, input: {} }).allowed).toBe(true)
+          guard!.onToolUseCompleted?.({ sessionId, toolUseId: toolName, toolName, isError: false })
+        }
+        for (const toolName of ['Bash', 'mcp__native-public-web__search', 'mcp__monid__monid_discover']) {
+          expect(guard!.beforeToolUse({ sessionId, toolUseId: toolName, toolName, input: {} }).allowed).toBe(false)
+        }
+      },
+      getLastAssistantText: () => 'research complete',
+      getSessionToolUseSummary: () => ({ count: 2, names: ['WebSearch', 'WebFetch'] }),
+      getSessionToolUseRecords: () => [{ toolUseId: 'actual-page', toolName: 'WebFetch', toolInput: { url: 'https://example.com/article' }, toolResult: 'Source page text.' }],
+      abortSession: async () => {},
+      getWorkspaceRootPath: () => workspaceRoot,
+      resolveSourceReadiness: () => { throw new Error('Must not select all configured sources') },
+      resolveSourceProfiles: () => { throw new Error('Must not resolve configured profiles') },
+      emit: event => events.push(event),
+    })
+    const prepared = runner.prepare('workspace-1', { topic: 'native research', planPolicy: 'auto', sourceSlugs: ['monid'] }, {
+      executionContract: { nativePublicWebOnly: true, maxSearchCalls: 12, maxPageReads: 12, maxTotalResearchToolCalls: 24 },
+    })
+    expect(prepared.sourceReadiness.usable).toEqual([])
+    expect(prepared.plan.requiredSourceSlugs).toEqual([])
+    expect(prepared.plan.sourceProfiles.map(source => source.slug)).toEqual(['native-public-web'])
+    expect(readDeepResearchRun(workspaceRoot, prepared.id)?.executionContract?.nativePublicWebOnly).toBe(true)
+    runner.begin('workspace-1', prepared.id)
+    await waitFor(() => events.some(event => event.type === 'run.completed'))
+    expect(created.every(options => options.enabledSourceSlugs?.length === 0)).toBe(true)
+    expect(created[0]?.customSystemPrompt).toContain('Use only the built-in web_search and web_fetch')
+    const completed = readDeepResearchRun(workspaceRoot, prepared.id)!
+    expect(completed.state).toBe('succeeded')
+    expect(completed.steps[0]?.toolReceipts?.find(receipt => receipt.toolName === 'WebFetch')?.kind).toBe('page-read')
   })
 
   test('persists sanitized tool receipts and repairs structured synthesis once', async () => {
