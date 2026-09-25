@@ -58,76 +58,109 @@ def coda_score(c1, c2):
     s = 0
     for a, b in zip(reversed(c1), reversed(c2)):
         if a == b: s += 2
-        elif MANNER.get(a) == MANNER.get(b): s += 1
+        elif a in MANNER and MANNER[a] == MANNER.get(b): s += 1
     return s - abs(len(c1) - len(c2))
 
 def tail_sim(t1, t2):
+    """Align tails so one added consonant is a near match (town / sound)."""
     if not t1 and not t2: return 2
-    s = 0
-    for a, b in zip(reversed(t1), reversed(t2)):
-        if a == b: s += 2
-        elif MANNER.get(a) == MANNER.get(b): s += 1
-    return max(-1, s - abs(len(t1) - len(t2)))
+    previous = [-j for j in range(len(t2) + 1)]
+    for i, a in enumerate(t1, 1):
+        current = [-i]
+        for j, b in enumerate(t2, 1):
+            similarity = (2 if a == b else
+                          1 if a in MANNER and MANNER[a] == MANNER.get(b) else -2)
+            current.append(max(previous[j - 1] + similarity,
+                               previous[j] - 1, current[j - 1] - 1))
+        previous = current
+    return previous[-1]
 
 _ALL = None
+_RHYMES = None
+
+def rhyme_key(ph):
+    # Primary and secondary stress can rhyme (town / breakdown).
+    return tuple(bare(t) for t in P.rhyming_part(ph).split())
+
 def all_words():
-    global _ALL
+    global _ALL, _RHYMES
     if _ALL is None:
+        P.init_cmu()
         seen = {}
+        rhymes = {}
         for w, ph in P.pronunciations:
-            if "(" in w or not w.isalpha(): continue
-            if not any(c in "aeiouy" for c in w): continue  # kill abbrevs like dr, mr, tv
-            if w not in seen: seen[w] = ph
-        _ALL = seen
+            if not re.fullmatch(r"[a-z]+(?:[-'][a-z]+)*", w): continue
+            if not any(c in "aeiouy" for c in w): continue
+            seen.setdefault(w, set()).add(ph)
+            rhymes.setdefault(rhyme_key(ph), {}).setdefault(w, set()).add(ph)
+        _ALL = {w: tuple(sorted(phs)) for w, phs in seen.items()}
+        _RHYMES = rhymes
     return _ALL
 
+def perfect_matches(word):
+    """Matching pronunciations, including every reading of the selected word."""
+    all_words()
+    matches = {}
+    for ph in P.phones_for_word(word.lower()):
+        for w, phs in _RHYMES.get(rhyme_key(ph), {}).items():
+            if w != word.lower(): matches.setdefault(w, set()).update(phs)
+    return matches
+
+def slant_score(T, W):
+    # Anchor at the stressed vowel, never just an unstressed final syllable.
+    # Shared vowels need some supporting tail similarity; longer tails must
+    # match proportionately so a final consonant cannot outweigh a weak anchor.
+    if (T["sv"] == W["sv"]
+            and sum(t in VOWELS for t in T["stail"])
+                == sum(t in VOWELS for t in W["stail"])):
+        similarity = tail_sim(T["stail"], W["stail"])
+        threshold = max(1, max(len(T["stail"]), len(W["stail"])) - 1)
+        if similarity >= threshold:
+            return 3 + similarity, "assonance"
+    # Different vowels need an exact consonant cluster at a stressed ending.
+    # A single F (enough / sheriff) or N (town / in) is not enough evidence.
+    if (T["fstress"] and W["fstress"]
+            and T["fcoda"] == W["fcoda"] and len(T["fcoda"]) >= 2):
+        return 3, "consonance"
+    return None
+
 def slant(word, want_syll=None, max_n=40, min_freq=3.4):
-    ph = phones(word)
-    if not ph: return []
-    T = anchors(ph)
-    if not T: return []
-    perfect_set = set(P.rhymes(word)); wl = word.lower()
+    targets = [anchors(ph) for ph in P.phones_for_word(word.lower())]
+    targets = [t for t in targets if t]
+    if not targets: return []
+    perfect_set = set(perfect_matches(word)); wl = word.lower()
     out = []
-    for w, wph in all_words().items():
+    for w, pronunciations in all_words().items():
+        if not w.isalpha() or not any(c in "aeiouy" for c in w): continue
         if w == wl or w in perfect_set: continue
-        if len(wl) >= 4 and (wl in w or w in wl): continue  # skip compounds/derivatives
-        if freq(w) < min_freq: continue
-        W = anchors(wph)
-        if not W: continue
-        # Anchor A — last STRESSED vowel matches (assonance; the ear's primary anchor)
-        sA = (3 + tail_sim(T["stail"], W["stail"])) if W["sv"] == T["sv"] else None
-        # Anchor B — final syllable. A bare UNSTRESSED final vowel is only a weak rhyme,
-        # so require the final vowel be stressed in both, OR a real consonant-coda match.
-        sB = None
-        if W["fv"] == T["fv"]:
-            cs = coda_score(T["fcoda"], W["fcoda"])
-            if (T["fstress"] and W["fstress"]) or (cs >= 2 and T["fcoda"]):
-                sB = 2 + cs
-        else:
-            cs = coda_score(T["fcoda"], W["fcoda"])
-            if cs >= 3 and T["fcoda"]:            # consonance: strong coda, different vowel
-                sB = cs
-        cands = [x for x in (sA, sB) if x is not None]
-        if not cands: continue
-        base = max(cands)
-        syl = P.syllable_count(wph)
-        if want_syll and syl != want_syll: continue
-        if sA is not None and sA >= (sB or -99): kind = "assonance"
-        elif sB is not None and W["fv"] == T["fv"]: kind = "assonance"
-        else: kind = "consonance"
-        score = base + 0.25 * freq(w) - 0.1 * syl
-        out.append((score, w, syl, P.stresses(wph), kind))
+        if len(wl) >= 4 and (wl in w or w in wl): continue
+        frequency = freq(w)
+        if frequency < min_freq: continue
+        best = None
+        for wph in pronunciations:
+            W = anchors(wph)
+            if not W: continue
+            syl = P.syllable_count(wph)
+            if want_syll and syl != want_syll: continue
+            for T in targets:
+                match = slant_score(T, W)
+                if match is None: continue
+                base, kind = match
+                score = base + 0.25 * frequency - 0.1 * syl
+                candidate = (score, w, syl, P.stresses(wph), kind)
+                if best is None or candidate > best: best = candidate
+        if best is not None: out.append(best)
     out.sort(key=lambda x: (-x[0], x[2], x[1]))
     return out[:max_n]
 
 def perfect(word, want_syll=None, max_n=40, min_freq=2.6):
     res = []
-    for w in P.rhymes(word):
-        if freq(w) < min_freq: continue
-        wph = phones(w)
-        if want_syll and wph and P.syllable_count(wph) != want_syll: continue
-        res.append((w, round(freq(w), 2)))
-    res.sort(key=lambda x: -x[1])
+    for w, pronunciations in perfect_matches(word).items():
+        frequency = freq(w)
+        if frequency < min_freq: continue
+        if want_syll and not any(P.syllable_count(ph) == want_syll for ph in pronunciations): continue
+        res.append((w, round(frequency, 2)))
+    res.sort(key=lambda x: (-x[1], x[0]))
     return [w for w, _ in res[:max_n]]
 
 def do_rhymes(a):
