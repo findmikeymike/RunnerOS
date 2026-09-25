@@ -5,6 +5,8 @@
  * Shell, presentation wrappers, and IO use synthetic fixtures; no app profile or providers.
  */
 import { build } from 'esbuild';
+import { build as buildStyles } from 'vite';
+import tailwindcss from '@tailwindcss/vite';
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -24,11 +26,13 @@ const boundaries: Record<string, string> = {
     '@/hooks/useOutputs': 'outputs', '@/context/AppShellContext': 'shell', '@/contexts/NavigationContext': 'navigation',
     sonner: 'toast', '@/components/ui/button': 'button', '@/components/ui/styled-dropdown': 'menu',
 };
-const bundle = await build({
+const buildFixture = (realPresentation = false) => build({
     entryPoints: [resolve(import.meta.dir, 'fixtures/video-studio-ui.tsx')],
     bundle: true,
     write: false,
+    outdir: '/tmp/video-studio-fixture-bundle',
     platform: 'browser',
+    loader: { '.woff2': 'dataurl', '.woff': 'dataurl', '.ttf': 'dataurl' },
     format: 'iife',
     jsx: 'automatic',
     tsconfig: resolve(base, 'apps/electron/tsconfig.json'),
@@ -37,7 +41,8 @@ const bundle = await build({
         setup(builder) {
             builder.onResolve({ filter: /.*/ }, args => {
                 const key = boundaries[args.path];
-                return key ? { path: key, namespace: 'fixture' } : undefined;
+                if (realPresentation && key === 'menu') return { path: resolve(base, 'packages/ui/src/components/ui/StyledDropdown.tsx') };
+                return key && !(realPresentation && ['button', 'menu'].includes(key)) ? { path: key, namespace: 'fixture' } : undefined;
             });
             builder.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({
                 contents: stubs[args.path],
@@ -47,6 +52,16 @@ const bundle = await build({
         },
     }],
 });
+
+const bundle = await buildFixture();
+const layoutBundle = await buildFixture(true);
+const styleBuild = await buildStyles({
+    configFile: false, root: base, logLevel: 'error', plugins: [tailwindcss()],
+    build: { write: false, minify: false, rollupOptions: { input: resolve(base, 'apps/electron/src/renderer/index.css') } },
+});
+assert.ok('output' in styleBuild, 'CSS build must return assets');
+const stylesheet = styleBuild.output.find(asset => asset.type === 'asset' && asset.fileName.endsWith('.css'));
+assert.ok(stylesheet?.type === 'asset', 'real compiled design CSS is required');
 
 const temporary = mkdtempSync(join(tmpdir(), 'video-studio-ui-'));
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
@@ -113,9 +128,11 @@ try {
             }
             return route.fulfill({ contentType: 'video/mp4', headers: { 'Accept-Ranges': 'bytes' }, body: bytes });
         }
+        if (path === '/fixture.css') return route.fulfill({ contentType: 'text/css', body: String(stylesheet.source) + '\n' + layoutBundle.outputFiles.filter(file => file.path.endsWith('.css')).map(file => file.text).join('\n') });
+        if (path === '/fixture-layout.js') return route.fulfill({ contentType: 'text/javascript', body: layoutBundle.outputFiles[0]!.text });
         if (path === '/fixture.js')
             return route.fulfill({ contentType: 'text/javascript', body: bundle.outputFiles[0]!.text });
-        return route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body><div id="root"></div><script src="/fixture.js"></script></body></html>' });
+        return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html class="dark"><head><link rel="stylesheet" href="/fixture.css"></head><body><div id="root" style="height:100vh;min-width:0"></div><script src="/${new URL(route.request().url()).searchParams.has('layout') ? 'fixture-layout' : 'fixture'}.js"></script></body></html>` });
     });
     page.setDefaultTimeout(6000);
     page.on('dialog', dialog => dialog.accept());
@@ -124,13 +141,15 @@ try {
     const fixture = () => page.evaluate(() => ({ calls: (window as any).fixture.calls, navigations: (window as any).fixture.navigations, drafts: (window as any).fixture.drafts, disk: (window as any).fixture.disk(), initialText: (window as any).fixture.initialText, toasts: (window as any).fixture.toasts }));
     const reopen = async () => { await page.evaluate(() => { (window as any).fixture.unmount(); (window as any).fixture.mount(); }); await page.getByRole('button', { name: 'Restore draft', exact: true }).waitFor(); };
     const edit = () => page.getByRole('button', { name: 'Add title', exact: true }).click();
-    const raw = async () => { if (!await page.locator('textarea').count())
+    const openInspector = async () => { const toggle = page.getByRole('button', { name: 'Toggle inspector', exact: true }); if (await toggle.getAttribute('aria-pressed') !== 'true') await toggle.click(); };
+    const raw = async () => { await openInspector(); if (!await page.locator('textarea').count())
         await page.getByRole('button', { name: /Developer details/ }).click(); return page.locator('textarea').last(); };
     const save = () => page.getByRole('button', { name: 'Save project', exact: true }).click();
-    const check = async (name: string, body: () => Promise<void>) => {
+    const check = async (name: string, body: () => Promise<void>, layout = false) => {
+        if (process.env.VIDEO_UI_LAYOUT_ONLY && !layout) return;
         try {
             errors = [];
-            await page.goto('https://video-studio-fixture.test/');
+            await page.goto(`https://video-studio-fixture.test/${layout ? '?layout=1' : ''}`);
             await page.evaluate(() => localStorage.clear());
             await page.reload();
             await page.getByRole('button', { name: 'Add title', exact: true }).waitFor();
@@ -144,7 +163,7 @@ try {
             console.error(`FAIL ${name}: ${error instanceof Error ? error.stack : error}`);
             if (errors.length)
                 console.error(errors);
-            console.error(await page.evaluate(() => ({ video: document.querySelector('video') ? { time: document.querySelector('video')!.currentTime, duration: document.querySelector('video')!.duration, seekable: document.querySelector('video')!.seekable.length ? document.querySelector('video')!.seekable.end(0) : 0, seeking: document.querySelector('video')!.seeking, ready: document.querySelector('video')!.readyState } : null, markers: Array.from(document.querySelectorAll('div[aria-hidden="true"][style]')).map(e => (e as HTMLElement).style.cssText) })));
+            console.error(await page.evaluate(() => ({ canvas: document.querySelector('canvas[aria-label="Composition preview"]')?.outerHTML, alerts: [...document.querySelectorAll('[role="alert"]')].map(e => e.textContent), video: document.querySelector('video') ? { time: document.querySelector('video')!.currentTime, duration: document.querySelector('video')!.duration, seekable: document.querySelector('video')!.seekable.length ? document.querySelector('video')!.seekable.end(0) : 0, seeking: document.querySelector('video')!.seeking, ready: document.querySelector('video')!.readyState } : null, markers: Array.from(document.querySelectorAll('div[aria-hidden="true"][style]')).map(e => (e as HTMLElement).style.cssText) })));
         }
     };
     await check('real page edit saves against exact original disk bytes', async () => {
@@ -198,7 +217,7 @@ try {
         await page.getByRole('button', { name: 'Source', exact: true }).click();
         await page.waitForFunction(() => document.querySelector('video')?.getAttribute('src')?.endsWith('/source.mp4'));
     });
-    const openAgent = async () => { await page.getByRole('button', { name: 'Video Agent', exact: true }).click(); await page.getByPlaceholder('Make this a 9:16 punchy short...').fill('Synthetic trim request'); };
+    const openAgent = async () => { await openInspector(); await page.getByRole('button', { name: 'Video Agent', exact: true }).click(); await page.getByPlaceholder('Make this a 9:16 punchy short...').fill('Synthetic trim request'); };
     await check('agent saves first and deferred-save double click launches once', async () => {
         await page.evaluate(() => (window as any).fixture.holdSave = true);
         await openAgent();
@@ -592,6 +611,71 @@ try {
         await page.waitForTimeout(200);
         assert.equal(await page.getByLabel('Composition time', { exact: true }).inputValue(), stopped);
     });
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 1100, height: 760 }]) {
+        await check(`real styled editor fills ${viewport.width}x${viewport.height} with a dominant stage and visible timeline`, async () => {
+            await page.setViewportSize(viewport);
+            await page.getByTestId('video-stage').waitFor();
+            await page.waitForFunction(() => getComputedStyle(document.querySelector('.video-studio-workspace')!).display === 'grid');
+            const stage = await page.getByTestId('video-stage').boundingBox();
+            const timeline = await page.getByTestId('video-timeline').boundingBox();
+            assert.ok(stage && timeline);
+            assert.ok(stage.width > viewport.width * 0.65, `stage should dominate available width: ${JSON.stringify(stage)}`);
+            assert.ok(stage.height > viewport.height * 0.35, `stage should dominate available height: ${JSON.stringify(stage)}`);
+            assert.ok(timeline.height >= 150 && timeline.y + timeline.height <= viewport.height + 1, `timeline must stay visible: ${JSON.stringify(timeline)}`);
+            assert.equal(await page.getByTestId('video-inspector').isVisible(), false);
+            await openInspector();
+            assert.equal(await page.getByTestId('video-inspector').isVisible(), true);
+            await page.getByRole('button', { name: 'Toggle inspector', exact: true }).click();
+            assert.equal(await page.getByTestId('video-inspector').isVisible(), false);
+            const mediaBounds = await page.locator('.video-studio-media').boundingBox();
+            const cardBounds = await page.locator('.video-studio-media').getByRole('button', { name: /Synthetic source/ }).boundingBox();
+            assert.ok(mediaBounds && cardBounds && cardBounds.x >= mediaBounds.x && cardBounds.x + cardBounds.width <= mediaBounds.x + mediaBounds.width, 'media card must fit its column');
+            const rangeStyles = await page.locator('.video-studio-shell input[type="range"]').evaluateAll(inputs => inputs.map(input => getComputedStyle(input).appearance));
+            assert.ok(rangeStyles.length > 0 && rangeStyles.every(appearance => appearance === 'none'), 'ranges must use editor styling');
+            await page.getByTestId('video-timeline').getByRole('button', { name: /Synthetic clip/ }).click();
+            assert.equal(await page.getByTestId('video-inspector').isVisible(), true, 'clip selection opens inspector');
+            await page.getByRole('button', { name: 'Toggle inspector', exact: true }).click();
+            assert.equal(await page.getByTestId('video-inspector').isVisible(), false);
+            const dimensions = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, width: innerWidth }));
+            assert.ok(dimensions.scroll <= dimensions.width + 1, `no document horizontal overflow: ${JSON.stringify(dimensions)}`);
+            const zoom = page.getByRole('slider', { name: 'Zoom', exact: true });
+            const zoomValue = page.getByRole('button', { name: 'Reset timeline zoom', exact: true });
+            await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+            assert.equal(await zoomValue.textContent(), '125%');
+            assert.equal(await zoom.inputValue(), '1.25');
+            await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+            assert.equal(await zoomValue.textContent(), '100%');
+            await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+            await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+            assert.equal(await zoomValue.textContent(), '150%');
+            await zoomValue.click();
+            assert.equal(await zoom.inputValue(), '1');
+            await zoom.focus(); await page.keyboard.press('ArrowRight');
+            assert.equal(await zoom.inputValue(), '1.25', 'zoom keyboard increments by25 percent');
+            assert.equal(await zoom.getAttribute('aria-valuetext'), '125 percent');
+            await page.getByRole('button', { name: 'Composition', exact: true }).click();
+            const transport = page.getByRole('group', { name: 'Preview transport', exact: true });
+            const seek = page.getByRole('slider', { name: 'Composition time', exact: true });
+            await seek.focus(); await page.keyboard.press('Home'); await readyComposition(0);
+            assert.equal(await seek.inputValue(), '0');
+            await page.keyboard.press('ArrowRight'); await readyComposition(1);
+            assert.equal(await seek.inputValue(), '1', 'scrubber supports precise keyboard seek');
+            await page.keyboard.press('End'); await readyComposition(2000);
+            assert.equal(await seek.inputValue(), '2000');
+            await seekComposition(1000); await readyComposition(1000);
+            assert.equal(await seek.getAttribute('aria-valuetext'), '00:01.000 of 00:02.000');
+            assert.deepEqual(await transport.locator('.video-timecode').allTextContents(), ['00:01.000', '00:02.000']);
+            assert.equal(await seek.evaluate(input => getComputedStyle(input).getPropertyValue('--range-fill').trim()), '50%');
+            assert.equal(await seek.evaluate(input => getComputedStyle(input).appearance), 'none');
+            await seek.evaluate(input => (input as HTMLInputElement).blur());
+            await page.screenshot({ path: `/tmp/video-studio-layout-${viewport.width}x${viewport.height}.png` });
+            if (viewport.width === 1100) {
+                await page.screenshot({ path: '/tmp/video-transport-polish.png' });
+                await page.locator('.video-scrubber').screenshot({ path: '/tmp/video-scrubber-polish.png' });
+                await page.locator('.video-zoom-control').screenshot({ path: '/tmp/video-zoom-polish.png' });
+            }
+        }, true);
+    }
 }
 finally {
     try {

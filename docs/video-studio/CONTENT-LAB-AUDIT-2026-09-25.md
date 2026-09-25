@@ -135,3 +135,15 @@ This section supersedes earlier notes about separate writers and best-effort com
 - Electron, server-core and standalone browser-harness typechecks pass; Artist OS main and renderer builds pass. Renderer retains existing chunk-size/Jotai warnings. Focused registered-RPC source checks and shared audio tests pass, including real FFmpeg samples. Final repository regression result is recorded below.
 - Limits: this is interactive preview, not sample-accurate final rendering. Browser scheduling, source decoding and final font/color rendering can differ; Rendered review remains the final reference. No app restart, live provider call or remote push was performed.
 - Final repository regression: **67 processes passed, zero failed or skipped** (six discovery shards plus 61 isolated checks), recorded in `/tmp/video-audio-full-tests.log`.
+
+## Editor visual layout correction
+
+- Live review exposed two integration problems missed by isolated component testing: Video Studio fell through to an empty chat navigator, and its panel retained the 920px width cap. Video Studio now uses the full content area and omits the empty navigator.
+- Applied the dark-glass clean layout and neutral shadow design guidance with restrained surfaces: compact media bin, real lazy-decoded media stills, full-height composition stage, collapsible inspector, quieter controls, and a taller timeline with a time ruler and readable track labels. Redundant badges, media-card outlines, preview warnings and empty history blocks are removed from the default view.
+- Browser acceptance now compiles real renderer styles and uses actual controls for layout verification. All 23 existing behavior cases plus two layout cases at 1440x900 and 1100x760 passed (25 total); shell/route checks passed 62 tests. The full repository gate was not repeated for this UI-only slice. Actual Electron layout was inspected in the video worktree with the Homebody preview copy.
+
+## Precision transport controls
+
+- Replaced default scrubber and zoom rails with thin neutral progress tracks, compact handles, precise timecodes, keyboard focus states, zoom step buttons, and percentage reset. Native range semantics and generous pointer targets remain intact.
+- Keyboard acceptance exposed a real tiny-seek race: the previous frame could satisfy the readiness tolerance before assigning the new seek. Preview now waits for the new seeked event before drawing.
+- All 25 browser scenarios pass, including 1 ms keyboard seeks, endpoints, progress fill, zoom steps, keyboard adjustment, and reset. Electron and browser harness typechecks pass.

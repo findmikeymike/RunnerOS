@@ -1,6 +1,8 @@
 import * as React from 'react'
+import './video-studio.css'
+import { MediaThumbnail } from '@/components/video-studio/MediaThumbnail'
 import { CompositionPreview } from '@/components/video-studio/CompositionPreview'
-import { AlertTriangle, Bot, ChevronDown, ClipboardCheck, Code2, Copy, Crop, Download, Eye, EyeOff, FileVideo, Film, FolderOpen, History, Layers, Link, Loader2, Lock, Magnet, MoreHorizontal, Move, Music, Pause, Play, Plus, Redo2, RefreshCw, RotateCw, Save, Scissors, Send, ShieldCheck, SlidersHorizontal, Trash2, Type, Undo2, Unlock, Upload, Volume2, VolumeX, X } from 'lucide-react'
+import { AlertTriangle, Bot, ChevronDown, ClipboardCheck, Code2, Copy, Crop, Download, Eye, EyeOff, FileVideo, Film, FolderOpen, History, Layers, Link, Loader2, Lock, Magnet, MoreHorizontal, Move, Minus, Music, Pause, Play, Plus, Redo2, RefreshCw, RotateCw, Save, Scissors, Send, ShieldCheck, SlidersHorizontal, Trash2, Type, Undo2, Unlock, Upload, Volume2, VolumeX, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator } from '@/components/ui/styled-dropdown'
@@ -8,7 +10,7 @@ import { useAppShellContext } from '@/context/AppShellContext'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
-import { findVideoProjectAsset, formatDuration, summarizeVideoProject } from '@/components/outputs/video-project-output'
+import { findVideoProjectAsset, formatDuration } from '@/components/outputs/video-project-output'
 import { createVideoAgentHandoff, videoAgentPromptKey, type VideoAgentHandoffResult, type VideoPreviewMode, previewMediaTime, previewTimelineTime, previewPlaybackRate, videoCompositionFingerprint, renderedPreviewFreshness, sourceInAfterLeadingTrim, clipPlaybackSpeed, previewClipSourceTime, timelineMsFromPreviewVideoTime, splitVideoClip, videoProjectFingerprint, isExternalVideoProjectChange, nextPreviewClip, requireVideoProjectWrite } from '@/lib/video-studio-editing'
 import { type VideoStudioDraft, readVideoDraft, writeVideoDraft, clearVideoDraft, videoDraftConflicts } from '@/lib/video-studio-drafts'
 import type { RunnerVideoProject, VideoAspectRatio, VideoClip } from '@craft-agent/shared/video'
@@ -117,6 +119,8 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   const [rawJsonDirty, setRawJsonDirty] = React.useState(false)
   const [showDeveloperDetails, setShowDeveloperDetails] = React.useState(false)
   const [agentPanelOpen, setAgentPanelOpen] = React.useState(false)
+  const [inspectorOpen, setInspectorOpen] = React.useState(false)
+  const trackLabelsRef = React.useRef<HTMLDivElement>(null)
   const [agentPrompt, setAgentPrompt] = React.useState(() => {
     try { return window.localStorage.getItem(videoAgentPromptKey(workspaceId, outputId)) ?? '' } catch { return '' }
   })
@@ -1218,11 +1222,9 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
     )
   }
 
-  const summary = summarizeVideoProject(project)
   const tracks = project.timeline?.tracks ?? []
   const media = project.media ?? []
   const filteredMedia = media.filter((item) => mediaFilter === 'all' || item.type === mediaFilter)
-  const duration = project.timeline?.durationMs ?? 0
   const contextClip = clipContextMenu
     ? tracks.flatMap((track) => track.clips ?? []).find((clip) => clip.id === clipContextMenu.clipId) ?? null
     : null
@@ -1236,31 +1238,27 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   const isBusy = saving || importing || checking !== null || exporting || agentRunning || Boolean(availableDraft)
 
   return (
-    <div className="h-full overflow-hidden bg-[#101010] text-white">
+    <div className="video-studio-shell h-full overflow-hidden text-white">
       <div
         className="grid h-full min-h-0"
-        style={{ gridTemplateRows: (externalReloadPending || availableDraft || draftBackupFailed) ? '44px 36px minmax(0,1fr) 220px' : '44px minmax(0,1fr) 220px' }}
+        style={{ gridTemplateRows: (externalReloadPending || availableDraft || draftBackupFailed) ? '56px 36px minmax(0,1fr) clamp(230px,29vh,310px)' : '56px minmax(0,1fr) clamp(230px,29vh,310px)' }}
       >
-        <header className="flex min-w-0 items-center justify-between gap-3 border-b border-white/[0.07] bg-[#171717] px-3">
-          <div className="flex min-w-0 items-center gap-3">
+        <header className="video-studio-header flex min-w-0 items-center justify-between gap-3 px-4">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-white/[0.06] text-white/58">
               <FileVideo className="h-4 w-4" />
             </div>
             <input
+              aria-label="Project title"
               value={project.title}
               onChange={(event) => updateProject((current) => ({ ...current, title: event.target.value }))}
-              className="min-w-0 bg-transparent text-[15px] font-semibold text-white outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[15px] font-semibold text-white outline-none"
             />
-            <div className="hidden items-center gap-1.5 text-[11px] text-white/42 xl:flex">
-              <MetricPill label="Dur" value={formatDuration(duration)} />
-              <MetricPill label="Canvas" value={`${summary?.width ?? '-'}x${summary?.height ?? '-'}`} />
-              <MetricPill label="FPS" value={String(summary?.fps ?? '-')} />
-              <MetricPill label="Ver" value={String(summary?.versionCount ?? 0)} />
-            </div>
+            <span className="video-save-state">{saving ? 'Saving…' : rawJsonDirty || videoProjectFingerprint(rawJson) !== savedFingerprintRef.current ? 'Unsaved changes' : 'Saved'}</span>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <label className="flex h-8 items-center gap-2 rounded-md bg-white/[0.06] px-2 text-[12px] text-white/55">
-              <span>Canvas</span>
+              <span className="sr-only">Canvas</span>
               <select
                 value={currentAspectRatio}
                 onChange={(event) => changeAspectRatio(event.target.value as AspectSelectValue)}
@@ -1273,6 +1271,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                 ))}
               </select>
             </label>
+            <button type="button" aria-label="Toggle inspector" aria-pressed={inspectorOpen} onClick={() => setInspectorOpen(value => !value)} className="video-studio-control flex h-8 items-center gap-2 rounded-lg px-3 text-xs text-white/70"><SlidersHorizontal className="h-3.5 w-3.5" /><span className="video-inspector-toggle-label">Inspector</span></button>
             <IconButton label="Undo" onClick={undo} disabled={isBusy || rawJsonDirty || undoStack.length === 0}><Undo2 className="h-4 w-4" /></IconButton>
             <IconButton label="Redo" onClick={redo} disabled={isBusy || rawJsonDirty || redoStack.length === 0}><Redo2 className="h-4 w-4" /></IconButton>
             <DropdownMenu>
@@ -1345,8 +1344,8 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
           )
         )}
 
-        <div className="grid min-h-0 grid-cols-[220px_minmax(0,1fr)_460px] overflow-hidden">
-          <aside className="min-h-0 border-r border-white/[0.07] bg-[#181818]">
+        <div className={`video-studio-workspace min-h-0 ${inspectorOpen ? 'inspector-open' : 'inspector-closed'}`}>
+          <aside className="video-studio-media min-h-0">
             <div className="flex h-10 items-center justify-between border-b border-white/[0.07] px-3">
               <PanelTitle title="Media" value={`${media.length}`} />
               <button type="button" title="Import files" onClick={() => void importMedia('files')} disabled={isBusy} className="flex h-7 w-7 items-center justify-center rounded-md bg-white/[0.06] text-white/58 hover:bg-white/[0.1] hover:text-white">
@@ -1365,44 +1364,31 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                 </button>
               ))}
             </div>
-            <div className="grid max-h-full gap-2 overflow-auto p-2">
+            <div className="grid min-w-0 max-h-full grid-cols-[minmax(0,1fr)] gap-2 overflow-auto p-2">
               {media.length === 0 ? <EmptyText>No media yet</EmptyText> : filteredMedia.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => addMediaToTimeline(item)}
-                  className="group rounded-md border border-white/[0.06] bg-[#202020] p-2 text-left hover:border-[#18c7d4]/40 hover:bg-[#242424]"
+                  className="group min-w-0 w-full rounded-xl bg-white/[0.025] p-2 text-left hover:bg-white/[0.06]"
                 >
                   <div className="relative aspect-video overflow-hidden rounded bg-black/70">
-                    {item.thumbnailPath ? (
-                      <img src={thumbnailUrl(item.thumbnailPath)} alt="" className="h-full w-full object-cover" />
-                    ) : item.waveformPath ? (
-                      <img src={thumbnailUrl(item.waveformPath)} alt="" className="h-full w-full object-cover opacity-90" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-white/28">
-                        {item.type === 'audio' ? <Music className="h-5 w-5" /> : <Film className="h-5 w-5" />}
-                      </div>
-                    )}
-                    <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-white/68">{item.type}</span>
+                    <MediaThumbnail media={item} loadMedia={loadCompositionMedia} className="h-full w-full" />
                     <span className="absolute bottom-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded bg-[#18c7d4] text-black opacity-0 transition-opacity group-hover:opacity-100">
                       <Plus className="h-3 w-3" />
                     </span>
                   </div>
                   <div className="mt-2 truncate text-[12px] font-medium text-white/80">{item.label ?? item.id}</div>
-                  <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-white/38">
-                    {typeof item.durationMs === 'number' && <span className="rounded bg-white/[0.055] px-1.5 py-0.5">{formatDuration(item.durationMs)}</span>}
-                    {typeof item.width === 'number' && typeof item.height === 'number' && <span className="rounded bg-white/[0.055] px-1.5 py-0.5">{item.width}x{item.height}</span>}
-                    {typeof item.fps === 'number' && <span className="rounded bg-white/[0.055] px-1.5 py-0.5">{item.fps} fps</span>}
-                  </div>
+                  {typeof item.durationMs === 'number' && <div className="mt-1 text-[10px] tabular-nums text-white/40">{formatDuration(item.durationMs)}</div>}
                 </button>
               ))}
               {media.length > 0 && filteredMedia.length === 0 && <EmptyText>No {mediaFilter} media</EmptyText>}
             </div>
           </aside>
 
-          <main className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#101010]">
-            <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] px-3 py-2">
-              <PanelTitle title="Player" value={previewStatus} />
+          <main data-testid="video-stage" className="video-studio-stage flex min-h-0 min-w-0 flex-col overflow-hidden">
+            <div className="video-stage-toolbar flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 px-3 py-2">
+              <span className="sr-only">{previewStatus}</span>
               <div className="flex flex-wrap items-center gap-1.5">
                 <button type="button" aria-pressed={previewMode === 'composition'} onClick={() => changePreviewMode('composition')} className={`rounded px-2 py-1 text-xs ${previewMode === 'composition' ? 'bg-white/15 text-white' : 'text-white/50'}`}>Composition</button>
                 <button type="button" aria-pressed={previewMode === 'source'} onClick={() => changePreviewMode('source')} className={`rounded px-2 py-1 text-xs ${previewMode === 'source' ? 'bg-white/15 text-white' : 'text-white/50'}`}>Source</button>
@@ -1411,13 +1397,10 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                   {exporting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Film className="mr-1 h-3 w-3" />}Render &amp; review
                 </Button>
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-white/38">
-                <span>{`${summary?.width ?? '-'} x ${summary?.height ?? '-'}`}</span>
-                <span>{`${summary?.fps ?? '-'} fps`}</span>
-              </div>
+
             </div>
-            <div className="flex min-h-0 flex-1 items-center justify-center bg-[#0a0a0a] p-4">
-              <div className="flex aspect-video w-full max-w-[min(100%,980px)] items-center justify-center overflow-hidden rounded-sm border border-white/[0.06] bg-black">
+            <div className="video-stage-viewport flex min-h-0 flex-1 items-center justify-center p-3">
+              <div className="video-stage-frame flex h-full min-h-0 w-full items-center justify-center overflow-hidden rounded-xl bg-black shadow-[0_2.8px_2.2px_rgba(0,_0,_0,_0.034),_0_6.7px_5.3px_rgba(0,_0,_0,_0.048),_0_12.5px_10px_rgba(0,_0,_0,_0.06),_0_22.3px_17.9px_rgba(0,_0,_0,_0.072),_0_41.8px_33.4px_rgba(0,_0,_0,_0.086),_0_100px_80px_rgba(0,_0,_0,_0.12)]">
                 {previewMode === 'composition' && project ? (
                   <CompositionPreview project={project} timeMs={playheadMs} loadMedia={loadCompositionMedia} loadMediaInfo={loadCompositionMediaInfo} playing={isPreviewPlaying} onTimeChange={setPlayheadMs} onPlaybackStop={stopCompositionPlayback} />
                 ) : previewUrl && previewMode !== 'composition' ? (
@@ -1461,15 +1444,15 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
               </div>
             </div>
             {previewMode === 'composition' && (
-              <label className="flex items-center gap-3 border-t border-white/[0.07] px-4 py-2 text-xs text-white/60">
-                <span>Scrub</span>
-                <input aria-label="Composition time" type="range" min={0} max={timelineDurationMs} step={1} value={playheadMs} onChange={(event) => setPlayheadPosition(Number(event.target.value))} className="min-w-0 flex-1" />
-                <span className="tabular-nums">{(playheadMs / 1000).toFixed(2)}s</span>
-              </label>
+              <div className="video-scrubber" role="group" aria-label="Preview transport">
+                <span className="video-timecode" aria-hidden="true">{formatPreviewTime(playheadMs)}</span>
+                <input aria-label="Composition time" aria-valuetext={`${formatPreviewTime(playheadMs)} of ${formatPreviewTime(timelineDurationMs)}`} type="range" min={0} max={timelineDurationMs} step={1} value={playheadMs} onChange={(event) => setPlayheadPosition(Number(event.target.value))} className="video-precision-range video-seek-range" style={{ '--range-fill': `${Math.max(0, Math.min(100, playheadMs / Math.max(1, timelineDurationMs) * 100))}%` } as React.CSSProperties} />
+                <span className="video-timecode video-timecode-total" aria-hidden="true">{formatPreviewTime(timelineDurationMs)}</span>
+              </div>
             )}
           </main>
 
-          <aside className="relative min-h-0 min-w-0 overflow-hidden border-l border-white/[0.07] bg-[#181818]">
+          <aside aria-label="Clip inspector" data-testid="video-inspector" className={`video-studio-inspector relative min-h-0 min-w-0 overflow-hidden ${inspectorOpen ? '' : 'hidden'}`}>
             {agentPanelOpen && (
               <div className="absolute inset-0 z-10 flex flex-col border-l border-[#18c7d4]/20 bg-[#181818] p-3">
                 <div className="flex h-9 shrink-0 items-center justify-between">
@@ -1629,7 +1612,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                 </div>
               )}
 
-              <div className="mt-5">
+              {showDeveloperDetails && (project.agentEvents?.length ?? 0) > 0 && <div className="mt-5">
                 <PanelTitle title="Agent Changes" value={`${project.agentEvents?.length ?? 0}`} />
                 <div className="mt-2 grid gap-2">
                 {(project.agentEvents ?? []).slice(-5).reverse().map((event, index) => (
@@ -1639,9 +1622,9 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                   </div>
                 ))}
                 </div>
-              </div>
+              </div>}
 
-              <div className="mt-5">
+              {showDeveloperDetails && (project.versions?.length ?? 0) > 0 && <div className="mt-5">
                 <PanelTitle title="Versions" value={`${project.versions?.length ?? 0}`} />
                 <div className="mt-2 grid gap-2">
                 {(project.versions ?? []).slice(-6).reverse().map((version) => (
@@ -1654,13 +1637,13 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                   </div>
                 ))}
                 </div>
-              </div>
+              </div>}
             </div>
             </div>
           </aside>
         </div>
 
-        <footer className="min-h-0 border-t border-white/[0.07] bg-[#151515]">
+        <footer data-testid="video-timeline" className="video-studio-timeline flex min-h-0 flex-col">
           {clipContextMenu && contextClip && (
             <div
               className="fixed z-50 min-w-40 rounded-md border border-white/[0.1] bg-[#202020] p-1 shadow-modal-small"
@@ -1759,25 +1742,20 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                 {isPreviewPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                 {isPreviewPlaying ? 'Pause' : 'Play'}
               </button>
-              <label className="flex h-7 items-center gap-2 rounded-md bg-white/[0.06] px-2 text-[11px] text-white/50">
-                <span>Zoom</span>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="2.5"
-                  step="0.25"
-                  value={timelineZoom}
-                  onChange={(event) => setTimelineZoom(Number(event.target.value))}
-                  className="w-24 accent-[#18c7d4]"
-                />
-              </label>
+              <div className="video-zoom-control" role="group" aria-label="Timeline zoom">
+                <button type="button" aria-label="Zoom out" title="Zoom out" disabled={timelineZoom <= 0.5} onClick={() => setTimelineZoom(value => Math.max(0.5, value - 0.25))}><Minus className="h-3 w-3" /></button>
+                <input aria-label="Zoom" aria-valuetext={`${Math.round(timelineZoom * 100)} percent`} type="range" min="0.5" max="2.5" step="0.25" value={timelineZoom} onChange={(event) => setTimelineZoom(Number(event.target.value))} className="video-precision-range video-zoom-range" style={{ '--range-fill': `${((timelineZoom - 0.5) / 2) * 100}%` } as React.CSSProperties} />
+                <button type="button" aria-label="Zoom in" title="Zoom in" disabled={timelineZoom >= 2.5} onClick={() => setTimelineZoom(value => Math.min(2.5, value + 0.25))}><Plus className="h-3 w-3" /></button>
+                <button type="button" className="video-zoom-value" aria-label="Reset timeline zoom" title="Reset zoom to 100%" onClick={() => setTimelineZoom(1)}>{Math.round(timelineZoom * 100)}%</button>
+              </div>
             </div>
           </div>
-          <div className="grid h-[181px] grid-cols-[132px_minmax(0,1fr)] overflow-hidden">
-            <div className="border-r border-white/[0.07] bg-[#111] text-[11px] text-white/38">
+          <div className="video-timeline-lanes grid min-h-0 flex-1 grid-cols-[204px_minmax(0,1fr)] overflow-hidden">
+            <div ref={trackLabelsRef} className="video-track-labels overflow-hidden text-[11px] text-white/55">
+              <div className="h-7 px-3 text-[10px] leading-7 uppercase tracking-wider text-white/30">Tracks</div>
               {tracks.map((track) => (
-                <div key={track.id} className={`flex h-[60px] items-center justify-between gap-2 px-2 ${track.hidden ? 'opacity-45' : ''}`}>
-                  <span className="min-w-0 truncate">{track.label ?? track.id}</span>
+                <div key={track.id} className={`flex h-[60px] flex-col items-start justify-center gap-1 px-3 ${track.hidden ? 'opacity-45' : ''}`}>
+                  <span className="w-full whitespace-normal break-words leading-tight">{track.label ?? track.id}</span>
                   <div className="flex shrink-0 items-center gap-1">
                     <button type="button" title={track.locked ? 'Unlock track' : 'Lock track'} onClick={() => toggleTrackFlag(track.id, 'locked')} className="flex h-5 w-5 items-center justify-center rounded bg-white/[0.04] text-white/38 hover:bg-white/[0.1] hover:text-white">
                       {track.locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
@@ -1805,6 +1783,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
             <div
               ref={timelineScrubRef}
               className="relative overflow-auto"
+              onScroll={(event) => { if (trackLabelsRef.current) trackLabelsRef.current.scrollTop = event.currentTarget.scrollTop }}
               onPointerDown={(event) => {
                 if (event.target !== event.currentTarget) return
                 event.currentTarget.setPointerCapture(event.pointerId)
@@ -1826,6 +1805,9 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                 style={{ left: `${timelinePositionPixels(playheadMs, timelineZoom) + 12}px` }}
               >
                 <div className="absolute -left-[5px] top-0 h-2.5 w-2.5 rotate-45 rounded-[2px] bg-[#18c7d4]" />
+              </div>
+              <div aria-hidden="true" className="video-time-ruler relative h-7" style={{ minWidth: `${timelinePositionPixels(timelineDurationMs, timelineZoom) + 180}px` }}>
+                {Array.from({ length: Math.min(300, Math.ceil(timelineDurationMs / 1000) + 1) }, (_, index) => <span key={index} className="absolute top-0 border-l border-white/10 pl-1 text-[10px] leading-7 text-white/35" style={{ left: `${timelinePositionPixels(index * 1000, timelineZoom) + 12}px` }}>{index}s</span>)}
               </div>
               {tracks.map((track) => (
                 <div
@@ -1850,6 +1832,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                 >
                   {(track.clips ?? []).length === 0 ? <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-white/26">No clips</span> : renderTimelineClips(track.clips ?? [], selectedClipId, timelineZoom, track, (clip) => {
                     setSelectedClipId(clip.id)
+                    setInspectorOpen(true)
                   }, (event, clip, mode) => {
                     if (track.locked || operationBusyRef.current) return
                     event.preventDefault()
@@ -1879,6 +1862,11 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
       </div>
     </div>
   )
+}
+
+function formatPreviewTime(ms: number): string {
+  const value = Math.max(0, Math.floor(ms));
+  return `${String(Math.floor(value / 60000)).padStart(2, '0')}:${String(Math.floor(value / 1000) % 60).padStart(2, '0')}.${String(value % 1000).padStart(3, '0')}`
 }
 
 function computeTimelineDuration(tracks: VideoProject['timeline']['tracks']): number {
@@ -2323,7 +2311,7 @@ function IconButton({ label, onClick, disabled = false, children }: { label: str
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className="flex h-7 min-w-9 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.055] px-2 text-white/68 outline-none hover:border-[#18c7d4]/45 hover:bg-white/[0.09] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+      className="flex h-7 min-w-9 items-center justify-center rounded-md bg-white/[0.055] px-2 text-white/68 outline-none hover:bg-white/[0.09] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
     >
       {children}
     </button>
