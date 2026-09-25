@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { commitVideoProjectContent } from '../../../../../tools/video-studio/lib/project-storage.mjs';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
 import type { ArchiveSocialVariantRequest, CreateSocialVariantSetRequest, OutputFinalPointer, OutputManifest, OutputSummary, PromoteOutputToFinalInput, RebindSocialVariantSetRequest, RemoveOutputFromFinalInput, StartSocialVariantSetRequest } from '@craft-agent/shared/outputs';
@@ -357,9 +357,22 @@ export function registerOutputsHandlers(server: RpcServer, deps: HandlerDeps): v
 
   server.handle(
     RPC_CHANNELS.outputs.READ_ASSET_DATA_URL,
-    async (_ctx, workspaceId: string, outputId: string, assetId?: string): Promise<string> => {
+    async (_ctx, workspaceId: string, outputId: string, assetId?: string, expectedSourcePath?: string): Promise<string> => {
       assertLocalWorkspace(workspaceId, 'Read output asset');
       const safePath = await resolveSafeOutputAssetPath(workspaceId, outputId, assetId, serviceFor(server));
+      if (expectedSourcePath !== undefined) {
+        if (typeof expectedSourcePath !== 'string' || !expectedSourcePath.trim() || !isAbsolute(expectedSourcePath)) {
+          throw new Error('Preview source does not match this Output asset. Reimport or relink the media before previewing.');
+        }
+        // Resolve identity under the existing boundary; the expected path is never
+        // used as the read target and cannot grant access to another file.
+        let expectedPath: string;
+        try { expectedPath = await validateFilePath(expectedSourcePath, getWorkspaceAllowedDirs(workspaceId)); }
+        catch { throw new Error('Preview source does not match this Output asset. Reimport or relink the media before previewing.'); }
+        if (resolve(expectedPath) !== resolve(safePath)) {
+          throw new Error('Preview source does not match this Output asset. Reimport or relink the media before previewing.');
+        }
+      }
       const buffer = await readFile(safePath);
       return `data:${mimeTypeForPath(safePath)};base64,${buffer.toString('base64')}`;
     },

@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { CompositionPreview } from '@/components/video-studio/CompositionPreview'
 import { AlertTriangle, Bot, ChevronDown, ClipboardCheck, Code2, Copy, Crop, Download, Eye, EyeOff, FileVideo, Film, FolderOpen, History, Layers, Link, Loader2, Lock, Magnet, MoreHorizontal, Move, Music, Pause, Play, Plus, Redo2, RefreshCw, RotateCw, Save, Scissors, Send, ShieldCheck, SlidersHorizontal, Trash2, Type, Undo2, Unlock, Upload, Volume2, VolumeX, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -93,7 +94,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   const [rawJson, setRawJson] = React.useState('')
   const [selectedClipId, setSelectedClipId] = React.useState<string | null>(null)
   const [renderPreviewUrl, setRenderPreviewUrl] = React.useState<string | null>(null)
-  const [previewMode, setPreviewMode] = React.useState<VideoPreviewMode>('source')
+  const [previewMode, setPreviewMode] = React.useState<VideoPreviewMode | 'composition'>('source')
   const [renderedFingerprint, setRenderedFingerprint] = React.useState<string | null>(null)
   const knownRenderRef = React.useRef<{ assetId: string; fingerprint: string } | null>(null)
   const [timelinePreviewUrl, setTimelinePreviewUrl] = React.useState<string | null>(null)
@@ -280,7 +281,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   const setPlayheadPosition = React.useCallback((nextMs: number, seekPreview = false) => {
     const clamped = clampNumber(Number.isFinite(nextMs) ? nextMs : 0, 0, timelineDurationMs)
     setPlayheadMs(Math.round(clamped))
-    if (seekPreview && previewVideoRef.current) {
+    if (seekPreview && previewMode !== 'composition' && previewVideoRef.current) {
       const previewClip = findTimelinePreviewClip(project, clamped)
       if (previewMode === 'rendered' || previewClip) {
         previewVideoRef.current.currentTime = previewMediaTime(previewMode, previewClip?.clip ?? null, clamped)
@@ -305,6 +306,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   }, [project])
 
   const togglePreviewPlayback = React.useCallback(() => {
+    if (previewMode === 'composition') return
     const video = previewVideoRef.current
     if (isPreviewPlaying) {
       setIsPreviewPlaying(false)
@@ -332,9 +334,10 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== 'Space') return
+      if (event.code !== 'Space' || event.defaultPrevented) return
       const target = event.target
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable)) return
+      if (target instanceof Element && target.closest('button, a, [role="button"], [role="slider"], [role="textbox"]')) return
       event.preventDefault()
       togglePreviewPlayback()
     }
@@ -365,13 +368,24 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
     () => findTimelinePreviewClip(project, playheadMs) ?? findNextTimelinePreviewClip(project, playheadMs),
     [playheadMs, project],
   )
-  const previewUrl = previewMode === 'rendered' ? renderPreviewUrl : timelinePreviewUrl
+  const previewUrl = previewMode === 'composition' ? null : previewMode === 'rendered' ? renderPreviewUrl : timelinePreviewUrl
   const renderFreshness = renderedPreviewFreshness(rawJson, renderedFingerprint)
-  const previewStatus = previewMode === 'source' ? 'source clip · render to review all edits'
+  const previewStatus = previewMode === 'composition' ? 'scrub to preview · silent' : previewMode === 'source' ? 'source clip · render to review all edits'
     : renderFreshness === 'edited' ? 'edited since render · render again'
     : renderFreshness === 'current' ? 'rendered result' : 'saved render · freshness unverified'
 
-  const changePreviewMode = (mode: VideoPreviewMode) => {
+  const compositionSourceKey = JSON.stringify(project?.media.map(({ id, path }) => [id, path]) ?? [])
+  const compositionSources = React.useMemo(() => new Map<string, string>(JSON.parse(compositionSourceKey)), [compositionSourceKey])
+  const loadCompositionMedia = React.useCallback(async (mediaId: string) => {
+    const asset = manifest?.assets.find((item) => item.id === `video-media-${mediaId}`)
+    if (!asset) throw new Error(`Media unavailable: ${mediaId}`)
+    const sourcePath = compositionSources.get(mediaId)
+    if (!sourcePath) throw new Error(`Media unavailable: ${mediaId}`)
+    // The server must verify the imported asset still is the file export will read.
+    return window.electronAPI.readOutputAssetDataUrl(workspaceId, outputId, asset.id, sourcePath)
+  }, [manifest, outputId, workspaceId, compositionSources])
+
+  const changePreviewMode = (mode: VideoPreviewMode | 'composition') => {
     previewVideoRef.current?.pause()
     switchingPreviewClipRef.current = false
     setIsPreviewPlaying(false)
@@ -391,7 +405,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
       }
       const assetId = `video-media-${timelinePreviewClip.clip.mediaId}`
       const mediaAsset = manifest.assets.find((asset) => asset.id === assetId)
-      const cacheKey = JSON.stringify([workspaceId, outputId, assetId, mediaAsset?.sha256, mediaAsset?.path])
+      const cacheKey = JSON.stringify([workspaceId, outputId, assetId, mediaAsset?.sha256, mediaAsset?.path, timelinePreviewClip.media.path])
       const cached = timelinePreviewCacheRef.current.get(cacheKey)
       if (cached) {
         setTimelinePreviewUrl(cached)
@@ -403,7 +417,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
       }
       setTimelinePreviewUrl(null)
       try {
-        const url = await window.electronAPI.readOutputAssetDataUrl(workspaceId, outputId, mediaAsset.id)
+        const url = await window.electronAPI.readOutputAssetDataUrl(workspaceId, outputId, mediaAsset.id, timelinePreviewClip.media.path)
         if (cancelled) return
         timelinePreviewCacheRef.current.set(cacheKey, url)
         setTimelinePreviewUrl(url)
@@ -415,12 +429,12 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
     return () => {
       cancelled = true
     }
-  }, [manifest, outputId, timelinePreviewClip?.clip.mediaId, workspaceId])
+  }, [manifest, outputId, timelinePreviewClip?.clip.mediaId, timelinePreviewClip?.media.path, workspaceId])
 
   React.useEffect(() => {
     const video = previewVideoRef.current
     const previewClip = timelinePreviewClip
-    if (!video) return
+    if (!video || previewMode === 'composition') return
     if (previewMode === 'rendered') {
       if (!isPreviewPlaying) video.currentTime = previewMediaTime('rendered', null, playheadMs)
       return
@@ -441,7 +455,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   }, [isPreviewPlaying, playheadMs, previewMode, project, renderPreviewUrl, timelinePreviewClip, timelinePreviewUrl])
 
   React.useEffect(() => {
-    if (!isPreviewPlaying || previewMode === 'rendered') return
+    if (!isPreviewPlaying || previewMode !== 'source') return
     let frameId = 0
     const tick = () => {
       const video = previewVideoRef.current
@@ -1372,9 +1386,10 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
           </aside>
 
           <main className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#101010]">
-            <div className="flex h-10 shrink-0 items-center justify-between border-b border-white/[0.07] px-3">
+            <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] px-3 py-2">
               <PanelTitle title="Player" value={previewStatus} />
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button type="button" aria-pressed={previewMode === 'composition'} onClick={() => changePreviewMode('composition')} className={`rounded px-2 py-1 text-xs ${previewMode === 'composition' ? 'bg-white/15 text-white' : 'text-white/50'}`}>Composition</button>
                 <button type="button" aria-pressed={previewMode === 'source'} onClick={() => changePreviewMode('source')} className={`rounded px-2 py-1 text-xs ${previewMode === 'source' ? 'bg-white/15 text-white' : 'text-white/50'}`}>Source</button>
                 <button type="button" aria-pressed={previewMode === 'rendered'} disabled={!renderPreviewUrl} onClick={() => changePreviewMode('rendered')} className={`rounded px-2 py-1 text-xs disabled:opacity-35 ${previewMode === 'rendered' ? 'bg-white/15 text-white' : 'text-white/50'}`}>Rendered</button>
                 <Button size="sm" disabled={isBusy} onClick={exportProject} title="Save edits, export an MP4 to Outputs, and review the rendered result">
@@ -1388,7 +1403,9 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
             </div>
             <div className="flex min-h-0 flex-1 items-center justify-center bg-[#0a0a0a] p-4">
               <div className="flex aspect-video w-full max-w-[min(100%,980px)] items-center justify-center overflow-hidden rounded-sm border border-white/[0.06] bg-black">
-                {previewUrl ? (
+                {previewMode === 'composition' && project ? (
+                  <CompositionPreview project={project} timeMs={playheadMs} loadMedia={loadCompositionMedia} />
+                ) : previewUrl && previewMode !== 'composition' ? (
                   <div className="relative h-full w-full">
                     <video
                       key={previewMode}
@@ -1428,6 +1445,13 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                 )}
               </div>
             </div>
+            {previewMode === 'composition' && (
+              <label className="flex items-center gap-3 border-t border-white/[0.07] px-4 py-2 text-xs text-white/60">
+                <span>Scrub</span>
+                <input aria-label="Composition time" type="range" min={0} max={timelineDurationMs} step={1} value={playheadMs} onChange={(event) => setPlayheadPosition(Number(event.target.value))} className="min-w-0 flex-1" />
+                <span className="tabular-nums">{(playheadMs / 1000).toFixed(2)}s</span>
+              </label>
+            )}
           </main>
 
           <aside className="relative min-h-0 min-w-0 overflow-hidden border-l border-white/[0.07] bg-[#181818]">

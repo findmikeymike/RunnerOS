@@ -751,7 +751,7 @@ Core workflow:
 2. Read existing projects with \`video_get_timeline\` and \`video_get_media\` before referencing IDs.
 3. Register footage with \`video_media_import\`; use \`video_inspect_media\` with overview for source inspection.
 4. Use \`video_project_snapshot\` before risky edits, \`video_project_diff\` to review changes, and \`video_project_undo\` to recover.
-5. Edit through structured clip tools and verify rendered results with \`video_inspect_timeline\`.
+5. Add timeline clips with \`video_clip_add\`, then edit through structured clip tools and verify rendered results with \`video_inspect_timeline\`.
 6. Use \`video_export\` for MP4 renders. A non-video placeholder receipt is not a rendered video.
 7. Explain unsupported features and distinguish source preview, rendered inspection, and final export.
 8. Prefer concise project/version summaries so the user can understand what changed.

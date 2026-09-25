@@ -1,3 +1,9 @@
+import {
+    seconds, clamp, clipSpeed, clipTransform, clipOpacity, clipCrop,
+    visualSourceSize, fittedVisualSize, assertSourceCanCoverSpeed,
+    validateRenderCapabilities, buildScenePlan, positionKeyframes,
+} from './scene-plan.mjs';
+export { positiveNumber, clamp, clipSpeed, finiteNumber, clipTransform, validateRenderCapabilities } from './scene-plan.mjs';
 // Canonical FFmpeg timeline renderer shared by the Node CLI and agent tools.
 import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join, extname } from 'node:path';
@@ -6,21 +12,11 @@ import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
 const SIMPLE_RENDER_TIMEOUT_MS = 180_000;
-export function positiveNumber(value) {
-    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
-}
-function seconds(ms, fallbackMs = 0) {
-    return Math.max(0, (ms ?? fallbackMs) / 1000);
-}
+
 export function ffmpegNumber(value) {
     return value.toFixed(3).replace(/\.?0+$/, '');
 }
-export function clamp(value, min, max) {
-    return Math.min(max, Math.max(min, value));
-}
-export function clipSpeed(clip) {
-    return clamp(typeof clip.speed === 'number' && Number.isFinite(clip.speed) ? clip.speed : 1, 0.25, 4);
-}
+
 function clipVolume(clip) {
     return clamp(typeof clip.volume === 'number' && Number.isFinite(clip.volume) ? clip.volume : 1, 0, 4);
 }
@@ -28,74 +24,13 @@ function clipFadeSeconds(clip, key, clipDurationSeconds) {
     const value = typeof clip[key] === 'number' && Number.isFinite(clip[key]) ? clip[key] : 0;
     return clamp(value / 1000, 0, Math.max(0, clipDurationSeconds / 2));
 }
-export function finiteNumber(value, fallback) {
-    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
-export function clipTransform(clip) {
-    const transform = clip.transform && typeof clip.transform === 'object' ? clip.transform : {};
-    return {
-        x: finiteNumber(transform.x, 0),
-        y: finiteNumber(transform.y, 0),
-        scale: clamp(finiteNumber(transform.scale, 1), 0.05, 5),
-        rotateDeg: finiteNumber(transform.rotateDeg, 0),
-    };
-}
-function clipOpacity(clip) {
-    return clamp(finiteNumber(clip.opacity, 1), 0, 1);
-}
-function clipCrop(clip, media) {
-    if (!clip.crop || typeof clip.crop !== 'object')
-        return null;
-    const crop = clip.crop;
-    const mediaWidth = positiveNumber(media.width) ?? Number.POSITIVE_INFINITY;
-    const mediaHeight = positiveNumber(media.height) ?? Number.POSITIVE_INFINITY;
-    const x = Math.max(0, Math.round(finiteNumber(crop.x, 0)));
-    const y = Math.max(0, Math.round(finiteNumber(crop.y, 0)));
-    const width = Math.round(finiteNumber(crop.width, 0));
-    const height = Math.round(finiteNumber(crop.height, 0));
-    if (width <= 0 || height <= 0)
-        return null;
-    return {
-        x: clamp(x, 0, Math.max(0, mediaWidth - 1)),
-        y: clamp(y, 0, Math.max(0, mediaHeight - 1)),
-        width: Math.max(1, Math.min(width, Math.max(1, mediaWidth - x))),
-        height: Math.max(1, Math.min(height, Math.max(1, mediaHeight - y))),
-    };
-}
-function visualSourceSize(media, crop, canvasWidth, canvasHeight) {
-    return {
-        width: crop?.width ?? positiveNumber(media.width) ?? canvasWidth,
-        height: crop?.height ?? positiveNumber(media.height) ?? canvasHeight,
-    };
-}
-function fittedVisualSize(source, canvasWidth, canvasHeight, scale) {
-    const fit = Math.min(canvasWidth / Math.max(1, source.width), canvasHeight / Math.max(1, source.height));
-    return {
-        width: Math.max(1, Math.round(source.width * fit * scale)),
-        height: Math.max(1, Math.round(source.height * fit * scale)),
-    };
-}
+
 function ffmpegExprNumber(value) {
     const rounded = Math.round(value * 1000) / 1000;
     return Object.is(rounded, -0) ? '0' : ffmpegNumber(rounded);
 }
 function keyframeExpression(clip, property, fallback) {
-    const frames = Array.isArray(clip.keyframes)
-        ? clip.keyframes
-            .filter((frame) => Boolean(frame) && typeof frame === 'object')
-            .filter((frame) => frame.property === property && typeof frame.value === 'number' && Number.isFinite(frame.value))
-            .map((frame) => ({
-            timeMs: clamp(Math.round(finiteNumber(frame.timeMs, 0)), 0, Math.max(1, clip.durationMs)),
-            value: frame.value,
-        }))
-            .sort((a, b) => a.timeMs - b.timeMs)
-        : [];
-    if (frames.length === 0)
-        return ffmpegExprNumber(fallback);
-    const hasExplicitZeroFrame = frames.some((frame) => frame.timeMs === 0);
-    const uniqueFrames = [...(hasExplicitZeroFrame ? [] : [{ timeMs: 0, value: fallback }]), ...frames]
-        .filter((frame, index, items) => index === items.findIndex((item) => item.timeMs === frame.timeMs))
-        .sort((a, b) => a.timeMs - b.timeMs);
+    const uniqueFrames = positionKeyframes(clip, property, fallback);
     if (uniqueFrames.length === 1)
         return ffmpegExprNumber(uniqueFrames[0].value);
     const timelineSeconds = (timeMs) => (clip.startMs + timeMs) / 1000;
@@ -162,27 +97,7 @@ function clipSourceDurationSeconds(clip) {
     }
     return seconds(requestedMs, 1000);
 }
-function sourceAvailableMs(clip, media) {
-    const sourceInMs = typeof clip.sourceInMs === 'number' && Number.isFinite(clip.sourceInMs) ? clip.sourceInMs : 0;
-    const sourceOutMs = typeof clip.sourceOutMs === 'number' && Number.isFinite(clip.sourceOutMs)
-        ? clip.sourceOutMs
-        : typeof media.durationMs === 'number' && Number.isFinite(media.durationMs)
-            ? media.durationMs
-            : undefined;
-    return sourceOutMs !== undefined && sourceOutMs > sourceInMs ? sourceOutMs - sourceInMs : undefined;
-}
-function assertSourceCanCoverSpeed(clip, media) {
-    if (media.type === 'image')
-        return;
-    const availableMs = sourceAvailableMs(clip, media);
-    if (availableMs === undefined)
-        return;
-    const requiredMs = clip.durationMs * clipSpeed(clip);
-    if (requiredMs > availableMs + 33) {
-        const label = typeof clip.label === 'string' ? clip.label : clip.id;
-        throw new Error(`Clip "${label}" speed requires ${Math.ceil(requiredMs)} ms of source media, but only ${Math.floor(availableMs)} ms is available. Shorten durationMs or extend sourceOutMs.`);
-    }
-}
+
 function hasAdjustments(adjustments) {
     return Boolean(adjustments && Object.keys(adjustments).some((key) => key !== 'preset'));
 }
@@ -208,51 +123,7 @@ function adjustmentFilter(inputLabel, outputLabel, adjustments) {
     }
     return `${inputLabel}${parts.join(',')}${outputLabel}`;
 }
-function textForClip(clip, fallback) {
-    const textPayload = clip.text;
-    if (typeof textPayload === 'object' && textPayload && 'text' in textPayload && typeof textPayload.text === 'string') {
-        return textPayload.text;
-    }
-    return typeof clip.label === 'string' ? clip.label : fallback;
-}
-const MAX_DRAWTEXT_CAPTION_CUES = 200;
-function captionCuesForClip(clip, cueById) {
-    const cueIds = Array.isArray(clip.captionCueIds) ? clip.captionCueIds : [];
-    const cues = cueIds.map((id) => cueById.get(id)).filter((cue) => Boolean(cue));
-    if (cues.length === 0)
-        return [];
-    if (cues.length === 1)
-        return [{ ...cues[0], startMs: clip.startMs, durationMs: clip.durationMs }];
-    const sourceStartMs = Math.min(...cues.map((cue) => cue.startMs));
-    return cues
-        .map((cue) => {
-        const offsetMs = Math.max(0, cue.startMs - sourceStartMs);
-        const durationMs = Math.min(cue.durationMs, Math.max(0, clip.durationMs - offsetMs));
-        return durationMs > 0 ? { ...cue, startMs: clip.startMs + offsetMs, durationMs } : null;
-    })
-        .filter((cue) => Boolean(cue));
-}
-function captionCuesForRender(project, visibleTracks) {
-    const cueById = new Map(project.captions.flatMap((track) => track.cues.map((cue) => [cue.id, cue])));
-    const hasTimelineCaptionClips = project.timeline.tracks
-        .flatMap((track) => track.clips)
-        .some((clip) => clip.type === 'caption' || Array.isArray(clip.captionCueIds));
-    const visibleCaptionClips = visibleTracks
-        .flatMap((track) => track.clips)
-        .filter((clip) => clip.disabled !== true && clip.type === 'caption');
-    const visibleCues = visibleCaptionClips.flatMap((clip) => captionCuesForClip(clip, cueById));
-    const cues = visibleCues.length > 0
-        ? visibleCues
-        : hasTimelineCaptionClips
-            ? []
-            : project.captions.flatMap((track) => track.cues);
-    return [...cues].sort((a, b) => a.startMs - b.startMs);
-}
-function assertDrawtextCaptionCueLimit(cues) {
-    if (cues.length <= MAX_DRAWTEXT_CAPTION_CUES)
-        return;
-    throw new Error(`Simple MP4 renderer can burn at most ${MAX_DRAWTEXT_CAPTION_CUES} caption cues right now; got ${cues.length}. Split the caption track or use a subtitle renderer before exporting.`);
-}
+
 function hasAudioStream(path) {
     const result = spawnSync('ffprobe', [
         '-v', 'error',
@@ -264,63 +135,6 @@ function hasAudioStream(path) {
     return result.status === 0 && result.stdout.trim().length > 0;
 }
 /** Capability checks are shared by CLI dry-run and every real export. */
-export function validateRenderCapabilities(project) {
-  const issues = [];
-  const add = (code, message, clip, track) => issues.push({ code, message, ...(clip ? { clipId: clip.id } : {}), ...(track ? { trackId: track.id } : {}) });
-  for (const field of ['effects', 'overlays', 'templates']) {
-    if (Array.isArray(project[field]) && project[field].length > 0) add(`unsupported-${field}`, `The shared renderer does not support project ${field} yet. Remove or bake them into source media before exporting.`);
-  }
-  const mediaById = new Map(project.media.map((media) => [media.id, media]));
-  const visibleTracks = project.timeline.tracks.filter((track) => track.hidden !== true);
-  for (const track of visibleTracks) {
-    for (const clip of track.clips.filter((item) => item.disabled !== true)) {
-      const label = `Clip "${clip.label || clip.id}"`;
-      const media = clip.mediaId ? mediaById.get(clip.mediaId) : undefined;
-      const visual = media && ['video', 'image'].includes(media.type);
-      if (!['video', 'image', 'audio', 'text', 'caption'].includes(clip.type) || (media && !['video', 'image', 'audio', 'caption'].includes(media.type))) {
-        add('unsupported-clip', `Simple MP4 renderer only supports video, image, audio, and text clips right now: ${clip.label || clip.id}.`, clip, track);
-      }
-      if (clip.transitionIn || clip.transitionOut) add('unsupported-transition', `${label} uses transitions, which the shared renderer does not support yet.`, clip, track);
-      if (clip.effects !== undefined && (!Array.isArray(clip.effects) || clip.effects.length > 0)) add('unsupported-effects', `${label} uses effects, which the shared renderer does not support yet. Color adjustments remain supported.`, clip, track);
-      const transform = clip.transform || {};
-      if (clip.transform !== undefined && (!clip.transform || typeof clip.transform !== 'object' || Array.isArray(clip.transform) || ['x', 'y', 'scale', 'rotateDeg'].some((key) => transform[key] !== undefined && !Number.isFinite(transform[key])) || (transform.scale !== undefined && (transform.scale < 0.05 || transform.scale > 5)))) add('invalid-transform', `${label} has an invalid transform. Use finite position/rotation and scale between 0.05 and 5.`, clip, track);
-      if (clip.opacity !== undefined && (!Number.isFinite(clip.opacity) || clip.opacity < 0 || clip.opacity > 1)) add('invalid-opacity', `${label} opacity must be between 0 and 1.`, clip, track);
-      if (clip.crop !== undefined) {
-        const crop = clip.crop;
-        if (!crop || typeof crop !== 'object' || ['x', 'y', 'width', 'height'].some((key) => !Number.isFinite(crop[key])) || crop.x < 0 || crop.y < 0 || crop.width <= 0 || crop.height <= 0) add('invalid-crop', `${label} crop must have non-negative x/y and positive width/height.`, clip, track);
-        else if ((positiveNumber(media?.width) && crop.x + crop.width > media.width) || (positiveNumber(media?.height) && crop.y + crop.height > media.height)) add('invalid-crop', `${label} crop extends outside the source media dimensions.`, clip, track);
-      }
-      if (['anchorX', 'anchorY'].some((key) => transform[key] !== undefined && transform[key] !== 0.5)) add('unsupported-anchor', `${label} uses a custom transform anchor; only centered anchors are supported.`, clip, track);
-      const hasGeometry = clip.crop || (clip.opacity !== undefined && clip.opacity !== 1) || Object.entries({ x: 0, y: 0, scale: 1, rotateDeg: 0 }).some(([key, fallback]) => (transform[key] ?? fallback) !== fallback);
-      if (hasGeometry && !visual) add('unsupported-composition', `${label} uses composition controls on ${clip.type}; transforms, crop, and opacity currently require video or image media.`, clip, track);
-      if (clip.keyframes !== undefined) {
-        if (!Array.isArray(clip.keyframes)) add('unsupported-keyframes', `${label} keyframes must be an array.`, clip, track);
-        else {
-          const times = new Set();
-          for (const frame of clip.keyframes) {
-            if (!visual || !frame || !['x', 'y'].includes(frame.property) || !Number.isFinite(frame.value) || !Number.isFinite(frame.timeMs) || frame.timeMs < 0 || frame.timeMs > clip.durationMs || (frame.easing !== undefined && frame.easing !== 'linear')) {
-              add('unsupported-keyframes', `${label} supports only finite x/y position keyframes within the clip duration with linear easing on video or image media.`, clip, track);
-              break;
-            }
-            const key = `${frame.property}:${frame.timeMs}`;
-            if (times.has(key)) {
-              add('unsupported-keyframes', `${label} has multiple ${frame.property} keyframes at ${frame.timeMs} ms. Use one value per property and time.`, clip, track);
-              break;
-            }
-            times.add(key);
-          }
-        }
-      }
-      if (media && ['video', 'audio'].includes(media.type)) {
-        try { assertSourceCanCoverSpeed(clip, media); }
-        catch (error) { add('insufficient-source', error.message, clip, track); }
-      }
-    }
-  }
-  try { assertDrawtextCaptionCueLimit(captionCuesForRender(project, visibleTracks)); }
-  catch (error) { add('caption-capacity', error.message); }
-  return { ok: issues.length === 0, issues };
-}
 
 export function renderSimpleMp4(project, outputPath, renderSettings, options = {}) {
     const capabilities = validateRenderCapabilities(project);
@@ -335,8 +149,8 @@ export function renderSimpleMp4(project, outputPath, renderSettings, options = {
         .flatMap((track, trackIndex) => track.clips.map((clip) => ({ clip, trackId: track.id, trackIndex })))
         .filter((item) => item.clip.disabled !== true)
         .sort((a, b) => a.trackIndex - b.trackIndex || a.clip.startMs - b.clip.startMs);
-    const activeDurationMs = clips.reduce((end, { clip }) => Math.max(end, clip.startMs + clip.durationMs), 0);
-    const durationMs = activeDurationMs > 0 ? activeDurationMs : project.timeline.durationMs || 3000;
+    const scene = buildScenePlan(project, width, height);
+    const durationMs = scene.durationMs;
     const durationSeconds = Math.max(1 / fps, durationMs / 1000);
     const mediaClips = clips
         .map(({ clip, trackId }) => ({ clip, trackId, media: clip.mediaId ? mediaById.get(clip.mediaId) : undefined }))
@@ -395,31 +209,17 @@ export function renderSimpleMp4(project, outputPath, renderSettings, options = {
         currentVideo = `[${next}]`;
         overlayIndex += 1;
     }
-    const textClips = visibleTracks
-        .flatMap((track) => track.clips)
-        .filter((clip) => clip.disabled !== true)
-        .filter((clip) => clip.type !== 'caption')
-        .filter((clip) => clip.type === 'text' || clip.text || !clip.mediaId);
-    for (const [index, clip] of textClips.entries()) {
-        const start = seconds(clip.startMs);
-        const end = Math.max(start + 0.2, start + seconds(clip.durationMs, 3000));
-        const y = Math.round(height * 0.42) + (index % 3) * 86;
+    for (const [index, title] of scene.titles.entries()) {
         const next = `text${index}`;
-        filters.push(`${currentVideo}drawtext=${drawTextFileOption(textForClip(clip, project.title))}:expansion=none:fontcolor=white:fontsize=${Math.max(28, Math.round(width / 24))}:x=(w-text_w)/2:y=${y}:enable='between(t,${ffmpegNumber(start)},${ffmpegNumber(end)})'[${next}]`);
+        const y = title.centered ? '(h-text_h)/2' : title.y;
+        const enable = title.centered ? '' : `:enable='between(t,${ffmpegNumber(title.startMs / 1000)},${ffmpegNumber(title.endMs / 1000)})'`;
+        filters.push(`${currentVideo}drawtext=${drawTextFileOption(title.text)}:expansion=none:fontcolor=white:fontsize=${title.fontSize}:x=(w-text_w)/2:y=${y}${enable}[${next}]`);
         currentVideo = `[${next}]`;
     }
-    const captionCues = captionCuesForRender(project, visibleTracks);
-    assertDrawtextCaptionCueLimit(captionCues);
-    for (const [index, cue] of captionCues.entries()) {
-        const start = seconds(cue.startMs);
-        const end = Math.max(start + 0.2, start + seconds(cue.durationMs, 1000));
+    for (const [index, caption] of scene.captions.entries()) {
         const next = `caption${index}`;
-        filters.push(`${currentVideo}drawtext=${drawTextFileOption(cue.text)}:expansion=none:fontcolor=white:fontsize=${Math.max(24, Math.round(width / 30))}:x=(w-text_w)/2:y=h-text_h-${Math.max(48, Math.round(height * 0.09))}:box=1:boxcolor=black@0.55:boxborderw=${Math.max(10, Math.round(width / 90))}:enable='between(t,${ffmpegNumber(start)},${ffmpegNumber(end)})'[${next}]`);
+        filters.push(`${currentVideo}drawtext=${drawTextFileOption(caption.text)}:expansion=none:fontcolor=white:fontsize=${caption.fontSize}:x=(w-text_w)/2:y=h-text_h-${caption.bottom}:box=1:boxcolor=black@0.55:boxborderw=${caption.boxBorder}:enable='between(t,${ffmpegNumber(caption.startMs / 1000)},${ffmpegNumber(caption.endMs / 1000)})'[${next}]`);
         currentVideo = `[${next}]`;
-    }
-    if (textClips.length === 0 && inputClips.length === 0 && captionCues.length === 0) {
-        filters.push(`${currentVideo}drawtext=${drawTextFileOption(project.title)}:expansion=none:fontcolor=white:fontsize=${Math.max(28, Math.round(width / 22))}:x=(w-text_w)/2:y=(h-text_h)/2[title0]`);
-        currentVideo = '[title0]';
     }
     const audioLabels = [];
     inputClips.filter((item) => audibleTrackIds.has(item.trackId) && (item.media.type === 'audio' || (item.media.type === 'video' && hasAudioStream(item.media.path)))).forEach(({ clip, inputIndex }, index) => {

@@ -56,11 +56,16 @@ try {
         const made = spawnSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', `color=c=${color}:s=160x90:r=10`, '-t', duration!, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', join(temporary, `${name}.mp4`)], { encoding: 'utf8' });
         assert.equal(made.status, 0, made.stderr);
     }
+    const clock = spawnSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=red:s=320x240:r=10:d=1', '-f', 'lavfi', '-i', 'color=lime:s=320x240:r=10:d=1', '-f', 'lavfi', '-i', 'color=blue:s=320x240:r=10:d=2', '-filter_complex', '[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]', '-map', '[v]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', join(temporary, 'clock.mp4')], { encoding: 'utf8' });
+    assert.equal(clock.status, 0, clock.stderr);
+    const overlay = spawnSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=80x80,drawbox=x=40:y=0:w=40:h=80:color=yellow:t=fill', '-frames:v', '1', join(temporary, 'overlay.png')], { encoding: 'utf8' });
+    assert.equal(overlay.status, 0, overlay.stderr);
     browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome' });
     const page = await browser.newPage({ viewport: { width: 1600, height: 1100 } });
     await page.route('https://video-studio-fixture.test/**', route => {
         const path = new URL(route.request().url()).pathname;
-        if (path === '/source.mp4' || path === '/render.mp4') {
+        if (path === '/overlay.png') return route.fulfill({ contentType: 'image/png', body: readFileSync(join(temporary, 'overlay.png')) });
+        if (path === '/source.mp4' || path === '/render.mp4' || path === '/clock.mp4') {
             const bytes = readFileSync(join(temporary, path.slice(1)));
             const range = route.request().headers()['range']?.match(/bytes=(\d+)-(\d*)/);
             if (range) {
@@ -181,6 +186,96 @@ try {
         assert.deepEqual(state.drafts, [{ sessionId: 'fixture-session', text: 'Saved edit request: Synthetic trim request' }]);
         assert.deepEqual(state.navigations, ['allSessions/session/fixture-session', 'allSessions/session/fixture-session']);
         assert.equal(state.toasts.filter((t: any) => t.kind === 'warning').length, 2);
+    });
+    const openComposition = async () => {
+        await page.evaluate(() => (window as any).fixture.composition());
+        const button = page.getByRole('button', { name: 'Composition', exact: true });
+        await button.focus();
+        await page.keyboard.press('Space');
+        assert.equal(await button.getAttribute('aria-pressed'), 'true', 'Space must activate the focused Composition button');
+    };
+    const seekComposition = async (timeMs: number) => {
+        await page.getByLabel('Composition time', { exact: true }).evaluate((input, value) => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, String(value));
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        }, timeMs);
+    };
+    const readyComposition = async (timeMs: number) => {
+        await page.waitForFunction(time => {
+            const canvas = document.querySelector('canvas[aria-label="Composition preview"]');
+            return canvas?.getAttribute('data-state') === 'ready' && Number(canvas.getAttribute('data-time-ms')) === time;
+        }, timeMs);
+    };
+    const canvasPixel = (x: number, y: number) => page.getByLabel('Composition preview', { exact: true }).evaluate((canvas, point) =>
+        [...(canvas as HTMLCanvasElement).getContext('2d')!.getImageData(point.x, point.y, 1, 1).data], { x, y });
+    const whitePixels = (top: number, bottom: number) => page.getByLabel('Composition preview', { exact: true }).evaluate((canvas, region) => {
+        const c = canvas as HTMLCanvasElement;
+        const pixels = c.getContext('2d')!.getImageData(0, region.top, c.width, region.bottom - region.top).data;
+        let count = 0;
+        for (let i = 0; i < pixels.length; i += 4) if (pixels[i]! > 190 && pixels[i + 1]! > 190 && pixels[i + 2]! > 190) count++;
+        return count;
+    }, { top, bottom });
+    await check('composition renders layers, crop, opacity, movement and retimed source frames', async () => {
+        await openComposition();
+        await seekComposition(100); await readyComposition(100);
+        const purple = await canvasPixel(96, 55);
+        assert.ok(purple[0]! > 100 && purple[0]! < 155 && purple[1]! < 20 && purple[2]! > 100 && purple[2]! < 155, `expected half-blue over red, got ${purple}`);
+        assert.ok((await canvasPixel(230, 220))[0]! > 230);
+        assert.equal(await whitePixels(0, 240), 0, 'hidden, disabled and future text must not render');
+        await seekComposition(400); await readyComposition(400);
+        const retimed = await canvasPixel(230, 220);
+        assert.ok(retimed[1]! > 230 && retimed[0]! < 20, `sourceIn500 + speed2 must show green at400ms, got ${retimed}`);
+        const moved = await canvasPixel(144, 55);
+        assert.ok(moved[1]! > 100 && moved[1]! < 155 && moved[2]! > 100, `moving blue image must blend over green, got ${moved}`);
+        assert.ok((await canvasPixel(96, 55))[2]! < 20, 'old image position must be clear');
+    });
+    await check('composition respects title and remapped-caption windows and clears gaps', async () => {
+        await openComposition();
+        await seekComposition(700); await readyComposition(700);
+        assert.ok(await whitePixels(85, 145) > 100, 'active title must be drawn');
+        await seekComposition(1200); await readyComposition(1200);
+        assert.equal(await whitePixels(85, 145), 0, 'ended title must disappear');
+        assert.ok(await whitePixels(145, 210) > 100, 'caption must follow moved clip timing');
+        await seekComposition(1800); await readyComposition(1800);
+        assert.equal(await whitePixels(0, 240), 0);
+        const gap = await canvasPixel(160, 120);
+        assert.ok(gap[0]! < 25 && gap[1]! < 25 && gap[2]! < 25, `gap must clear prior content, got ${gap}`);
+    });
+    await check('composition ignores stale async loading after a newer seek', async () => {
+        await page.evaluate(() => { (window as any).fixture.holdMedia = 'video-media-overlay'; });
+        await openComposition();
+        await page.waitForFunction(() => Boolean((window as any).fixture.pendingMedia['video-media-overlay']));
+        await seekComposition(1800);
+        await readyComposition(1800);
+        await page.evaluate(() => (window as any).fixture.pendingMedia['video-media-overlay']());
+        await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+        assert.equal(await page.getByLabel('Composition preview', { exact: true }).getAttribute('data-time-ms'), '1800');
+        const pixel = await canvasPixel(160, 120);
+        assert.ok(pixel[0]! < 25 && pixel[1]! < 25 && pixel[2]! < 25);
+    });
+    await check('composition shows missing-media errors without pretending a frame is ready', async () => {
+        await page.evaluate(() => { (window as any).fixture.missingMedia = 'video-media-overlay'; });
+        await openComposition();
+        await page.getByRole('alert').filter({ hasText: /Media unavailable|media unavailable/ }).waitFor();
+        assert.equal(await page.getByLabel('Composition preview', { exact: true }).getAttribute('data-state'), 'error');
+        await page.evaluate(() => { (window as any).fixture.missingMedia = null; });
+        await page.getByRole('button', { name: 'Retry preview', exact: true }).focus();
+        await page.keyboard.press('Space');
+        await readyComposition(0);
+        assert.equal(await page.getByRole('alert').count(), 0, 'Space must activate Retry after missing media is repaired');
+    });
+    await check('composition rejects a relinked source identity instead of drawing the old asset', async () => {
+        await openComposition();
+        await seekComposition(100); await readyComposition(100);
+        const requests = await page.evaluate(() => (window as any).fixture.mediaRequests);
+        assert.ok(requests.some((request: any) => request.asset === 'video-media-overlay' && request.expectedSourcePath === '/synthetic/overlay.png'));
+        await page.evaluate(() => (window as any).fixture.relink('overlay', '/synthetic/relinked.png'));
+        await page.getByRole('alert').filter({ hasText: /source mismatch/ }).waitFor();
+        const canvas = page.getByLabel('Composition preview', { exact: true });
+        assert.equal(await canvas.getAttribute('data-state'), 'error');
+        assert.equal(await canvas.getAttribute('data-time-ms'), null, 'old successful frame timestamp must be cleared');
+        assert.equal((await canvasPixel(96, 55))[3], 0, 'old composited pixels must be cleared');
     });
 }
 finally {
