@@ -74,6 +74,7 @@ export function PanelSlot({
     || navState?.navigator === 'automations'
     || navState?.navigator === 'workflows'
     || navState?.navigator === 'outputs'
+    || navState?.navigator === 'videoStudio'
     || navState?.navigator === 'workspaceContext'
     || navState?.navigator === 'settings'
 

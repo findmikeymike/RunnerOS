@@ -131,7 +131,7 @@ import {
   isOutputsNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
-import { isWorkflowRunNavigation, isWorkflowsNavigation } from "../../../shared/types"
+import { isVideoStudioNavigation, isWorkflowRunNavigation, isWorkflowsNavigation } from "../../../shared/types"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
@@ -2811,6 +2811,7 @@ function AppShellContent({
     if (isCampaignNavigation(navState)) return false
     if (isLabNavigation(navState)) return false
     if (isOutputsNavigation(navState)) return false
+    if (isVideoStudioNavigation(navState)) return false
     if (isAutoCompact) return true
     if (isSessionsNavigation(navState)) return false
     if (isAgentsNavigation(navState)) return false

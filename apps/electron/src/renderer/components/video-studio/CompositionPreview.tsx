@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { Volume2, VolumeX } from 'lucide-react'
 import type { RunnerVideoProject } from '@craft-agent/shared/video'
 import { buildScenePlan, sceneAtTime, visualGeometry, clipSpeed, audioGainAtTime } from '../../../../../../tools/video-studio/lib/scene-plan.mjs'
 
@@ -27,7 +28,7 @@ function interruptible<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> 
   })
 }
 
-function waitForMedia(element: HTMLVideoElement | HTMLImageElement, event: string, ready: () => boolean, signal: AbortSignal): Promise<void> {
+function waitForMedia(element: HTMLVideoElement | HTMLImageElement, event: string, ready: () => boolean, signal: AbortSignal, checkInitial = true): Promise<void> {
   return new Promise((resolve, reject) => {
     const cleanup = () => {
       element.removeEventListener(event, done)
@@ -41,7 +42,7 @@ function waitForMedia(element: HTMLVideoElement | HTMLImageElement, event: strin
     element.addEventListener('error', fail)
     signal.addEventListener('abort', abort, { once: true })
     if (signal.aborted) abort()
-    else done()
+    else if (checkInitial) done()
   })
 }
 
@@ -277,7 +278,8 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
               silence()
               video.pause()
               if (Math.abs(video.currentTime - target) > 0.0001 || video.seeking) {
-                const seek = waitForMedia(video, 'seeked', () => !video.seeking && Math.abs(video.currentTime - target) < 0.01, signal)
+                // Tiny seeks can satisfy the tolerance before assignment; wait for the new seek event.
+                const seek = waitForMedia(video, 'seeked', () => !video.seeking && Math.abs(video.currentTime - target) < 0.01, signal, false)
                 video.currentTime = target
                 await seek
               }
@@ -447,13 +449,19 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
   React.useLayoutEffect(() => { command.current(timeMs, playing) }, [timeMs, playing])
 
   return (
-    <div className="relative flex h-full w-full flex-col items-center justify-center">
-      <button type="button" onClick={toggleSound} className="absolute right-2 top-2 z-10 rounded bg-black/80 px-2 py-1 text-xs text-white/80">{soundEnabled ? 'Mute preview' : 'Enable sound'}</button>
-      {soundError && <div role="alert" className="absolute top-10 z-10 rounded bg-black/90 p-2 text-xs text-white/80">{soundError}</div>}
-      <canvas ref={canvasRef} aria-label="Composition preview" data-state={state} className="h-full w-full object-contain" />
-      {state === 'loading' && <div role="status" className="absolute rounded bg-black/75 px-3 py-2 text-xs text-white/70">Preparing frame…</div>}
-      {state === 'error' && <div role="alert" className="absolute max-w-[90%] rounded bg-black/90 p-3 text-center text-xs text-white/80">{error}<button type="button" onClick={() => setRetry(value => value + 1)} className="ml-2 underline">Retry preview</button></div>}
-      {state === 'ready' && <div className="absolute bottom-1 rounded bg-black/75 px-2 py-1 text-[10px] text-white/60">{soundEnabled ? 'Composition with sound' : 'Silent visual preview'} · render for final fonts and color</div>}
+    <div className="relative flex h-full min-h-0 w-full flex-col items-center justify-center gap-3">
+      <div className="relative flex min-h-0 w-full flex-1 items-center justify-center">
+        <canvas ref={canvasRef} aria-label="Composition preview" data-state={state} className="absolute inset-0 h-full w-full object-contain" />
+        {state === 'loading' && <div role="status" className="absolute rounded-xl bg-black/70 px-4 py-2 text-xs text-white/70 backdrop-blur-xl">Preparing frame…</div>}
+        {state === 'error' && <div role="alert" className="absolute max-w-[90%] rounded-xl bg-black/85 p-4 text-center text-xs leading-relaxed text-white/80">{error}<button type="button" onClick={() => setRetry(value => value + 1)} className="ml-2 underline underline-offset-4">Retry preview</button></div>}
+      </div>
+      <div className="flex h-8 shrink-0 items-center justify-center">
+        <button type="button" onClick={toggleSound} title="Preview audio. Render for final output quality." className="inline-flex h-8 items-center gap-2 rounded-full bg-white/[0.06] px-3.5 text-[11px] font-medium text-white/65 transition-colors hover:bg-white/[0.1] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">
+          {soundEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+          {soundEnabled ? 'Mute preview' : 'Enable sound'}
+        </button>
+      </div>
+      {soundError && <div role="alert" className="absolute bottom-11 z-10 max-w-[90%] rounded-xl bg-black/90 p-3 text-xs text-white/80">{soundError}</div>}
     </div>
   )
 }
