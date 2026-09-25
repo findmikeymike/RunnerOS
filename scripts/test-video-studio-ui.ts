@@ -85,11 +85,12 @@ try {
     browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome', args: ['--mute-audio'] });
     const page = await browser.newPage({ viewport: { width: 1600, height: 1100 } });
     await page.addInitScript(() => {
-        const captured = (window as any).audioCapture = { analysers: [] as AnalyserNode[], sources: [] as any[], measure: () => 0 };
+        const captured = (window as any).audioCapture = { analysers: [] as AnalyserNode[], masters: [] as GainNode[], masterCommands: [] as Array<{param:AudioParam;value:number;time:number;wall:number}>, sources: [] as any[], measure: () => 0 };
         const sinks = new WeakMap<BaseAudioContext, AnalyserNode>();
         const connect = AudioNode.prototype.connect;
         AudioNode.prototype.connect = function (destination: any, ...args: any[]) {
             if (destination === this.context.destination) {
+                if (this instanceof GainNode) captured.masters.push(this);
                 let analyser = sinks.get(this.context);
                 if (!analyser) {
                     analyser = this.context.createAnalyser(); analyser.fftSize = 4096;
@@ -101,6 +102,11 @@ try {
             }
             return (connect as any).call(this, destination, ...args);
         } as typeof connect;
+        const setValueAtTime=AudioParam.prototype.setValueAtTime;
+        AudioParam.prototype.setValueAtTime=function(value:number,time:number) {
+            if(captured.masters.some(master=>master.gain===this)) captured.masterCommands.push({param:this,value,time,wall:performance.now()});
+            return setValueAtTime.call(this,value,time);
+        };
         const createSource = AudioContext.prototype.createMediaElementSource;
         AudioContext.prototype.createMediaElementSource = function (element) {
             captured.sources.push(element);
@@ -142,11 +148,12 @@ try {
     const reopen = async () => { await page.evaluate(() => { (window as any).fixture.unmount(); (window as any).fixture.mount(); }); await page.getByRole('button', { name: 'Restore draft', exact: true }).waitFor(); };
     const edit = () => page.getByRole('button', { name: 'Add title', exact: true }).click();
     const openInspector = async () => { const toggle = page.getByRole('button', { name: 'Toggle inspector', exact: true }); if (await toggle.getAttribute('aria-pressed') !== 'true') await toggle.click(); };
-    const raw = async () => { await openInspector(); if (!await page.locator('textarea').count())
-        await page.getByRole('button', { name: /Developer details/ }).click(); return page.locator('textarea').last(); };
+    const raw = async () => { await openInspector(); const details=page.getByRole('button', { name: /Developer details/ }); if ((await details.textContent())?.endsWith('Show'))
+        await details.click(); return page.locator('textarea').last(); };
     const save = () => page.getByRole('button', { name: 'Save project', exact: true }).click();
     const check = async (name: string, body: () => Promise<void>, layout = false) => {
         if (process.env.VIDEO_UI_LAYOUT_ONLY && !layout) return;
+        if (process.env.VIDEO_UI_MATCH && !name.includes(process.env.VIDEO_UI_MATCH)) return;
         try {
             errors = [];
             await page.goto(`https://video-studio-fixture.test/${layout ? '?layout=1' : ''}`);
@@ -174,6 +181,125 @@ try {
         assert.equal(state.calls[0].expected, state.initialText);
         assert.equal(JSON.parse(state.disk).timeline.tracks.flatMap((t: any) => t.clips).length, 2);
         assert.equal(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('artist-os:video-draft:')).length), 0);
+    });
+    for (const command of ['Inspect','Dry run']) for (const ok of [true,false]) {
+      await check(`history survives ${command} ${ok ? 'success' : 'failure'}`, async () => {
+        await edit();
+        const selection=await page.getByPlaceholder('Clip Name',{exact:true}).inputValue();
+        await page.evaluate(value=>(window as any).fixture.reportOk=value,ok);
+        await page.getByRole('button',{name:command,exact:true}).click();
+        await page.waitForFunction(()=>!(document.querySelector('button[title="Undo"]') as HTMLButtonElement)?.disabled);
+        assert.equal(await page.getByPlaceholder('Clip Name',{exact:true}).inputValue(),selection);
+        await page.getByRole('button',{name:'Undo',exact:true}).click();
+        const project=JSON.parse(await (await raw()).inputValue());
+        assert.equal(project.timeline.tracks.flatMap((track:any)=>track.clips).length,1);
+        assert.equal(project.agentEvents[0].id,'metadata-event');
+        assert.ok(project.versions.length>0);
+        await page.getByRole('button',{name:'Redo',exact:true}).click();
+        assert.equal(JSON.parse(await (await raw()).inputValue()).timeline.tracks.flatMap((track:any)=>track.clips).length,2);
+      });
+    }
+    for (const ripple of [false,true]) await check(`accurate timeline contiguous trim ${ripple ? 'ripple' : 'normal'}`, async () => {
+      await page.evaluate(()=>(window as any).fixture.contiguousClips());
+      const rawInput=await raw();
+      const first=page.locator('[data-video-clip-id="clip"]'), next=page.locator('[data-video-clip-id="next"]');
+      await next.waitFor();
+      const a=await first.boundingBox(), b=await next.boundingBox(); assert.ok(a&&b);
+      assert.ok(Math.abs(a.width-1000/12)<0.1,`accurate first width ${a.width}`);
+      assert.ok(Math.abs(a.x+a.width-b.x)<0.1,'contiguous clips share their true boundary');
+      const tail=await page.locator('[data-video-clip-id="gap-tail"]').boundingBox();assert.ok(tail);
+      assert.ok(Math.abs(tail.width-10000/12)<0.1,'long cards must not cap at640px');
+      assert.ok(Math.abs(tail.x-(b.x+b.width)-1000/12)<0.1,'real gaps remain visible');
+      if(ripple) await page.locator('button[title="Ripple trim and delete"]').click();
+      const edge=await first.locator('[data-trim-edge="end"]').boundingBox();assert.ok(edge);
+      const x=edge.x+edge.width/2,y=edge.y+edge.height/2;
+      assert.equal(await page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.getAttribute('data-trim-edge'),{x,y}),'end','next clip must not cover prior trim handle');
+      await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+(ripple ? 500 : -400)/12,y,{steps:8});await page.mouse.up();
+      const clips=JSON.parse(await rawInput.inputValue()).timeline.tracks[0].clips;
+      assert.ok(Math.abs(clips[0].durationMs-(ripple?1500:600))<=12,JSON.stringify(clips));
+      assert.ok(Math.abs(clips[1].startMs-(ripple?1500:1000))<=12);
+    });
+    await check('accurate timeline short clips at minimum zoom keep controls inside time bounds', async () => {
+      await page.evaluate(()=>(window as any).fixture.contiguousClips(true));
+      await page.locator('[data-video-clip-id="next"]').waitFor();
+      await page.getByRole('slider',{name:'Zoom',exact:true}).fill('0.5');
+      const first=page.locator('[data-video-clip-id="clip"]'),next=page.locator('[data-video-clip-id="next"]');
+      const a=await first.boundingBox(),b=await next.boundingBox();assert.ok(a&&b);
+      assert.ok(Math.abs(a.width-100/24)<0.1,`short width ${a.width}`);
+      assert.ok(a.x+a.width<=b.x+0.1,'short cards cannot overlap neighbors');
+      const start=await first.locator('[data-trim-edge="start"]').boundingBox(),end=await first.locator('[data-trim-edge="end"]').boundingBox();assert.ok(start&&end);
+      assert.ok(start.x>=a.x && end.x+end.width<=a.x+a.width+0.1 && start.x+start.width<end.x,'trim targets must stay inside their own card and leave a move target');
+      await page.mouse.click(a.x+a.width/2,a.y+a.height/2);
+      assert.equal(await page.getByPlaceholder('Clip Name',{exact:true}).inputValue(),'Synthetic clip');
+      assert.match(await first.getAttribute('title') || '',/Zoom in/);
+      await page.getByRole('slider',{name:'Zoom',exact:true}).fill('2.5');
+      const expanded=await first.boundingBox();assert.ok(expanded);
+      assert.ok(expanded.width>a.width*4.9,'zoom makes precise trimming usable without altering time');
+    });
+    for (const ripple of [false, true]) await check(`trailing trim source drag ${ripple ? 'ripple' : 'normal'}`, async () => {
+      await page.evaluate(value => (window as any).fixture.trimBounds(value), ripple);
+      const rawInput = await raw();
+      await page.waitForFunction(() => document.querySelectorAll('textarea').length > 0 && [...document.querySelectorAll('textarea')].some(input => input.value.includes('Next clip')));
+      if (ripple) await page.locator('button[title="Ripple trim and delete"]').click();
+      const clipButton = page.getByRole('button', { name: /Synthetic clip/ }).last();
+      const handle = clipButton.locator('span.cursor-ew-resize').last();
+      const box = await handle.boundingBox(); assert.ok(box);
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down(); await page.mouse.move(box.x + 600, box.y + box.height / 2, { steps: 12 }); await page.mouse.up();
+      const project = JSON.parse(await rawInput.inputValue());
+      const clips = project.timeline.tracks[0].clips;
+      assert.equal(clips[0].durationMs, ripple ? 2000 : 1500);
+      assert.equal(clips[1].startMs, ripple ? 2500 : 1500);
+    });
+    await check('history survives export output notifications and retains render metadata', async () => {
+      await edit();
+      const selection=await page.getByPlaceholder('Clip Name',{exact:true}).inputValue();
+      await page.getByRole('button',{name:'Render & review',exact:true}).click();
+      await page.waitForFunction(()=>!!(window as any).fixture.calls.find((call:any)=>call.action==='export') && !(document.querySelector('button[title="Undo"]') as HTMLButtonElement)?.disabled);
+      assert.equal(await page.getByPlaceholder('Clip Name',{exact:true}).inputValue(),selection);
+      await page.getByRole('button',{name:'Undo',exact:true}).click();
+      const project=JSON.parse(await (await raw()).inputValue());
+      assert.equal(project.exports[0].id,'render-receipt');
+      assert.equal(project.timeline.tracks.flatMap((track:any)=>track.clips).length,1);
+    });
+    await check('history and dirty edits survive metadata-only external notifications', async () => {
+      await edit();
+      await page.evaluate(()=>(window as any).fixture.metadata());
+      await raw();
+      await page.waitForFunction(()=>JSON.parse((Array.from(document.querySelectorAll('textarea')).at(-1) as HTMLTextAreaElement).value).agentEvents?.length>0);
+      await page.getByRole('button',{name:'Undo',exact:true}).click();
+      assert.equal(JSON.parse(await (await raw()).inputValue()).timeline.tracks.flatMap((track:any)=>track.clips).length,1);
+      await page.getByRole('button',{name:'Redo',exact:true}).click();
+      await save();
+      assert.equal(JSON.parse((await fixture()).disk).timeline.tracks.flatMap((track:any)=>track.clips).length,2);
+    });
+    await check('history is preserved when an external composition arrives during inspect', async () => {
+      await edit();
+      await page.evaluate(()=>(window as any).fixture.holdReport=true);
+      await page.getByRole('button',{name:'Inspect',exact:true}).click();
+      await page.waitForFunction(()=>!!(window as any).fixture.finishReport);
+      await page.evaluate(()=>{(window as any).fixture.external('External composition');(window as any).fixture.finishReport()});
+      await page.getByRole('button',{name:'Reload',exact:true}).last().waitFor();
+      assert.equal(await page.getByLabel('Project title',{exact:true}).inputValue(),'Synthetic video');
+      await page.getByRole('button',{name:'Undo',exact:true}).click();
+      assert.equal(JSON.parse(await (await raw()).inputValue()).timeline.tracks.flatMap((track:any)=>track.clips).length,1);
+      assert.equal(JSON.parse((await fixture()).disk).title,'External composition');
+    });
+    await check('history and old render freshness survive an external composition during export', async () => {
+      await page.getByRole('button',{name:'Render & review',exact:true}).click();
+      await page.getByText('rendered result',{exact:true}).waitFor();
+      await edit();
+      await page.getByText('edited since render · render again',{exact:true}).waitFor();
+      await page.evaluate(()=>(window as any).fixture.holdExport=true);
+      await page.getByRole('button',{name:'Render & review',exact:true}).click();
+      await page.waitForFunction(()=>!!(window as any).fixture.finishExport);
+      await page.evaluate(()=>{(window as any).fixture.external('External export composition');(window as any).fixture.finishExport()});
+      await page.getByRole('button',{name:'Reload',exact:true}).last().waitFor();
+      assert.equal(await page.getByLabel('Project title',{exact:true}).inputValue(),'Synthetic video');
+      await page.getByText('edited since render · render again',{exact:true}).waitFor();
+      await page.getByRole('button',{name:'Undo',exact:true}).click();
+      assert.equal(JSON.parse(await (await raw()).inputValue()).timeline.tracks.flatMap((track:any)=>track.clips).length,1);
+      assert.equal(JSON.parse((await fixture()).disk).title,'External export composition');
     });
     await check('saving preserves undo and redo without treating saved history as a dirty draft', async () => {
         await edit(); await page.keyboard.press(process.platform==='darwin'?'Meta+s':'Control+s');
@@ -539,6 +665,30 @@ try {
         await page.getByTitle('Pause', { exact: true }).click();
         return level;
     };
+    const assertSilentGraph = async (reason: string) => {
+        if(reason==='pause') await page.getByTitle('Play',{exact:true}).waitFor();
+        const frames = await page.evaluate(() => {
+            const capture=(window as any).audioCapture;
+            return { commandCount:capture.masterCommands.length, committedWall:performance.now(),
+                sequence:capture.masterCommands.slice(-4).map((event:any)=>({value:event.value,time:event.time,wall:event.wall})),
+                gains:capture.masters.map((master:GainNode)=>master.gain.value),
+                commands:capture.masters.map((master:GainNode)=>capture.masterCommands.filter((event:any)=>event.param===master.gain).at(-1)?.value),
+                clocks:capture.analysers.map((analyser:AnalyserNode)=>({time:analyser.context.currentTime,window:analyser.fftSize/analyser.context.sampleRate})) };
+        });
+        if(process.env.VIDEO_UI_AUDIO_DIAGNOSTIC) console.log(`AUDIO ${reason} ${JSON.stringify(frames)}`);
+        assert.ok(frames.commands.length>0 && frames.commands.every((gain:number)=>gain===0),`${reason}: master must be commanded silent immediately: ${JSON.stringify(frames)}`);
+        // Analyser data retains an entire FFT window. Under host load, wall time
+        // can advance before the audio clock has produced fresh silent samples.
+        await page.waitForFunction((clocks:any[]) => {
+            const capture=(window as any).audioCapture;
+            return clocks.every((clock,index)=>capture.analysers[index].context.currentTime>=clock.time+clock.window+0.01)
+                && capture.measure()<0.0001;
+        },frames.clocks,{timeout:2000});
+        const laterCommands=await page.evaluate((count:number)=>(window as any).audioCapture.masterCommands.slice(count).map((event:any)=>({value:event.value,time:event.time,wall:event.wall})),frames.commandCount);
+        assert.ok(laterCommands.every((event:any)=>event.value===0),`${reason}: audio must never unmute after the committed silence command: ${JSON.stringify(laterCommands)}`);
+        assert.ok(await rms()<0.0001,`${reason}: fresh output samples must be silent`);
+        assert.equal(await page.evaluate(()=>(window as any).audioCapture.masters.every((master:GainNode)=>master.gain.value===0)),true,`${reason}: settled master gain must be zero`);
+    };
     await check('composition audio requires opt-in and measured output goes silent on pause, mute and hide', async () => {
         await openAudio();
         await page.getByTitle('Play', { exact: true }).click();
@@ -547,13 +697,11 @@ try {
         await page.getByRole('button', { name: 'Enable sound', exact: true }).click();
         await page.waitForFunction(() => (window as any).audioCapture.measure() > 0.015);
         await page.getByTitle('Pause', { exact: true }).click();
-        await page.waitForTimeout(150);
-        assert.ok(await rms() < 0.0001, 'pause must silence the measured graph');
+        await assertSilentGraph('pause');
         await page.getByTitle('Play', { exact: true }).click();
         await page.waitForFunction(() => (window as any).audioCapture.measure() > 0.015);
         await page.getByRole('button', { name: 'Mute preview', exact: true }).click();
-        await page.waitForTimeout(150);
-        assert.ok(await rms() < 0.0001, 'mute must silence the measured graph');
+        await assertSilentGraph('mute');
         await page.getByRole('button', { name: 'Enable sound', exact: true }).click();
         await page.waitForFunction(() => (window as any).audioCapture.measure() > 0.015);
         await page.evaluate(() => {
@@ -562,8 +710,7 @@ try {
             document.dispatchEvent(new Event('visibilitychange'));
         });
         await page.getByTitle('Play', { exact: true }).waitFor();
-        await page.waitForTimeout(150);
-        assert.ok(await rms() < 0.0001, 'hidden page must silence the measured graph');
+        await assertSilentGraph('hidden page');
     });
     await check('real audio output follows seeked volume and fade envelopes', async () => {
         await openAudio('fade');

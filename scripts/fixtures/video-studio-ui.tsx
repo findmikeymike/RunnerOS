@@ -41,6 +41,8 @@ let assets: any[] = [
 ]
 const state = w.fixture = {
   calls: [] as any[], navigations: [] as string[], drafts: [] as any[], toasts: [] as any[], initialText,
+  holdExport: false, finishExport: null as null | (() => void),
+  reportOk: true, holdReport: false, finishReport: null as null | (() => void),
   status: 'started', holdSave: false, finishSave: null as null | (() => void),
   holdMedia: null as string | null, missingMedia: null as string | null,
   pendingMedia: {} as Record<string, () => void>, mediaReads: [] as string[],
@@ -48,6 +50,34 @@ const state = w.fixture = {
   getOutput: async () => ({ id: 'fixture-output', title: 'Synthetic video', summary: '', kind: 'video', status: 'draft', assets, primary: assets.find(a => a.id === 'video-render-result'), origin: { type: 'agent' }, receipts: [], links: [] }),
   disk: () => diskText,
   external: (title: string) => { diskText = JSON.stringify({ ...JSON.parse(diskText), title }, null, 2) + '\n'; listeners.forEach(fn => fn('fixture-workspace')) },
+  trimBounds: (ripple: boolean) => {
+    const project = JSON.parse(diskText)
+    project.media[0].durationMs = 4500
+    project.timeline.tracks[0].clips = [
+      { ...project.timeline.tracks[0].clips[0], durationMs: 1000, sourceOutMs: 9999 },
+      { id: 'next', type: 'text', label: 'Next clip', startMs: 1500, durationMs: 1000, text: { text: 'Next', fontSize: 64, color: '#ffffff' } },
+    ]
+    project.timeline.durationMs = 2500
+    diskText = JSON.stringify(project, null, 2) + '\n'
+    listeners.forEach(fn => fn('fixture-workspace'))
+  },
+  contiguousClips: (short = false) => {
+    const project=JSON.parse(initialText)
+    project.timeline.tracks[0].clips=[
+      {...project.timeline.tracks[0].clips[0],durationMs:short ? 100 : 1000},
+      {id:'next',type:'text',label:'Next clip',startMs:short ? 100 : 1000,durationMs:short ? 100 : 1000,text:{text:'Next'}},
+      {id:'gap-tail',type:'text',label:'Gap tail',startMs:short ? 300 : 3000,durationMs:10000,text:{text:'Tail'}},
+    ]
+    project.timeline.durationMs=(short ? 300 : 3000)+10000
+    diskText=JSON.stringify(project,null,2)+'\n'
+    listeners.forEach(fn=>fn('fixture-workspace'))
+  },
+  metadata: () => {
+    const project=JSON.parse(diskText)
+    project.agentEvents=[...project.agentEvents,{id:'metadata-event',type:'inspect'}]
+    diskText=JSON.stringify(project,null,2)+'\n'
+    listeners.forEach(fn=>fn('fixture-workspace'))
+  },
   relink: (id: string, path: string) => {
     const project = JSON.parse(diskText)
     project.media = project.media.map((media: any) => media.id === id ? { ...media, path } : media)
@@ -82,9 +112,25 @@ w.electronAPI = {
     listeners.forEach(fn => fn(workspace))
     return true
   },
+  inspectVideoStudio: async () => {
+    state.calls.push({action:'inspect'})
+    if(state.holdReport) await new Promise<void>(resolve=>{state.finishReport=resolve})
+    state.metadata()
+    return {ok:state.reportOk}
+  },
+  dryRunVideoStudio: async () => {
+    state.calls.push({action:'dry-run'})
+    state.metadata()
+    return {ok:state.reportOk}
+  },
   exportVideoStudio: async () => {
     state.calls.push({ action: 'export' })
+    if(state.holdExport) await new Promise<void>(resolve=>{state.finishExport=resolve})
+    const project=JSON.parse(diskText)
+    project.exports=[...project.exports,{id:'render-receipt',outputPath:'renders/result.mp4'}]
+    diskText=JSON.stringify(project,null,2)+'\n'
     assets = [...assets.filter(a => a.id !== 'video-render-result'), { id: 'video-render-result', path: 'renders/result.mp4', label: 'Result', role: 'primary', mimeType: 'video/mp4' }]
+    listeners.forEach(fn=>fn('fixture-workspace'))
     return { ok: true, assetId: 'video-render-result', rendered: true }
   },
   runVideoStudioAgent: async (_workspace: string, outputId: string, prompt: string) => {

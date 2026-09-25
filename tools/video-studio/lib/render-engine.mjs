@@ -49,7 +49,7 @@ function visualOverlayPosition(clip, transform) {
         y: `(main_h-overlay_h)/2+${y}`,
     };
 }
-function visualCompositionFilter(inputLabel, outputLabel, clip, media, canvas, colorParts = []) {
+function visualCompositionFilter(inputLabel, outputLabel, clip, media, canvas, colorParts = [], colorId) {
     const transform = clipTransform(clip);
     const crop = clipCrop(clip, media);
     const source = visualSourceSize(media, crop, canvas.width, canvas.height);
@@ -58,15 +58,21 @@ function visualCompositionFilter(inputLabel, outputLabel, clip, media, canvas, c
     if (crop)
         parts.push(`crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`);
     parts.push(`scale=${fitted.width}:${fitted.height}:force_original_aspect_ratio=decrease`);
-    parts.push('setsar=1', 'format=rgba', ...colorParts);
+    parts.push('setsar=1', 'format=rgba');
+    const geometryParts = [];
     if (transform.rotateDeg !== 0) {
         const angle = (transform.rotateDeg * Math.PI) / 180;
-        parts.push(`rotate=${ffmpegExprNumber(angle)}:ow=rotw(${ffmpegExprNumber(angle)}):oh=roth(${ffmpegExprNumber(angle)}):fillcolor=black@0`);
+        geometryParts.push(`rotate=${ffmpegExprNumber(angle)}:ow=rotw(${ffmpegExprNumber(angle)}):oh=roth(${ffmpegExprNumber(angle)}):fillcolor=black@0`);
     }
     const opacity = clipOpacity(clip);
     if (opacity < 1)
-        parts.push(`colorchannelmixer=aa=${ffmpegExprNumber(opacity)}`);
-    return `${inputLabel}${parts.length ? parts.join(',') : 'null'}${outputLabel}`;
+        geometryParts.push(`colorchannelmixer=aa=${ffmpegExprNumber(opacity)}`);
+    if (!colorParts.length) return `${inputLabel}${[...parts, ...geometryParts].join(',')}${outputLabel}`;
+    return [
+        `${inputLabel}${parts.join(',')}[${colorId}Source]`,
+        alphaPreservingAdjustmentFilter(`[${colorId}Source]`, `[${colorId}Result]`, colorParts, colorId),
+        `[${colorId}Result]${geometryParts.length ? geometryParts.join(',') : 'null'}${outputLabel}`,
+    ].join(';');
 }
 function atempoFilter(speed) {
     const parts = [];
@@ -121,9 +127,20 @@ function adjustmentParts(adjustments, writeLut) {
     return parts;
 }
 
-function adjustmentFilter(inputLabel, outputLabel, adjustments, writeLut) {
-    const parts = adjustmentParts(adjustments, writeLut);
-    return `${inputLabel}${parts.length ? parts.join(',') : 'null'}${outputLabel}`;
+// Color filters can negotiate non-alpha formats or alter alpha (for example,
+// vignette and noise). Keep the incoming alpha independently of RGB processing.
+function alphaPreservingAdjustmentFilter(inputLabel, outputLabel, parts, colorId) {
+    if (!parts.length) return `${inputLabel}null${outputLabel}`;
+    return [
+        `${inputLabel}split[${colorId}Rgb][${colorId}AlphaInput]`,
+        `[${colorId}AlphaInput]alphaextract[${colorId}Alpha]`,
+        `[${colorId}Rgb]${parts.join(',')},format=rgba[${colorId}Graded]`,
+        `[${colorId}Graded][${colorId}Alpha]alphamerge${outputLabel}`,
+    ].join(';');
+}
+
+function adjustmentFilter(inputLabel, outputLabel, adjustments, writeLut, colorId) {
+    return alphaPreservingAdjustmentFilter(inputLabel, outputLabel, adjustmentParts(adjustments, writeLut), colorId);
 }
 
 function hasAudioStream(path) {
@@ -213,11 +230,11 @@ export function renderSimpleMp4(project, outputPath, renderSettings, options = {
             : `setpts=PTS-STARTPTS+${start}/TB`;
         if (clip.adjustments?.pipeline === 'rgb-v1' || clip.adjustments?.lut) {
             // Match preview: crop/resize, color, then rotation and opacity.
-            filters.push(visualCompositionFilter(`[${inputIndex}:v]`, `[${prepared}]`, clip, media, { width, height }, adjustmentParts(clip.adjustments, writeLut)));
+            filters.push(visualCompositionFilter(`[${inputIndex}:v]`, `[${prepared}]`, clip, media, { width, height }, adjustmentParts(clip.adjustments, writeLut), `color${overlayIndex}`));
         } else {
             // Preserve established ordering for existing unversioned projects.
             filters.push(visualCompositionFilter(`[${inputIndex}:v]`, `[${adjusted}]`, clip, media, { width, height }));
-            filters.push(adjustmentFilter(`[${adjusted}]`, `[${prepared}]`, clip.adjustments, writeLut));
+            filters.push(adjustmentFilter(`[${adjusted}]`, `[${prepared}]`, clip.adjustments, writeLut, `color${overlayIndex}`));
         }
         filters.push(`[${prepared}]${setpts}[${composed}]`);
         filters.push(`${currentVideo}[${composed}]overlay=x='${overlayPosition.x}':y='${overlayPosition.y}':enable='between(t,${start},${end})'[${next}]`);

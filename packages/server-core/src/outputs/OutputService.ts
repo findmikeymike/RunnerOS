@@ -1,3 +1,4 @@
+import { withVideoProjectMedia } from './video-project-media';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname, extname, isAbsolute, join } from 'node:path';
@@ -106,8 +107,9 @@ export class OutputService {
 
   get(workspaceId: string, outputId: string): OutputManifest | null {
     const root = this.deps.getWorkspaceRootPath(workspaceId);
-    const output = readOutput(root, outputId);
-    if (!output) return null;
+    const stored = readOutput(root, outputId);
+    if (!stored) return null;
+    const output = withVideoProjectMedia(root, stored);
     const finals = readOutputFinalsRegistry(root).finals.filter((entry) => entry.outputId === output.id);
     return finals.length ? { ...output, finals } : output;
   }

@@ -109,6 +109,8 @@ export interface VideoClip {
   keyframes?: VideoKeyframe[];
   text?: VideoTextPayload;
   captionCueIds?: string[];
+  /** Window into the original caption clip; preserves cue timing across cuts. */
+  captionSource?: { offsetMs: number; durationMs: number };
 }
 
 export interface VideoCubeLut {

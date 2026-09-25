@@ -357,6 +357,79 @@ describe('video studio session tools', () => {
     expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === firstClipId)?.startMs).toBe(0);
   });
 
+  test.each([false, true])('undo isolates sibling project files (same ID: %s)', async (sameId) => {
+    const ctx = makeCtx();
+    const a = join(root, 'a.runner-video.json');
+    const b = join(root, 'b.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath: a, title: 'A' });
+    await handleVideoProjectCreate(ctx, { projectPath: b, title: 'B' });
+    if (sameId) {
+      const copy = JSON.parse(readFileSync(a, 'utf8')); copy.title = 'B';
+      writeFileSync(b, JSON.stringify(copy));
+    }
+    await handleVideoProjectUpdate(ctx, { projectPath: a, title: 'A edited' });
+    await handleVideoProjectUpdate(ctx, { projectPath: b, title: 'B edited' });
+    expect((await handleVideoProjectUndo(ctx, { projectPath: a })).isError).toBe(false);
+    expect(JSON.parse(readFileSync(a, 'utf8')).title).toBe('A');
+    expect(JSON.parse(readFileSync(b, 'utf8')).title).toBe('B edited');
+    expect((await handleVideoProjectUndo(ctx, { projectPath: b })).isError).toBe(false);
+    expect(JSON.parse(readFileSync(b, 'utf8')).title).toBe('B');
+  });
+
+  test('replacing a project at the same path cannot reuse its old history', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'a.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Old project' });
+    const edited = await handleVideoProjectUpdate(ctx, { projectPath, title: 'Old edited' });
+    const oldSnapshot = edited.structuredContent!.undoSnapshotPath as string;
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'New project', overwrite: true });
+    expect((await handleVideoProjectUndo(ctx, { projectPath })).isError).toBe(true);
+    expect(JSON.parse(readFileSync(projectPath, 'utf8')).title).toBe('New project');
+    expect(existsSync(oldSnapshot)).toBe(true);
+  });
+
+  test('undo resolves project aliases to the same history', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'a.runner-video.json');
+    const alias = join(root, 'alias.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Original' });
+    symlinkSync(projectPath, alias);
+    await handleVideoProjectUpdate(ctx, { projectPath: alias, title: 'Edited' });
+    expect((await handleVideoProjectUndo(ctx, { projectPath })).isError).toBe(false);
+    expect(JSON.parse(readFileSync(alias, 'utf8')).title).toBe('Original');
+  });
+
+  test('undo rejects foreign identity and preserves snapshot and project', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'a.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Original' });
+    const edited = await handleVideoProjectUpdate(ctx, { projectPath, title: 'Edited' });
+    const snapshotPath = edited.structuredContent!.undoSnapshotPath as string;
+    const snapshot = JSON.parse(readFileSync(snapshotPath, 'utf8')); snapshot.id = 'foreign';
+    writeFileSync(snapshotPath, JSON.stringify(snapshot));
+    const baseline = readFileSync(projectPath, 'utf8');
+    expect((await handleVideoProjectUndo(ctx, { projectPath })).isError).toBe(true);
+    expect(readFileSync(projectPath, 'utf8')).toBe(baseline);
+    expect(existsSync(snapshotPath)).toBe(true);
+  });
+
+  test('undo preserves ambiguous legacy history without automatically restoring it', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'a.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Original' });
+    const legacy = join(root, '.runner-video', 'undo', 'old.runner-video.json');
+    mkdirSync(dirname(legacy), { recursive: true });
+    writeFileSync(legacy, readFileSync(projectPath));
+    const baseline = readFileSync(projectPath, 'utf8');
+    const result = await handleVideoProjectUndo(ctx, { projectPath });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).toContain('Legacy shared-folder history is preserved');
+    expect(readFileSync(projectPath, 'utf8')).toBe(baseline);
+    await handleVideoProjectUpdate(ctx, { projectPath, title: 'Edited' });
+    expect((await handleVideoProjectUndo(ctx, { projectPath })).isError).toBe(false);
+    expect(readFileSync(legacy, 'utf8')).toBe(baseline);
+  });
+
   test('video_project_undo removes reverted export files inside the project folder', async () => {
     const ctx = makeCtx();
     const projectPath = join(root, 'project', 'video.runner-video.json');
@@ -1666,4 +1739,51 @@ describe('export preserves project control files', () => {
     if (kind === 'lock') expect(readFileSync(lock, 'utf8')).toBe('live lock');
     if (kind === 'dangling-lock-alias') expect(existsSync(lock)).toBe(false);
   });
+});
+
+test('agent split and trim preserve animated and caption timing metadata', async () => {
+  const ctx=makeCtx();
+  const projectPath=join(root,'project','video.runner-video.json');
+  await handleVideoProjectCreate(ctx,{projectPath,title:'Timed cuts'});
+  const project=JSON.parse(readFileSync(projectPath,'utf8'));
+  project.media=[{id:'m',type:'video',path:join(root,'source.mp4'),durationMs:4000}];
+  project.timeline.durationMs=4000;
+  project.timeline.tracks=[{id:'v',type:'video',label:'Video',clips:[{id:'v1',type:'video',mediaId:'m',startMs:0,durationMs:4000,sourceInMs:0,keyframes:[{property:'x',timeMs:0,value:0},{property:'x',timeMs:4000,value:100}]}]}, {id:'c',type:'caption',label:'Captions',clips:[{id:'c1',type:'caption',startMs:0,durationMs:4000,captionCueIds:['a','b']}]}];
+  project.captions=[{id:'captions',label:'Captions',cues:[{id:'a',startMs:0,durationMs:2000,text:'FIRST'},{id:'b',startMs:2000,durationMs:2000,text:'SECOND'}]}];
+  writeFileSync(projectPath,JSON.stringify(project));
+  expect((await handleVideoClipEdit(ctx,{projectPath,clipId:'v1',action:'split',atMs:2000})).isError).toBe(false);
+  expect((await handleVideoClipEdit(ctx,{projectPath,clipId:'c1',action:'split',atMs:2000})).isError).toBe(false);
+  let saved=JSON.parse(readFileSync(projectPath,'utf8'));
+  expect(saved.timeline.tracks[0].clips[0].keyframes).toEqual([{property:'x',timeMs:0,value:0,easing:'linear'},{property:'x',timeMs:2000,value:50,easing:'linear'}]);
+  expect(saved.timeline.tracks[1].clips[1].captionSource).toEqual({offsetMs:2000,durationMs:4000});
+  expect((await handleVideoClipEdit(ctx,{projectPath,clipId:'v1',action:'trim',durationMs:1000,sourceInMs:500})).isError).toBe(false);
+  saved=JSON.parse(readFileSync(projectPath,'utf8'));
+  expect(saved.timeline.tracks[0].clips[0].keyframes.map((key:any)=>key.value)).toEqual([12.5,37.5]);
+  expect((await handleVideoClipEdit(ctx,{projectPath,clipId:saved.timeline.tracks[1].clips[1].id,action:'trim',durationMs:500,ripple:true})).isError).toBe(false);
+  saved=JSON.parse(readFileSync(projectPath,'utf8'));
+  expect(saved.timeline.tracks[1].clips[1].captionSource).toEqual({offsetMs:2000,durationMs:4000});
+});
+
+test.each([false, true])('agent trim rejects beyond physical source without writes (ripple %s)', async ripple => {
+  const ctx = makeCtx(), projectPath = join(root, 'bounds', 'video.runner-video.json');
+  await handleVideoProjectCreate(ctx, { projectPath, title: 'Bounds' });
+  const project = JSON.parse(readFileSync(projectPath, 'utf8'));
+  project.media = [{ id: 'm', type: 'video', path: join(root, 'source.mp4'), durationMs: 1500 }];
+  project.timeline.tracks = [{ id: 'v', type: 'video', label: 'Video', clips: [
+    { id: 'a', type: 'video', mediaId: 'm', startMs: 0, durationMs: 400, sourceInMs: 500, sourceOutMs: 9000, speed: 2 },
+    { id: 'b', type: 'text', startMs: 1000, durationMs: 1000, text: { text: 'Next' } },
+  ] }];
+  writeFileSync(projectPath, JSON.stringify(project));
+  const before = readFileSync(projectPath, 'utf8');
+  const result = await handleVideoClipEdit(ctx, { projectPath, clipId: 'a', action: 'trim', durationMs: 501, sourceOutMs: 99999, ripple });
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result.content)).toContain('exceeds available source');
+  expect(readFileSync(projectPath, 'utf8')).toBe(before);
+  expect(existsSync(join(dirname(projectPath), '.runner-video', 'undo'))).toBe(false);
+  expect((await handleVideoClipEdit(ctx, { projectPath, clipId: 'a', action: 'trim', durationMs: 1, sourceInMs: 1500, ripple })).isError).toBe(true);
+  expect(readFileSync(projectPath, 'utf8')).toBe(before);
+  expect((await handleVideoClipEdit(ctx, { projectPath, clipId: 'a', action: 'trim', durationMs: 500, ripple })).isError).toBe(false);
+  const saved = JSON.parse(readFileSync(projectPath, 'utf8'));
+  expect(saved.timeline.tracks[0].clips[0].durationMs).toBe(500);
+  expect(saved.timeline.tracks[0].clips[1].startMs).toBe(ripple ? 1100 : 1000);
 });

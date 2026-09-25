@@ -1,3 +1,5 @@
+import { sliceVideoClipMetadata } from '../../../../../tools/video-studio/lib/clip-editing.mjs'
+export { sliceVideoClipMetadata } from '../../../../../tools/video-studio/lib/clip-editing.mjs'
 import type { VideoClip } from '@craft-agent/shared/video'
 
 export function clipPlaybackSpeed(clip: Pick<VideoClip, 'speed'>): number {
@@ -17,8 +19,8 @@ export function splitVideoClip(clip: VideoClip, splitAtMs: number, secondId: str
   if (firstDuration <= 0 || firstDuration >= clip.durationMs) throw new Error('Split must be inside the clip.')
   const sourceBoundary = (clip.sourceInMs ?? 0) + firstDuration * clipPlaybackSpeed(clip)
   return [
-    { ...clip, durationMs: firstDuration, sourceOutMs: sourceBoundary },
-    { ...clip, id: secondId, startMs: splitAtMs, durationMs: clip.durationMs - firstDuration, sourceInMs: sourceBoundary, label: clip.label ? `${clip.label} split` : undefined },
+    { ...sliceVideoClipMetadata(clip, 0, firstDuration), sourceOutMs: sourceBoundary },
+    { ...sliceVideoClipMetadata(clip, firstDuration, clip.durationMs - firstDuration), id: secondId, startMs: splitAtMs, sourceInMs: sourceBoundary, label: clip.label ? `${clip.label} split` : undefined },
   ]
 }
 
