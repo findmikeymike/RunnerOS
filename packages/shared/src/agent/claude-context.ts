@@ -9,7 +9,8 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from 'fs';
-import { join, basename, isAbsolute, resolve } from 'path';
+import { join, basename } from 'path';
+import { getLottiePath, getVideoStudioPath } from '../sources/builtin-sources.ts';
 import { spawnSync } from 'node:child_process';
 import { CONFIG_DIR } from '../config/paths.ts';
 import type {
@@ -223,15 +224,15 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
       return { success: true, message: 'Local path exists.' };
     }
 
-    const localPath = source.local?.path;
-    if (!localPath) {
-      return { success: false, message: 'No local path configured.', error: 'No local path configured.' };
-    }
-
-    const dir = isAbsolute(localPath) ? localPath : resolve(workspacePath, localPath);
+    // Built-in validation must never execute a workspace-provided shadow script.
     const isVideoStudio = source.slug === 'video-studio';
+    const dir = isVideoStudio ? getVideoStudioPath() : getLottiePath();
     const script = isVideoStudio ? 'bin/video-studio.mjs' : 'bin/lottie.mjs';
     const label = isVideoStudio ? 'Video Studio' : 'Lottie';
+    if (!existsSync(join(dir, script))) {
+      const error = `${label} tool not found in bundled resources.`;
+      return { success: false, message: error, error };
+    }
     const result = spawnSync(process.execPath, [script, 'doctor', '--json'], {
       cwd: dir,
       encoding: 'utf-8',

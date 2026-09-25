@@ -8,7 +8,8 @@ import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { delimiter } from 'node:path';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { LoadedSource, FolderSourceConfig } from './types.ts';
 import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 
@@ -59,6 +60,20 @@ function findRepoRoot(startDir: string): string {
 }
 
 const REPO_ROOT = findRepoRoot(process.cwd());
+// Doctor execution must be anchored to installed code, never the workspace cwd.
+function findDoctorAppRoot(): string {
+  const moduleDir = typeof __dirname === 'string' ? __dirname : dirname(fileURLToPath(import.meta.url));
+  let current = moduleDir;
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (existsSync(join(current, 'tools', 'lottie', 'bin', 'lottie.mjs'))
+      || existsSync(join(current, 'tools', 'video-studio', 'bin', 'video-studio.mjs'))) return current;
+    const parent = resolve(current, '..');
+    if (parent === current) break;
+    current = parent;
+  }
+  return moduleDir;
+}
+const DOCTOR_APP_ROOT = findDoctorAppRoot();
 
 function getResourceScriptPath(scriptName: string): string {
   const scriptsRoot = process.env.CRAFT_SCRIPTS;
@@ -285,33 +300,31 @@ function getHypermotionPath(): string {
   );
 }
 
-function getLottiePath(): string {
+export function getLottiePath(): string {
   const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
-  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+  const appRoot = process.env.CRAFT_APP_ROOT || DOCTOR_APP_ROOT;
 
   return firstExistingPath(
     [
       resourcesBase ? join(resourcesBase, 'tools', 'lottie') : '',
       join(appRoot, 'tools', 'lottie'),
-      join(REPO_ROOT, 'tools', 'lottie'),
-      join(process.cwd(), 'tools', 'lottie'),
+      join(DOCTOR_APP_ROOT, 'tools', 'lottie'),
     ],
-    join('tools', 'lottie')
+    join(DOCTOR_APP_ROOT, 'tools', 'lottie')
   );
 }
 
-function getVideoStudioPath(): string {
+export function getVideoStudioPath(): string {
   const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
-  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+  const appRoot = process.env.CRAFT_APP_ROOT || DOCTOR_APP_ROOT;
 
   return firstExistingPath(
     [
       resourcesBase ? join(resourcesBase, 'tools', 'video-studio') : '',
       join(appRoot, 'tools', 'video-studio'),
-      join(REPO_ROOT, 'tools', 'video-studio'),
-      join(process.cwd(), 'tools', 'video-studio'),
+      join(DOCTOR_APP_ROOT, 'tools', 'video-studio'),
     ],
-    join('tools', 'video-studio')
+    join(DOCTOR_APP_ROOT, 'tools', 'video-studio')
   );
 }
 
