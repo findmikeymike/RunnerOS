@@ -1,0 +1,4 @@
+{
+  "hq": { "id": "00000000-0000-4000-8000-000000000001", "title": "Synthetic HQ report", "content": "# Synthetic HQ report\n\nFixture data only. No real artist or account information." },
+  "campaign": { "id": "00000000-0000-4000-8000-000000000002", "title": "Synthetic release draft", "content": "# Paper Moon Demo\n\nA fictional release draft for local preview checks." }
+}

@@ -1,0 +1,4 @@
+{
+  "hq": { "slug": "artist-profile", "name": "Synthetic Artist", "data": { "artistName": "Example Lanterns", "bio": "A fictional artist used only for disposable smoke checks." } },
+  "campaign": { "slug": "mission-brief", "name": "Synthetic Campaign", "data": { "title": "Paper Moon Demo", "objective": "Review a fictional release draft without contacting anyone." } }
+}

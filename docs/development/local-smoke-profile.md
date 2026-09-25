@@ -55,3 +55,18 @@ App-entered credentials persist across relaunch because the credential manager w
 Future agents may read `smoke/local/*.md` only when explicitly doing local smoke setup or real-provider smoke testing. They must never commit those files or quote private content into tracked docs.
 
 Future agents must not ask the user to put real keys in `.env.local` unless debugging the environment fallback specifically. The normal smoke lane is app UI credentials.
+
+## Disposable synthetic fixtures
+
+For local context/Outputs reader and preview checks without real artist data:
+
+```bash
+bun scripts/smoke/load-local-smoke-profile.ts --destination /private/tmp/artist-os-smoke-demo
+bun test scripts/smoke/load-local-smoke-profile.test.ts
+```
+
+Choose a new or empty **absolute directory**. The loader creates a marked fixture container with separate `hq/` and `campaign/` workspace roots, one synthetic context document and one draft output each. It does not register these workspaces in the app. Use the printed roots for local reader checks. On macOS, use `/private/tmp` because `/tmp` is a symlink and symlink destinations/ancestors are rejected.
+
+Rerunning fills missing fixtures using stable IDs and preserves existing document/output directories, including user edits. It does not repair partially created fixtures; use a fresh disposable destination if interrupted data needs rebuilding. Existing unmarked workspaces, unexpected container files, invalid markers, traversal, symlinks, and production execution are refused. Keep the marker in place; never copy it into a real workspace. A concurrent run is refused; an interrupted run can leave `.seeding`, in which case use a fresh destination.
+
+Only bundled `scripts/smoke/templates/demo/context.json` and `outputs.json` are used. There is no custom profile, credential, environment-file, provider-call, or output-index step. This utility is adapted from historical commit `d66b3dfc4`, updated for current context/Outputs storage and isolated synthetic fixtures.
