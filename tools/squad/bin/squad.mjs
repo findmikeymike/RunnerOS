@@ -162,8 +162,12 @@ function parsePythonResult(result, fallbackMode) {
       payload = null;
     }
   }
+  // Every Python entry point used here returns a JSON object. Recipe output
+  // need not contain `ok`, but explicit failure and malformed output never pass.
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) payload = null;
+  const failed = payload?.ok === false || String(payload?.final_status || '').toLowerCase().includes('fail');
   return {
-    ok: result.status === 0,
+    ok: result.status === 0 && payload !== null && !failed,
     status: result.status,
     payload,
     stdout,
@@ -445,7 +449,7 @@ function modularRun(briefFile, mode) {
 function passThrough(script, scriptArgs, fallbackMode, outputFactory, briefFile) {
   const result = parsePythonResult(runPython(script, scriptArgs), fallbackMode);
   if (result.payload) {
-    const payload = { ...result.payload };
+    const payload = { ...result.payload, ...(result.ok ? {} : { ok: false }) };
     const createOutput = outputFactory?.(payload, briefFile);
     if (createOutput) payload.create_output = createOutput;
     print(payload);
@@ -496,8 +500,9 @@ if (command === 'help' || command === '--help' || command === '-h') {
   const pyArgs = ['--brief-file', briefFile, '--preflight-only', '--video-quality', opt('video-quality', 'budget'), '--budget-cap-usd', opt('budget-cap-usd', '1.00')];
   const result = parsePythonResult(runPython('run_creative_production.py', pyArgs), 'creative_production_preflight');
   const payload = normalizeOpenAiBlockers(result.payload, mode, providerState());
-  print(payload || { ok: result.ok, stdout: result.stdout, stderr: result.stderr });
-  process.exit(payload?.ok || result.ok ? 0 : 1);
+  const ok = result.ok && payload?.ok === true;
+  print(payload ? { ...payload, ok } : { ok: false, stdout: result.stdout, stderr: result.stderr });
+  process.exit(ok ? 0 : 1);
 } else if (command === 'run') {
   const briefFile = requireBriefFile();
   const mode = providerMode();

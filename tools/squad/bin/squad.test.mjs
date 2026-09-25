@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -12,10 +12,18 @@ import { fileURLToPath } from 'node:url';
 const BIN = fileURLToPath(new URL('./squad.mjs', import.meta.url));
 
 function run(args, env = {}) {
-  return spawnSync(process.execPath, [BIN, ...args, '--json'], {
-    encoding: 'utf-8',
-    env: { ...process.env, ...env },
-  });
+  const dir = mkdtempSync(join(tmpdir(), 'squad-runtime-fixture-'));
+  const python = join(dir, 'python.mjs');
+  writeFileSync(python, '#!/usr/bin/env node\nconsole.log("{}");\n');
+  chmodSync(python, 0o755);
+  const cleanEnv = { ...process.env };
+  for (const key of ['OPENAI_API_KEY', 'SQUAD_OPENAI_API_KEY', 'WAVESPEED_API_KEY', 'SQUAD_WAVESPEED_API_KEY', 'FAL_API_KEY', 'SQUAD_FAL_API_KEY', 'REPLICATE_API_TOKEN', 'HEYGEN_API_KEY', 'SQUAD_HEYGEN_API_KEY', 'MUAPI_API_KEY', 'RUNPOD_API_KEY', 'ZERO_CLI_PATH']) delete cleanEnv[key];
+  try {
+    return spawnSync(process.execPath, [BIN, ...args, '--json'], {
+      encoding: 'utf-8',
+      env: { ...cleanEnv, SQUAD_PYTHON: python, CRAFT_UV: '', PYTHON: '', ...env },
+    });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
 function briefFile() {
@@ -102,12 +110,20 @@ describe('runneros squad wrapper', () => {
   });
 
   it('storyboard returns a Canvas output payload', () => {
-    const result = run(['storyboard', '--brief-file', briefFile()]);
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-    const payload = JSON.parse(result.stdout);
-    assert.equal(payload.create_output.kind, 'report');
-    assert.equal(payload.create_output.showInCanvas, true);
-    assert.equal(payload.create_output.files[0].role, 'primary');
+    const dir = mkdtempSync(join(tmpdir(), 'squad-storyboard-fixture-'));
+    const python = join(dir, 'python.mjs');
+    const board = join(dir, 'board.html');
+    writeFileSync(board, '<html>Storyboard fixture</html>');
+    writeFileSync(python, `#!/usr/bin/env node\nconsole.log(${JSON.stringify(JSON.stringify({ ok: true, html_path: board }))});\n`);
+    chmodSync(python, 0o755);
+    try {
+      const result = run(['storyboard', '--brief-file', briefFile()], { SQUAD_PYTHON: python });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const payload = JSON.parse(result.stdout);
+      assert.equal(payload.create_output.kind, 'report');
+      assert.equal(payload.create_output.showInCanvas, true);
+      assert.equal(payload.create_output.files[0].role, 'primary');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
   it('approved modular run returns an honest pending receipt', () => {
@@ -119,5 +135,49 @@ describe('runneros squad wrapper', () => {
     assert.equal(payload.final_status, 'planned_waiting_for_external_generation_or_assembly');
     assert.equal(payload.create_output.kind, 'receipt');
     assert.match(payload.create_output.summary, /not a finished video/i);
+  });
+});
+
+describe('Python command outcome guards', () => {
+  function fakeResult(command, stdout, status = 0) {
+    const dir = mkdtempSync(join(tmpdir(), 'squad-outcome-'));
+    const fakeUv = join(dir, 'uv.mjs');
+    writeFileSync(fakeUv, `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(stdout)});process.exit(${status});\n`);
+    chmodSync(fakeUv, 0o755);
+    try {
+      return run([command, '--brief-file', briefFile(), '--provider-mode', 'openai', ...(command === 'run' ? ['--approved'] : [])], {
+        CRAFT_UV: fakeUv, SQUAD_PYTHON: '', PYTHON: '', OPENAI_API_KEY: 'fixture-unused', SQUAD_OPENAI_API_KEY: 'fixture-unused',
+      });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }
+
+  for (const command of ['run', 'preflight']) {
+    for (const stdout of ['not json', 'null', '[]', '{"ok":false}', '{"ok":true,"final_status":"failed"}']) {
+      it(`${command} rejects exit-zero ${stdout}`, () => {
+        const result = fakeResult(command, stdout);
+        assert.notEqual(result.status, 0);
+        assert.equal(JSON.parse(result.stdout).ok, false);
+      });
+    }
+    it(`${command} rejects nonzero exits even when JSON claims success`, () => {
+      const result = fakeResult(command, '{"ok":true}', 1);
+      assert.notEqual(result.status, 0);
+      assert.equal(JSON.parse(result.stdout).ok, false);
+    });
+    it(`${command} accepts a valid success`, () => {
+      const result = fakeResult(command, '{"ok":true,"final_status":"completed"}');
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(JSON.parse(result.stdout).ok, true);
+    });
+  }
+  it('preflight requires explicit readiness', () => {
+    const result = fakeResult('preflight', '{"mode":"preflight"}');
+    assert.notEqual(result.status, 0);
+    assert.equal(JSON.parse(result.stdout).ok, false);
+  });
+  it('preserves recipe output without an ok field', () => {
+    const result = fakeResult('recipe', '{"recommendations":[]}');
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.deepEqual(JSON.parse(result.stdout), { recommendations: [] });
   });
 });
