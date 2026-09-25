@@ -13271,12 +13271,12 @@ user a clickable link to where the thing now lives.`
     const title = input.outputTitle ?? output.title
     const message = [
       '<system-reminder>',
-      `Canvas just captured a preview screenshot for "${title}".`,
+      `The user explicitly requested a review of this Canvas preview screenshot for "${title}".`,
       'Inspect and review the image in the context of what you and the user are working on.',
       'Look for anything obviously off, broken, ugly, misaligned, out of whack, or missing from what the user specifically asked for or would reasonably expect to see.',
-      'If something is clearly wrong, briefly mention it to the user and state your concrete idea for fixing it before making one focused edit.',
+      'If something is clearly wrong, briefly explain it and propose a concrete fix. Do not edit or run tools that modify the asset unless the user asks.',
       'If it looks right to you, do not give a sterile pass/fail verdict. Ask the user for their take on what they see.',
-      'Do not start another Canvas visual review unless the user reopens Canvas or clicks another board/output tab.',
+      'Opening Canvas or switching board/output tabs is not a request for review. Only review again when the user explicitly asks.',
       '</system-reminder>',
     ].join('\n')
 

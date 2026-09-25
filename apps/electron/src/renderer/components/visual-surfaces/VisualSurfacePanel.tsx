@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { Archive, Globe2, Layers, Loader2, Maximize2, PanelRight, PanelTopOpen } from 'lucide-react'
+import { Archive, Eye, Globe2, Layers, Loader2, Maximize2, PanelRight, PanelTopOpen } from 'lucide-react'
 import { VISUAL_BOARD_TAG } from '@craft-agent/shared/visual-board'
 import { Button } from '@/components/ui/button'
 import { isAdOutput } from '@/lib/output-finals-actions'
@@ -83,8 +83,15 @@ export function VisualSurfacePanel({
     ? `${activeSurface.workspaceId}:${activeSurface.sessionId}:${selectedManifest.id}:${selectedCaptureVersion}`
     : null
   const [previewSettledKey, setPreviewSettledKey] = React.useState<string | null>(null)
-  const [visualReviewTriggerId, setVisualReviewTriggerId] = React.useState<string | null>(null)
-  const visualReviewCounterRef = React.useRef(0)
+  const [reviewPending, setReviewPending] = React.useState(false)
+  const reviewPendingRef = React.useRef(false)
+  const reviewSelectionRef = React.useRef<string | null>(null)
+  const reviewSelectionGenerationRef = React.useRef(0)
+  React.useLayoutEffect(() => {
+    reviewSelectionGenerationRef.current += 1
+    reviewSelectionRef.current = isCollapsed || selectedManifest?.id !== selectedOutputId ? null : selectedCaptureKey
+    return () => { reviewSelectionRef.current = null }
+  }, [isCollapsed, selectedCaptureKey, selectedOutputId, selectedManifest?.id])
   const visualCaptureRef = React.useRef<HTMLDivElement | null>(null)
   const capturedVersionsRef = React.useRef(new Set<string>())
 
@@ -114,21 +121,6 @@ export function VisualSurfacePanel({
   React.useEffect(() => {
     setPreviewSettledKey(null)
   }, [selectedCaptureKey])
-
-  React.useEffect(() => {
-    if (!activeSurface?.workspaceId || !activeSurface.sessionId || !selectedOutputId || isCollapsed) {
-      setVisualReviewTriggerId(null)
-      return
-    }
-    visualReviewCounterRef.current += 1
-    setVisualReviewTriggerId([
-      activeSurface.workspaceId,
-      activeSurface.sessionId,
-      selectedOutputId,
-      Date.now(),
-      visualReviewCounterRef.current,
-    ].join(':'))
-  }, [activeSurface?.sessionId, activeSurface?.workspaceId, isCollapsed, selectedOutputId])
 
   const openOutput = React.useCallback((output: OutputSummaryDTO) => {
     if (!activeSurface?.sessionId) return
@@ -204,7 +196,7 @@ export function VisualSurfacePanel({
     if (!selectedCaptureVersion || !selectedCaptureKey) return
     if (previewSettledKey !== selectedCaptureKey) return
     const captureVersion = selectedCaptureVersion
-    const captureKey = visualReviewTriggerId ? `${selectedCaptureKey}:${visualReviewTriggerId}` : selectedCaptureKey
+    const captureKey = selectedCaptureKey
     if (capturedVersionsRef.current.has(captureKey)) return
 
     let cancelled = false
@@ -213,7 +205,6 @@ export function VisualSurfacePanel({
       const node = visualCaptureRef.current
       const captureVisualElement = window.electronAPI.captureVisualElement
       const recordVisualCapture = window.electronAPI.recordVisualCapture
-      const queueCanvasVisualReview = window.electronAPI.queueCanvasVisualReview
       if (!node || typeof captureVisualElement !== 'function' || typeof recordVisualCapture !== 'function') return
       const rect = node.getBoundingClientRect()
       if (rect.width < 80 || rect.height < 80) return
@@ -226,31 +217,16 @@ export function VisualSurfacePanel({
           height: rect.height,
         })
         if (cancelled) return
-        const result = await recordVisualCapture({
+        await recordVisualCapture({
           workspaceId,
           sessionId,
           outputId: selectedManifest.id,
           source: 'canvas',
           captureVersion,
-          ...(visualReviewTriggerId ? { reviewTriggerId: visualReviewTriggerId } : {}),
           dataUrl: capture.dataUrl,
           width: capture.width,
           height: capture.height,
         })
-        if (!cancelled && result.reviewQueued && result.reviewTriggerId && typeof queueCanvasVisualReview === 'function') {
-          void queueCanvasVisualReview({
-            workspaceId,
-            sessionId,
-            outputId: selectedManifest.id,
-            outputTitle: selectedManifest.title,
-            captureAssetId: result.assetId,
-            capturePath: result.path,
-            captureVersion,
-            reviewTriggerId: result.reviewTriggerId,
-          }).catch((err) => {
-            console.warn('[VisualSurfacePanel] canvas visual review queue failed:', err)
-          })
-        }
         capturedVersionsRef.current.add(captureKey)
       } catch (err) {
         console.warn('[VisualSurfacePanel] visual capture failed:', err)
@@ -269,8 +245,58 @@ export function VisualSurfacePanel({
     selectedCaptureKey,
     selectedCaptureVersion,
     selectedManifest,
-    visualReviewTriggerId,
   ])
+
+  // Opening or restoring Canvas only captures previews; sending a review requires a click.
+  const requestVisualReview = React.useCallback(async () => {
+    if (reviewPendingRef.current || isCollapsed || !selectedManifest || !activeSurface?.sessionId) return
+    if (selectedManifest.id !== selectedOutputId || selectedManifest.tags?.includes(VISUAL_BOARD_TAG)) return
+    if (selectedManifest.origin?.sessionId !== activeSurface.sessionId) return
+    if (!selectedCaptureKey || !selectedCaptureVersion || previewSettledKey !== selectedCaptureKey) return
+    const node = visualCaptureRef.current
+    if (!node) return
+    const rect = node.getBoundingClientRect()
+    if (rect.width < 80 || rect.height < 80) return
+    const selectionKey = selectedCaptureKey
+    const generation = reviewSelectionGenerationRef.current
+    const isCurrent = () => reviewSelectionRef.current === selectionKey && reviewSelectionGenerationRef.current === generation
+    reviewPendingRef.current = true
+    setReviewPending(true)
+    try {
+      const capture = await window.electronAPI.captureVisualElement({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })
+      if (!isCurrent()) return
+      const reviewTriggerId = crypto.randomUUID()
+      const result = await window.electronAPI.recordVisualCapture({
+        workspaceId: activeSurface.workspaceId,
+        sessionId: activeSurface.sessionId,
+        outputId: selectedManifest.id,
+        source: 'canvas',
+        captureVersion: selectedCaptureVersion,
+        reviewTriggerId,
+        dataUrl: capture.dataUrl,
+        width: capture.width,
+        height: capture.height,
+      })
+      if (!isCurrent()) return
+      const queued = await window.electronAPI.queueCanvasVisualReview({
+        workspaceId: activeSurface.workspaceId,
+        sessionId: activeSurface.sessionId,
+        outputId: selectedManifest.id,
+        outputTitle: selectedManifest.title,
+        captureAssetId: result.assetId,
+        capturePath: result.path,
+        captureVersion: selectedCaptureVersion,
+        reviewTriggerId,
+      })
+      if (queued.accepted) toast.success('Review sent to agent')
+      else toast.info(queued.reason === 'session busy' ? 'The agent is busy. Try again when it finishes.' : 'This preview was recently sent for review. Try again shortly.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not send the preview for review.')
+    } finally {
+      reviewPendingRef.current = false
+      setReviewPending(false)
+    }
+  }, [activeSurface, isCollapsed, previewSettledKey, selectedCaptureKey, selectedCaptureVersion, selectedManifest, selectedOutputId])
 
   if (!activeSurface) return null
 
@@ -395,6 +421,20 @@ export function VisualSurfacePanel({
               selectedOutputId={selectedOutputId}
               onSelect={openOutput}
             />
+          ) : null}
+
+          {selectedManifest && !selectedIsBoard && selectedManifest.id === selectedOutputId && selectedManifest.origin?.sessionId === activeSurface.sessionId ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-8 shrink-0 gap-2"
+              disabled={reviewPending || !selectedCaptureKey || previewSettledKey !== selectedCaptureKey}
+              onClick={() => void requestVisualReview()}
+            >
+              {reviewPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+              Ask agent to review
+            </Button>
           ) : null}
 
           {presentation === 'rollup' ? null : (
