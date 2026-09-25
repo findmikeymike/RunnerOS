@@ -1,9 +1,29 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
+import { createColorPreview } from '../../apps/electron/src/renderer/components/video-studio/color-preview'
+import { applyLutToRgba, buildColorLut } from '../../tools/video-studio/lib/color-pipeline.mjs'
 import VideoStudioPage from '../../apps/electron/src/renderer/pages/VideoStudioPage'
 
 const w = window as any
+w.colorProbe = (forceCpu = false) => {
+  const source=document.createElement('canvas'); source.width=2;source.height=2;
+  const ctx=source.getContext('2d')!;
+  const original=new Uint8ClampedArray([180,40,20,255,20,160,70,255,40,70,180,255,110,90,150,255]);
+  ctx.putImageData(new ImageData(original,2,2),0,0);
+  const pipeline=createColorPreview();
+  const result=[];
+  for(const settings of [{pipeline:'rgb-v1',temperature:0.3,tint:-0.2,saturation:0.6},{pipeline:'rgb-v1',exposure:-0.6,contrast:1.2}]) {
+    const lut=buildColorLut(settings as any)!;
+    const canvas=pipeline.draw(source,{x:0,y:0,width:2,height:2},2,2,lut);
+    if(forceCpu) canvas.getContext('webgl')?.getExtension('WEBGL_lose_context')?.loseContext();
+    const actual=pipeline.draw(source,{x:0,y:0,width:2,height:2},2,2,lut);
+    const read=document.createElement('canvas');read.width=2;read.height=2;
+    const out=read.getContext('2d')!;out.drawImage(actual,0,0);
+    result.push({actual:[...out.getImageData(0,0,2,2).data],expected:[...applyLutToRgba(new Uint8ClampedArray(original),lut)]});
+  }
+  pipeline.dispose();return result;
+}
 const initialProject = {
   version: 1, id: 'synthetic-project', workspaceId: 'fixture-workspace', title: 'Synthetic video',
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',

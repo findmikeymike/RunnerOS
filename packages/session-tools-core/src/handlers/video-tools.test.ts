@@ -199,7 +199,7 @@ describe('video studio session tools', () => {
 
     const outputPath = join(root, 'project', 'renders', 'preview.placeholder.txt');
     const exported = await handleVideoExport(ctx, { projectPath, outputPath });
-    expect(exported.isError).toBe(false);
+    expect(exported.isError, JSON.stringify(exported)).toBe(false);
     expect(existsSync(outputPath)).toBe(true);
     expect(existsSync(`${outputPath}.receipt.json`)).toBe(true);
 
@@ -245,7 +245,7 @@ describe('video studio session tools', () => {
       showInCanvas: true,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError, JSON.stringify(result)).toBe(false);
     expect(publishedTitle).toContain('Publish Cut');
     expect((result.structuredContent as { outputId?: string }).outputId).toBe('output-1');
   });
@@ -365,7 +365,7 @@ describe('video studio session tools', () => {
     const receiptPath = `${outputPath}.receipt.json`;
 
     const exported = await handleVideoExport(ctx, { projectPath, outputPath });
-    expect(exported.isError).toBe(false);
+    expect(exported.isError, JSON.stringify(exported)).toBe(false);
     expect(existsSync(outputPath)).toBe(true);
     expect(existsSync(receiptPath)).toBe(true);
 
@@ -572,7 +572,7 @@ describe('video studio session tools', () => {
 
     const exported = await handleVideoExport(ctx, { projectPath, outputPath });
 
-    expect(exported.isError).toBe(false);
+    expect(exported.isError, JSON.stringify(exported)).toBe(false);
     const audioProbe = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', outputPath], { encoding: 'utf-8' });
     expect(audioProbe.status).toBe(0);
     expect(audioProbe.stdout.trim()).not.toBe('');
@@ -614,7 +614,7 @@ describe('video studio session tools', () => {
 
     const exported = await handleVideoExport(ctx, { projectPath, outputPath });
 
-    expect(exported.isError).toBe(false);
+    expect(exported.isError, JSON.stringify(exported)).toBe(false);
     const audioProbe = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', outputPath], { encoding: 'utf-8' });
     expect(audioProbe.status).toBe(0);
     expect(audioProbe.stdout.trim()).toBe('');
@@ -675,7 +675,7 @@ describe('video studio session tools', () => {
 
     const outputPath = join(root, 'project', 'renders', 'settings.mp4');
     const exported = await handleVideoExport(ctx, { projectPath, outputPath });
-    expect(exported.isError).toBe(false);
+    expect(exported.isError, JSON.stringify(exported)).toBe(false);
     expect(existsSync(outputPath)).toBe(true);
     expect(meanVolumeDb(outputPath)).toBeLessThan(meanVolumeDb(baselinePath) - 20);
   });
@@ -751,7 +751,7 @@ describe('video studio session tools', () => {
 
     const exported = await handleVideoExport(ctx, { projectPath, outputPath });
 
-    expect(exported.isError).toBe(false);
+    expect(exported.isError, JSON.stringify(exported)).toBe(false);
     expect(existsSync(outputPath)).toBe(true);
     const durationProbe = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', outputPath], { encoding: 'utf-8' });
     expect(durationProbe.status).toBe(0);
@@ -792,7 +792,7 @@ describe('video studio session tools', () => {
     const outputPath = join(root, 'project', 'renders', 'captioned.mp4');
     const exported = await handleVideoExport(ctx, { projectPath, outputPath });
 
-    expect(exported.isError).toBe(false);
+    expect(exported.isError, JSON.stringify(exported)).toBe(false);
     expect(existsSync(outputPath)).toBe(true);
     expect(averageBottomLuma(outputPath, 0.5)).toBeGreaterThan(20);
     expect(averageCaptionCenterLaneLuma(outputPath, 0.5)).toBeLessThan(20);
@@ -822,7 +822,7 @@ describe('video studio session tools', () => {
     const outputPath = join(root, 'project', 'renders', 'punctuation.mp4');
     const exported = await handleVideoExport(ctx, { projectPath, outputPath });
 
-    expect(exported.isError).toBe(false);
+    expect(exported.isError, JSON.stringify(exported)).toBe(false);
     expect(existsSync(outputPath)).toBe(true);
   });
 
@@ -861,7 +861,7 @@ describe('video studio session tools', () => {
     const outputPath = join(root, 'project', 'renders', 'moved-caption.mp4');
     const exported = await handleVideoExport(ctx, { projectPath, outputPath });
 
-    expect(exported.isError).toBe(false);
+    expect(exported.isError, JSON.stringify(exported)).toBe(false);
     expect(averageBottomLuma(outputPath, 0.5)).toBeLessThan(20);
     expect(averageBottomLuma(outputPath, 1.2)).toBeGreaterThan(20);
   });
@@ -1240,7 +1240,7 @@ describe('video studio session tools', () => {
       preset: 'clean',
     });
     const cleanProject = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
-      timeline: { tracks: Array<{ clips: Array<{ id: string; adjustments?: { preset?: string; exposure?: number; contrast?: number; saturation?: number; highlights?: number; shadows?: number; grain?: number } }> }> };
+      timeline: { tracks: Array<{ clips: Array<{ id: string; adjustments?: { pipeline?: 'rgb-v1'; preset?: string; exposure?: number; contrast?: number; saturation?: number; highlights?: number; shadows?: number; grain?: number } }> }> };
     };
     const cleanStored = cleanProject.timeline.tracks[0]!.clips.find((item) => item.id === clipId)?.adjustments;
     const neutral = await handleVideoClipAdjust(ctx, {
@@ -1249,28 +1249,28 @@ describe('video studio session tools', () => {
       preset: 'neutral',
     });
     const neutralProject = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
-      timeline: { tracks: Array<{ clips: Array<{ id: string; adjustments?: { preset?: string; exposure?: number; grain?: number } }> }> };
+      timeline: { tracks: Array<{ clips: Array<{ id: string; adjustments?: { pipeline?: 'rgb-v1'; preset?: string; exposure?: number; grain?: number } }> }> };
     };
     const neutralStored = neutralProject.timeline.tracks[0]!.clips.find((item) => item.id === clipId)?.adjustments;
     const adjusted = await handleVideoClipAdjust(ctx, {
       projectPath,
       clipId,
-      exposure: 2,
-      grain: 2,
+      exposure: 1,
+      grain: 1,
     });
 
     expect(cinematic.isError).toBe(false);
     expect(clean.isError).toBe(false);
     expect(neutral.isError).toBe(false);
     expect(adjusted.isError).toBe(false);
-    expect(cleanStored).toEqual({ preset: 'clean', exposure: 0.03, contrast: 1.05, saturation: 1.04, grain: 0 });
-    expect(neutralStored).toEqual({ preset: 'neutral' });
+    expect(cleanStored).toEqual({ pipeline: 'rgb-v1', preset: 'clean', exposure: 0.03, contrast: 1.05, saturation: 1.04 });
+    expect(neutralStored).toEqual({ pipeline: 'rgb-v1', preset: 'neutral' });
     const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
-      timeline: { tracks: Array<{ clips: Array<{ id: string; adjustments?: { preset?: string; exposure?: number; contrast?: number; saturation?: number; highlights?: number; shadows?: number; grain?: number } }> }> };
+      timeline: { tracks: Array<{ clips: Array<{ id: string; adjustments?: { pipeline?: 'rgb-v1'; preset?: string; exposure?: number; contrast?: number; saturation?: number; highlights?: number; shadows?: number; grain?: number } }> }> };
       agentEvents: Array<{ toolName?: string }>;
     };
     const stored = project.timeline.tracks[0]!.clips.find((item) => item.id === clipId)?.adjustments;
-    expect(stored).toEqual({ preset: 'manual', exposure: 1, grain: 1 });
+    expect(stored).toEqual({ pipeline: 'rgb-v1', preset: 'manual', exposure: 1, grain: 1 });
     expect(project.agentEvents.some((event) => event.toolName === 'video_clip_adjust')).toBe(true);
   });
 
@@ -1326,7 +1326,7 @@ describe('video studio session tools', () => {
       outputPath: join(root, 'project', 'renders', 'composed.mp4'),
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError, JSON.stringify(result)).toBe(false);
     const outputPath = (result.structuredContent as { outputPath: string }).outputPath;
     expect(existsSync(outputPath)).toBe(true);
     expect(readFileSync(outputPath).subarray(4, 8).toString()).toBe('ftyp');
@@ -1446,7 +1446,7 @@ describe('video studio session tools', () => {
       outputPath,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError, JSON.stringify(result)).toBe(false);
     expect((result.structuredContent as { rendered?: boolean; placeholder?: boolean }).rendered).toBe(true);
     expect((result.structuredContent as { rendered?: boolean; placeholder?: boolean }).placeholder).toBe(false);
     expect(existsSync(outputPath)).toBe(true);
@@ -1481,7 +1481,7 @@ describe('video studio session tools', () => {
       outputPath: join(root, 'project', 'renders', 'preview.mp4'),
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError, JSON.stringify(result)).toBe(false);
     const outputPath = (result.structuredContent as { outputPath: string }).outputPath;
     expect(existsSync(outputPath)).toBe(true);
     expect(readFileSync(outputPath).subarray(4, 8).toString()).toBe('ftyp');
@@ -1522,7 +1522,7 @@ describe('video studio session tools', () => {
       outputPath: join(root, 'project', 'renders', 'adjusted.mp4'),
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError, JSON.stringify(result)).toBe(false);
     const outputPath = (result.structuredContent as { outputPath: string }).outputPath;
     expect(existsSync(outputPath)).toBe(true);
     expect(readFileSync(outputPath).subarray(4, 8).toString()).toBe('ftyp');
@@ -1563,7 +1563,7 @@ describe('export integrity regressions', () => {
     project.timeline.tracks[0].clips = [{ id: 'speed', type: 'video', startMs: 0, durationMs: 4000, sourceInMs: 1000, sourceOutMs: 1000 + 4000 * speed, speed }];
     writeFileSync(projectPath, JSON.stringify(project));
     const result = await handleVideoClipEdit(ctx, { projectPath, action: 'split', clipId: 'speed', atMs: 2000 });
-    expect(result.isError).toBe(false);
+    expect(result.isError, JSON.stringify(result)).toBe(false);
     const [first, second] = JSON.parse(readFileSync(projectPath, 'utf8')).timeline.tracks[0].clips;
     expect(first.sourceOutMs).toBe(1000 + 2000 * speed);
     expect(second.sourceInMs).toBe(first.sourceOutMs);
@@ -1597,7 +1597,7 @@ describe('export integrity regressions', () => {
     await handleVideoClipAdd(ctx, { projectPath, type: 'text', startMs: 0, durationMs: 1100, text: 'Test' });
     const outputPath = join(root, 'exact.mp4');
     const exported = await handleVideoExport(ctx, { projectPath, outputPath });
-    expect(exported.isError).toBe(false);
+    expect(exported.isError, JSON.stringify(exported)).toBe(false);
     const result = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', outputPath], { encoding: 'utf8' });
     expect(result.status).toBe(0);
     expect(Number(result.stdout)).toBeCloseTo(1.1, 2);
@@ -1621,7 +1621,7 @@ describe('complete text rendering', () => {
     writeFileSync(projectPath, JSON.stringify(project));
     const outputPath = join(dirname(projectPath), 'all-text.mp4');
     const exported = await handleVideoExport(ctx, { projectPath, outputPath });
-    expect(exported.isError).toBe(false);
+    expect(exported.isError, JSON.stringify(exported)).toBe(false);
     const frame = spawnSync('ffmpeg', ['-v', 'error', '-ss', '1.5', '-i', outputPath, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 10 * 1024 * 1024 });
     expect(frame.status, frame.stderr.toString()).toBe(0);
     // The ninth clip starts at 1s. Its final lines extend into the bottom of the

@@ -20,6 +20,8 @@ describe('shared renderer capabilities', () => {
     expect(result).toEqual({ ok: true, issues: [] });
   });
   test.each([
+    { adjustments: { lut: { name: 'Broken', size: 2, values: [0, 0, 0] } } },
+    { adjustments: { pipeline: 'rgb-v1', exposure: NaN } },
     { transitionIn: { type: 'crossfade', durationMs: 200 } },
     { transitionOut: { type: 'wipe', durationMs: 200 } },
     { effects: ['blur'] },

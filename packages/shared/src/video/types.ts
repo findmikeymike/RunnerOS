@@ -111,7 +111,18 @@ export interface VideoClip {
   captionCueIds?: string[];
 }
 
+export interface VideoCubeLut {
+  name: string;
+  size: number;
+  domainMin?: [number, number, number];
+  domainMax?: [number, number, number];
+  values: number[];
+  intensity?: number;
+}
+
 export interface VideoClipAdjustments {
+  pipeline?: 'rgb-v1';
+  lut?: VideoCubeLut;
   exposure?: number;
   contrast?: number;
   saturation?: number;

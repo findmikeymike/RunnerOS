@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { createColorPreview } from './color-preview'
+import { buildColorLut } from '../../../../../../tools/video-studio/lib/color-pipeline.mjs'
 import { Volume2, VolumeX } from 'lucide-react'
 import type { RunnerVideoProject } from '@craft-agent/shared/video'
 import { buildScenePlan, sceneAtTime, visualGeometry, clipSpeed, audioGainAtTime } from '../../../../../../tools/video-studio/lib/scene-plan.mjs'
@@ -159,6 +161,9 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
     const urls = new Map<string, Promise<string>>()
     const audioInfo = new Map<string, Promise<{ hasAudio: boolean }>>()
     const buffer = document.createElement('canvas')
+    let colorPreview: ReturnType<typeof createColorPreview> | null = null
+    disposers.add(() => colorPreview?.dispose())
+    const colorLuts = new Map<string, ReturnType<typeof buildColorLut>>()
 
     const pauseDecoders = (force = true) => {
       silence()
@@ -310,7 +315,15 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
           context.globalAlpha = geometry.opacity
           context.translate(geometry.x, geometry.y)
           context.rotate(geometry.rotateDeg * Math.PI / 180)
-          context.drawImage(element, crop.x, crop.y, crop.width, crop.height, -geometry.width / 2, -geometry.height / 2, geometry.width, geometry.height)
+          if (!colorLuts.has(layer.clip.id)) colorLuts.set(layer.clip.id, buildColorLut(layer.clip.adjustments))
+          const lut = colorLuts.get(layer.clip.id)
+          if (lut) {
+            colorPreview ??= createColorPreview()
+            const colored = colorPreview.draw(element, crop, Math.min(1920, geometry.width * scale), Math.min(1920, geometry.height * scale), lut)
+            context.drawImage(colored, -geometry.width / 2, -geometry.height / 2, geometry.width, geometry.height)
+          } else {
+            context.drawImage(element, crop.x, crop.y, crop.width, crop.height, -geometry.width / 2, -geometry.height / 2, geometry.width, geometry.height)
+          }
           context.restore()
         }
         for (const title of frame.titles) drawText(context, title.text, title.fontSize, scene.width, scene.height, title)

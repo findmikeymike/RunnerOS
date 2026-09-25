@@ -1,3 +1,4 @@
+import type { ColorAdjustments } from './color-pipeline.mjs';
 /** Node-compatible renderer contract. The .mjs is also bundled into agent hosts. */
 export interface RenderClip {
   id: string;
@@ -12,6 +13,7 @@ export interface RenderClip {
   keyframes?: unknown;
   speed?: unknown;
   disabled?: boolean;
+  adjustments?: ColorAdjustments;
 }
 export interface RenderProject {
   title: string;

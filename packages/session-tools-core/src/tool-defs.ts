@@ -1462,15 +1462,20 @@ export const VideoClipEditSchema = z.object({
 
 export const VideoClipAdjustSchema = z.object({
   projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
-  clipId: z.string().min(1).describe('Existing visual timeline clip id to adjust.'),
+  clipId: z.string().min(1).optional().describe('One existing visual clip to adjust. Supply exactly one of clipId or clipIds.'),
+  clipIds: z.array(z.string().min(1)).min(1).max(32).optional().describe('Up to 32 distinct visual clips. All targets are validated before one atomic save and one undo checkpoint. Mutually exclusive with clipId.'),
+  lutCube: z.string().max(2_000_000).optional().describe('Embedded .cube LUT text (max 2 MB). Parsed and validated before any write; no external file access.'),
+  lutName: z.string().max(200).optional().describe('Display name for lutCube.'),
+  lutIntensity: z.number().min(0).max(1).optional().describe('LUT blend amount; requires a new or existing LUT.'),
+  removeLut: z.boolean().optional().describe('Remove the existing LUT, preserving other color settings. Cannot combine with lutCube or lutIntensity.'),
   preset: z.enum(['neutral', 'clean', 'cinematic', 'warm', 'punchy', 'black-and-white']).optional().describe('Optional look preset. Explicit numeric values override preset values.'),
   exposure: z.number().min(-1).max(1).optional().describe('Exposure adjustment. 0 is neutral.'),
   contrast: z.number().min(0).max(3).optional().describe('Contrast multiplier. 1 is neutral.'),
   saturation: z.number().min(0).max(3).optional().describe('Saturation multiplier. 1 is neutral.'),
   highlights: z.number().min(-1).max(1).optional().describe('Highlight recovery/boost. 0 is neutral.'),
   shadows: z.number().min(-1).max(1).optional().describe('Shadow lift/crush. 0 is neutral.'),
-  temperature: z.number().min(-1).max(1).optional().describe('Warm/cool intent stored for preview-grade rendering. 0 is neutral.'),
-  tint: z.number().min(-1).max(1).optional().describe('Green/magenta intent stored for preview-grade rendering. 0 is neutral.'),
+  temperature: z.number().min(-1).max(1).optional().describe('Warm/cool RGB adjustment shared by preview and export. 0 is neutral.'),
+  tint: z.number().min(-1).max(1).optional().describe('Green/magenta RGB adjustment shared by preview and export. 0 is neutral.'),
   sharpen: z.number().min(0).max(1).optional().describe('Sharpen amount. 0 is neutral.'),
   vignette: z.number().min(0).max(1).optional().describe('Vignette amount. 0 is neutral.'),
   grain: z.number().min(0).max(1).optional().describe('Film grain amount. 0 is neutral.'),
@@ -2358,7 +2363,7 @@ Use move with startMs to reposition a clip. Pass snap: true when you want magnet
 
   video_clip_adjust: `Apply footage look adjustments to a RunnerOS Video Studio clip.
 
-Use this for exposure, contrast, saturation, highlights, shadows, temperature, tint, sharpen, vignette, grain, or a preset look such as clean, cinematic, warm, punchy, or black-and-white. The simple FFmpeg renderer applies the practical subset now and stores the rest for richer preview/render engines later. This mutates the project JSON and records a version/event for the agent change log.`,
+Apply color to one clipId or up to 32 clipIds as one atomic edit and one undo checkpoint. Supports exposure, contrast, saturation, highlights, shadows, temperature, tint, presets, and validated embedded .cube LUT text with intensity. New color edits use rgb-v1 for shared preview/export behavior; grain, sharpen and vignette remain render-only with an explicit warning. Locked, missing or nonvisual targets reject the entire batch.`,
 
   video_clip_transform: `Transform a RunnerOS Video Studio video/image clip.
 

@@ -1,3 +1,4 @@
+import { validateColorProjectBudget } from './color-pipeline.mjs';
 import { existsSync, realpathSync, statSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, fsyncSync, renameSync, unlinkSync } from 'node:fs';
 import { dirname, join, basename, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -45,7 +46,7 @@ function durableReplace(path, content) {
 export function commitVideoProjectContent(path, content, options) {
   if (typeof content !== 'string') throw new TypeError('Video project content must be a string.');
   if (!options || (options.expectedContent !== null && typeof options.expectedContent !== 'string')) throw new VideoProjectStorageError('VIDEO_PROJECT_EXPECTED_CONTENT_REQUIRED', 'Saving a video project requires the exact content it was read from, or null for a new project.');
-  JSON.parse(content);
+  validateColorProjectBudget(JSON.parse(content));
   const canonical = canonicalProjectPath(path);
   const lockPath = `${canonical}.write-lock`;
   let lockFd;

@@ -175,6 +175,19 @@ try {
         assert.equal(JSON.parse(state.disk).timeline.tracks.flatMap((t: any) => t.clips).length, 2);
         assert.equal(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('artist-os:video-draft:')).length), 0);
     });
+    await check('saving preserves undo and redo without treating saved history as a dirty draft', async () => {
+        await edit(); await page.keyboard.press(process.platform==='darwin'?'Meta+s':'Control+s');
+        await page.waitForFunction(()=>(window as any).fixture.calls.length===1);
+        await page.getByRole('button',{name:'Undo',exact:true}).click();
+        assert.equal(JSON.parse(await (await raw()).inputValue()).timeline.tracks.flatMap((t:any)=>t.clips).length,1);
+        await page.getByRole('button',{name:'Redo',exact:true}).click();
+        assert.equal(JSON.parse(await (await raw()).inputValue()).timeline.tracks.flatMap((t:any)=>t.clips).length,2);
+        await save();
+        await page.waitForFunction(()=>(window as any).fixture.calls.length===2);
+        await page.evaluate(()=>(window as any).fixture.external('External after saved history'));
+        await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('input[aria-label="Project title"]')?.value==='External after saved history');
+        assert.equal(await page.getByRole('button',{name:'Undo',exact:true}).isEnabled(),false,'external load starts a new history');
+    });
     await check('navigation retains invalid raw draft and explicit discard removes it', async () => {
         await (await raw()).fill('{ unfinished private fixture');
         await reopen();
@@ -610,6 +623,75 @@ try {
         const stopped = await page.getByLabel('Composition time', { exact: true }).inputValue();
         await page.waitForTimeout(200);
         assert.equal(await page.getByLabel('Composition time', { exact: true }).inputValue(), stopped);
+    });
+    await check('LUT import previews actual pixels, supports intensity, undo, and rejects malformed cubes', async () => {
+        await page.getByRole('button', { name: 'Synthetic clip 0:00 - 0:02', exact: true }).click();
+        await page.getByRole('button', { name: 'Composition', exact: true }).click();
+        await readyComposition(0);
+        const red = await canvasPixel(80, 45);
+        assert.ok(red[0]! > 200 && red[1]! < 30);
+        const cube = 'LUT_3D_SIZE 2\n' + Array(8).fill('0 1 0').join('\n');
+        await page.getByLabel('Import LUT file').setInputFiles({name:'green.cube', mimeType:'text/plain', buffer:Buffer.from(cube)});
+        await page.getByRole('button', {name:'Remove LUT',exact:true}).waitFor();
+        await readyComposition(0);
+        const green = await canvasPixel(80, 45);
+        assert.ok(green[1]! > 240 && green[0]! < 15 && green[2]! < 15, `LUT pixel ${green}`);
+        const intensity = page.locator('label').filter({hasText:'LUT intensity'}).locator('input[type="range"]');
+        await intensity.fill('0');
+        await readyComposition(0);
+        assert.ok((await canvasPixel(80,45))[0]! > 200, 'zero LUT intensity restores source');
+        await page.getByRole('button',{name:'Undo',exact:true}).click();
+        await readyComposition(0);
+        assert.ok((await canvasPixel(80,45))[1]! > 240, 'undo restores LUT strength');
+        await page.getByLabel('Import LUT file').setInputFiles({name:'bad.cube', mimeType:'text/plain', buffer:Buffer.from('LUT_3D_SIZE 2\n0 1 0')});
+        await page.getByRole('alert').filter({hasText:/LUT|Cube/i}).waitFor();
+        assert.ok((await canvasPixel(80,45))[1]! > 240, 'invalid LUT leaves previous look');
+        await save();
+        assert.equal(JSON.parse((await fixture()).disk).timeline.tracks[0].clips[0].adjustments.lut.name,'green.cube');
+    });
+    await check('RGB color preview is visible and keyboard undo preserves native text editing', async () => {
+        await page.getByRole('button', { name: 'Synthetic clip 0:00 - 0:02', exact: true }).click();
+        await page.getByRole('button', { name: 'Composition', exact: true }).click();
+        const saturation = page.locator('label').filter({hasText:/^Saturation/}).locator('input[type="range"]');
+        await saturation.fill('0');
+        await readyComposition(0);
+        const gray = await canvasPixel(80,45);
+        assert.ok(Math.abs(gray[0]!-gray[1]!)<3 && Math.abs(gray[1]!-gray[2]!)<3, `grayscale ${gray}`);
+        await page.getByRole('button',{name:'Toggle inspector',exact:true}).focus();
+        await page.keyboard.press(process.platform==='darwin'?'Meta+z':'Control+z');
+        await readyComposition(0);
+        assert.ok((await canvasPixel(80,45))[0]! > 200, 'keyboard undo restores source');
+        await page.keyboard.press(process.platform==='darwin'?'Meta+Shift+z':'Control+Shift+z');
+        await readyComposition(0);
+        const restored = await canvasPixel(80,45);
+        assert.ok(Math.abs(restored[0]!-restored[1]!)<3, 'keyboard redo restores grade');
+        const title=page.getByLabel('Project title',{exact:true});
+        const originalTitle=await title.inputValue();
+        await title.focus(); await page.keyboard.press('End'); await page.keyboard.type('x');
+        await page.keyboard.press(process.platform==='darwin'?'Meta+z':'Control+z');
+        assert.equal(await title.inputValue(),originalTitle,'native text undo is preserved');
+    });
+    await check('one slider drag is one undo step; keyboard changes stay separate', async () => {
+        await page.getByRole('button', { name: 'Synthetic clip 0:00 - 0:02', exact: true }).click();
+        const exposure=page.locator('label').filter({hasText:/^Exposure/}).locator('input[type="range"]');
+        await exposure.dispatchEvent('pointerdown',{pointerId:7});
+        await exposure.fill('0.1'); await exposure.fill('0.3'); await exposure.fill('0.5');
+        await page.evaluate(()=>window.dispatchEvent(new PointerEvent('pointerup',{pointerId:7})));
+        await page.getByRole('button',{name:'Undo',exact:true}).click();
+        assert.equal(await exposure.inputValue(),'0');
+        await page.getByRole('button',{name:'Redo',exact:true}).click();
+        assert.equal(await exposure.inputValue(),'0.5');
+        await exposure.focus(); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
+        await page.getByRole('button',{name:'Undo',exact:true}).click();
+        assert.equal(await exposure.inputValue(),'0.51');
+    });
+    await check('GPU color matches CPU across channel changes, orientation, and lost-context fallback', async () => {
+        for(const forceCpu of [false,true]) {
+            const probes=await page.evaluate(force => (window as any).colorProbe(force), forceCpu);
+            for(const probe of probes) for(let i=0;i<probe.actual.length;i++) {
+                assert.ok(Math.abs(probe.actual[i]-probe.expected[i])<=2, `color channel ${i}: ${probe.actual[i]} vs ${probe.expected[i]}, CPU ${forceCpu}`);
+            }
+        }
     });
     for (const viewport of [{ width: 1440, height: 900 }, { width: 1100, height: 760 }]) {
         await check(`real styled editor fills ${viewport.width}x${viewport.height} with a dominant stage and visible timeline`, async () => {

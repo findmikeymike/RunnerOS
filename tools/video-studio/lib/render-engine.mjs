@@ -1,3 +1,4 @@
+import { buildColorLut, serializeCubeLut, validateColorAdjustments } from './color-pipeline.mjs';
 import {
     seconds, clamp, clipSpeed, clipVolume, clipFadeSeconds, clipTransform, clipOpacity, clipCrop,
     visualSourceSize, fittedVisualSize, assertSourceCanCoverSpeed,
@@ -48,7 +49,7 @@ function visualOverlayPosition(clip, transform) {
         y: `(main_h-overlay_h)/2+${y}`,
     };
 }
-function visualCompositionFilter(inputLabel, outputLabel, clip, media, canvas) {
+function visualCompositionFilter(inputLabel, outputLabel, clip, media, canvas, colorParts = []) {
     const transform = clipTransform(clip);
     const crop = clipCrop(clip, media);
     const source = visualSourceSize(media, crop, canvas.width, canvas.height);
@@ -57,7 +58,7 @@ function visualCompositionFilter(inputLabel, outputLabel, clip, media, canvas) {
     if (crop)
         parts.push(`crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`);
     parts.push(`scale=${fitted.width}:${fitted.height}:force_original_aspect_ratio=decrease`);
-    parts.push('setsar=1', 'format=rgba');
+    parts.push('setsar=1', 'format=rgba', ...colorParts);
     if (transform.rotateDeg !== 0) {
         const angle = (transform.rotateDeg * Math.PI) / 180;
         parts.push(`rotate=${ffmpegExprNumber(angle)}:ow=rotw(${ffmpegExprNumber(angle)}):oh=roth(${ffmpegExprNumber(angle)}):fillcolor=black@0`);
@@ -65,7 +66,7 @@ function visualCompositionFilter(inputLabel, outputLabel, clip, media, canvas) {
     const opacity = clipOpacity(clip);
     if (opacity < 1)
         parts.push(`colorchannelmixer=aa=${ffmpegExprNumber(opacity)}`);
-    return `${inputLabel}${parts.join(',')}${outputLabel}`;
+    return `${inputLabel}${parts.length ? parts.join(',') : 'null'}${outputLabel}`;
 }
 function atempoFilter(speed) {
     const parts = [];
@@ -95,14 +96,15 @@ function clipSourceDurationSeconds(clip) {
 function hasAdjustments(adjustments) {
     return Boolean(adjustments && Object.keys(adjustments).some((key) => key !== 'preset'));
 }
-function adjustmentFilter(inputLabel, outputLabel, adjustments) {
-    if (!hasAdjustments(adjustments))
-        return `${inputLabel}null${outputLabel}`;
+function adjustmentParts(adjustments, writeLut) {
+    validateColorAdjustments(adjustments);
+    const lut = buildColorLut(adjustments);
+    if (!hasAdjustments(adjustments)) return [];
     const brightness = clamp((adjustments?.exposure ?? 0) + ((adjustments?.highlights ?? 0) * 0.08) + ((adjustments?.shadows ?? 0) * 0.06), -1, 1);
     const contrast = clamp(adjustments?.contrast ?? 1, 0, 3);
     const saturation = clamp((adjustments?.saturation ?? 1) + ((adjustments?.temperature ?? 0) * 0.04) - Math.abs(adjustments?.tint ?? 0) * 0.02, 0, 3);
     const gamma = clamp(1 - ((adjustments?.shadows ?? 0) * 0.12) + ((adjustments?.highlights ?? 0) * 0.08), 0.1, 10);
-    const parts = [`eq=brightness=${ffmpegNumber(brightness)}:contrast=${ffmpegNumber(contrast)}:saturation=${ffmpegNumber(saturation)}:gamma=${ffmpegNumber(gamma)}`];
+    const parts = adjustments?.pipeline === 'rgb-v1' ? [] : [`eq=brightness=${ffmpegNumber(brightness)}:contrast=${ffmpegNumber(contrast)}:saturation=${ffmpegNumber(saturation)}:gamma=${ffmpegNumber(gamma)}`];
     if ((adjustments?.grain ?? 0) > 0) {
         const strength = Math.round(clamp(adjustments?.grain ?? 0, 0, 1) * 18);
         parts.push(`noise=alls=${strength}:allf=t`);
@@ -115,7 +117,13 @@ function adjustmentFilter(inputLabel, outputLabel, adjustments) {
         const angle = ffmpegNumber(Math.PI / 5 + clamp(adjustments?.vignette ?? 0, 0, 1) * 0.45);
         parts.push(`vignette=angle=${angle}`);
     }
-    return `${inputLabel}${parts.join(',')}${outputLabel}`;
+    if (lut) parts.push(`lut3d=file='${writeLut(lut)}':interp=trilinear`);
+    return parts;
+}
+
+function adjustmentFilter(inputLabel, outputLabel, adjustments, writeLut) {
+    const parts = adjustmentParts(adjustments, writeLut);
+    return `${inputLabel}${parts.length ? parts.join(',') : 'null'}${outputLabel}`;
 }
 
 function hasAudioStream(path) {
@@ -166,6 +174,13 @@ export function renderSimpleMp4(project, outputPath, renderSettings, options = {
         writeFileSync(textPath, text, 'utf-8');
         return `textfile=${textPath}`;
     };
+    const writeLut = (lut) => {
+        mkdirSync(textFileDir, { recursive: true });
+        const lutPath = join(textFileDir, `color-${textFileIndex++}.cube`);
+        writeFileSync(lutPath, serializeCubeLut(lut), 'utf-8');
+        return lutPath.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "'\\''");
+    };
+    try {
     for (const { clip, trackId, media } of inputSourceClips) {
         if (!existsSync(media.path))
             throw new Error(`Media file not found for clip "${clip.label ?? clip.id}": ${media.path}`);
@@ -196,8 +211,14 @@ export function renderSimpleMp4(project, outputPath, renderSettings, options = {
         const setpts = media.type === 'video'
             ? `setpts=(PTS-STARTPTS)/${ffmpegNumber(clipSpeed(clip))}+${start}/TB`
             : `setpts=PTS-STARTPTS+${start}/TB`;
-        filters.push(visualCompositionFilter(`[${inputIndex}:v]`, `[${adjusted}]`, clip, media, { width, height }));
-        filters.push(adjustmentFilter(`[${adjusted}]`, `[${prepared}]`, clip.adjustments));
+        if (clip.adjustments?.pipeline === 'rgb-v1' || clip.adjustments?.lut) {
+            // Match preview: crop/resize, color, then rotation and opacity.
+            filters.push(visualCompositionFilter(`[${inputIndex}:v]`, `[${prepared}]`, clip, media, { width, height }, adjustmentParts(clip.adjustments, writeLut)));
+        } else {
+            // Preserve established ordering for existing unversioned projects.
+            filters.push(visualCompositionFilter(`[${inputIndex}:v]`, `[${adjusted}]`, clip, media, { width, height }));
+            filters.push(adjustmentFilter(`[${adjusted}]`, `[${prepared}]`, clip.adjustments, writeLut));
+        }
         filters.push(`[${prepared}]${setpts}[${composed}]`);
         filters.push(`${currentVideo}[${composed}]overlay=x='${overlayPosition.x}':y='${overlayPosition.y}':enable='between(t,${start},${end})'[${next}]`);
         currentVideo = `[${next}]`;
@@ -252,11 +273,11 @@ export function renderSimpleMp4(project, outputPath, renderSettings, options = {
     }
     args.push(outputPath);
     const result = spawnSync('ffmpeg', args, { encoding: 'utf-8', timeout: options.timeoutMs ?? SIMPLE_RENDER_TIMEOUT_MS });
-    rmSync(textFileDir, { recursive: true, force: true });
     if (result.error) {
         throw new Error(result.error.message || 'ffmpeg failed to render video.');
     }
     if (result.status !== 0) {
         throw new Error(result.stderr || result.stdout || 'ffmpeg failed to render video.');
     }
+    } finally { rmSync(textFileDir, { recursive: true, force: true }); }
 }
