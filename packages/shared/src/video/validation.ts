@@ -1,3 +1,4 @@
+import { validateColorAdjustments, validateColorProjectBudget } from '../../../../tools/video-studio/lib/color-pipeline.mjs';
 import type {
   RunnerVideoProject,
   VideoClip,
@@ -105,9 +106,8 @@ function validateClip(clip: VideoClip, path: string, errors: VideoValidationIssu
   if (clip.text && !isNonEmptyString(clip.text.text)) {
     push(errors, `${path}.text.text`, 'Text clips require non-empty text.');
   }
-  if (clip.adjustments !== undefined && !isRecord(clip.adjustments)) {
-    push(errors, `${path}.adjustments`, 'Clip adjustments must be an object.');
-  }
+  try { validateColorAdjustments(clip.adjustments); }
+  catch (error) { push(errors, `${path}.adjustments`, error instanceof Error ? error.message : 'Invalid color adjustments.'); }
 }
 
 export function validateRunnerVideoProject(value: unknown): VideoValidationResult {
@@ -123,6 +123,8 @@ export function validateRunnerVideoProject(value: unknown): VideoValidationResul
   }
 
   const project = value as unknown as RunnerVideoProject;
+  try { validateColorProjectBudget(project); }
+  catch (error) { push(errors, '$', error instanceof Error ? error.message : 'Project exceeds the embedded LUT size budget.'); }
 
   if (project.version !== 1) push(errors, 'version', 'Project version must be 1.');
   if (!isNonEmptyString(project.id)) push(errors, 'id', 'Project id is required.');

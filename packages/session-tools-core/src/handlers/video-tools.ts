@@ -1,3 +1,4 @@
+import { parseCubeLut, validateColorAdjustments, validateColorProjectBudget } from '../../../../tools/video-studio/lib/color-pipeline.mjs';
 import { assertSafeVideoExportPaths } from '../../../../tools/video-studio/lib/export-safety.mjs';
 import { commitVideoProjectContent } from '../../../../tools/video-studio/lib/project-storage.mjs';
 import { positiveNumber, ffmpegNumber, clamp, clipSpeed, finiteNumber, clipTransform, renderSimpleMp4 } from '../../../../tools/video-studio/lib/render-engine.mjs';
@@ -99,7 +100,12 @@ interface VideoClipEditInput {
 
 interface VideoClipAdjustInput {
   projectPath: string;
-  clipId: string;
+  clipId?: string;
+  clipIds?: string[];
+  lutCube?: string;
+  lutName?: string;
+  lutIntensity?: number;
+  removeLut?: boolean;
   preset?: 'neutral' | 'clean' | 'cinematic' | 'warm' | 'punchy' | 'black-and-white';
   exposure?: number;
   contrast?: number;
@@ -237,6 +243,8 @@ interface VideoExportRenderSettings {
 }
 
 interface VideoClipAdjustments {
+  pipeline?: 'rgb-v1';
+  lut?: ReturnType<typeof parseCubeLut>;
   exposure?: number;
   contrast?: number;
   saturation?: number;
@@ -1062,12 +1070,12 @@ function applyClipSettings(clip: { volume?: number; speed?: number; fadeInMs?: n
 }
 
 const ADJUSTMENT_PRESETS: Record<NonNullable<VideoClipAdjustInput['preset']>, VideoClipAdjustments> = {
-  neutral: {},
-  clean: { exposure: 0.03, contrast: 1.05, saturation: 1.04, grain: 0, preset: 'clean' },
-  cinematic: { exposure: -0.03, contrast: 1.18, saturation: 0.92, highlights: -0.12, shadows: 0.08, grain: 0.12, preset: 'cinematic' },
-  warm: { exposure: 0.02, contrast: 1.05, saturation: 1.08, temperature: 0.18, grain: 0.04, preset: 'warm' },
-  punchy: { exposure: 0.04, contrast: 1.25, saturation: 1.22, highlights: -0.05, shadows: -0.04, grain: 0.02, preset: 'punchy' },
-  'black-and-white': { exposure: 0, contrast: 1.16, saturation: 0, grain: 0.1, preset: 'black-and-white' },
+  neutral: { pipeline: 'rgb-v1', preset: 'neutral' },
+  clean: { pipeline: 'rgb-v1', exposure: 0.03, contrast: 1.05, saturation: 1.04, preset: 'clean' },
+  cinematic: { pipeline: 'rgb-v1', exposure: -0.03, contrast: 1.18, saturation: 0.92, highlights: -0.12, shadows: 0.08, preset: 'cinematic' },
+  warm: { pipeline: 'rgb-v1', exposure: 0.02, contrast: 1.05, saturation: 1.08, temperature: 0.18, preset: 'warm' },
+  punchy: { pipeline: 'rgb-v1', exposure: 0.04, contrast: 1.25, saturation: 1.22, highlights: -0.05, shadows: -0.04, preset: 'punchy' },
+  'black-and-white': { pipeline: 'rgb-v1', exposure: 0, contrast: 1.16, saturation: 0, preset: 'black-and-white' },
 };
 
 function sanitizedAdjustments(input: Partial<VideoClipAdjustments>): VideoClipAdjustments {
@@ -1770,7 +1778,21 @@ export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoCl
 
 export async function handleVideoClipAdjust(ctx: SessionToolContext, args: VideoClipAdjustInput): Promise<ToolResult> {
   if (!args.projectPath) return errorResponse('projectPath is required.');
-  if (!args.clipId) return errorResponse('clipId is required.');
+  try { validateColorAdjustments({ ...args, pipeline: 'rgb-v1' }); }
+  catch (error) { return errorResponse(`Invalid color adjustments: ${error instanceof Error ? error.message : String(error)}`); }
+  if ((args.clipId !== undefined) === (args.clipIds !== undefined)) return errorResponse('Supply exactly one of clipId or clipIds.');
+  const ids = args.clipIds ?? [args.clipId!];
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 32 || ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length) return errorResponse('clipIds must contain 1–32 distinct nonempty clip ids.');
+  if (args.removeLut && (args.lutCube !== undefined || args.lutIntensity !== undefined)) return errorResponse('removeLut cannot combine with lutCube or lutIntensity.');
+  if (args.lutName !== undefined && (typeof args.lutName !== 'string' || args.lutName.length > 200 || args.lutCube === undefined)) return errorResponse('lutName requires lutCube and must be at most 200 characters.');
+  if (args.lutIntensity !== undefined && (!Number.isFinite(args.lutIntensity) || args.lutIntensity < 0 || args.lutIntensity > 1)) return errorResponse('lutIntensity must be between 0 and 1.');
+  if (args.reset && (args.lutCube !== undefined || args.lutIntensity !== undefined || args.removeLut || args.preset || hasExplicitAdjustmentInput(args))) return errorResponse('reset cannot combine with adjustment fields.');
+  let importedLut: ReturnType<typeof parseCubeLut> | undefined;
+  if (args.lutCube !== undefined) {
+    if (typeof args.lutCube !== 'string' || Buffer.byteLength(args.lutCube, 'utf8') > 2_000_000) return errorResponse('lutCube must be text no larger than 2 MB.');
+    try { importedLut = parseCubeLut(args.lutCube, args.lutName); }
+    catch (error) { return errorResponse(`Invalid LUT: ${error instanceof Error ? error.message : String(error)}`); }
+  }
   const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
   if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
   const projectPath = projectPathResult.path;
@@ -1778,52 +1800,60 @@ export async function handleVideoClipAdjust(ctx: SessionToolContext, args: Video
   return withVideoProjectLock(projectPath, () => {
     const project = readProject(projectPath);
     const beforeProject = cloneProject(project);
-    const found = findClip(project, args.clipId);
-    if (!found) return errorResponse(`Clip not found: ${args.clipId}`);
-    const { clip, track } = found;
-    if (track.locked) return errorResponse(lockedTrackError(track));
-
-    if (args.reset) {
-      delete clip.adjustments;
-    } else {
-      const media = clip.mediaId ? project.media.find((asset) => asset.id === clip.mediaId) : undefined;
-      if (!media || !['video', 'image'].includes(media.type)) {
-        return errorResponse(`Clip "${clip.label ?? clip.id}" is not a video or image clip that can render look adjustments.`);
-      }
-      const preset = args.preset ? ADJUSTMENT_PRESETS[args.preset] : undefined;
-      if (args.preset && !preset) return errorResponse(`Unknown adjustment preset: ${args.preset}`);
-      const hasExplicit = hasExplicitAdjustmentInput(args);
-      const base = args.preset ? { ...(preset ?? {}) } : { ...(clip.adjustments ?? {}) };
-      clip.adjustments = sanitizedAdjustments({
-        ...base,
-        exposure: args.exposure ?? base.exposure,
-        contrast: args.contrast ?? base.contrast,
-        saturation: args.saturation ?? base.saturation,
-        highlights: args.highlights ?? base.highlights,
-        shadows: args.shadows ?? base.shadows,
-        temperature: args.temperature ?? base.temperature,
-        tint: args.tint ?? base.tint,
-        sharpen: args.sharpen ?? base.sharpen,
-        vignette: args.vignette ?? base.vignette,
-        grain: args.grain ?? base.grain,
-        preset: hasExplicit ? 'manual' : args.preset ?? clip.adjustments?.preset,
-      });
+    const targets: Array<NonNullable<ReturnType<typeof findClip>>> = [];
+    const warnings: string[] = [];
+    for (const id of ids) {
+      const found = findClip(project, id);
+      if (!found) return errorResponse(`Clip not found: ${id}`);
+      if (found.track.locked) return errorResponse(lockedTrackError(found.track));
+      const media = project.media.find(asset => asset.id === found.clip.mediaId);
+      if (!media || !['video', 'image'].includes(media.type) || !['video', 'image'].includes(found.clip.type)) return errorResponse(`Clip "${id}" is not a video or image clip that can render look adjustments.`);
+      targets.push(found);
     }
-
+    const preset = args.preset ? ADJUSTMENT_PRESETS[args.preset] : undefined;
+    if (args.preset && !preset) return errorResponse(`Unknown adjustment preset: ${args.preset}`);
+    for (const { clip } of targets) {
+      if (args.reset) { delete clip.adjustments; continue; }
+      const base = args.preset ? { ...preset, lut: clip.adjustments?.lut } : { ...clip.adjustments };
+      const next = sanitizedAdjustments({
+        ...base,
+        exposure: args.exposure ?? base.exposure, contrast: args.contrast ?? base.contrast,
+        saturation: args.saturation ?? base.saturation, highlights: args.highlights ?? base.highlights,
+        shadows: args.shadows ?? base.shadows, temperature: args.temperature ?? base.temperature,
+        tint: args.tint ?? base.tint, sharpen: args.sharpen ?? base.sharpen,
+        vignette: args.vignette ?? base.vignette, grain: args.grain ?? base.grain,
+        preset: hasExplicitAdjustmentInput(args) || importedLut || args.lutIntensity !== undefined ? 'manual' : args.preset ?? base.preset,
+      });
+      next.lut = importedLut ?? base.lut;
+      if (args.removeLut) delete next.lut;
+      if (args.lutIntensity !== undefined && !next.lut) return errorResponse(`Clip "${clip.id}" has no LUT to adjust.`);
+      if (next.lut) next.lut = { ...next.lut, intensity: args.lutIntensity ?? (importedLut ? 1 : next.lut.intensity ?? 1) };
+      const hasLegacyEffects = [next.grain, next.sharpen, next.vignette].some(value => (value ?? 0) !== 0);
+      if (hasLegacyEffects) warnings.push(`Clip "${clip.id}" has grain, sharpen or vignette; render to review these effects.`);
+      const changesColor = [args.exposure, args.contrast, args.saturation, args.highlights, args.shadows, args.temperature, args.tint].some(value => value !== undefined)
+        || args.preset !== undefined || args.lutCube !== undefined || args.lutIntensity !== undefined || args.removeLut;
+      if (base.pipeline === 'rgb-v1' || next.lut || changesColor) next.pipeline = 'rgb-v1';
+      try { validateColorAdjustments(next); }
+      catch (error) { return errorResponse(`Invalid color adjustments: ${error instanceof Error ? error.message : String(error)}`); }
+      clip.adjustments = next;
+    }
     const errors = validateProject(project);
     if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
-    const versionId = addVersion(project, `${args.reset ? 'Reset' : 'Adjusted'} ${clip.label ?? clip.id} clip look`, ctx, 'video_clip_adjust');
+    const versionId = addVersion(project, `${args.reset ? 'Reset' : 'Adjusted'} ${targets.length} clip look${targets.length === 1 ? '' : 's'}`, ctx, 'video_clip_adjust');
+    try { validateColorProjectBudget(project); }
+    catch (error) { return errorResponse(error instanceof Error ? error.message : 'Project exceeds the embedded LUT size budget.'); }
     const undoSnapshotPath = writeProjectWithUndo(projectPath, beforeProject, project, 'video_clip_adjust');
-    return ok(`${args.reset ? 'Reset' : 'Applied'} adjustments for clip "${clip.label ?? clip.id}".`, {
-      ok: true,
-      projectPath,
-      clipId: clip.id,
-      trackId: track.id,
-      adjustments: clip.adjustments ?? {},
-      versionId,
-      undoSnapshotPath,
-      changedClipIds: [clip.id],
-      warnings: [],
+    const first = targets[0]!;
+    // Keep embedded cube samples on disk instead of repeating a large table for every target in tool output.
+    const report = (adjustments: VideoClipAdjustments = {}) => ({
+      ...adjustments,
+      ...(adjustments.lut ? { lut: { name: adjustments.lut.name, size: adjustments.lut.size, intensity: adjustments.lut.intensity ?? 1 } } : {}),
+    });
+    return ok(`${args.reset ? 'Reset' : 'Applied'} adjustments for ${targets.length} clip${targets.length === 1 ? '' : 's'}.`, {
+      ok: true, projectPath,
+      ...(targets.length === 1 ? { clipId: first.clip.id, trackId: first.track.id, adjustments: report(first.clip.adjustments) } : {}),
+      clips: targets.map(({ clip, track }) => ({ clipId: clip.id, trackId: track.id, adjustments: report(clip.adjustments) })),
+      versionId, undoSnapshotPath, changedClipIds: ids, warnings,
     });
   });
 }

@@ -1,5 +1,6 @@
 import * as React from 'react'
 import './video-studio.css'
+import { parseCubeLut, validateColorProjectBudget } from '../../../../../tools/video-studio/lib/color-pipeline.mjs'
 import { MediaThumbnail } from '@/components/video-studio/MediaThumbnail'
 import { CompositionPreview } from '@/components/video-studio/CompositionPreview'
 import { AlertTriangle, Bot, ChevronDown, ClipboardCheck, Code2, Copy, Crop, Download, Eye, EyeOff, FileVideo, Film, FolderOpen, History, Layers, Link, Loader2, Lock, Magnet, MoreHorizontal, Move, Minus, Music, Pause, Play, Plus, Redo2, RefreshCw, RotateCw, Save, Scissors, Send, ShieldCheck, SlidersHorizontal, Trash2, Type, Undo2, Unlock, Upload, Volume2, VolumeX, X } from 'lucide-react'
@@ -34,12 +35,12 @@ type LookPreset = 'neutral' | 'clean' | 'cinematic' | 'warm' | 'punchy' | 'black
 type MediaFilter = 'all' | 'video' | 'audio' | 'image'
 
 const LOOK_PRESETS: Array<{ value: LookPreset; label: string; adjustments: NonNullable<VideoClip['adjustments']> }> = [
-  { value: 'neutral', label: 'Neutral', adjustments: {} },
-  { value: 'clean', label: 'Clean', adjustments: { exposure: 0.03, contrast: 1.05, saturation: 1.04, grain: 0, preset: 'clean' } },
-  { value: 'cinematic', label: 'Cinematic', adjustments: { exposure: -0.03, contrast: 1.18, saturation: 0.92, highlights: -0.12, shadows: 0.08, grain: 0.12, preset: 'cinematic' } },
-  { value: 'warm', label: 'Warm', adjustments: { exposure: 0.02, contrast: 1.05, saturation: 1.08, temperature: 0.18, grain: 0.04, preset: 'warm' } },
-  { value: 'punchy', label: 'Punchy', adjustments: { exposure: 0.04, contrast: 1.25, saturation: 1.22, highlights: -0.05, shadows: -0.04, grain: 0.02, preset: 'punchy' } },
-  { value: 'black-and-white', label: 'B&W', adjustments: { exposure: 0, contrast: 1.16, saturation: 0, grain: 0.1, preset: 'black-and-white' } },
+  { value: 'neutral', label: 'Neutral', adjustments: { pipeline: 'rgb-v1', preset: 'neutral' } },
+  { value: 'clean', label: 'Clean', adjustments: { pipeline: 'rgb-v1', exposure: 0.03, contrast: 1.05, saturation: 1.04, preset: 'clean' } },
+  { value: 'cinematic', label: 'Cinematic', adjustments: { pipeline: 'rgb-v1', exposure: -0.03, contrast: 1.18, saturation: 0.92, highlights: -0.12, shadows: 0.08, preset: 'cinematic' } },
+  { value: 'warm', label: 'Warm', adjustments: { pipeline: 'rgb-v1', exposure: 0.02, contrast: 1.05, saturation: 1.08, temperature: 0.18, preset: 'warm' } },
+  { value: 'punchy', label: 'Punchy', adjustments: { pipeline: 'rgb-v1', exposure: 0.04, contrast: 1.25, saturation: 1.22, highlights: -0.05, shadows: -0.04, preset: 'punchy' } },
+  { value: 'black-and-white', label: 'B&W', adjustments: { pipeline: 'rgb-v1', exposure: 0, contrast: 1.16, saturation: 0, preset: 'black-and-white' } },
 ]
 
 const MIN_CLIP_DURATION_MS = 100
@@ -121,6 +122,30 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   const [agentPanelOpen, setAgentPanelOpen] = React.useState(false)
   const [inspectorOpen, setInspectorOpen] = React.useState(false)
   const trackLabelsRef = React.useRef<HTMLDivElement>(null)
+  const lutFileRef = React.useRef<HTMLInputElement>(null)
+  const lutRequestRef = React.useRef(0)
+  const adjustmentGestureRef = React.useRef<{ pointerId: number; recorded: boolean } | null>(null)
+  React.useEffect(() => {
+    const endPointerGesture = (event: PointerEvent) => {
+      if (adjustmentGestureRef.current?.pointerId === event.pointerId) adjustmentGestureRef.current = null
+    }
+    const endGesture = () => { adjustmentGestureRef.current = null }
+    window.addEventListener('pointerup', endPointerGesture)
+    window.addEventListener('pointercancel', endPointerGesture)
+    window.addEventListener('blur', endGesture)
+    window.addEventListener('keydown', endGesture, true)
+    return () => {
+      window.removeEventListener('pointerup', endPointerGesture)
+      window.removeEventListener('pointercancel', endPointerGesture)
+      window.removeEventListener('blur', endGesture)
+      window.removeEventListener('keydown', endGesture, true)
+    }
+  }, [])
+  const selectedClipIdRef = React.useRef(selectedClipId)
+  selectedClipIdRef.current = selectedClipId
+  const [lutImporting, setLutImporting] = React.useState(false)
+  const [lutError, setLutError] = React.useState('')
+  React.useEffect(() => { setLutError('') }, [selectedClipId])
   const [agentPrompt, setAgentPrompt] = React.useState(() => {
     try { return window.localStorage.getItem(videoAgentPromptKey(workspaceId, outputId)) ?? '' } catch { return '' }
   })
@@ -148,6 +173,8 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   const pendingFingerprintRef = React.useRef<string | null>(null)
   const rawJsonRef = React.useRef(rawJson)
   rawJsonRef.current = rawJson
+  const currentProjectFingerprint = React.useMemo(() => videoProjectFingerprint(rawJson), [rawJson])
+  const hasUnsavedChanges = rawJsonDirty || (savedFingerprintRef.current !== null && currentProjectFingerprint !== savedFingerprintRef.current)
   React.useEffect(() => {
     activeRef.current = true
     return () => { activeRef.current = false; loadGenerationRef.current += 1 }
@@ -245,8 +272,8 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   }, [getOutput, load, outputId, workspaceId])
 
   React.useEffect(() => {
-    hasLocalEditsRef.current = undoStack.length > 0 || redoStack.length > 0 || rawJsonDirty
-  }, [rawJsonDirty, redoStack.length, undoStack.length])
+    hasLocalEditsRef.current = hasUnsavedChanges
+  }, [hasUnsavedChanges])
 
   React.useEffect(() => {
     timelineDragRef.current = timelineDrag
@@ -254,15 +281,14 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
 
   // Warn before the window closes/navigates with unsaved edits in the editor.
   React.useEffect(() => {
-    const hasUnsaved = undoStack.length > 0 || redoStack.length > 0 || rawJsonDirty
-    if (!hasUnsaved) return
+    if (!hasUnsavedChanges) return
     const handler = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
-  }, [rawJsonDirty, redoStack.length, undoStack.length])
+  }, [hasUnsavedChanges])
 
   React.useEffect(() => {
     if (!clipContextMenu) return
@@ -503,11 +529,20 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   }, [advanceToNextPreviewClip, isPreviewPlaying, previewMode, timelineDurationMs])
 
   const updateProject = React.useCallback((updater: (current: VideoProject) => VideoProject, options: { recordHistory?: boolean } = {}) => {
+    // Capture the gesture with this edit, even if React processes it after pointerup.
+    const gesture = adjustmentGestureRef.current
     setProject((current) => {
       if (!current || operationBusyRef.current || draftPendingRef.current || rawJsonDirtyRef.current) return current
       const next = updater(current)
       if (next === current) return current
-      if (options.recordHistory !== false) {
+      // The helper skips serialization entirely when the project has no LUT.
+      try { validateColorProjectBudget(next) }
+      catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : 'This LUT would make the project too large.')
+        return current
+      }
+      if (options.recordHistory !== false && !gesture?.recorded) {
+        if (gesture) gesture.recorded = true
         setUndoStack((items) => [...items.slice(-49), current])
         setRedoStack([])
       }
@@ -549,6 +584,25 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
     setUndoStack((items) => [...items.slice(-49), project])
     restoreProject(next)
   }, [project, redoStack, restoreProject])
+
+  React.useEffect(() => {
+    const handleHistoryShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return
+      const target = event.target
+      if (target instanceof HTMLElement) {
+        const input = target.closest('input')
+        const nativeInputUndo = input && !['range', 'checkbox', 'radio', 'button', 'submit'].includes(input.type)
+        if (nativeInputUndo || target.closest('textarea, select, [role="textbox"]') || target.isContentEditable) return
+      }
+      if (operationBusyRef.current || draftPendingRef.current || rawJsonDirtyRef.current) return
+      if (event.shiftKey ? redoStack.length === 0 : undoStack.length === 0) return
+      event.preventDefault()
+      if (event.shiftKey) redo()
+      else undo()
+    }
+    window.addEventListener('keydown', handleHistoryShortcut)
+    return () => window.removeEventListener('keydown', handleHistoryShortcut)
+  }, [undo, redo, undoStack.length, redoStack.length])
 
   const selectedClipTrack = React.useMemo(() => findTrackForClip(project, selectedClipId), [project, selectedClipId])
   const selectedClipLocked = selectedClipTrack?.locked === true
@@ -642,9 +696,36 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
       adjustments: {
         ...(selectedClip?.adjustments ?? {}),
         ...patch,
+        pipeline: 'rgb-v1',
       },
     })
   }, [selectedClip, updateSelectedClip])
+
+  const importLut = async (file: File | undefined) => {
+    if (!file || !selectedClip || !canEditClip(selectedClip.id) || operationBusyRef.current || draftPendingRef.current || rawJsonDirtyRef.current) return
+    const request = ++lutRequestRef.current
+    const clipId = selectedClip.id
+    const baseJson = rawJsonRef.current
+    setLutError('')
+    setLutImporting(true)
+    try {
+      if (!/\.cube$/i.test(file.name)) throw new Error('Choose a .cube LUT file.')
+      if (file.size > 2 * 1024 * 1024) throw new Error('LUT files must be 2 MB or smaller.')
+      const text = await file.text()
+      if (!activeRef.current || request !== lutRequestRef.current) return
+      if (selectedClipIdRef.current !== clipId || rawJsonRef.current !== baseJson || operationBusyRef.current || rawJsonDirtyRef.current) {
+        throw new Error('The clip changed while reading the LUT. Select it and import again.')
+      }
+      const lut = parseCubeLut(text, file.name)
+      const candidate = JSON.parse(baseJson) as VideoProject
+      validateColorProjectBudget({ ...candidate, timeline: { ...candidate.timeline, tracks: candidate.timeline.tracks.map(track => ({ ...track, clips: track.clips.map(clip => clip.id === clipId ? { ...clip, adjustments: { ...clip.adjustments, lut, preset: 'manual', pipeline: 'rgb-v1' } } : clip) })) } })
+      updateSelectedClipAdjustment({ lut, preset: 'manual' })
+    } catch (cause) {
+      if (activeRef.current && request === lutRequestRef.current) setLutError(cause instanceof Error ? cause.message : 'Unable to import this LUT.')
+    } finally {
+      if (activeRef.current && request === lutRequestRef.current) setLutImporting(false)
+    }
+  }
 
   const updateSelectedClipTransform = React.useCallback((patch: Partial<NonNullable<VideoClip['transform']>>) => {
     updateSelectedClip({
@@ -717,8 +798,8 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   const applyLookPreset = React.useCallback((preset: LookPreset) => {
     const found = LOOK_PRESETS.find((item) => item.value === preset)
     if (!found) return
-    updateSelectedClip({ adjustments: found.adjustments })
-  }, [updateSelectedClip])
+    updateSelectedClip({ adjustments: { ...found.adjustments, ...(selectedClip?.adjustments?.lut ? { lut: selectedClip.adjustments.lut } : {}) } })
+  }, [selectedClip, updateSelectedClip])
 
   const resetLook = React.useCallback(() => {
     updateSelectedClip({ adjustments: undefined })
@@ -1080,6 +1161,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
         throw new Error('This project changed outside the editor. Your edits are preserved; reload before saving.')
       }
       const parsed = addUserEditVersion(JSON.parse(capturedJson) as VideoProject, summary)
+      validateColorProjectBudget(parsed)
       const content = `${JSON.stringify(parsed, null, 2)}\n`
       pendingFingerprintRef.current = videoProjectFingerprint(content)
       const write = (window.electronAPI as VideoStudioElectronAPI).writeOutputAssetText
@@ -1089,11 +1171,15 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
       baseSavedTextRef.current = content
       savedFingerprintRef.current = videoProjectFingerprint(content)
       if (rawJsonRef.current === capturedJson) {
+        rawJsonRef.current = JSON.stringify(parsed, null, 2)
         setProject(parsed)
-        setRawJson(JSON.stringify(parsed, null, 2))
+        setRawJson(rawJsonRef.current)
         setRawJsonDirty(false)
-        setUndoStack([])
-        setRedoStack([])
+        // Saving commits a baseline, not a new editing session. Retain edit
+        // history while carrying the confirmed save's audit metadata forward.
+        const withSavedMetadata = (snapshot: VideoProject): VideoProject => ({ ...snapshot, versions: parsed.versions, updatedAt: parsed.updatedAt })
+        setUndoStack(items => items.map(withSavedMetadata))
+        setRedoStack(items => items.map(withSavedMetadata))
         hasLocalEditsRef.current = false
       }
       setExternalReloadPending(false)
@@ -1108,11 +1194,15 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   }
 
   const save = async () => {
+    if (operationBusyRef.current || draftPendingRef.current) return
+    operationBusyRef.current = true
     try {
       const saved = await persistProject()
       if (saved) toast.success('Video project saved.')
     } catch {
       // persistProject already reports the failure and retains edits.
+    } finally {
+      operationBusyRef.current = false
     }
   }
 
@@ -1238,7 +1328,19 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   const isBusy = saving || importing || checking !== null || exporting || agentRunning || Boolean(availableDraft)
 
   return (
-    <div className="video-studio-shell h-full overflow-hidden text-white">
+    <div className="video-studio-shell h-full overflow-hidden text-white"
+      onKeyDownCapture={(event) => {
+        if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 's') {
+          event.preventDefault()
+          if (!event.repeat) void save()
+        }
+      }}
+      onPointerDownCapture={(event) => {
+        adjustmentGestureRef.current = event.target instanceof HTMLInputElement && event.target.matches('input.video-adjust-slider')
+          ? { pointerId: event.pointerId, recorded: false }
+          : null
+      }}
+    >
       <div
         className="grid h-full min-h-0"
         style={{ gridTemplateRows: (externalReloadPending || availableDraft || draftBackupFailed) ? '56px 36px minmax(0,1fr) clamp(230px,29vh,310px)' : '56px minmax(0,1fr) clamp(230px,29vh,310px)' }}
@@ -1254,7 +1356,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
               onChange={(event) => updateProject((current) => ({ ...current, title: event.target.value }))}
               className="min-w-0 flex-1 bg-transparent text-[15px] font-semibold text-white outline-none"
             />
-            <span className="video-save-state">{saving ? 'Saving…' : rawJsonDirty || videoProjectFingerprint(rawJson) !== savedFingerprintRef.current ? 'Unsaved changes' : 'Saved'}</span>
+            <button type="button" onClick={() => void save()} disabled={isBusy || !hasUnsavedChanges} title="Save project (⌘/Ctrl+S)" className="video-save-state rounded-md px-2 py-1 transition-colors enabled:hover:bg-white/[0.06] enabled:hover:text-white disabled:cursor-default">{saving ? 'Saving…' : hasUnsavedChanges ? 'Save changes' : 'Saved'}</button>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <label className="flex h-8 items-center gap-2 rounded-md bg-white/[0.06] px-2 text-[12px] text-white/55">
@@ -1272,8 +1374,8 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
               </select>
             </label>
             <button type="button" aria-label="Toggle inspector" aria-pressed={inspectorOpen} onClick={() => setInspectorOpen(value => !value)} className="video-studio-control flex h-8 items-center gap-2 rounded-lg px-3 text-xs text-white/70"><SlidersHorizontal className="h-3.5 w-3.5" /><span className="video-inspector-toggle-label">Inspector</span></button>
-            <IconButton label="Undo" onClick={undo} disabled={isBusy || rawJsonDirty || undoStack.length === 0}><Undo2 className="h-4 w-4" /></IconButton>
-            <IconButton label="Redo" onClick={redo} disabled={isBusy || rawJsonDirty || redoStack.length === 0}><Redo2 className="h-4 w-4" /></IconButton>
+            <IconButton label="Undo" onClick={undo} disabled={isBusy || rawJsonDirty || undoStack.length === 0}><Undo2 className="h-4 w-4" /><span>Undo</span></IconButton>
+            <IconButton label="Redo" onClick={redo} disabled={isBusy || rawJsonDirty || redoStack.length === 0}><Redo2 className="h-4 w-4" /><span>Redo</span></IconButton>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" className="flex h-8 w-8 items-center justify-center rounded-md bg-white/[0.06] text-white/62 hover:bg-white/[0.1] hover:text-white">
@@ -1400,7 +1502,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
 
             </div>
             <div className="video-stage-viewport flex min-h-0 flex-1 items-center justify-center p-3">
-              <div className="video-stage-frame flex h-full min-h-0 w-full items-center justify-center overflow-hidden rounded-xl bg-black shadow-[0_2.8px_2.2px_rgba(0,_0,_0,_0.034),_0_6.7px_5.3px_rgba(0,_0,_0,_0.048),_0_12.5px_10px_rgba(0,_0,_0,_0.06),_0_22.3px_17.9px_rgba(0,_0,_0,_0.072),_0_41.8px_33.4px_rgba(0,_0,_0,_0.086),_0_100px_80px_rgba(0,_0,_0,_0.12)]">
+              <div className="video-stage-frame flex h-full min-h-0 w-full items-center justify-center overflow-hidden rounded-xl bg-black shadow-panel-lift">
                 {previewMode === 'composition' && project ? (
                   <CompositionPreview project={project} timeMs={playheadMs} loadMedia={loadCompositionMedia} loadMediaInfo={loadCompositionMediaInfo} playing={isPreviewPlaying} onTimeChange={setPlayheadMs} onPlaybackStop={stopCompositionPlayback} />
                 ) : previewUrl && previewMode !== 'composition' ? (
@@ -1545,6 +1647,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                   <div className="grid gap-1.5 rounded-md border border-white/[0.07] bg-[#111214]/80 p-2">
                     <PanelTitle title="Look" value={selectedLookValue} />
                     <select
+                      aria-label="Look preset"
                       value={selectedLookValue}
                       onChange={(event) => applyLookPreset(event.target.value as LookPreset)}
                       className="h-8 rounded-md border border-white/[0.07] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#18c7d4]/60"
@@ -1559,7 +1662,22 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                     <AdjustmentField label="Saturation" min={0} max={3} step={0.01} value={selectedClip.adjustments?.saturation ?? 1} onChange={(value) => updateSelectedClipAdjustment({ saturation: value, preset: 'manual' })} />
                     <AdjustmentField label="Highlights" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.highlights ?? 0} onChange={(value) => updateSelectedClipAdjustment({ highlights: value, preset: 'manual' })} />
                     <AdjustmentField label="Shadows" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.shadows ?? 0} onChange={(value) => updateSelectedClipAdjustment({ shadows: value, preset: 'manual' })} />
-                    <AdjustmentField label="Grain" min={0} max={1} step={0.01} value={selectedClip.adjustments?.grain ?? 0} onChange={(value) => updateSelectedClipAdjustment({ grain: value, preset: 'manual' })} />
+                    <AdjustmentField label="Temperature" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.temperature ?? 0} onChange={(value) => updateSelectedClipAdjustment({ temperature: value, preset: 'manual' })} />
+                    <AdjustmentField label="Tint" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.tint ?? 0} onChange={(value) => updateSelectedClipAdjustment({ tint: value, preset: 'manual' })} />
+                    {selectedClip.adjustments && selectedClip.adjustments.pipeline !== 'rgb-v1' && <p className="text-[10px] leading-relaxed text-white/45">Editing this saved look updates its color processing. Undo restores the original look.</p>}
+                    {Boolean(selectedClip.adjustments?.grain || selectedClip.adjustments?.sharpen || selectedClip.adjustments?.vignette) && <p className="text-[10px] leading-relaxed text-white/45">Existing texture effects are preserved. Use Rendered to review them, or Reset Look to clear them.</p>}
+                    <div className="video-lut-control mt-2 grid gap-2">
+                      <input ref={lutFileRef} type="file" accept=".cube" aria-label="Import LUT file" className="hidden" onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; void importLut(file) }} />
+                      <div className="flex min-w-0 items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-xs text-white/60" title={selectedClip.adjustments?.lut?.name}>{selectedClip.adjustments?.lut?.name ?? 'Color LUT'}</span>
+                        <button type="button" disabled={isBusy || lutImporting || selectedClipLocked || rawJsonDirty} onClick={() => lutFileRef.current?.click()} className="shrink-0 rounded-md bg-white/[0.065] px-2 py-1 text-[11px] text-white/75">{lutImporting ? 'Reading…' : selectedClip.adjustments?.lut ? 'Replace LUT' : 'Import LUT'}</button>
+                      </div>
+                      {selectedClip.adjustments?.lut && <>
+                        <AdjustmentField label="LUT intensity" min={0} max={1} step={0.01} value={selectedClip.adjustments.lut.intensity ?? 1} onChange={(value) => updateSelectedClipAdjustment({ lut: { ...selectedClip.adjustments!.lut!, intensity: value }, preset: 'manual' })} />
+                        <button type="button" onClick={() => updateSelectedClipAdjustment({ lut: undefined, preset: 'manual' })} className="justify-self-start text-[11px] text-white/45 hover:text-white/80">Remove LUT</button>
+                      </>}
+                      {lutError && <p role="alert" className="text-[11px] leading-relaxed text-amber-200/80">{lutError}</p>}
+                    </div>
                     <Button size="sm" variant="outline" className="h-7 border-white/[0.07] bg-white/[0.035] text-xs text-white/60 hover:bg-white/[0.07] hover:text-white" onClick={resetLook}>
                       Reset Look
                     </Button>
@@ -2189,7 +2307,7 @@ function renderTimelineClips(
           inactive || trackHidden
             ? 'border-white/[0.05] bg-white/[0.025] text-white/28 opacity-55'
             : selectedClipId === clip.id
-              ? 'border-[#d8dee9]/75 bg-[#263238] text-white shadow-[0_0_0_1px_rgba(24,199,212,0.28)]'
+              ? 'border-[#d8dee9]/75 bg-[#263238] text-white shadow-accent-ring'
               : 'border-[#18c7d4]/22 bg-[#172326] text-white/78 hover:border-[#18c7d4]/42 hover:bg-[#1b2c30]'
         }`}
         style={{
@@ -2311,7 +2429,7 @@ function IconButton({ label, onClick, disabled = false, children }: { label: str
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className="flex h-7 min-w-9 items-center justify-center rounded-md bg-white/[0.055] px-2 text-white/68 outline-none hover:bg-white/[0.09] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+      className="flex h-7 min-w-9 items-center justify-center gap-1.5 rounded-md bg-white/[0.055] px-2 text-white/68 outline-none hover:bg-white/[0.09] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
     >
       {children}
     </button>

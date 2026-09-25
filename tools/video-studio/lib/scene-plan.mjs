@@ -1,3 +1,4 @@
+import { validateColorAdjustments } from './color-pipeline.mjs';
 // Browser-safe timeline semantics shared with the FFmpeg renderer. No platform imports.
 const MAX_DRAWTEXT_CAPTION_CUES = 200;
 
@@ -176,7 +177,12 @@ export function validateRenderCapabilities(project) {
     for (const clip of track.clips.filter((item) => item.disabled !== true)) {
       const label = `Clip "${clip.label || clip.id}"`;
       const media = clip.mediaId ? mediaById.get(clip.mediaId) : undefined;
+      try { validateColorAdjustments(clip.adjustments); } catch (error) { add('invalid-color', `${label}: ${error.message}`, clip, track); }
       const visual = media && ['video', 'image'].includes(media.type);
+      const colorNeutral = { exposure:0, contrast:1, saturation:1, highlights:0, shadows:0, temperature:0, tint:0, grain:0, sharpen:0, vignette:0 };
+      if (!visual && clip.adjustments && (clip.adjustments.lut || Object.entries(colorNeutral).some(([key, neutral]) => clip.adjustments[key] !== undefined && clip.adjustments[key] !== neutral))) {
+        add('unsupported-color', `${label} uses color adjustments without video or image media.`, clip, track);
+      }
       if (!['video', 'image', 'audio', 'text', 'caption'].includes(clip.type) || (media && !['video', 'image', 'audio', 'caption'].includes(media.type))) {
         add('unsupported-clip', `Simple MP4 renderer only supports video, image, audio, and text clips right now: ${clip.label || clip.id}.`, clip, track);
       }
@@ -299,7 +305,15 @@ export function buildScenePlan(project, width, height) {
     const issues = [...validateRenderCapabilities(project).issues];
     const neutral = { exposure: 0, highlights: 0, shadows: 0, contrast: 1, saturation: 1, temperature: 0, tint: 0, grain: 0, sharpen: 0, vignette: 0 };
     for (const { clip } of visuals) {
-        if (clip.adjustments && Object.entries(clip.adjustments).some(([key, value]) => key !== 'preset' && value !== neutral[key])) {
+        const adjustments = clip.adjustments;
+        const usesColorPipeline = adjustments?.pipeline === 'rgb-v1';
+        if (adjustments?.lut || usesColorPipeline) validateColorAdjustments(adjustments);
+        const unsupported = adjustments && Object.entries(adjustments).some(([key, value]) => {
+            if (key === 'preset' || key === 'lut' || key === 'pipeline') return false;
+            if (usesColorPipeline && ['exposure','contrast','saturation','highlights','shadows','temperature','tint'].includes(key)) return false;
+            return value !== neutral[key];
+        });
+        if (unsupported) {
             issues.push({ code: 'preview-unsupported-adjustments', clipId: clip.id, message: `Clip "${clip.label || clip.id}" has color or look adjustments. Render to review these accurately.` });
         }
     }

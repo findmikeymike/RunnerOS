@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { buildScenePlan, sceneAtTime, visualGeometry, audioGainAtTime, clipVolume, clipFadeSeconds } from './scene-plan.mjs';
+import { buildScenePlan, sceneAtTime, visualGeometry, audioGainAtTime, clipVolume, clipFadeSeconds, validateRenderCapabilities } from './scene-plan.mjs';
 function project() {
     return { title: 'Scene', settings: {width: 320,height: 240,fps: 30},
         media: [{id:'m',type:'video',path:'fixture.mp4',width:640,height:480,durationMs:20000}],
@@ -119,4 +119,14 @@ describe('shared audio scene', () => {
             expect(result.stdout.readFloatLE(Math.round(time*48)*4)).toBeCloseTo(expected,5);
         }
     });
+});
+
+test('RGB color is previewable while nonvisual grades and legacy texture stay explicit', () => {
+ const p=project(), clip=p.timeline.tracks[0].clips[0];
+ clip.adjustments={pipeline:'rgb-v1',exposure:0.5,temperature:0.2};
+ expect(buildScenePlan(p).issues).toEqual([]);
+ clip.adjustments.grain=0.1;
+ expect(buildScenePlan(p).issues.some(i=>i.code==='preview-unsupported-adjustments')).toBe(true);
+ clip.type='text';delete clip.mediaId;
+ expect(validateRenderCapabilities(p).issues.some(i=>i.code==='unsupported-color')).toBe(true);
 });
