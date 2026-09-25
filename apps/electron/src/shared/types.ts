@@ -1511,7 +1511,7 @@ export interface ElectronAPI {
   resolveSignalChannel(workspaceId: string, url: string): Promise<import('@craft-agent/shared/shared-intel').SignalChannel>
   saveSignalConfig(workspaceId: string, track: import('@craft-agent/shared/shared-intel').SignalTrack, config: import('@craft-agent/shared/shared-intel').SignalTrackConfig, expectedRevision: string): Promise<import('@craft-agent/shared/shared-intel').SignalState>
   startSignalResearch(workspaceId: string, input: { track: import('@craft-agent/shared/shared-intel').SignalTrack; mode: import('@craft-agent/shared/shared-intel').SignalMode; idempotencyKey: string; links?: string[] }): Promise<import('@craft-agent/shared/shared-intel').SignalQueueResult>
-  writeOutputAssetText(workspaceId: string, outputId: string, assetId: string, content: string): Promise<boolean>
+  writeOutputAssetText(workspaceId: string, outputId: string, assetId: string, content: string, expectedContent: string): Promise<boolean>
   readOutputAssetDataUrl(workspaceId: string, outputId: string, assetId?: string): Promise<string>
   importVideoStudioMedia(workspaceId: string, outputId: string, options?: { mode?: 'files' | 'folder' }): Promise<VideoStudioImportResult>
   inspectVideoStudio(workspaceId: string, outputId: string): Promise<VideoStudioReportResult>

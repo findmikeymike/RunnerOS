@@ -4,9 +4,16 @@ Native RunnerOS video-editing workspace for human + agent co-editing.
 
 This is not a pasted-in CapCut clone. The target is a local-first video project system where the UI, agents, workflows, and artifact sidecar all operate on the same project model.
 
+## Current continuation
+
+See [September 25 audit and Content Lab build plan](./CONTENT-LAB-AUDIT-2026-09-25.md) for current implementation, reproduced defects, recovery evidence, and next gates. The original spec, roadmap and engine proposal below are historical and contain stale feature status.
+
 ## Docs
 
 - [01 Spec](./01-spec.md)
+- [02 VibeFrame-Inspired Agentic Editing Upgrades](./02-vibeframe-inspired-upgrades.md)
+- [Roadmap](./ROADMAP.md)
+- [Render Engine Decision](./RENDER_ENGINE_DECISION.md)
 
 ## Short Version
 

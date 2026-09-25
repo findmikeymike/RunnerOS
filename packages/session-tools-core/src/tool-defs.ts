@@ -155,12 +155,20 @@ import {
   handleCancelDeepResearchRun,
 } from './handlers/deep-research.ts';
 import {
+  handleVideoGetTimeline,
+  handleVideoGetMedia,
+  handleVideoInspectTimeline,
+  handleVideoInspectMedia,
+  handleVideoProjectSnapshot,
+  handleVideoProjectDiff,
+  handleVideoProjectUndo,
   handleVideoProjectCreate,
   handleVideoProjectUpdate,
   handleVideoMediaImport,
   handleVideoClipAdd,
   handleVideoClipEdit,
   handleVideoClipAdjust,
+  handleVideoClipTransform,
   handleVideoExport,
 } from './handlers/video-tools.ts';
 
@@ -1427,6 +1435,10 @@ export const VideoClipAddSchema = z.object({
   durationMs: z.number().positive().optional().describe('Clip duration in milliseconds. Defaults to 3000 for text/image or 1000 otherwise.'),
   sourceInMs: z.number().nonnegative().optional().describe('Optional source in-point in milliseconds.'),
   sourceOutMs: z.number().nonnegative().optional().describe('Optional source out-point in milliseconds.'),
+  volume: z.number().min(0).max(4).optional().describe('Per-clip audio volume multiplier. 1 is normal, 0 is silent.'),
+  speed: z.number().min(0.25).max(4).optional().describe('Per-clip playback speed. 1 is normal. This does not change timeline durationMs; trim the clip separately when retiming should shorten or lengthen the timeline.'),
+  fadeInMs: z.number().nonnegative().optional().describe('Optional audio fade-in duration in milliseconds.'),
+  fadeOutMs: z.number().nonnegative().optional().describe('Optional audio fade-out duration in milliseconds.'),
   label: z.string().optional().describe('Optional timeline clip label.'),
   text: z.string().optional().describe('Text payload for text clips.'),
 });
@@ -1434,11 +1446,15 @@ export const VideoClipAddSchema = z.object({
 export const VideoClipEditSchema = z.object({
   projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
   clipId: z.string().min(1).optional().describe('Existing timeline clip id to edit. Required except for pack.'),
-  action: z.enum(['move', 'trim', 'pack', 'split', 'delete', 'duplicate']).describe('Timeline edit to apply.'),
+  action: z.enum(['move', 'trim', 'pack', 'split', 'delete', 'duplicate', 'settings']).describe('Timeline edit to apply. Use settings for speed, volume, and fades.'),
   startMs: z.number().nonnegative().optional().describe('New timeline start in milliseconds. Required for move.'),
   durationMs: z.number().positive().optional().describe('New clip duration in milliseconds. Required for trim.'),
   sourceInMs: z.number().nonnegative().optional().describe('Optional source in-point in milliseconds for trim.'),
   sourceOutMs: z.number().nonnegative().optional().describe('Optional source out-point in milliseconds for trim.'),
+  volume: z.number().min(0).max(4).optional().describe('Per-clip audio volume multiplier for settings edits.'),
+  speed: z.number().min(0.25).max(4).optional().describe('Per-clip playback speed for settings edits. This does not change timeline durationMs; trim the clip separately when retiming should shorten or lengthen the timeline.'),
+  fadeInMs: z.number().nonnegative().optional().describe('Audio fade-in duration in milliseconds for settings edits.'),
+  fadeOutMs: z.number().nonnegative().optional().describe('Audio fade-out duration in milliseconds for settings edits.'),
   atMs: z.number().nonnegative().optional().describe('Timeline timestamp in milliseconds. Required for split.'),
   ripple: z.boolean().optional().describe('For delete, pull later clips on the same track left by the removed duration.'),
   snap: z.boolean().optional().describe('For move, snap near previous clip end points on the same track.'),
@@ -1461,12 +1477,76 @@ export const VideoClipAdjustSchema = z.object({
   reset: z.boolean().optional().describe('Remove all adjustments from the clip.'),
 });
 
+export const VideoClipTransformSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  clipId: z.string().min(1).describe('Existing video or image clip id to transform.'),
+  x: z.number().optional().describe('Horizontal canvas offset in pixels from center. Positive moves right.'),
+  y: z.number().optional().describe('Vertical canvas offset in pixels from center. Positive moves down.'),
+  scale: z.number().min(0.05).max(5).optional().describe('Visual scale multiplier after fitting media to the canvas. 1 is full fitted size.'),
+  rotateDeg: z.number().optional().describe('Clockwise rotation in degrees.'),
+  opacity: z.number().min(0).max(1).optional().describe('Clip opacity. 1 is opaque, 0 is invisible.'),
+  cropX: z.number().nonnegative().optional().describe('Source crop x in source pixels.'),
+  cropY: z.number().nonnegative().optional().describe('Source crop y in source pixels.'),
+  cropWidth: z.number().positive().optional().describe('Source crop width in source pixels.'),
+  cropHeight: z.number().positive().optional().describe('Source crop height in source pixels.'),
+  layoutPreset: z.enum(['center', 'pip-top-right', 'pip-bottom-right', 'split-left', 'split-right', 'split-top', 'split-bottom']).optional().describe('Convenience transform preset for common layouts. Explicit x/y/scale/rotateDeg override the preset.'),
+  keyframes: z.array(z.object({
+    timeMs: z.number().nonnegative().describe('Keyframe time relative to clip start.'),
+    property: z.enum(['x', 'y']).describe('Currently rendered keyframe property.'),
+    value: z.number().describe('Pixel offset value for the property.'),
+    easing: z.enum(['linear', 'easeIn', 'easeOut', 'easeInOut']).optional().describe('Stored easing hint. The current FFmpeg renderer uses linear interpolation.'),
+  })).optional().describe('Replace clip motion keyframes. Current renderer supports x/y motion keyframes.'),
+  resetTransform: z.boolean().optional().describe('Remove transform from the clip.'),
+  resetCrop: z.boolean().optional().describe('Remove source crop from the clip.'),
+  resetKeyframes: z.boolean().optional().describe('Remove motion keyframes from the clip.'),
+});
+
 export const VideoExportSchema = z.object({
   projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
   outputPath: z.string().optional().describe('Output path. Defaults to renders/preview.placeholder.txt next to the project. Use .mp4 for the simple FFmpeg renderer. It supports video, image, audio, and text clips. Non-video paths write a placeholder text receipt.'),
-  preset: z.string().optional().describe('Export preset label. Defaults to placeholder.'),
+  preset: z.enum(['simple-mp4', 'placeholder', 'mp4-16x9-1080p', 'mp4-9x16-1080x1920', 'mp4-1x1-1080', 'mp4-4x5-1080x1350', 'mp4-source-size']).optional().describe('Export preset. Video outputs default to simple-mp4; non-video receipts default to placeholder.'),
   publishOutput: z.boolean().optional().describe('Also publish a Runner Output receipt if create_output is available. Defaults to false.'),
   showInCanvas: z.boolean().optional().describe('When publishOutput is true, request immediate Canvas display.'),
+});
+
+export const VideoGetTimelineSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  startFrame: z.number().int().nonnegative().optional().describe('Optional project-frame window start.'),
+  endFrame: z.number().int().positive().optional().describe('Optional project-frame window end.'),
+});
+
+export const VideoGetMediaSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+});
+
+export const VideoInspectTimelineSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  startFrame: z.number().int().nonnegative().optional().describe('Project frame to inspect. Defaults to 0.'),
+  endFrame: z.number().int().positive().optional().describe('Optional project-frame end. When set, samples up to maxFrames across the range.'),
+  maxFrames: z.number().int().min(1).max(12).optional().describe('Maximum frames to render when endFrame is set. Defaults to 6.'),
+});
+
+export const VideoInspectMediaSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  mediaId: z.string().min(1).describe('Media asset id from video_get_media.'),
+  overview: z.boolean().optional().describe('For video assets, render a storyboard contact sheet.'),
+  maxFrames: z.number().int().min(1).max(36).optional().describe('Maximum overview tiles. Defaults to 12.'),
+  startSeconds: z.number().nonnegative().optional().describe('Optional source-media window start for overview.'),
+  endSeconds: z.number().positive().optional().describe('Optional source-media window end for overview.'),
+});
+
+export const VideoProjectSnapshotSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  label: z.string().optional().describe('Optional snapshot label.'),
+});
+
+export const VideoProjectDiffSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  snapshotPath: z.string().optional().describe('Optional snapshot file path. Defaults to the latest undo snapshot.'),
+});
+
+export const VideoProjectUndoSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
 });
 
 export const VisualSurfaceSchema = z.object({
@@ -2232,13 +2312,41 @@ Use this before timeline edits. The project file is the source of truth for both
 
 This tool writes \`video.runner-video.json\`, initializes default video/audio/caption tracks, and records an initial version.`,
 
+  video_get_timeline: `Read a RunnerOS Video Studio timeline in an agent-friendly frame model.
+
+Call this before editing an existing project. It returns project fps, canvas, totalFrames, tracks, clips, frame timing, millisecond timing, media references, selection, and markers. Use the returned clip ids and track ids for later video tools.`,
+
+  video_get_media: `Read the Video Studio media bin.
+
+Call this before referencing any media asset. It returns media ids, paths, probe metadata, thumbnails/waveforms when available, existence checks, duration in milliseconds and project frames, and clip usage.`,
+
+  video_inspect_timeline: `Render actual timeline inspection frames.
+
+Use this to verify what the user would see after an edit. It renders the current project through the simple MP4 composition path, writes generated JPEG inspection files, and returns their file paths plus frame numbers. This is for visual verification, not final export.`,
+
+  video_inspect_media: `Inspect a media asset from the project bin.
+
+For video assets, pass overview: true to render a storyboard contact sheet over the source-media window. Use this before asking the agent to cut or describe footage. Returns metadata and generated inspection image paths. Overview mode writes a generated inspection image.`,
+
+  video_project_snapshot: `Save a named Video Studio project snapshot.
+
+Use this before a risky multi-step edit or as a stable checkpoint. The snapshot is a full project JSON copy stored beside the project and can be used by video_project_diff.`,
+
+  video_project_diff: `Compare the current Video Studio project to a snapshot.
+
+Defaults to the latest undo snapshot when snapshotPath is omitted. Returns changed settings, duration changes, added/removed media ids, and added/removed/changed clip ids.`,
+
+  video_project_undo: `Restore the latest undo snapshot for a Video Studio project.
+
+Every mutating Video Studio tool records an undo snapshot before saving. Use this when an agent edit needs to be reverted. Repeated calls walk backward through the undo history.`,
+
   video_project_update: `Update RunnerOS Video Studio project-level settings.
 
 Use this to change title, aspect ratio, output width/height, or FPS on an existing project without touching timeline clips. Aspect presets are 9:16 vertical, 16:9 landscape, 1:1 square, and 4:5 portrait. This records a version/event for the agent change log.`,
 
   video_media_import: `Register a local media file in a RunnerOS Video Studio project.
 
-Use this after video_project_create and before adding media-backed clips to the timeline. The tool probes basic file metadata, adds the asset to the project media bin, and records a version/event.`,
+Use this after video_project_create and before adding media-backed clips to the timeline. The tool probes basic file metadata, adds the asset to the project media bin, and records a version/event. SRT/VTT caption files are parsed into project caption cues and visible caption timeline clips.`,
 
   video_clip_add: `Add a clip to a RunnerOS Video Studio project timeline.
 
@@ -2246,15 +2354,19 @@ Use this for the first agent-editable timeline operations: place imported media 
 
   video_clip_edit: `Edit a RunnerOS Video Studio timeline.
 
-Use move with startMs to reposition a clip. Pass snap: true when you want magnet behavior near another clip's end point. Use trim with durationMs and optional sourceInMs/sourceOutMs to change clip length/source bounds. Use split with atMs, duplicate, delete with optional ripple, or pack to remove gaps on each track. This mutates the project JSON and records a version/event for the agent change log.`,
+Use move with startMs to reposition a clip. Pass snap: true when you want magnet behavior near another clip's end point. Use trim with durationMs and optional sourceInMs/sourceOutMs to change clip length/source bounds. Use settings with speed, volume, fadeInMs, or fadeOutMs for playback/audio behavior. Speed keeps the existing timeline duration; if retiming should change clip length, call trim too. Use split with atMs, duplicate, delete with optional ripple, or pack to remove gaps on each track. This mutates the project JSON and records a version/event for the agent change log.`,
 
   video_clip_adjust: `Apply footage look adjustments to a RunnerOS Video Studio clip.
 
 Use this for exposure, contrast, saturation, highlights, shadows, temperature, tint, sharpen, vignette, grain, or a preset look such as clean, cinematic, warm, punchy, or black-and-white. The simple FFmpeg renderer applies the practical subset now and stores the rest for richer preview/render engines later. This mutates the project JSON and records a version/event for the agent change log.`,
 
+  video_clip_transform: `Transform a RunnerOS Video Studio video/image clip.
+
+Use this for picture-in-picture, split-screen, reframing, crop, opacity, rotation, and simple motion. The renderer applies source crop, fitted scale, rotation, opacity, centered x/y placement, and linear x/y keyframes. It records undo/version history and returns the changed clip fields.`,
+
   video_export: `Create a Video Studio export.
 
-Use an .mp4 output path for the simple FFmpeg renderer. It supports video, image, audio, and text clips, and fails loudly on unsupported media types like SVG/Lottie/HTML until the fuller renderer lands. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
+Use an .mp4 output path for the simple FFmpeg renderer. It supports video, image, audio, text clips, caption burn-in from SRT/VTT imports, per-clip speed, volume, audio fades, transform/crop/opacity, and x/y keyframes, and fails loudly on unsupported media types like SVG/Lottie/HTML until the fuller renderer lands. Video presets are simple-mp4, mp4-16x9-1080p, mp4-9x16-1080x1920, mp4-1x1-1080, mp4-4x5-1080x1350, and mp4-source-size. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
 
   visual_surface: `Update the current session Canvas through a safe structured operation.
 
@@ -2469,11 +2581,19 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'artwork_compose', description: TOOL_DESCRIPTIONS.artwork_compose, inputSchema: ArtworkComposeSchema, executionMode: 'registry', safeMode: 'block', handler: handleArtworkCompose },
   { name: 'media_provider_request', workerTrust: 'approval', description: TOOL_DESCRIPTIONS.media_provider_request, inputSchema: MediaProviderRequestSchema, executionMode: 'registry', safeMode: 'block', handler: handleMediaProviderRequest },
   { name: 'video_project_create', description: TOOL_DESCRIPTIONS.video_project_create, inputSchema: VideoProjectCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectCreate },
+  { name: 'video_get_timeline', description: TOOL_DESCRIPTIONS.video_get_timeline, inputSchema: VideoGetTimelineSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoGetTimeline },
+  { name: 'video_get_media', description: TOOL_DESCRIPTIONS.video_get_media, inputSchema: VideoGetMediaSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoGetMedia },
+  { name: 'video_inspect_timeline', description: TOOL_DESCRIPTIONS.video_inspect_timeline, inputSchema: VideoInspectTimelineSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoInspectTimeline },
+  { name: 'video_inspect_media', description: TOOL_DESCRIPTIONS.video_inspect_media, inputSchema: VideoInspectMediaSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoInspectMedia },
+  { name: 'video_project_snapshot', description: TOOL_DESCRIPTIONS.video_project_snapshot, inputSchema: VideoProjectSnapshotSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectSnapshot },
+  { name: 'video_project_diff', description: TOOL_DESCRIPTIONS.video_project_diff, inputSchema: VideoProjectDiffSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoProjectDiff },
+  { name: 'video_project_undo', description: TOOL_DESCRIPTIONS.video_project_undo, inputSchema: VideoProjectUndoSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectUndo },
   { name: 'video_project_update', description: TOOL_DESCRIPTIONS.video_project_update, inputSchema: VideoProjectUpdateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectUpdate },
   { name: 'video_media_import', description: TOOL_DESCRIPTIONS.video_media_import, inputSchema: VideoMediaImportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoMediaImport },
   { name: 'video_clip_add', description: TOOL_DESCRIPTIONS.video_clip_add, inputSchema: VideoClipAddSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipAdd },
   { name: 'video_clip_edit', description: TOOL_DESCRIPTIONS.video_clip_edit, inputSchema: VideoClipEditSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipEdit },
   { name: 'video_clip_adjust', description: TOOL_DESCRIPTIONS.video_clip_adjust, inputSchema: VideoClipAdjustSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipAdjust },
+  { name: 'video_clip_transform', description: TOOL_DESCRIPTIONS.video_clip_transform, inputSchema: VideoClipTransformSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipTransform },
   { name: 'video_export', description: TOOL_DESCRIPTIONS.video_export, inputSchema: VideoExportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoExport },
   { name: 'visual_surface_state', description: TOOL_DESCRIPTIONS.visual_surface_state, inputSchema: VisualSurfaceStateSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVisualSurfaceState },
   { name: 'visual_surface', description: TOOL_DESCRIPTIONS.visual_surface, inputSchema: VisualSurfaceSchema, executionMode: 'registry', safeMode: 'block', handler: handleVisualSurface },

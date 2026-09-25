@@ -1,5 +1,5 @@
-import { readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { commitVideoProjectContent } from '../../../../../tools/video-studio/lib/project-storage.mjs';
 import { resolve } from 'node:path';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
@@ -142,17 +142,6 @@ function parseAndValidateVideoProject(content: string): unknown {
     throw new Error(first ? `Invalid video project: ${first.path} ${first.message}` : 'Invalid video project.');
   }
   return parsed;
-}
-
-async function writeTextAtomic(path: string, content: string): Promise<void> {
-  const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    await writeFile(tempPath, content, 'utf-8');
-    await rename(tempPath, path);
-  } catch (error) {
-    await rm(tempPath, { force: true }).catch(() => {});
-    throw error;
-  }
 }
 
 export function registerOutputsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -344,11 +333,12 @@ export function registerOutputsHandlers(server: RpcServer, deps: HandlerDeps): v
 
   server.handle(
     RPC_CHANNELS.outputs.WRITE_ASSET_TEXT,
-    async (_ctx, workspaceId: string, outputId: string, assetId: string, content: string): Promise<boolean> => {
+    async (_ctx, workspaceId: string, outputId: string, assetId: string, content: string, expectedContent: string): Promise<boolean> => {
       assertLocalWorkspace(workspaceId, 'Write output asset');
       const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
       assertTeamPermission(resolveRootPath(workspaceId), 'files.write');
       if (typeof content !== 'string') throw new Error('Output asset content must be a string.');
+      if (typeof expectedContent !== 'string') throw new Error('Video project save requires the previously loaded content. Reload the project before saving.');
       const service = serviceFor(server);
       const output = service.get(workspaceId, outputId);
       if (!output) throw new Error(`Output not found: ${outputId}`);
@@ -359,7 +349,7 @@ export function registerOutputsHandlers(server: RpcServer, deps: HandlerDeps): v
       }
       const parsed = parseAndValidateVideoProject(content);
       const safePath = await resolveSafeOutputAssetPath(workspaceId, outputId, assetId, service);
-      await writeTextAtomic(safePath, `${JSON.stringify(parsed, null, 2)}\n`);
+      commitVideoProjectContent(safePath, `${JSON.stringify(parsed, null, 2)}\n`, { expectedContent });
       pushOutputsUpdated(server, workspaceId);
       return true;
     },

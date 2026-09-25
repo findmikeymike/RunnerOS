@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, symlinkSync, linkSync } from 'node:fs';
+import { dirname, join, resolve, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 
@@ -27,7 +27,7 @@ function tempProject() {
 }
 
 function run(args, options = {}) {
-  const child = spawnSync('node', [cli, ...args], { encoding: 'utf-8' });
+  const child = spawnSync('node', [cli, ...args], { encoding: 'utf-8', env: options.env });
   if (options.expectFailure) return child;
   expect(child.status, child.stderr || child.stdout).toBe(0);
   return JSON.parse(child.stdout);
@@ -60,6 +60,74 @@ function averageFrameLuma(videoPath) {
   return total / (bytes.length / 3);
 }
 
+function averageBottomLuma(videoPath, atSeconds) {
+  const frame = spawnSync('ffmpeg', [
+    '-v',
+    'error',
+    '-ss',
+    String(atSeconds),
+    '-i',
+    videoPath,
+    '-vf',
+    'crop=iw:ih/3:0:ih*2/3',
+    '-frames:v',
+    '1',
+    '-f',
+    'rawvideo',
+    '-pix_fmt',
+    'gray',
+    '-',
+  ]);
+  expect(frame.status, frame.stderr?.toString() || frame.stdout?.toString()).toBe(0);
+  const bytes = frame.stdout;
+  let total = 0;
+  for (const byte of bytes) total += byte;
+  return total / Math.max(1, bytes.length);
+}
+
+function averageCaptionCenterLaneLuma(videoPath, atSeconds) {
+  const frame = spawnSync('ffmpeg', [
+    '-v',
+    'error',
+    '-ss',
+    String(atSeconds),
+    '-i',
+    videoPath,
+    '-vf',
+    'crop=iw:30:0:65',
+    '-frames:v',
+    '1',
+    '-f',
+    'rawvideo',
+    '-pix_fmt',
+    'gray',
+    '-',
+  ]);
+  expect(frame.status, frame.stderr?.toString() || frame.stdout?.toString()).toBe(0);
+  const bytes = frame.stdout;
+  let total = 0;
+  for (const byte of bytes) total += byte;
+  return total / Math.max(1, bytes.length);
+}
+
+function meanVolumeDb(videoPath) {
+  const result = spawnSync('ffmpeg', [
+    '-v',
+    'info',
+    '-i',
+    videoPath,
+    '-af',
+    'volumedetect',
+    '-f',
+    'null',
+    '-',
+  ], { encoding: 'utf-8' });
+  expect(result.status, result.stderr || result.stdout).toBe(0);
+  const match = result.stderr.match(/mean_volume:\s*(-?inf|-?\d+(?:\.\d+)?) dB/);
+  expect(match?.[1]).toBeTruthy();
+  return match?.[1] === '-inf' ? -1000 : Number(match?.[1]);
+}
+
 describe('video-studio edit commands', () => {
   test('packs timeline clips end-to-start', () => {
     const projectPath = tempProject();
@@ -85,6 +153,32 @@ describe('video-studio edit commands', () => {
     expect(clips.some((clip) => clip.id === duplicate.createdClipId)).toBe(false);
     expect(clips).toHaveLength(3);
     expect(run(['inspect', projectPath, '--json']).ok).toBe(true);
+  });
+
+  test('updates clip playback and audio settings', () => {
+    const projectPath = tempProject();
+
+    const updated = run([
+      'edit',
+      projectPath,
+      '--action',
+      'settings',
+      '--clip-id',
+      'clip-a',
+      '--speed',
+      '1.5',
+      '--volume',
+      '0.25',
+      '--fade-in-ms',
+      '120',
+      '--fade-out-ms',
+      '180',
+      '--json',
+    ]);
+
+    expect(updated.updatedClipId).toBe('clip-a');
+    const clip = readProject(projectPath).timeline.tracks[0].clips.find((item) => item.id === 'clip-a');
+    expect(clip).toMatchObject({ speed: 1.5, volume: 0.25, fadeInMs: 120, fadeOutMs: 180 });
   });
 
   test('inspect fails on overlapping clips', () => {
@@ -129,19 +223,51 @@ describe('video-studio edit commands', () => {
     expect(run(['inspect', projectPath, '--json']).ok).toBe(true);
   });
 
-  test('simple MP4 export preserves audio from video clips', () => {
-    if (!hasFfmpeg()) return;
-    const projectPath = tempProject();
-    const projectDir = projectPath.replace('/video.runner-video.json', '');
-    const sourcePath = `${projectDir}/source.mp4`;
-    const outputPath = `${projectDir}/out.mp4`;
+  test('probe reports real media metadata', () => {
+    expect(hasFfmpeg()).toBe(true);
+    const dir = mkdtempSync(join(tmpdir(), 'runneros-video-probe-'));
+    tempDirs.push(dir);
+    const sourcePath = join(dir, 'source.mp4');
     const fixture = spawnSync('ffmpeg', [
       '-y',
       '-f', 'lavfi',
       '-i', 'testsrc=size=160x90:rate=10',
       '-f', 'lavfi',
-      '-i', 'sine=frequency=440:duration=1',
-      '-t', '1',
+      '-i', 'sine=frequency=440:duration=2',
+      '-t', '2',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      sourcePath,
+    ], { encoding: 'utf-8' });
+    expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
+
+    const probed = run(['probe', sourcePath, '--json']);
+
+    expect(probed.type).toBe('video');
+    expect(probed.width).toBe(160);
+    expect(probed.height).toBe(90);
+    expect(probed.fps).toBe(10);
+    expect(probed.durationMs).toBeGreaterThanOrEqual(900);
+    expect(probed.hasVideo).toBe(true);
+    expect(probed.hasAudio).toBe(true);
+    expect(probed.codec).toBeTruthy();
+  });
+
+  test('simple MP4 export preserves audio from video clips', () => {
+    expect(hasFfmpeg()).toBe(true);
+    const projectPath = tempProject();
+    const projectDir = projectPath.replace('/video.runner-video.json', '');
+    const sourcePath = `${projectDir}/source.mp4`;
+    const outputPath = `${projectDir}/out.mp4`;
+    const silentOutputPath = `${projectDir}/silent.mp4`;
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=160x90:rate=10',
+      '-f', 'lavfi',
+      '-i', 'sine=frequency=440:duration=2',
+      '-t', '2',
       '-c:v', 'libx264',
       '-pix_fmt', 'yuv420p',
       '-c:a', 'aac',
@@ -150,7 +276,18 @@ describe('video-studio edit commands', () => {
     expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
     const project = readProject(projectPath);
     project.media.push({ id: 'media-video', type: 'video', label: 'Source', path: sourcePath, source: { kind: 'user-import' } });
-    project.timeline.tracks[0].clips = [{ id: 'clip-video', mediaId: 'media-video', type: 'video', startMs: 0, durationMs: 1000, label: 'Source' }];
+    project.timeline.tracks[0].clips = [{
+      id: 'clip-video',
+      mediaId: 'media-video',
+      type: 'video',
+      startMs: 0,
+      durationMs: 1000,
+      label: 'Source',
+      speed: 1.5,
+      volume: 0.75,
+      fadeInMs: 100,
+      fadeOutMs: 100,
+    }];
     project.timeline.durationMs = 1000;
     writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
 
@@ -159,10 +296,194 @@ describe('video-studio edit commands', () => {
     const audioProbe = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', outputPath], { encoding: 'utf-8' });
     expect(audioProbe.status).toBe(0);
     expect(audioProbe.stdout.trim()).not.toBe('');
+
+    project.timeline.tracks[0].clips[0].volume = 0;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+    run(['export', projectPath, '--out', silentOutputPath, '--json']);
+    expect(meanVolumeDb(silentOutputPath)).toBeLessThan(meanVolumeDb(outputPath) - 20);
+  });
+
+  test('export fails when speed outruns known source duration', () => {
+    expect(hasFfmpeg()).toBe(true);
+    const projectPath = tempProject();
+    const projectDir = projectPath.replace('/video.runner-video.json', '');
+    const sourcePath = `${projectDir}/source.mp4`;
+    const outputPath = `${projectDir}/too-fast.mp4`;
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=160x90:rate=10:duration=2',
+      '-t', '2',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      sourcePath,
+    ], { encoding: 'utf-8' });
+    expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
+    const project = readProject(projectPath);
+    project.media.push({ id: 'media-video', type: 'video', label: 'Source', path: sourcePath, durationMs: 2000, source: { kind: 'user-import' } });
+    project.timeline.tracks[0].clips = [{ id: 'clip-video', mediaId: 'media-video', type: 'video', startMs: 0, durationMs: 2000, label: 'Source', speed: 2 }];
+    project.timeline.durationMs = 2000;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    const result = run(['export', projectPath, '--out', outputPath, '--json'], { expectFailure: true });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr || result.stdout).toContain('speed requires');
+  });
+
+  test('simple MP4 export burns project captions into video', () => {
+    expect(hasFfmpeg()).toBe(true);
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    const outputPath = join(dirname(projectPath), 'captioned.mp4');
+    project.settings = { ...project.settings, aspectRatio: 'custom', width: 320, height: 180, fps: 10 };
+    project.timeline.tracks[0].clips = [];
+    project.timeline.tracks[2].clips = [{
+      id: 'caption-clip',
+      type: 'caption',
+      startMs: 100,
+      durationMs: 1500,
+      label: 'HELLO CAPTION TEST',
+      captionCueIds: ['cue-1'],
+    }];
+    project.captions = [{
+      id: 'captions-1',
+      label: 'Captions',
+      cues: [{ id: 'cue-1', startMs: 100, durationMs: 1500, text: 'HELLO CAPTION TEST' }],
+    }];
+    project.timeline.durationMs = 1800;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    run(['export', projectPath, '--out', outputPath, '--json']);
+
+    expect(averageBottomLuma(outputPath, 0.5)).toBeGreaterThan(20);
+    expect(averageCaptionCenterLaneLuma(outputPath, 0.5)).toBeLessThan(20);
+  });
+
+  test('simple MP4 export handles caption punctuation safely', () => {
+    expect(hasFfmpeg()).toBe(true);
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    const outputPath = join(dirname(projectPath), 'punctuation-caption.mp4');
+    project.settings = { ...project.settings, aspectRatio: 'custom', width: 320, height: 180, fps: 10 };
+    project.timeline.tracks[0].clips = [];
+    project.timeline.tracks[2].clips = [{
+      id: 'caption-clip',
+      type: 'caption',
+      startMs: 100,
+      durationMs: 1200,
+      label: "It's ok: yes, now; [100%]",
+      captionCueIds: ['cue-1'],
+    }];
+    project.captions = [{
+      id: 'captions-1',
+      label: 'Captions',
+      cues: [{ id: 'cue-1', startMs: 100, durationMs: 1200, text: "It's ok: yes, now; [100%]" }],
+    }];
+    project.timeline.durationMs = 1600;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    run(['export', projectPath, '--out', outputPath, '--json']);
+  });
+
+  test('simple MP4 export uses caption clip timing instead of raw cue timing', () => {
+    expect(hasFfmpeg()).toBe(true);
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    const outputPath = join(dirname(projectPath), 'moved-caption.mp4');
+    project.settings = { ...project.settings, aspectRatio: 'custom', width: 320, height: 180, fps: 10 };
+    project.timeline.tracks[0].clips = [];
+    project.timeline.tracks[2].clips = [{
+      id: 'caption-clip',
+      type: 'caption',
+      startMs: 1000,
+      durationMs: 700,
+      label: 'MOVED CAPTION TEST',
+      captionCueIds: ['cue-1'],
+    }];
+    project.captions = [{
+      id: 'captions-1',
+      label: 'Captions',
+      cues: [{ id: 'cue-1', startMs: 100, durationMs: 1500, text: 'MOVED CAPTION TEST' }],
+    }];
+    project.timeline.durationMs = 1800;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    run(['export', projectPath, '--out', outputPath, '--json']);
+
+    expect(averageBottomLuma(outputPath, 0.5)).toBeLessThan(20);
+    expect(averageBottomLuma(outputPath, 1.2)).toBeGreaterThan(20);
+  });
+
+  test('simple MP4 export honors hidden and disabled caption clips', () => {
+    expect(hasFfmpeg()).toBe(true);
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    const hiddenOutput = join(dirname(projectPath), 'hidden-caption.mp4');
+    const disabledOutput = join(dirname(projectPath), 'disabled-caption.mp4');
+    project.settings = { ...project.settings, aspectRatio: 'custom', width: 320, height: 180, fps: 10 };
+    project.timeline.tracks[0].clips = [];
+    project.timeline.tracks[2].hidden = true;
+    project.timeline.tracks[2].clips = [{
+      id: 'caption-clip',
+      type: 'caption',
+      startMs: 100,
+      durationMs: 1500,
+      label: 'HIDDEN CAPTION TEST',
+      captionCueIds: ['cue-1'],
+    }];
+    project.captions = [{
+      id: 'captions-1',
+      label: 'Captions',
+      cues: [{ id: 'cue-1', startMs: 100, durationMs: 1500, text: 'HIDDEN CAPTION TEST' }],
+    }];
+    project.timeline.durationMs = 1800;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    run(['export', projectPath, '--out', hiddenOutput, '--json']);
+
+    expect(averageBottomLuma(hiddenOutput, 0.5)).toBeLessThan(20);
+
+    project.timeline.tracks[2].hidden = false;
+    project.timeline.tracks[2].clips[0].disabled = true;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    run(['export', projectPath, '--out', disabledOutput, '--json']);
+
+    expect(averageBottomLuma(disabledOutput, 0.5)).toBeLessThan(20);
+  });
+
+  test('simple MP4 export fails loudly instead of silently truncating caption cues', () => {
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    const outputPath = join(dirname(projectPath), 'long-captions.mp4');
+    const cues = Array.from({ length: 201 }, (_, index) => ({
+      id: `cue-${index}`,
+      startMs: index * 10,
+      durationMs: 5,
+      text: `Caption ${index}`,
+    }));
+    project.timeline.tracks[0].clips = [];
+    project.timeline.tracks[2].clips = cues.map((cue) => ({
+      id: `clip-${cue.id}`,
+      type: 'caption',
+      startMs: cue.startMs,
+      durationMs: cue.durationMs,
+      label: cue.text,
+      captionCueIds: [cue.id],
+    }));
+    project.captions = [{ id: 'captions-long', label: 'Captions', cues }];
+    project.timeline.durationMs = 3000;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    const result = run(['export', projectPath, '--out', outputPath, '--json'], { expectFailure: true });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr || result.stdout).toContain('at most 200 caption cues');
   });
 
   test('simple MP4 export applies clip look adjustments', () => {
-    if (!hasFfmpeg()) return;
+    expect(hasFfmpeg()).toBe(true);
     const projectPath = tempProject();
     const projectDir = projectPath.replace('/video.runner-video.json', '');
     const sourcePath = `${projectDir}/gray.mp4`;
@@ -190,5 +511,200 @@ describe('video-studio edit commands', () => {
     run(['export', projectPath, '--out', adjustedPath, '--json']);
 
     expect(averageFrameLuma(adjustedPath)).toBeGreaterThan(averageFrameLuma(baselinePath) + 25);
+  });
+
+  test('export preset controls output dimensions', () => {
+    expect(hasFfmpeg()).toBe(true);
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    project.settings = { ...project.settings, aspectRatio: 'custom', width: 64, height: 64, fps: 10 };
+    project.timeline.tracks[0].clips = [{ id: 'title', type: 'text', startMs: 0, durationMs: 1000, label: 'Title', text: { text: 'Title', fontSize: 32, color: '#ffffff' } }];
+    project.timeline.durationMs = 1000;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+    const outputPath = join(dirname(projectPath), 'square.mp4');
+
+    const exported = run(['export', projectPath, '--out', outputPath, '--preset', 'mp4-1x1-1080', '--json']);
+
+    expect(exported.preset).toBe('mp4-1x1-1080');
+    expect(exported.width).toBe(1080);
+    expect(exported.height).toBe(1080);
+    const dimensions = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x', outputPath], { encoding: 'utf-8' });
+    expect(dimensions.status).toBe(0);
+    expect(dimensions.stdout.trim()).toBe('1080x1080');
+  });
+});
+
+
+describe('export integrity regressions', () => {
+  test.each([0.5, 2])('split preserves source continuity at %sx speed', (speed) => {
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    project.timeline.tracks[0].clips = [{ id: 'speed', type: 'video', startMs: 0, durationMs: 4000, sourceInMs: 1000, sourceOutMs: 1000 + 4000 * speed, speed }];
+    writeFileSync(projectPath, JSON.stringify(project));
+    run(['edit', projectPath, '--action', 'split', '--clip-id', 'speed', '--at-ms', '2000', '--json']);
+    const [first, second] = readProject(projectPath).timeline.tracks[0].clips;
+    expect(first.sourceOutMs).toBe(1000 + 2000 * speed);
+    expect(second.sourceInMs).toBe(first.sourceOutMs);
+    expect(second.sourceOutMs - second.sourceInMs).toBe(second.durationMs * speed);
+  });
+
+  test.each(['symlink', 'hardlink', 'receipt'])('refuses source overwrite through %s alias', (kind) => {
+    const projectPath = tempProject();
+    const source = join(dirname(projectPath), 'source.mov');
+    writeFileSync(source, 'original media');
+    const output = join(dirname(projectPath), 'export.txt');
+    if (kind === 'symlink') symlinkSync(source, output);
+    if (kind === 'hardlink') linkSync(source, output);
+    const project = readProject(projectPath);
+    project.media = [{ id: 'media', label: 'Source', type: 'video', path: kind === 'receipt' ? output + '.receipt.json' : source }];
+    if (kind === 'receipt') writeFileSync(output + '.receipt.json', 'original media');
+    writeFileSync(projectPath, JSON.stringify(project));
+    const result = run(['export', projectPath, '--out', output, '--json'], { expectFailure: true });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('Refusing to overwrite source media');
+    expect(readFileSync(project.media[0].path, 'utf8')).toBe('original media');
+  });
+
+  test.each([{ opacity: 0 }, { transform: { x: 25 } }, { crop: { x: 0, y: 0, width: 20, height: 20 } }, { keyframes: [{ timeMs: 0, property: 'x', value: 10 }] }])('dry-run and export reject unsupported composition on text clips %j', (settings) => {
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    project.timeline.tracks[0].clips = [{ id: 'clip', type: 'text', startMs: 0, durationMs: 1100, text: { text: 'Test' }, ...settings }];
+    writeFileSync(projectPath, JSON.stringify(project));
+    const preview = run(['dry-run', projectPath, '--json'], { expectFailure: true });
+    expect(preview.status).not.toBe(0);
+    expect(preview.stdout).toMatch(/composition controls|position keyframes/);
+    const result = run(['export', projectPath, '--out', join(dirname(projectPath), 'unsupported.mp4'), '--json'], { expectFailure: true });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toMatch(/composition controls|position keyframes/);
+  });
+
+  test('fractional second export retains timeline duration', () => {
+    expect(hasFfmpeg()).toBe(true);
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    project.settings = { aspectRatio: 'custom', width: 320, height: 240, fps: 30 };
+    project.timeline.tracks[0].clips = [{ id: 'clip', type: 'text', startMs: 0, durationMs: 1100, text: { text: 'Test' }, opacity: 1, transform: { x: 0, y: 0, scale: 1, rotateDeg: 0 } }];
+    writeFileSync(projectPath, JSON.stringify(project));
+    const output = join(dirname(projectPath), 'exact.mp4');
+    run(['export', projectPath, '--out', output, '--json']);
+    const result = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', output], { encoding: 'utf8' });
+    expect(result.status).toBe(0);
+    expect(Number(result.stdout)).toBeCloseTo(1.1, 2);
+  });
+});
+
+describe('complete text rendering', () => {
+
+  test('renders ninth text clip and preserves text after 180 characters', () => {
+    expect(hasFfmpeg()).toBe(true);
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    project.settings = { aspectRatio: 'custom', width: 320, height: 1200, fps: 30 };
+    project.timeline.tracks = [{ id: 'text', type: 'text', label: 'Text', clips: Array.from({ length: 9 }, (_, index) => ({
+      id: `text-${index}`, type: 'text', startMs: index === 8 ? 1000 : index * 100, durationMs: index === 8 ? 1000 : 100,
+      text: { text: index === 8 ? ('AAAAAAAAAAAAAAA\n'.repeat(12) + 'TAIL') : 'Earlier' },
+    })) }];
+    project.timeline.durationMs = 2000;
+    writeFileSync(projectPath, JSON.stringify(project));
+    const outputPath = join(dirname(projectPath), 'all-text.mp4');
+    run(['export', projectPath, '--out', outputPath, '--json']);
+    const frame = spawnSync('ffmpeg', ['-v', 'error', '-ss', '1.5', '-i', outputPath, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 10 * 1024 * 1024 });
+    expect(frame.status, frame.stderr.toString()).toBe(0);
+    // The ninth clip starts at 1s. Its final lines extend into the bottom of the
+    // portrait frame; omitting that clip or truncating its text leaves it blank.
+    let brightPixels = 0;
+    for (let offset = 320 * 1120 * 3; offset < frame.stdout.length; offset += 3) {
+      if (frame.stdout[offset] > 200 && frame.stdout[offset + 1] > 200 && frame.stdout[offset + 2] > 200) brightPixels++;
+    }
+    expect(brightPixels).toBeGreaterThan(20);
+  });
+
+});
+
+describe('visual layer ordering', () => {
+  test('later tracks stay above earlier tracks regardless of clip start time', () => {
+    expect(hasFfmpeg()).toBe(true);
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    project.settings = { aspectRatio: 'custom', width: 160, height: 120, fps: 30 };
+    project.media = ['red', 'blue'].map((color) => {
+      const path = join(dirname(projectPath), `${color}.png`);
+      const fixture = spawnSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', `color=c=${color}:s=160x120`, '-frames:v', '1', path]);
+      expect(fixture.status, fixture.stderr.toString()).toBe(0);
+      return { id: color, label: color, type: 'image', path };
+    });
+    project.timeline.tracks = [
+      { id: 'lower', type: 'video', clips: [{ id: 'red', type: 'image', mediaId: 'red', startMs: 500, durationMs: 500 }] },
+      { id: 'upper', type: 'video', clips: [{ id: 'blue', type: 'image', mediaId: 'blue', startMs: 0, durationMs: 1000 }] },
+    ];
+    project.timeline.durationMs = 1000;
+    writeFileSync(projectPath, JSON.stringify(project));
+    const outputPath = join(dirname(projectPath), 'layers.mp4');
+    run(['export', projectPath, '--out', outputPath, '--json']);
+    const frame = spawnSync('ffmpeg', ['-v', 'error', '-ss', '0.75', '-i', outputPath, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']);
+    expect(frame.status, frame.stderr.toString()).toBe(0);
+    const offset = (60 * 160 + 80) * 3;
+    expect(frame.stdout[offset]).toBeLessThan(30);
+    expect(frame.stdout[offset + 2]).toBeGreaterThan(200);
+  });
+});
+
+
+describe('export concurrent save protection', () => {
+  test('preserves a project saved while the renderer is running', () => {
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    project.timeline.tracks[0].clips = [{ id: 'text', type: 'text', startMs: 0, durationMs: 1000, text: { text: 'Before edit' } }];
+    writeFileSync(projectPath, JSON.stringify(project));
+    const bin = join(dirname(projectPath), 'test-bin');
+    mkdirSync(bin);
+    // A deterministic subprocess seam: simulates a save arriving while ffmpeg
+    // owns the render. This checks project integrity, not media correctness.
+    writeFileSync(join(bin, 'ffmpeg'), `#!/usr/bin/env node
+const fs = require('node:fs');
+const projectPath = process.env.VIDEO_TEST_PROJECT;
+const project = JSON.parse(fs.readFileSync(projectPath, 'utf8'));
+project.title = 'Newer user edit';
+fs.writeFileSync(projectPath, JSON.stringify(project));
+fs.writeFileSync(process.argv.at(-1), 'test render');
+`, { mode: 0o755 });
+    const result = run(['export', projectPath, '--out', join(dirname(projectPath), 'stale.mp4'), '--json'], {
+      expectFailure: true,
+      env: { ...process.env, PATH: bin + delimiter + process.env.PATH, VIDEO_TEST_PROJECT: projectPath },
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('Project changed during export');
+    expect(readProject(projectPath).title).toBe('Newer user edit');
+    expect(readProject(projectPath).exports).toHaveLength(0);
+  });
+});
+
+describe('export preserves project control files', () => {
+  test.each(['project', 'backup', 'lock', 'undo', 'symlink', 'hardlink', 'receipt-alias', 'dangling-lock-alias', 'dot-prefix-undo', 'undo-hardlink'])('rejects %s destination before writing', (kind) => {
+    const projectPath = tempProject();
+    const original = readFileSync(projectPath, 'utf8');
+    const backup = projectPath + '.bak', lock = projectPath + '.write-lock';
+    writeFileSync(backup, 'good backup');
+    const undo = join(dirname(projectPath), '.runner-video', 'undo', 'previous.runner-video.json');
+    mkdirSync(dirname(undo), { recursive: true }); writeFileSync(undo, 'undo snapshot');
+    let output = join(dirname(projectPath), 'export.txt');
+    if (kind === 'project') output = projectPath;
+    if (kind === 'backup') output = backup;
+    if (kind === 'lock') { output = lock; writeFileSync(lock, 'live lock'); }
+    if (kind === 'undo') output = undo;
+    if (kind === 'dot-prefix-undo') output = join(dirname(dirname(undo)), '..foo');
+    if (kind === 'undo-hardlink') linkSync(undo, output);
+    if (kind === 'symlink') symlinkSync(projectPath, output);
+    if (kind === 'hardlink') linkSync(projectPath, output);
+    if (kind === 'receipt-alias') symlinkSync(projectPath, output + '.receipt.json');
+    if (kind === 'dangling-lock-alias') symlinkSync(lock, output);
+    const result = run(['export', projectPath, '--out', output, '--json'], { expectFailure: true });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('Refusing to overwrite video project or recovery files');
+    expect(readFileSync(projectPath, 'utf8')).toBe(original);
+    expect(readFileSync(backup, 'utf8')).toBe('good backup');
+    expect(readFileSync(undo, 'utf8')).toBe('undo snapshot');
+    if (kind === 'lock') expect(readFileSync(lock, 'utf8')).toBe('live lock');
+    if (kind === 'dangling-lock-alias') expect(existsSync(lock)).toBe(false);
   });
 });

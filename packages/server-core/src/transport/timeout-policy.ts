@@ -1,7 +1,10 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { CLIENT_CONFIRM_DIALOG, CLIENT_OPEN_FILE_DIALOG } from './capabilities';
 
-/** Human browsing time, bounded independently of ordinary machine-to-machine RPCs. */
+/** Bound the renderer independently of ordinary machine-to-machine RPCs. */
+export const VIDEO_RENDER_TIMEOUT_MS = 5 * 60_000;
+
+/** Human browsing time for native file and confirmation dialogs. */
 export const DIALOG_TIMEOUT_MS = 10 * 60_000;
 
 const dialogRequests = new Set<string>([
@@ -26,9 +29,11 @@ export function clientCapabilityTimeout(channel: string): number {
 
 // Outer timers must outlive the native dialog and allow its result/error to return.
 export function rpcHandlerTimeout(channel: string, defaultMs: number): number {
+  if (channel === RPC_CHANNELS.videoStudio.EXPORT) return Math.max(defaultMs, VIDEO_RENDER_TIMEOUT_MS + 30_000);
   return dialogRequests.has(channel) ? Math.max(defaultMs, DIALOG_TIMEOUT_MS + 60_000) : defaultMs;
 }
 
 export function rpcRequestTimeout(channel: string, defaultMs: number): number {
+  if (channel === RPC_CHANNELS.videoStudio.EXPORT) return Math.max(defaultMs, VIDEO_RENDER_TIMEOUT_MS + 60_000);
   return dialogRequests.has(channel) ? Math.max(defaultMs, DIALOG_TIMEOUT_MS + 90_000) : defaultMs;
 }

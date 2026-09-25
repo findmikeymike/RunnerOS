@@ -472,6 +472,10 @@ function getDirSize(dir: string): number {
 function copyWorkspacePackages(config: ServerBuildConfig): void {
   const { rootDir, outputDir } = config;
 
+  // Session video handlers statically import this Node-compatible shared engine.
+  // Preserve the repository-relative layout for the unbundled server distribution.
+  cpSync(join(rootDir, 'tools', 'video-studio', 'lib'), join(outputDir, 'tools', 'video-studio', 'lib'), { recursive: true });
+
   // messaging-whatsapp-worker is included so dist/worker.cjs (built in step 4) ships.
   // The worker is spawned as a Node subprocess against that file at runtime; see
   // CRAFT_MESSAGING_WA_WORKER env resolution in packages/server/src/index.ts.

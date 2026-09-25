@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { assertSafeVideoExportPaths } from '../lib/export-safety.mjs';
+import { commitVideoProjectContent } from '../lib/project-storage.mjs';
+import { clipSpeed, renderSimpleMp4, validateRenderCapabilities } from '../lib/render-engine.mjs';
+import { closeSync, copyFileSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -46,12 +49,29 @@ function ensureDir(path) {
 function writeJsonAtomic(path, value) {
   ensureDir(dirname(path));
   const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf-8');
+  const fd = openSync(tmp, 'w');
+  try {
+    writeSync(fd, `${JSON.stringify(value, null, 2)}\n`);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
   renameSync(tmp, path);
 }
 
+const readContents = new WeakMap();
+
 function readJson(path) {
-  return JSON.parse(readFileSync(path, 'utf-8'));
+  try {
+    const content = readFileSync(path, 'utf-8');
+    const project = JSON.parse(content);
+    readContents.set(project, content);
+    return project;
+  } catch (error) {
+    // Preserve the corrupt file so a later write can't destroy the only copy.
+    try { copyFileSync(path, `${path}.${Date.now()}.corrupt.bak`); } catch { /* best-effort */ }
+    throw error;
+  }
 }
 
 function cloneJson(value) {
@@ -63,6 +83,28 @@ function defaultSettings(aspectRatio = '9:16') {
   if (aspectRatio === '1:1') return { aspectRatio, width: 1080, height: 1080, fps: 30 };
   if (aspectRatio === '4:5') return { aspectRatio, width: 1080, height: 1350, fps: 30 };
   return { aspectRatio, width: 1080, height: 1920, fps: 30 };
+}
+
+const VIDEO_EXPORT_PRESETS = {
+  'simple-mp4': {},
+  placeholder: {},
+  'mp4-16x9-1080p': { width: 1920, height: 1080, fps: 30 },
+  'mp4-9x16-1080x1920': { width: 1080, height: 1920, fps: 30 },
+  'mp4-1x1-1080': { width: 1080, height: 1080, fps: 30 },
+  'mp4-4x5-1080x1350': { width: 1080, height: 1350, fps: 30 },
+  'mp4-source-size': {},
+};
+
+function resolveExportPreset(project, preset, realVideo) {
+  const slug = preset || (realVideo ? 'simple-mp4' : 'placeholder');
+  const selected = VIDEO_EXPORT_PRESETS[slug];
+  if (!selected) fail(`Unknown export preset: ${slug}`);
+  if (realVideo && slug === 'placeholder') fail('The placeholder preset requires a non-video output path.');
+  if (!realVideo && slug !== 'placeholder') fail(`Preset ${slug} requires a video output path.`);
+  const width = selected.width || (typeof project.settings?.width === 'number' ? project.settings.width : 1080);
+  const height = selected.height || (typeof project.settings?.height === 'number' ? project.settings.height : 1920);
+  const fps = selected.fps || (typeof project.settings?.fps === 'number' ? project.settings.fps : 30);
+  return { slug, width, height, fps };
 }
 
 function createProject({ title, workspaceId, aspectRatio }) {
@@ -129,6 +171,22 @@ function validateProject(project) {
         if (clip.sourceInMs !== undefined && (typeof clip.sourceInMs !== 'number' || !Number.isFinite(clip.sourceInMs) || clip.sourceInMs < 0)) errors.push(`${path}.sourceInMs must be non-negative.`);
         if (clip.sourceOutMs !== undefined && (typeof clip.sourceOutMs !== 'number' || !Number.isFinite(clip.sourceOutMs) || clip.sourceOutMs < 0)) errors.push(`${path}.sourceOutMs must be non-negative.`);
         if (clip.sourceInMs !== undefined && clip.sourceOutMs !== undefined && clip.sourceOutMs <= clip.sourceInMs) errors.push(`${path}.sourceOutMs must be greater than sourceInMs.`);
+        if (clip.volume !== undefined && (typeof clip.volume !== 'number' || !Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 4)) errors.push(`${path}.volume must be between 0 and 4.`);
+        if (clip.speed !== undefined && (typeof clip.speed !== 'number' || !Number.isFinite(clip.speed) || clip.speed < 0.25 || clip.speed > 4)) errors.push(`${path}.speed must be between 0.25 and 4.`);
+        if (clip.fadeInMs !== undefined && (typeof clip.fadeInMs !== 'number' || !Number.isFinite(clip.fadeInMs) || clip.fadeInMs < 0)) errors.push(`${path}.fadeInMs must be non-negative.`);
+        if (clip.fadeOutMs !== undefined && (typeof clip.fadeOutMs !== 'number' || !Number.isFinite(clip.fadeOutMs) || clip.fadeOutMs < 0)) errors.push(`${path}.fadeOutMs must be non-negative.`);
+      }
+    }
+    for (const [trackIndex, track] of (project.captions || []).entries()) {
+      if (!track.id) errors.push(`captions[${trackIndex}].id is required.`);
+      if (!track.label) errors.push(`captions[${trackIndex}].label is required.`);
+      if (!Array.isArray(track.cues)) errors.push(`captions[${trackIndex}].cues must be an array.`);
+      for (const [cueIndex, cue] of (track.cues || []).entries()) {
+        const path = `captions[${trackIndex}].cues[${cueIndex}]`;
+        if (!cue.id) errors.push(`${path}.id is required.`);
+        if (typeof cue.startMs !== 'number' || !Number.isFinite(cue.startMs) || cue.startMs < 0) errors.push(`${path}.startMs must be non-negative.`);
+        if (typeof cue.durationMs !== 'number' || !Number.isFinite(cue.durationMs) || cue.durationMs <= 0) errors.push(`${path}.durationMs must be positive.`);
+        if (typeof cue.text !== 'string' || cue.text.trim().length === 0) errors.push(`${path}.text is required.`);
       }
     }
   }
@@ -161,10 +219,15 @@ function findClip(project, clipId) {
   return null;
 }
 
+function lockedTrackError(track) {
+  fail(`Track "${track.label || track.id}" is locked. Unlock it before editing clips on this track.`);
+}
+
 function packProjectTimeline(project) {
   const next = cloneJson(project);
   let moved = 0;
   for (const track of next.timeline.tracks || []) {
+    if (track.locked) continue;
     let cursor = 0;
     track.clips = orderedClips(track).map((clip) => {
       const previous = clip.startMs || 0;
@@ -185,6 +248,7 @@ function splitProjectClip(project, clipId, atMs) {
   const found = findClip(next, clipId);
   if (!found) fail(`Clip not found: ${clipId}`);
   const { track, clip, index } = found;
+  if (track.locked) lockedTrackError(track);
   const start = clip.startMs || 0;
   const duration = clip.durationMs || 0;
   const end = start + duration;
@@ -192,10 +256,11 @@ function splitProjectClip(project, clipId, atMs) {
   const firstDuration = atMs - start;
   const secondDuration = end - atMs;
   const sourceIn = clip.sourceInMs || 0;
+  const sourceSplit = sourceIn + firstDuration * clipSpeed(clip);
   const first = {
     ...clip,
     durationMs: firstDuration,
-    sourceOutMs: clip.sourceOutMs !== undefined ? sourceIn + firstDuration : clip.sourceOutMs,
+    sourceOutMs: clip.sourceOutMs !== undefined ? sourceSplit : clip.sourceOutMs,
   };
   const second = {
     ...clip,
@@ -203,7 +268,7 @@ function splitProjectClip(project, clipId, atMs) {
     startMs: atMs,
     durationMs: secondDuration,
     label: clip.label ? `${clip.label} copy` : undefined,
-    sourceInMs: sourceIn + firstDuration,
+    sourceInMs: sourceSplit,
     sourceOutMs: clip.sourceOutMs,
   };
   track.clips.splice(index, 1, first, second);
@@ -217,6 +282,7 @@ function deleteProjectClip(project, clipId, ripple = false) {
   const found = findClip(next, clipId);
   if (!found) fail(`Clip not found: ${clipId}`);
   const { track, clip, index } = found;
+  if (track.locked) lockedTrackError(track);
   const removedDuration = clip.durationMs || 0;
   const removedStart = clip.startMs || 0;
   track.clips.splice(index, 1);
@@ -235,6 +301,7 @@ function duplicateProjectClip(project, clipId) {
   const found = findClip(next, clipId);
   if (!found) fail(`Clip not found: ${clipId}`);
   const { track, clip, index } = found;
+  if (track.locked) lockedTrackError(track);
   const insertStart = (clip.startMs || 0) + Math.max(1, clip.durationMs || 1);
   const clipDuration = Math.max(1, clip.durationMs || 1);
   const duplicate = {
@@ -275,6 +342,7 @@ function moveProjectClip(project, clipId, startMs, snap = false) {
   const found = findClip(next, clipId);
   if (!found) fail(`Clip not found: ${clipId}`);
   const { track, clip } = found;
+  if (track.locked) lockedTrackError(track);
   const nextStart = snap ? snapClipStart(track, clipId, startMs) : Math.max(0, Math.round(startMs));
   clip.startMs = nextStart;
   track.clips = orderedClips(track);
@@ -283,29 +351,67 @@ function moveProjectClip(project, clipId, startMs, snap = false) {
   return { project: next, movedClipId: clipId, startMs: nextStart };
 }
 
-function trimProjectClip(project, clipId, durationMs, sourceInMs, sourceOutMs) {
+function trimProjectClip(project, clipId, durationMs, sourceInMs, sourceOutMs, ripple = false) {
   if (!Number.isFinite(durationMs) || durationMs <= 0) fail('--duration-ms must be a positive number.');
   const next = cloneJson(project);
   const found = findClip(next, clipId);
   if (!found) fail(`Clip not found: ${clipId}`);
-  const { clip } = found;
-  clip.durationMs = Math.max(1, Math.round(durationMs));
+  const { track, clip } = found;
+  if (track.locked) lockedTrackError(track);
+  const nextDurationMs = Math.max(1, Math.round(durationMs));
+  const ordered = orderedClips(track);
+  const clipIndex = ordered.findIndex((item) => item.id === clipId);
+  const deltaMs = nextDurationMs - Math.max(1, clip.durationMs || 1);
+  let editedClip = clip;
+  if (ripple) {
+    let cursor = 0;
+    track.clips = ordered.map((item, index) => {
+      const itemDuration = Math.max(1, item.durationMs || 1);
+      if (index < clipIndex) {
+        cursor = Math.max(cursor, (item.startMs || 0) + itemDuration);
+        return item;
+      }
+      if (item.id === clipId) {
+        const nextClip = { ...item, durationMs: nextDurationMs };
+        cursor = Math.max(cursor, (item.startMs || 0) + nextDurationMs);
+        return nextClip;
+      }
+      const startMs = Math.max((item.startMs || 0) + deltaMs, cursor);
+      cursor = startMs + itemDuration;
+      return { ...item, startMs };
+    });
+    editedClip = track.clips.find((item) => item.id === clipId) || clip;
+  } else {
+    clip.durationMs = nextDurationMs;
+  }
   if (sourceInMs !== undefined) {
     if (!Number.isFinite(sourceInMs) || sourceInMs < 0) fail('--source-in-ms must be a non-negative number.');
-    clip.sourceInMs = Math.round(sourceInMs);
+    editedClip.sourceInMs = Math.round(sourceInMs);
   }
   if (sourceOutMs !== undefined) {
     if (!Number.isFinite(sourceOutMs) || sourceOutMs < 0) fail('--source-out-ms must be a non-negative number.');
-    clip.sourceOutMs = Math.round(sourceOutMs);
+    editedClip.sourceOutMs = Math.round(sourceOutMs);
   }
   next.timeline.durationMs = timelineDuration(next.timeline.tracks);
-  addProjectVersion(next, `Trimmed clip ${clip.label || clip.id}`);
-  return { project: next, trimmedClipId: clipId, clipDurationMs: clip.durationMs };
+  addProjectVersion(next, `Trimmed clip ${editedClip.label || editedClip.id}${ripple ? ' with ripple' : ''}`);
+  return { project: next, trimmedClipId: clipId, clipDurationMs: editedClip.durationMs };
+}
+
+function updateProjectClipSettings(project, clipId, settings) {
+  const next = cloneJson(project);
+  const found = findClip(next, clipId);
+  if (!found) fail(`Clip not found: ${clipId}`);
+  const { track, clip } = found;
+  if (track.locked) lockedTrackError(track);
+  applyClipSettings(clip, settings);
+  next.timeline.durationMs = timelineDuration(next.timeline.tracks);
+  addProjectVersion(next, `Updated clip settings ${clip.label || clip.id}`);
+  return { project: next, updatedClipId: clipId };
 }
 
 function inspectProject(project) {
   const issues = [];
-  const warnings = [];
+  const warnings = validateRenderCapabilities(project).issues.map((issue) => ({ ...issue, type: 'unsupported-simple-render' }));
   const mediaById = new Map((project.media || []).map((media) => [media.id, media]));
   for (const [trackIndex, track] of (project.timeline?.tracks || []).entries()) {
     const clips = orderedClips(track);
@@ -319,7 +425,6 @@ function inspectProject(project) {
       if (clip.mediaId) {
         const media = mediaById.get(clip.mediaId);
         if (!media) issues.push({ type: 'missing-media', trackId: track.id, clipId: clip.id, message: `${label} references missing media ${clip.mediaId}.` });
-        else if (!['video', 'image', 'audio'].includes(media.type)) warnings.push({ type: 'unsupported-simple-render', trackId: track.id, clipId: clip.id, message: `${label} uses ${media.type}, which the simple MP4 renderer cannot render yet.` });
         else if (!existsSync(media.path)) issues.push({ type: 'missing-file', trackId: track.id, clipId: clip.id, message: `${label} media file is missing: ${media.path}` });
       }
       cursor = Math.max(cursor, end);
@@ -349,199 +454,97 @@ function inferType(path) {
   return 'unknown';
 }
 
+function parseFfprobeRate(value) {
+  if (typeof value !== 'string' || !value.trim() || value === '0/0') return undefined;
+  const [numerator, denominator] = value.split('/').map(Number);
+  if (!Number.isFinite(numerator)) return undefined;
+  if (!Number.isFinite(denominator) || denominator === 0) return numerator > 0 ? numerator : undefined;
+  const fps = numerator / denominator;
+  return Number.isFinite(fps) && fps > 0 ? Math.round(fps * 1000) / 1000 : undefined;
+}
+
+function parsePositiveNumber(value) {
+  const number = typeof value === 'number' ? value : typeof value === 'string' ? Number.parseFloat(value) : Number.NaN;
+  return Number.isFinite(number) && number > 0 ? number : undefined;
+}
+
+function probeMediaMetadata(path, mediaType = inferType(path)) {
+  const stats = statSync(path);
+  const metadata = { sizeBytes: stats.size };
+  if (!['video', 'audio', 'image'].includes(mediaType)) return metadata;
+  const result = spawnSync('ffprobe', [
+    '-v', 'error',
+    '-print_format', 'json',
+    '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate',
+    path,
+  ], { encoding: 'utf-8', timeout: 30_000 });
+  if (result.status !== 0 || !result.stdout.trim()) return metadata;
+  try {
+    const parsed = JSON.parse(result.stdout);
+    const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+    const video = streams.find((stream) => stream.codec_type === 'video');
+    const audio = streams.find((stream) => stream.codec_type === 'audio');
+    const durationSeconds = parsePositiveNumber(parsed.format?.duration);
+    if (durationSeconds) metadata.durationMs = Math.max(1, Math.round(durationSeconds * 1000));
+    if (video) {
+      metadata.hasVideo = true;
+      metadata.width = typeof video.width === 'number' && video.width > 0 ? video.width : undefined;
+      metadata.height = typeof video.height === 'number' && video.height > 0 ? video.height : undefined;
+      metadata.fps = parseFfprobeRate(video.avg_frame_rate) ?? parseFfprobeRate(video.r_frame_rate);
+      metadata.codec = video.codec_name;
+    }
+    if (audio) {
+      metadata.hasAudio = true;
+      if (!metadata.codec) metadata.codec = audio.codec_name;
+    }
+  } catch {
+    return metadata;
+  }
+  return metadata;
+}
+
 function isVideoOutputPath(path) {
   return ['.mp4', '.mov', '.m4v', '.webm', '.mkv'].includes(extname(path).toLowerCase());
 }
 
-function escapeDrawText(value) {
-  return String(value)
-    .replace(/\\/g, '\\\\')
-    .replace(/:/g, '\\:')
-    .replace(/'/g, "\\'")
-    .replace(/%/g, '\\%')
-    .replace(/\r?\n/g, ' ')
-    .replace(/\[/g, '\\[')
-    .replace(/\]/g, '\\]')
-    .slice(0, 180);
-}
-
-function seconds(ms, fallbackMs = 0) {
-  return Math.max(0, (ms ?? fallbackMs) / 1000);
-}
-
-function ffmpegNumber(value) {
-  return value.toFixed(3).replace(/\.?0+$/, '');
-}
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function hasAdjustments(adjustments) {
-  return Boolean(adjustments && Object.keys(adjustments).some((key) => key !== 'preset'));
-}
-
-function adjustmentFilter(inputLabel, outputLabel, adjustments) {
-  if (!hasAdjustments(adjustments)) return `${inputLabel}null${outputLabel}`;
-  const brightness = clamp(
-    (adjustments?.exposure ?? 0)
-      + ((adjustments?.highlights ?? 0) * 0.08)
-      + ((adjustments?.shadows ?? 0) * 0.06),
-    -1,
-    1,
-  );
-  const contrast = clamp(adjustments?.contrast ?? 1, 0, 3);
-  const saturation = clamp(
-    (adjustments?.saturation ?? 1)
-      + ((adjustments?.temperature ?? 0) * 0.04)
-      - Math.abs(adjustments?.tint ?? 0) * 0.02,
-    0,
-    3,
-  );
-  const gamma = clamp(1 - ((adjustments?.shadows ?? 0) * 0.12) + ((adjustments?.highlights ?? 0) * 0.08), 0.1, 10);
-  const filters = [
-    `eq=brightness=${ffmpegNumber(brightness)}:contrast=${ffmpegNumber(contrast)}:saturation=${ffmpegNumber(saturation)}:gamma=${ffmpegNumber(gamma)}`,
-  ];
-  if ((adjustments?.grain ?? 0) > 0) {
-    filters.push(`noise=alls=${Math.round(clamp(adjustments.grain, 0, 1) * 18)}:allf=t`);
+function applyClipSettings(clip, input) {
+  if (input.volume !== undefined) {
+    if (!Number.isFinite(input.volume) || input.volume < 0 || input.volume > 4) fail('--volume must be between 0 and 4.');
+    clip.volume = Math.round(input.volume * 1000) / 1000;
   }
-  if ((adjustments?.sharpen ?? 0) > 0) {
-    filters.push(`unsharp=5:5:${ffmpegNumber(clamp(adjustments.sharpen, 0, 1) * 1.2)}:3:3:0`);
+  if (input.speed !== undefined) {
+    if (!Number.isFinite(input.speed) || input.speed < 0.25 || input.speed > 4) fail('--speed must be between 0.25 and 4.');
+    clip.speed = Math.round(input.speed * 1000) / 1000;
   }
-  if ((adjustments?.vignette ?? 0) > 0) {
-    filters.push(`vignette=angle=${ffmpegNumber(Math.PI / 5 + clamp(adjustments.vignette, 0, 1) * 0.45)}`);
+  if (input.fadeInMs !== undefined) {
+    if (!Number.isFinite(input.fadeInMs) || input.fadeInMs < 0) fail('--fade-in-ms must be non-negative.');
+    clip.fadeInMs = Math.round(input.fadeInMs);
   }
-  return `${inputLabel}${filters.join(',')}${outputLabel}`;
-}
-
-function textForClip(clip, fallback) {
-  return typeof clip.text?.text === 'string' ? clip.text.text : (clip.label || fallback);
-}
-
-function hasAudioStream(path) {
-  const result = spawnSync('ffprobe', [
-    '-v', 'error',
-    '-select_streams', 'a',
-    '-show_entries', 'stream=index',
-    '-of', 'csv=p=0',
-    path,
-  ], { encoding: 'utf-8' });
-  return result.status === 0 && result.stdout.trim().length > 0;
-}
-
-function renderSimpleMp4(project, outputPath) {
-  const width = typeof project.settings?.width === 'number' ? project.settings.width : 1080;
-  const height = typeof project.settings?.height === 'number' ? project.settings.height : 1920;
-  const fps = typeof project.settings?.fps === 'number' ? project.settings.fps : 30;
-  const durationSeconds = Math.max(1, Math.ceil((project.timeline?.durationMs || 3000) / 1000));
-  const mediaById = new Map((project.media || []).map((media) => [media.id, media]));
-  const clips = (project.timeline?.tracks || [])
-    .flatMap((track) => track.clips || [])
-    .sort((a, b) => (a.startMs || 0) - (b.startMs || 0));
-  const mediaClips = clips
-    .map((clip) => ({ clip, media: clip.mediaId ? mediaById.get(clip.mediaId) : undefined }))
-    .filter((item) => item.media);
-  const unsupportedClips = mediaClips.filter(({ media }) => !['video', 'image', 'audio'].includes(media.type));
-  if (unsupportedClips.length > 0) {
-    const labels = unsupportedClips.slice(0, 3).map(({ clip }) => clip.label || clip.id).join(', ');
-    fail(`Simple MP4 renderer only supports video, image, audio, and text clips right now: ${labels}.`);
+  if (input.fadeOutMs !== undefined) {
+    if (!Number.isFinite(input.fadeOutMs) || input.fadeOutMs < 0) fail('--fade-out-ms must be non-negative.');
+    clip.fadeOutMs = Math.round(input.fadeOutMs);
   }
-
-  const args = ['-y', '-f', 'lavfi', '-i', `color=c=#111111:s=${width}x${height}:r=${fps}:d=${durationSeconds}`];
-  const inputClips = [];
-  for (const { clip, media } of mediaClips) {
-    if (!existsSync(media.path)) fail(`Media file not found for clip "${clip.label || clip.id}": ${media.path}`);
-    const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
-    const sourceIn = seconds(typeof clip.sourceInMs === 'number' ? clip.sourceInMs : 0);
-    if (media.type === 'image') {
-      args.push('-loop', '1', '-t', clipDuration, '-i', media.path);
-    } else {
-      if (sourceIn > 0) args.push('-ss', ffmpegNumber(sourceIn));
-      args.push('-t', clipDuration, '-i', media.path);
-    }
-    inputClips.push({ clip, media, inputIndex: inputClips.length + 1 });
-  }
-
-  const filters = [`[0:v]format=rgba[base0]`];
-  let currentVideo = '[base0]';
-  let overlayIndex = 0;
-  for (const { clip, media, inputIndex } of inputClips.filter((item) => item.media.type === 'video' || item.media.type === 'image')) {
-    const start = ffmpegNumber(seconds(clip.startMs));
-    const end = ffmpegNumber(seconds((clip.startMs || 0) + (clip.durationMs || 1000)));
-    const prepared = `v${overlayIndex}`;
-    const next = `base${overlayIndex + 1}`;
-    const adjusted = `adj${overlayIndex}`;
-    filters.push(
-      `[${inputIndex}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1,format=rgba[${adjusted}]`,
-    );
-    filters.push(adjustmentFilter(`[${adjusted}]`, `[${prepared}]`, clip.adjustments));
-    filters.push(`[${prepared}]setpts=PTS-STARTPTS+${start}/TB[${prepared}t]`);
-    filters.push(`${currentVideo}[${prepared}t]overlay=0:0:enable='between(t,${start},${end})'[${next}]`);
-    currentVideo = `[${next}]`;
-    overlayIndex += 1;
-  }
-
-  const textClips = (project.timeline?.tracks || [])
-    .flatMap((track) => track.clips || [])
-    .filter((clip) => clip.type === 'text' || clip.text || !clip.mediaId)
-    .slice(0, 8);
-  for (const [index, clip] of textClips.entries()) {
-    const start = seconds(clip.startMs);
-    const end = Math.max(start + 0.2, start + seconds(clip.durationMs, 3000));
-    const y = Math.round(height * 0.42) + (index % 3) * 86;
-    const next = `text${index}`;
-    filters.push(
-      `${currentVideo}drawtext=text='${escapeDrawText(textForClip(clip, project.title))}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 24))}:x=(w-text_w)/2:y=${y}:enable='between(t,${ffmpegNumber(start)},${ffmpegNumber(end)})'[${next}]`,
-    );
-    currentVideo = `[${next}]`;
-  }
-  if (textClips.length === 0 && inputClips.length === 0) {
-    filters.push(`${currentVideo}drawtext=text='${escapeDrawText(project.title)}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 22))}:x=(w-text_w)/2:y=(h-text_h)/2[title0]`);
-    currentVideo = '[title0]';
-  }
-
-  const audioLabels = [];
-  inputClips.filter((item) => item.media.type === 'audio' || (item.media.type === 'video' && hasAudioStream(item.media.path))).forEach(({ clip, inputIndex }, index) => {
-    const delayMs = Math.max(0, Math.round(clip.startMs || 0));
-    const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
-    const label = `a${index}`;
-    filters.push(`[${inputIndex}:a]atrim=duration=${clipDuration},asetpts=PTS-STARTPTS,adelay=${delayMs}:all=1[${label}]`);
-    audioLabels.push(`[${label}]`);
-  });
-  if (audioLabels.length > 0) {
-    filters.push(`${audioLabels.join('')}amix=inputs=${audioLabels.length}:duration=longest:dropout_transition=0,atrim=duration=${durationSeconds}[aout]`);
-  }
-
-  filters.push(`${currentVideo}format=yuv420p[vout]`);
-  args.push('-filter_complex', filters.join(';'), '-map', '[vout]');
-  if (audioLabels.length > 0) args.push('-map', '[aout]');
-  args.push('-t', String(durationSeconds), '-r', String(fps), '-pix_fmt', 'yuv420p');
-  if (['.mp4', '.mov', '.m4v'].includes(extname(outputPath).toLowerCase())) {
-    args.push('-movflags', '+faststart');
-  }
-  args.push(outputPath);
-
-  const result = spawnSync('ffmpeg', args, { encoding: 'utf-8' });
-  if (result.status !== 0) fail(result.stderr || result.stdout || 'ffmpeg failed to render video.');
 }
 
 function probeMedia(path) {
   const resolved = resolve(path);
   if (!existsSync(resolved)) fail(`Media file not found: ${path}`);
   const stats = statSync(resolved);
+  const type = inferType(resolved);
   return {
     ok: true,
     path: resolved,
     label: basename(resolved),
-    type: inferType(resolved),
+    type,
     sizeBytes: stats.size,
     modifiedAt: stats.mtime.toISOString(),
+    ...probeMediaMetadata(resolved, type),
   };
 }
 
 function runDoctor() {
   const nodeVersion = process.version;
-  const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
+  const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8', timeout: 15_000 });
   const ffmpegAvailable = ffmpeg.status === 0;
   const lines = [
     `✓ Node: ${nodeVersion}`,
@@ -579,7 +582,8 @@ function runCreate() {
     workspaceId: opt('--workspace-id', basename(process.cwd())),
     aspectRatio: opt('--aspect-ratio', '9:16'),
   });
-  writeJsonAtomic(projectPath, project);
+  const expectedContent = existsSync(projectPath) ? readFileSync(projectPath, 'utf-8') : null;
+  commitVideoProjectContent(projectPath, `${JSON.stringify(project, null, 2)}\n`, { expectedContent: hasFlag('--force') ? expectedContent : null });
   print({
     ok: true,
     projectPath,
@@ -656,7 +660,7 @@ function runDryRun() {
   if (!projectPath) fail('Usage: video-studio dry-run <project-path> [--json]');
   const { resolved, project } = readValidProject(projectPath);
   const report = inspectProject(project);
-  const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
+  const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8', timeout: 15_000 });
   const ffmpegAvailable = ffmpeg.status === 0;
   const renderable = report.ok && ffmpegAvailable && report.warnings.every((warning) => warning.type !== 'unsupported-simple-render');
   print({
@@ -676,7 +680,7 @@ function runDryRun() {
 
 function runEdit() {
   const projectPath = positional(0);
-  if (!projectPath) fail('Usage: video-studio edit <project-path> --action pack|split|delete|duplicate|move|trim [--clip-id <id>] [--at-ms <ms>] [--start-ms <ms>] [--duration-ms <ms>] [--source-in-ms <ms>] [--source-out-ms <ms>] [--snap] [--ripple] [--json]');
+  if (!projectPath) fail('Usage: video-studio edit <project-path> --action pack|split|delete|duplicate|move|trim|settings [--clip-id <id>] [--at-ms <ms>] [--start-ms <ms>] [--duration-ms <ms>] [--source-in-ms <ms>] [--source-out-ms <ms>] [--volume <0-4>] [--speed <0.25-4>] [--fade-in-ms <ms>] [--fade-out-ms <ms>] [--snap] [--ripple] [--json]');
   const action = opt('--action', '');
   const clipId = opt('--clip-id', '');
   const { resolved, project } = readValidProject(projectPath);
@@ -692,11 +696,18 @@ function runEdit() {
     Number(opt('--duration-ms', Number.NaN)),
     args.includes('--source-in-ms') ? Number(opt('--source-in-ms', Number.NaN)) : undefined,
     args.includes('--source-out-ms') ? Number(opt('--source-out-ms', Number.NaN)) : undefined,
+    hasFlag('--ripple'),
   );
-  else fail('Unknown edit action. Use pack, split, delete, duplicate, move, or trim.');
+  else if (action === 'settings') result = updateProjectClipSettings(project, clipId, {
+    volume: args.includes('--volume') ? Number(opt('--volume', Number.NaN)) : undefined,
+    speed: args.includes('--speed') ? Number(opt('--speed', Number.NaN)) : undefined,
+    fadeInMs: args.includes('--fade-in-ms') ? Number(opt('--fade-in-ms', Number.NaN)) : undefined,
+    fadeOutMs: args.includes('--fade-out-ms') ? Number(opt('--fade-out-ms', Number.NaN)) : undefined,
+  });
+  else fail('Unknown edit action. Use pack, split, delete, duplicate, move, trim, or settings.');
   const validation = validateProject(result.project);
   if (!validation.ok) fail('Edit produced an invalid project.', { errors: validation.errors });
-  writeJsonAtomic(resolved, result.project);
+  commitVideoProjectContent(resolved, `${JSON.stringify(result.project, null, 2)}\n`, { expectedContent: readContents.get(project) });
   print({
     ok: true,
     projectPath: resolved,
@@ -713,13 +724,24 @@ function runExport() {
   const resolvedProject = resolve(projectPath);
   const outPath = resolve(opt('--out', join(dirname(resolvedProject), 'renders', 'preview.placeholder.txt')));
   if (!existsSync(resolvedProject)) fail(`Project file not found: ${projectPath}`);
-  const project = readJson(resolvedProject);
+  const originalProjectText = readFileSync(resolvedProject, 'utf-8');
+  const project = JSON.parse(originalProjectText);
   const validation = validateProject(project);
   if (!validation.ok) fail('Project validation failed.', { projectPath: resolvedProject, errors: validation.errors });
+  try {
+    assertSafeVideoExportPaths(resolvedProject, project.media || [], outPath);
+  } catch (error) {
+    fail(error.message);
+  }
   ensureDir(dirname(outPath));
   const realVideo = isVideoOutputPath(outPath);
+  const renderSettings = resolveExportPreset(project, opt('--preset', realVideo ? 'simple-mp4' : 'placeholder'), realVideo);
   if (realVideo) {
-    renderSimpleMp4(project, outPath);
+    try {
+      renderSimpleMp4(project, outPath, renderSettings);
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+    }
   } else {
     writeFileSync(
       outPath,
@@ -741,6 +763,10 @@ function runExport() {
     rendered: realVideo,
     projectPath: resolvedProject,
     outputPath: outPath,
+    preset: renderSettings.slug,
+    width: renderSettings.width,
+    height: renderSettings.height,
+    fps: renderSettings.fps,
     createdAt: new Date().toISOString(),
     engine: realVideo ? 'runneros-video-studio-ffmpeg-simple' : 'runneros-video-studio-placeholder',
     note: realVideo ? 'Playable MP4 rendered by the simple FFmpeg media timeline engine.' : 'Placeholder export written by foundation CLI.',
@@ -751,12 +777,16 @@ function runExport() {
     createdAt: receipt.createdAt,
     status: 'succeeded',
     path: outPath,
-    preset: opt('--preset', realVideo ? 'simple-mp4' : 'placeholder'),
+    preset: renderSettings.slug,
     placeholder: !realVideo,
     receiptPath,
   });
   project.updatedAt = receipt.createdAt;
-  writeJsonAtomic(resolvedProject, project);
+  try {
+    commitVideoProjectContent(resolvedProject, `${JSON.stringify(project, null, 2)}\n`, { expectedContent: originalProjectText });
+  } catch (error) {
+    fail(error.code === 'VIDEO_PROJECT_CONFLICT' ? 'Project changed during export. The newer project was preserved; retry export from the latest saved version.' : error.message);
+  }
   print({
     ok: true,
     projectPath: resolvedProject,
@@ -764,6 +794,10 @@ function runExport() {
     receiptPath,
     placeholder: !realVideo,
     rendered: realVideo,
+    preset: renderSettings.slug,
+    width: renderSettings.width,
+    height: renderSettings.height,
+    fps: renderSettings.fps,
     lines: [
       realVideo ? `✓ MP4 export rendered: ${outPath}` : `✓ Placeholder export written: ${outPath}`,
       `✓ Receipt written: ${receiptPath}`,
@@ -781,7 +815,7 @@ Usage:
   video-studio probe <media-path> [--json]
   video-studio inspect <project-path> [--json]
   video-studio dry-run <project-path> [--json]
-  video-studio edit <project-path> --action pack|split|delete|duplicate|move|trim [--clip-id <id>] [--at-ms <ms>] [--start-ms <ms>] [--duration-ms <ms>] [--snap] [--ripple] [--json]
+  video-studio edit <project-path> --action pack|split|delete|duplicate|move|trim|settings [--clip-id <id>] [--at-ms <ms>] [--start-ms <ms>] [--duration-ms <ms>] [--source-in-ms <ms>] [--source-out-ms <ms>] [--volume <0-4>] [--speed <0.25-4>] [--fade-in-ms <ms>] [--fade-out-ms <ms>] [--snap] [--ripple] [--json]
   video-studio validate <project-path> [--json]
   video-studio export <project-path> --out <output-path> [--preset <name>] [--json]
 `);

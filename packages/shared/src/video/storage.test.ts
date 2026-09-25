@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   addVideoProjectVersion,
   appendVideoAgentEvent,
   createRunnerVideoProject,
+  migrateVideoProject,
   readVideoProject,
+  type VideoClip,
   upsertVideoMediaAsset,
   validateRunnerVideoProject,
   writeVideoProject,
@@ -61,6 +63,21 @@ describe('Runner video project storage', () => {
     expect(validation.errors[0]?.message).toContain('Referenced media');
   });
 
+  test('accepts partial clip transforms with renderer defaults', () => {
+    const project = createRunnerVideoProject({ title: 'Partial Transform', workspaceId: 'workspace-1' });
+    project.timeline.tracks[0]!.clips.push({
+      id: 'clip-1',
+      type: 'video',
+      startMs: 0,
+      durationMs: 1000,
+      transform: { x: 24 },
+    } as VideoClip);
+
+    const validation = validateRunnerVideoProject(project);
+
+    expect(validation.ok).toBe(true);
+  });
+
   test('tracks media, versions, and agent events', () => {
     const project = createRunnerVideoProject({ title: 'Agent Cut', workspaceId: 'workspace-1' });
     upsertVideoMediaAsset(project, {
@@ -87,4 +104,95 @@ describe('Runner video project storage', () => {
     expect(project.agentEvents.at(-1)?.id).toBe(event.id);
     expect(validateRunnerVideoProject(project).ok).toBe(true);
   });
+
+  test('rejects an unknown aspectRatio at validation', () => {
+    const project = createRunnerVideoProject({ title: 'Bad Ratio', workspaceId: 'workspace-1' });
+    (project.settings as { aspectRatio: string }).aspectRatio = 'banana';
+    const validation = validateRunnerVideoProject(project);
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.some((issue) => issue.path === 'settings.aspectRatio')).toBe(true);
+  });
+
+  test('migrateVideoProject rejects a newer schema version', () => {
+    expect(() => migrateVideoProject({ version: 99 })).toThrow(/newer schema/i);
+    // Current version passes through untouched.
+    const ok = createRunnerVideoProject({ title: 'V1', workspaceId: 'w' });
+    expect(migrateVideoProject(ok)).toBe(ok);
+  });
+
+  test('backs up the prior project on overwrite', () => {
+    const projectPath = join(root, 'video.runner-video.json');
+    const project = createRunnerVideoProject({ title: 'First', workspaceId: 'workspace-1' });
+    writeVideoProject(projectPath, project);
+    expect(existsSync(`${projectPath}.bak`)).toBe(false); // no prior file to back up
+
+    const updated = { ...project, title: 'Second', updatedAt: new Date().toISOString() };
+    writeVideoProject(projectPath, updated, { expectedContent: readFileSync(projectPath, 'utf-8') });
+    expect(existsSync(`${projectPath}.bak`)).toBe(true); // prior good copy preserved
+  });
+
+  test('recovers a corrupt project file from its backup', () => {
+    const projectPath = join(root, 'video.runner-video.json');
+    const project = createRunnerVideoProject({ title: 'Recoverable', workspaceId: 'workspace-1' });
+    writeVideoProject(projectPath, project);
+    writeVideoProject(projectPath, { ...project, updatedAt: new Date().toISOString() }, { expectedContent: readFileSync(projectPath, 'utf-8') }); // creates .bak
+
+    writeFileSync(projectPath, 'this is not valid json {{{', 'utf-8'); // corrupt the live file
+
+    const recovered = readVideoProject(projectPath);
+    expect(recovered.id).toBe(project.id);
+    expect(recovered.title).toBe('Recoverable');
+    expect(JSON.parse(readFileSync(projectPath, 'utf-8')).id).toBe(project.id);
+    expect(existsSync(`${projectPath}.bak`)).toBe(true);
+    expect(existsSync(`${projectPath}.corrupt.bak`)).toBe(false);
+  });
+
+  test('does not recover newer schema projects from a stale backup', () => {
+    const projectPath = join(root, 'video.runner-video.json');
+    const project = createRunnerVideoProject({ title: 'Old Backup', workspaceId: 'workspace-1' });
+    writeVideoProject(projectPath, project);
+    writeVideoProject(projectPath, { ...project, updatedAt: new Date().toISOString() }, { expectedContent: readFileSync(projectPath, 'utf-8') }); // creates .bak
+    writeFileSync(projectPath, `${JSON.stringify({ ...project, version: 99 }, null, 2)}\n`, 'utf-8');
+
+    expect(() => readVideoProject(projectPath)).toThrow(/newer schema/i);
+  });
+});
+
+
+describe('video storage revisions', () => {
+  test('two loaded copies cannot overwrite each other', () => {
+    const path = join(root, 'video.runner-video.json');
+    writeVideoProject(path, createRunnerVideoProject({ title: 'Base', workspaceId: 'w' }));
+    const first = readVideoProject(path), stale = readVideoProject(path);
+    first.title = 'First save'; writeVideoProject(path, first);
+    const backup = readFileSync(path + '.bak', 'utf8');
+    stale.title = 'Stale save';
+    expect(() => writeVideoProject(path, stale)).toThrow(/changed since it was read/);
+    expect(readVideoProject(path).title).toBe('First save');
+    expect(readFileSync(path + '.bak', 'utf8')).toBe(backup);
+  });
+
+  test('unknown cloned object needs an explicit baseline before replacing a project', () => {
+    const path = join(root, 'video.runner-video.json');
+    const initial = createRunnerVideoProject({ title: 'Base', workspaceId: 'w' });
+    writeVideoProject(path, initial);
+    expect(() => writeVideoProject(path, { ...initial, title: 'Untracked clone' })).toThrow(/changed since it was read/);
+    expect(readVideoProject(path).title).toBe('Base');
+  });
+  test('recovers through a symlink using the canonical project backup', () => {
+    const path = join(root, 'canonical.runner-video.json');
+    const alias = join(root, 'alias.runner-video.json');
+    const project = createRunnerVideoProject({ title: 'Before edit', workspaceId: 'workspace-1' });
+    writeVideoProject(path, project);
+    symlinkSync(path, alias);
+    const edit = readVideoProject(alias);
+    edit.title = 'After edit';
+    writeVideoProject(alias, edit);
+    const backup = readFileSync(`${path}.bak`, 'utf-8');
+    writeFileSync(path, 'broken JSON');
+    expect(readVideoProject(alias).title).toBe('Before edit');
+    expect(readFileSync(`${path}.bak`, 'utf-8')).toBe(backup);
+    expect(JSON.parse(readFileSync(alias, 'utf-8')).title).toBe('Before edit');
+  });
+
 });

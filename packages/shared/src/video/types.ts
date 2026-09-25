@@ -52,6 +52,10 @@ export interface VideoMediaAsset {
   width?: number;
   height?: number;
   fps?: number;
+  sizeBytes?: number;
+  codec?: string;
+  hasAudio?: boolean;
+  hasVideo?: boolean;
   waveformPath?: string;
   thumbnailPath?: string;
   transcriptPath?: string;
@@ -95,6 +99,9 @@ export interface VideoClip {
   opacity?: number;
   volume?: number;
   speed?: number;
+  fadeInMs?: number;
+  fadeOutMs?: number;
+  disabled?: boolean;
   adjustments?: VideoClipAdjustments;
   effects?: string[];
   transitionIn?: VideoTransition;

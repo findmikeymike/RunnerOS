@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { commitVideoProjectContent, VideoProjectStorageError } from '../../../../tools/video-studio/lib/project-storage.mjs';
+import { copyFileSync, existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type {
@@ -79,26 +80,99 @@ export function createRunnerVideoProject(input: CreateVideoProjectInput): Runner
   };
 }
 
+export const CURRENT_VIDEO_PROJECT_VERSION = 1;
+
+/**
+ * Bring a parsed project to the current schema version. Newer-than-known
+ * versions are rejected with a clear message instead of being mis-parsed;
+ * older versions are migrated forward (scaffold — only v1 exists today).
+ */
+export function migrateVideoProject(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const record = raw as Record<string, unknown>;
+  const version = typeof record.version === 'number' ? record.version : 1;
+  if (version > CURRENT_VIDEO_PROJECT_VERSION) {
+    throw new Error(
+      `This video project uses a newer schema (v${version}) than this RunnerOS build supports (v${CURRENT_VIDEO_PROJECT_VERSION}). Update RunnerOS to open it.`,
+    );
+  }
+  // Future: apply sequential v(n) -> v(n+1) migrations here.
+  if (record.version !== CURRENT_VIDEO_PROJECT_VERSION) {
+    return { ...record, version: CURRENT_VIDEO_PROJECT_VERSION };
+  }
+  return raw;
+}
+
+const readContents = new WeakMap<RunnerVideoProject, string>();
+
+function writeVideoProjectFile(projectPath: string, project: RunnerVideoProject, options: { expectedContent: string | null; backupExisting?: boolean }): void {
+  const content = `${JSON.stringify(project, null, 2)}\n`;
+  commitVideoProjectContent(projectPath, content, options);
+  readContents.set(project, content);
+}
+
 export function readVideoProject(projectPath: string): RunnerVideoProject {
-  const parsed = JSON.parse(readFileSync(projectPath, 'utf-8')) as unknown;
+  // Reads and recovery must use the same backup identity as locked commits.
+  if (existsSync(projectPath)) projectPath = realpathSync(projectPath);
+  let raw: unknown;
+  let originalContent: string | null = null;
+  try {
+    originalContent = readFileSync(projectPath, 'utf-8');
+    raw = JSON.parse(originalContent);
+  } catch (error) {
+    // Corrupt / unparseable JSON. Try a backup, then preserve the bad file so
+    // a later write can't silently destroy the only copy.
+    const backupPath = `${projectPath}.bak`;
+    if (existsSync(backupPath)) {
+      try {
+        const recovered = migrateVideoProject(JSON.parse(readFileSync(backupPath, 'utf-8')));
+        if (validateRunnerVideoProject(recovered).ok) {
+          try {
+            copyFileSync(projectPath, `${projectPath}.${Date.now()}.corrupt.bak`);
+          } catch {
+            /* best-effort */
+          }
+          writeVideoProjectFile(projectPath, recovered as RunnerVideoProject, { expectedContent: originalContent, backupExisting: false });
+          return recovered as RunnerVideoProject;
+        }
+      } catch (recoveryError) {
+        if (recoveryError instanceof VideoProjectStorageError) throw recoveryError;
+        /* backup also unusable — fall through */
+      }
+    }
+    try {
+      copyFileSync(projectPath, `${projectPath}.${Date.now()}.corrupt.bak`);
+    } catch {
+      /* best-effort */
+    }
+    throw error instanceof Error ? error : new Error('Invalid video project JSON.');
+  }
+  const parsed = migrateVideoProject(raw);
   const validation = validateRunnerVideoProject(parsed);
   if (!validation.ok) {
     const first = validation.errors[0];
     throw new Error(first ? `${first.path}: ${first.message}` : 'Invalid video project.');
   }
+  readContents.set(parsed as RunnerVideoProject, originalContent!);
   return parsed as RunnerVideoProject;
 }
 
-export function writeVideoProject(projectPath: string, project: RunnerVideoProject): void {
+/** Return the parsed model and its exact originating bytes from one read. */
+export function readVideoProjectWithContent(projectPath: string): { project: RunnerVideoProject; content: string } {
+  const project = readVideoProject(projectPath);
+  const content = readContents.get(project);
+  if (content === undefined) throw new Error('Video project read baseline is unavailable.');
+  return { project, content };
+}
+
+export function writeVideoProject(projectPath: string, project: RunnerVideoProject, options: { expectedContent?: string | null } = {}): void {
   const validation = validateRunnerVideoProject(project);
   if (!validation.ok) {
     const first = validation.errors[0];
     throw new Error(first ? `${first.path}: ${first.message}` : 'Invalid video project.');
   }
-  mkdirSync(dirname(projectPath), { recursive: true });
-  const tmp = `${projectPath}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
-  renameSync(tmp, projectPath);
+  const expectedContent = options.expectedContent !== undefined ? options.expectedContent : readContents.get(project) ?? null;
+  writeVideoProjectFile(projectPath, project, { expectedContent });
 }
 
 export function getDefaultVideoProjectPath(projectDir: string): string {
