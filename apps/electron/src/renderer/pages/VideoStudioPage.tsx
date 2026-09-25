@@ -373,7 +373,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   )
   const previewUrl = previewMode === 'composition' ? null : previewMode === 'rendered' ? renderPreviewUrl : timelinePreviewUrl
   const renderFreshness = renderedPreviewFreshness(rawJson, renderedFingerprint)
-  const previewStatus = previewMode === 'composition' ? 'composition playback · silent' : previewMode === 'source' ? 'source clip · render to review all edits'
+  const previewStatus = previewMode === 'composition' ? 'composition preview' : previewMode === 'source' ? 'source clip · render to review all edits'
     : renderFreshness === 'edited' ? 'edited since render · render again'
     : renderFreshness === 'current' ? 'rendered result' : 'saved render · freshness unverified'
 
@@ -386,6 +386,15 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
     if (!sourcePath) throw new Error(`Media unavailable: ${mediaId}`)
     // The server must verify the imported asset still is the file export will read.
     return window.electronAPI.readOutputAssetDataUrl(workspaceId, outputId, asset.id, sourcePath)
+  }, [manifest, outputId, workspaceId, compositionSources])
+
+  const loadCompositionMediaInfo = React.useCallback(async (mediaId: string) => {
+    const asset = manifest?.assets.find((item) => item.id === `video-media-${mediaId}`)
+    if (!asset) throw new Error(`Media unavailable: ${mediaId}`)
+    const sourcePath = compositionSources.get(mediaId)
+    if (!sourcePath) throw new Error(`Media unavailable: ${mediaId}`)
+    // The server must verify the imported asset still is the file export will read.
+    return window.electronAPI.readOutputAssetMediaInfo(workspaceId, outputId, asset.id, sourcePath)
   }, [manifest, outputId, workspaceId, compositionSources])
 
   const stopCompositionPlayback = React.useCallback(() => setIsPreviewPlaying(false), [])
@@ -1410,7 +1419,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
             <div className="flex min-h-0 flex-1 items-center justify-center bg-[#0a0a0a] p-4">
               <div className="flex aspect-video w-full max-w-[min(100%,980px)] items-center justify-center overflow-hidden rounded-sm border border-white/[0.06] bg-black">
                 {previewMode === 'composition' && project ? (
-                  <CompositionPreview project={project} timeMs={playheadMs} loadMedia={loadCompositionMedia} playing={isPreviewPlaying} onTimeChange={setPlayheadMs} onPlaybackStop={stopCompositionPlayback} />
+                  <CompositionPreview project={project} timeMs={playheadMs} loadMedia={loadCompositionMedia} loadMediaInfo={loadCompositionMediaInfo} playing={isPreviewPlaying} onTimeChange={setPlayheadMs} onPlaybackStop={stopCompositionPlayback} />
                 ) : previewUrl && previewMode !== 'composition' ? (
                   <div className="relative h-full w-full">
                     <video

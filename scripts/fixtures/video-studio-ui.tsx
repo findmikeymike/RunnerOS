@@ -38,14 +38,20 @@ const state = w.fixture = {
 w.electronAPI = {
   onOutputsUpdated: (fn: (workspace: string) => void) => { listeners.add(fn); return () => listeners.delete(fn) },
   readOutputAssetText: async () => diskText,
+  readOutputAssetMediaInfo: async (_workspace: string, _output: string, asset: string, expectedSourcePath?: string) => {
+    if ((state as any).unknownAudio) throw new Error('Audio metadata unavailable')
+    const media = JSON.parse(diskText).media.find((candidate: any) => `video-media-${candidate.id}` === asset)
+    if (!media || media.path !== expectedSourcePath) throw new Error('Media source mismatch')
+    return { hasAudio: asset === 'video-media-tone' || asset === 'video-media-audio' }
+  },
   readOutputAssetDataUrl: async (_workspace: string, _output: string, asset: string, expectedSourcePath?: string) => {
     state.mediaReads.push(asset)
     state.mediaRequests.push({ asset, expectedSourcePath })
-    const importedPaths: Record<string, string> = { 'video-media-source': '/synthetic/source.mp4', 'video-media-clock': '/synthetic/clock.mp4', 'video-media-overlay': '/synthetic/overlay.png' }
+    const importedPaths: Record<string, string> = { 'video-media-source': '/synthetic/source.mp4', 'video-media-clock': '/synthetic/clock.mp4', 'video-media-overlay': '/synthetic/overlay.png', 'video-media-tone': '/synthetic/tone-video.mp4', 'video-media-audio': '/synthetic/tone-audio.mp4' }
     if (expectedSourcePath !== undefined && importedPaths[asset] !== expectedSourcePath) throw new Error('Media source mismatch: reimport this media before previewing')
     if (state.holdMedia === asset) await new Promise<void>(resolve => { state.pendingMedia[asset] = resolve })
     if (state.missingMedia === asset) throw new Error('Synthetic media unavailable')
-    const names: Record<string, string> = { 'video-render-result': 'render.mp4', 'video-media-clock': 'clock.mp4', 'video-media-overlay': 'overlay.png' }
+    const names: Record<string, string> = { 'video-render-result': 'render.mp4', 'video-media-clock': 'clock.mp4', 'video-media-overlay': 'overlay.png', 'video-media-tone': 'tone-video.mp4', 'video-media-audio': 'tone-audio.mp4' }
     return `${location.origin}/${names[asset] ?? 'source.mp4'}`
   },
   writeOutputAssetText: async (workspace: string, output: string, asset: string, content: string, expected: string) => {
@@ -102,6 +108,32 @@ state.composition = (overlappingVideo = false) => {
   assets = [assets[0],
     { id: 'video-media-clock', path: 'media/clock.mp4', label: 'Clock', role: 'supporting', mimeType: 'video/mp4' },
     { id: 'video-media-overlay', path: 'media/overlay.png', label: 'Overlay', role: 'supporting', mimeType: 'image/png' },
+  ]
+  state.mount()
+}
+state.audio = (mode = 'basic') => {
+  state.unmount()
+  const project: any = {
+    ...initialProject, id: 'synthetic-audio', title: 'Audio fixture',
+    settings: { aspectRatio: 'custom', width: 320, height: 240, fps: 10 },
+    media: [
+      { id: 'tone', type: 'video', label: 'Video tone', path: '/synthetic/tone-video.mp4', durationMs: 8000, width: 320, height: 240, hasAudio: false },
+      { id: 'audio', type: 'audio', label: 'Audio tone', path: '/synthetic/tone-audio.mp4', durationMs: 8000 },
+    ],
+    timeline: { durationMs: 5000, markers: [], tracks: [
+      { id: 'video', type: 'video', label: 'Video tone', clips: [{ id: 'tone-clip', type: 'video', mediaId: 'tone', startMs: 0, durationMs: 5000, sourceInMs: 0, sourceOutMs: 5000, volume: mode === 'basic' || mode === 'stall' ? 1 : 0 }] },
+    ] },
+  }
+  if (mode === 'fade') project.timeline.tracks.push({ id: 'audio-track', type: 'audio', label: 'Faded audio', clips: [{ id: 'audio-clip', type: 'audio', mediaId: 'audio', startMs: 0, durationMs: 5000, sourceInMs: 0, sourceOutMs: 5000, volume: 0.5, fadeInMs: 2000, fadeOutMs: 2000 }] })
+  if (mode === 'stall') project.timeline.tracks.push({ id: 'future-audio', type: 'audio', label: 'Future audio', clips: [{ id: 'future-clip', type: 'audio', mediaId: 'audio', startMs: 1000, durationMs: 3000, sourceInMs: 0, sourceOutMs: 3000 }] })
+  if (mode === 'duplicate') project.timeline.tracks.push({ id: 'audio-track', type: 'audio', label: 'Duplicate audio', clips: [
+    { id: 'audio-left', type: 'audio', mediaId: 'audio', startMs: 0, durationMs: 4000, sourceInMs: 0, sourceOutMs: 4000, volume: 0.2 },
+    { id: 'audio-right', type: 'audio', mediaId: 'audio', startMs: 1000, durationMs: 3000, sourceInMs: 1000, sourceOutMs: 7000, speed: 2, volume: 0.8 },
+  ] })
+  diskText = JSON.stringify(project, null, 2) + '\n'
+  assets = [assets[0],
+    { id: 'video-media-tone', path: 'media/tone-video.mp4', label: 'Video tone', role: 'supporting', mimeType: 'video/mp4' },
+    { id: 'video-media-audio', path: 'media/tone-audio.mp4', label: 'Audio tone', role: 'supporting', mimeType: 'audio/mp4' },
   ]
   state.mount()
 }

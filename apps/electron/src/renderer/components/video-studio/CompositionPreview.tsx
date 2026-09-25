@@ -1,6 +1,6 @@
 import * as React from 'react'
 import type { RunnerVideoProject } from '@craft-agent/shared/video'
-import { buildScenePlan, sceneAtTime, visualGeometry, clipSpeed } from '../../../../../../tools/video-studio/lib/scene-plan.mjs'
+import { buildScenePlan, sceneAtTime, visualGeometry, clipSpeed, audioGainAtTime } from '../../../../../../tools/video-studio/lib/scene-plan.mjs'
 
 interface Props {
   project: RunnerVideoProject
@@ -9,6 +9,7 @@ interface Props {
   onTimeChange: (timeMs: number) => void
   onPlaybackStop: () => void
   loadMedia: (mediaId: string) => Promise<string>
+  loadMediaInfo: (mediaId: string) => Promise<{ hasAudio: boolean }>
 }
 
 const FRAME_TIMEOUT_MS = 10_000
@@ -61,8 +62,8 @@ function drawText(context: CanvasRenderingContext2D, text: string, fontSize: num
   lines.forEach((line, index) => context.fillText(line, width / 2, y + index * lineHeight))
 }
 
-/** Silent visual playback. Rendered view remains the audio and final typography reference. */
-export function CompositionPreview({ project, timeMs, playing, onTimeChange, onPlaybackStop, loadMedia }: Props) {
+/** Composition playback with opt-in audio. Rendered view remains the final reference. */
+export function CompositionPreview({ project, timeMs, playing, onTimeChange, onPlaybackStop, loadMedia, loadMediaInfo }: Props) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
   const [state, setState] = React.useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = React.useState('')
@@ -70,6 +71,60 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
   const callbacks = React.useRef({ onTimeChange, onPlaybackStop })
   callbacks.current = { onTimeChange, onPlaybackStop }
   const initialized = React.useRef(false)
+  const audioContextRef = React.useRef<AudioContext | null>(null)
+  const masterGainRef = React.useRef<GainNode | null>(null)
+  const soundEnabledRef = React.useRef(false)
+  const soundRequest = React.useRef(0)
+  const [soundEnabled, setSoundEnabled] = React.useState(false)
+  const [soundError, setSoundError] = React.useState('')
+  const silence = React.useCallback(() => {
+    const gain = masterGainRef.current
+    const context = audioContextRef.current
+    if (gain && context) { gain.gain.cancelScheduledValues(context.currentTime); gain.gain.setValueAtTime(0, context.currentTime) }
+  }, [])
+  const toggleSound = () => {
+    const request = ++soundRequest.current
+    if (soundEnabledRef.current) {
+      soundEnabledRef.current = false
+      setSoundEnabled(false)
+      silence()
+      return
+    }
+    try {
+      let context = audioContextRef.current
+      if (!context) {
+        context = new AudioContext()
+        audioContextRef.current = context
+        context.addEventListener('statechange', () => {
+          if (audioContextRef.current === context && context?.state !== 'running' && soundEnabledRef.current) {
+            soundEnabledRef.current = false
+            setSoundEnabled(false)
+            silence()
+            setSoundError('Preview sound was suspended. Enable sound to resume.')
+          }
+        })
+        const master = context.createGain()
+        master.gain.value = 0
+        master.connect(context.destination)
+        masterGainRef.current = master
+      }
+      // resume() is invoked synchronously in the click handler, before any IPC.
+      void context.resume().then(() => {
+        if (audioContextRef.current !== context || request !== soundRequest.current) return
+        soundEnabledRef.current = true
+        setSoundEnabled(true)
+        setSoundError('')
+      }, cause => { if (request === soundRequest.current) setSoundError(cause instanceof Error ? cause.message : 'Unable to enable preview sound') })
+    } catch (cause) { setSoundError(cause instanceof Error ? cause.message : 'Preview sound is unavailable') }
+  }
+  React.useEffect(() => () => {
+    soundRequest.current += 1
+    silence()
+    const context = audioContextRef.current
+    audioContextRef.current = null
+    masterGainRef.current = null
+    void context?.close()
+  }, [silence])
   const command = React.useRef<(time: number, play: boolean) => void>(() => {})
   const currentProps = React.useRef({ timeMs, playing })
   currentProps.current = { timeMs, playing }
@@ -81,7 +136,7 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
   React.useLayoutEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    type Decoder = { element: HTMLVideoElement | HTMLImageElement; width: number; height: number; dispose: () => void }
+    type Decoder = { element: HTMLVideoElement | HTMLImageElement; width: number; height: number; dispose: () => void; sourceNode?: MediaElementAudioSourceNode; gainNode?: GainNode }
     const decoders = new Map<string, Promise<Decoder>>()
     const decoderCancels = new Map<string, () => void>()
     const disposers = new Set<() => void>()
@@ -101,9 +156,11 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
     let pending = false
     let stopped = false
     const urls = new Map<string, Promise<string>>()
+    const audioInfo = new Map<string, Promise<{ hasAudio: boolean }>>()
     const buffer = document.createElement('canvas')
 
     const pauseDecoders = (force = true) => {
+      silence()
       for (const decoder of decoders.values()) void decoder.then(({ element }) => {
         if (element instanceof HTMLVideoElement && (force || !pendingPlay.has(element))) element.pause()
       }, () => {})
@@ -119,9 +176,10 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
       pauseDecoders()
       if (!stopped) { stopped = true; callbacks.current.onPlaybackStop() }
     }
-    async function decoderFor(layer: ReturnType<typeof sceneAtTime>['visuals'][number], signal: AbortSignal): Promise<Decoder> {
+    async function decoderFor(layer: { clip: ReturnType<typeof sceneAtTime>['visuals'][number]['clip']; media: ReturnType<typeof sceneAtTime>['visuals'][number]['media'] }, signal: AbortSignal): Promise<Decoder> {
       let decoder = decoders.get(layer.clip.id)
       if (!decoder) {
+        silence()
         const decodeController = new AbortController()
         const abortDecode = () => decodeController.abort()
         lifecycle.signal.addEventListener('abort', abortDecode, { once: true })
@@ -156,13 +214,22 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
           video.muted = true
           video.preload = 'auto'
           video.playsInline = true
-          const dispose = () => { video.pause(); video.removeAttribute('src'); video.load() }
+          let result: Decoder | undefined
+          const dispose = () => {
+            video.muted = true
+            video.pause()
+            result?.gainNode?.disconnect()
+            result?.sourceNode?.disconnect()
+            video.removeAttribute('src')
+            video.load()
+          }
           disposeElement = dispose
           disposers.add(dispose)
           const metadata = waitForMedia(video, 'loadedmetadata', () => video.readyState >= 1, decodeController.signal)
           video.src = url
           await metadata
-          return { element: video, width: video.videoWidth, height: video.videoHeight, dispose }
+          result = { element: video, width: video.videoWidth, height: video.videoHeight, dispose }
+          return result
         })()
         decoders.set(layer.clip.id, decoder)
       }
@@ -175,7 +242,7 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
       if (!Number.isFinite(scene.width) || !Number.isFinite(scene.height) || scene.width <= 0 || scene.height <= 0) throw new Error('Invalid preview dimensions')
       const frame = sceneAtTime(scene, nextTime)
       if (frame.visuals.length > MAX_ACTIVE_LAYERS) throw new Error('More than 32 active layers. Render to review this frame.')
-      const activeIds = new Set(frame.visuals.map(layer => layer.clip.id))
+      const activeIds = new Set([...frame.visuals, ...(soundEnabledRef.current ? frame.audio : [])].map(layer => layer.clip.id))
       // Keep only active decoders: a long timeline must not retain every decoded source.
       for (const [id, decoder] of decoders) if (!activeIds.has(id)) {
         decoders.delete(id)
@@ -189,13 +256,25 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
       const timer = window.setTimeout(() => { expired = true; controller.abort() }, FRAME_TIMEOUT_MS)
       const { signal } = controller
       try {
-        const sources = await Promise.all(frame.visuals.map(async layer => {
+        const provenAudio = new Set<string>()
+        if (soundEnabledRef.current) {
+          await Promise.all(scene.audio.map(async layer => {
+            let info = audioInfo.get(layer.media.id)
+            if (!info) { info = loadMediaInfo(layer.media.id); audioInfo.set(layer.media.id, info) }
+            if ((await interruptible(info, signal)).hasAudio) provenAudio.add(layer.clip.id)
+          }))
+        }
+        const audioLayers = soundEnabledRef.current ? frame.audio.filter(layer => provenAudio.has(layer.clip.id)) : []
+        const allLayers = [...frame.visuals, ...audioLayers.filter(layer => !frame.visuals.some(visual => visual.clip.id === layer.clip.id))]
+        if (allLayers.length > MAX_ACTIVE_LAYERS) throw new Error('More than 32 active media layers. Render to review this frame.')
+        const sources = await Promise.all(allLayers.map(async layer => {
           const decoder = await decoderFor(layer, signal)
           const video = decoder.element
           if (video instanceof HTMLVideoElement) {
             if (layer.sourceTimeMs / 1000 > video.duration + 0.033) throw new Error(`Source too short: ${layer.media.id}`)
             const target = Math.max(0, Math.min(layer.sourceTimeMs / 1000, Math.max(0, video.duration - 0.001)))
             if (forceSeek || Math.abs(video.currentTime - target) > 0.1 || video.readyState < 2) {
+              silence()
               video.pause()
               if (Math.abs(video.currentTime - target) > 0.0001 || video.seeking) {
                 const seek = waitForMedia(video, 'seeked', () => !video.seeking && Math.abs(video.currentTime - target) < 0.01, signal)
@@ -204,9 +283,13 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
               }
               await waitForMedia(video, 'loadeddata', () => video.readyState >= 2, signal)
             }
+            if (audioLayers.some(audio => audio.clip.id === layer.clip.id) && video.readyState < 3) {
+              silence()
+              await waitForMedia(video, 'canplay', () => video.readyState >= 3, signal)
+            }
             video.playbackRate = clipSpeed(layer.clip)
           }
-          return { layer, ...decoder }
+          return { layer, decoder, ...decoder }
         }))
         if (signal.aborted || lifecycle.signal.aborted) throw cancelled()
         const scale = Math.min(1, 1920 / Math.max(scene.width, scene.height))
@@ -218,6 +301,7 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
         context.fillStyle = scene.background
         context.fillRect(0, 0, scene.width, scene.height)
         for (const { layer, element, width, height } of sources) {
+          if (layer.media.type === 'audio') continue
           const geometry = visualGeometry(layer.clip, { ...layer.media, width, height }, scene.width, scene.height, nextTime)
           const crop = geometry.crop ?? { x: 0, y: 0, width, height }
           context.save()
@@ -229,8 +313,31 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
         }
         for (const title of frame.titles) drawText(context, title.text, title.fontSize, scene.width, scene.height, title)
         for (const caption of frame.captions) drawText(context, caption.text, caption.fontSize, scene.width, scene.height, caption)
-        for (const { element } of sources) if (element instanceof HTMLVideoElement) {
+        for (const { layer, element, decoder } of sources) if (element instanceof HTMLVideoElement) {
+          const audioLayer = audioLayers.find(audio => audio.clip.id === layer.clip.id)
+          const audioContext = audioContextRef.current
+          if (audioLayer && audioContext && masterGainRef.current) {
+            if (!decoder.sourceNode) {
+              decoder.sourceNode = audioContext.createMediaElementSource(element)
+              decoder.gainNode = audioContext.createGain()
+              decoder.gainNode.gain.value = 0
+              decoder.sourceNode.connect(decoder.gainNode)
+              decoder.gainNode.connect(masterGainRef.current)
+              // The source node now routes the element exclusively through our graph.
+              element.muted = false
+              element.volume = 1
+            }
+            const gain = decoder.gainNode!.gain
+            gain.cancelScheduledValues(audioContext.currentTime)
+            gain.setValueAtTime(audioGainAtTime(scene, audioLayer, nextTime, provenAudio), audioContext.currentTime)
+            const horizonMs = Math.min(20, Math.max(0, audioLayer.endMs - nextTime))
+            gain.linearRampToValueAtTime(audioGainAtTime(scene, audioLayer, nextTime + horizonMs, provenAudio), audioContext.currentTime + horizonMs / 1000)
+            // Even if rendering stalls, a decoder cannot sound beyond this clip.
+            gain.setValueAtTime(0, audioContext.currentTime + Math.max(0, audioLayer.endMs - nextTime) / 1000)
+          } else if (decoder.gainNode && audioContext) decoder.gainNode.gain.setValueAtTime(0, audioContext.currentTime)
+          else element.muted = true
           if (running && !element.ended && element.paused) {
+            silence()
             pendingPlay.add(element)
             try { await interruptible(element.play(), signal) }
             finally { pendingPlay.delete(element) }
@@ -242,6 +349,10 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
         canvas!.getContext('2d')?.drawImage(buffer, 0, 0)
         canvas!.dataset.timeMs = String(nextTime)
         setState('ready')
+        const audioContext = audioContextRef.current
+        if (running && soundEnabledRef.current && audioContext?.state === 'running' && masterGainRef.current) {
+          masterGainRef.current.gain.setValueAtTime(1, audioContext.currentTime)
+        } else silence()
       } catch (cause) {
         if (expired) throw new Error('Preview timed out. Try again or render to review.')
         throw cause
@@ -320,6 +431,7 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
     void tick(true)
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange)
+      silence()
       lifecycle.abort()
       frameController?.abort()
       cancelAnimationFrame(frameId)
@@ -330,16 +442,18 @@ export function CompositionPreview({ project, timeMs, playing, onTimeChange, onP
       decoders.clear()
       urls.clear()
     }
-  }, [plan, loadMedia, retry])
+  }, [plan, loadMedia, loadMediaInfo, retry, silence])
 
   React.useLayoutEffect(() => { command.current(timeMs, playing) }, [timeMs, playing])
 
   return (
     <div className="relative flex h-full w-full flex-col items-center justify-center">
+      <button type="button" onClick={toggleSound} className="absolute right-2 top-2 z-10 rounded bg-black/80 px-2 py-1 text-xs text-white/80">{soundEnabled ? 'Mute preview' : 'Enable sound'}</button>
+      {soundError && <div role="alert" className="absolute top-10 z-10 rounded bg-black/90 p-2 text-xs text-white/80">{soundError}</div>}
       <canvas ref={canvasRef} aria-label="Composition preview" data-state={state} className="h-full w-full object-contain" />
       {state === 'loading' && <div role="status" className="absolute rounded bg-black/75 px-3 py-2 text-xs text-white/70">Preparing frame…</div>}
       {state === 'error' && <div role="alert" className="absolute max-w-[90%] rounded bg-black/90 p-3 text-center text-xs text-white/80">{error}<button type="button" onClick={() => setRetry(value => value + 1)} className="ml-2 underline">Retry preview</button></div>}
-      {state === 'ready' && <div className="absolute bottom-1 rounded bg-black/75 px-2 py-1 text-[10px] text-white/60">Silent visual preview · render for audio, final fonts and color</div>}
+      {state === 'ready' && <div className="absolute bottom-1 rounded bg-black/75 px-2 py-1 text-[10px] text-white/60">{soundEnabled ? 'Composition with sound' : 'Silent visual preview'} · render for final fonts and color</div>}
     </div>
   )
 }

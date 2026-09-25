@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'bun:test';
-import { buildScenePlan, sceneAtTime, visualGeometry } from './scene-plan.mjs';
+import { spawnSync } from 'node:child_process';
+import { buildScenePlan, sceneAtTime, visualGeometry, audioGainAtTime, clipVolume, clipFadeSeconds } from './scene-plan.mjs';
 function project() {
     return { title: 'Scene', settings: {width: 320,height: 240,fps: 30},
         media: [{id:'m',type:'video',path:'fixture.mp4',width:640,height:480,durationMs:20000}],
@@ -55,5 +56,67 @@ describe('browser-safe scene contract', () => {
         expect(buildScenePlan(p).issues.map(i=>i.code)).toContain('preview-unsupported-adjustments');
         clip.transitionIn={type:'crossfade'};
         expect(buildScenePlan(p).issues.map(i=>i.code)).toContain('unsupported-transition');
+    });
+});
+
+
+describe('shared audio scene', () => {
+    function audioProject() {
+        const p = project();
+        p.media = [{id:'tone',type:'audio',path:'tone.wav'}, {id:'silent',type:'video',path:'silent.mp4',hasAudio:false}, {id:'unknown',type:'video',path:'unknown.mp4'}];
+        p.timeline.tracks = [{id:'sound',clips:[
+            {id:'first',type:'audio',mediaId:'tone',startMs:0,durationMs:1000},
+            {id:'future',type:'audio',mediaId:'tone',startMs:2000,durationMs:1000,volume:0},
+            {id:'silent',type:'video',mediaId:'silent',startMs:0,durationMs:4000},
+            {id:'unknown',type:'video',mediaId:'unknown',startMs:0,durationMs:4000},
+        ]}, {id:'muted',muted:true,clips:[{id:'muted',type:'audio',mediaId:'tone',startMs:0,durationMs:4000}]},
+        {id:'hidden',hidden:true,clips:[{id:'hidden',type:'audio',mediaId:'tone',startMs:0,durationMs:4000}]}];
+        return p;
+    }
+    test('candidate policy excludes disabled, hidden and muted tracks; even stale hasAudio false requires a real probe', () => {
+        const p = audioProject();
+        p.timeline.tracks[0].clips.push({id:'disabled',type:'audio',mediaId:'tone',startMs:0,durationMs:1000,disabled:true});
+        expect(buildScenePlan(p).audio.map(a=>a.clip.id)).toEqual(['first','silent','unknown','future']);
+    });
+    test('normalization includes future and zero-volume streams but excludes ended or disproven video streams', () => {
+        const plan = buildScenePlan(audioProject());
+        const first = plan.audio.find(a=>a.clip.id==='first');
+        const future = plan.audio.find(a=>a.clip.id==='future');
+        expect(audioGainAtTime(plan,first,500)).toBeCloseTo(1/4);
+        expect(audioGainAtTime(plan,first,500,new Set(['first','future']))).toBe(0.5);
+        expect(audioGainAtTime(plan,first,1000)).toBe(0);
+        expect(audioGainAtTime(plan,future,2500)).toBe(0);
+        future.clip.volume = 1;
+        expect(audioGainAtTime(plan,future,2500,new Set(['first','future']))).toBe(1);
+        expect(sceneAtTime(plan,1000).audio.map(a=>a.clip.id)).not.toContain('first');
+    });
+    test('gain clamps volume and caps linear fades at half duration; source clocks honor speed and source in', () => {
+        const p=audioProject();
+        p.timeline.tracks[0].clips=[{id:'faded',type:'audio',mediaId:'tone',startMs:1000,durationMs:2000,sourceInMs:500,speed:2,volume:8,fadeInMs:5000,fadeOutMs:5000}];
+        const plan=buildScenePlan(p), audio=plan.audio[0];
+        expect(clipVolume(audio.clip)).toBe(4);
+        expect(clipFadeSeconds(audio.clip,'fadeInMs')).toBe(1);
+        expect(audioGainAtTime(plan,audio,1000)).toBe(0);
+        expect(audioGainAtTime(plan,audio,1500)).toBe(2);
+        expect(audioGainAtTime(plan,audio,2000)).toBe(4);
+        expect(audioGainAtTime(plan,audio,2500)).toBe(2);
+        expect(sceneAtTime(plan,1500).audio[0].sourceTimeMs).toBe(1500);
+    });
+    test('real FFmpeg retains zero-volume streams in its normalization denominator', () => {
+        const result=spawnSync('ffmpeg',['-v','error','-f','lavfi','-i','aevalsrc=0.4:s=48000:d=1','-f','lavfi','-i','aevalsrc=0.2:s=48000:d=2','-filter_complex','[1:a]volume=0[b];[0:a][b]amix=inputs=2:duration=longest:dropout_transition=0[a]','-map','[a]','-f','f32le','-'],{maxBuffer:4*48000*4});
+        expect(result.status,result.stderr.toString()).toBe(0);
+        expect(result.stdout.readFloatLE(24000*4)).toBeCloseTo(0.2,5);
+        expect(result.stdout.readFloatLE(72000*4)).toBeCloseTo(0,5);
+    });
+    test('real FFmpeg delayed amix samples agree with future-stream and EOF normalization', () => {
+        const result=spawnSync('ffmpeg',['-v','error','-f','lavfi','-i','aevalsrc=0.4:s=48000:d=1','-f','lavfi','-i','aevalsrc=0.2:s=48000:d=1','-filter_complex','[1:a]adelay=2000:all=1[b];[0:a][b]amix=inputs=2:duration=longest:dropout_transition=0[a]','-map','[a]','-f','f32le','-'],{maxBuffer:4*48000*4});
+        expect(result.status,result.stderr.toString()).toBe(0);
+        const p=audioProject();p.timeline.tracks=[{id:'sound',clips:p.timeline.tracks[0].clips.slice(0,2)}];
+        p.timeline.tracks[0].clips[1].volume=1;
+        const plan=buildScenePlan(p);
+        for(const time of [100,500,1200,2200,2500]) {
+            const expected=0.4*audioGainAtTime(plan,plan.audio[0],time)+0.2*audioGainAtTime(plan,plan.audio[1],time);
+            expect(result.stdout.readFloatLE(Math.round(time*48)*4)).toBeCloseTo(expected,5);
+        }
     });
 });

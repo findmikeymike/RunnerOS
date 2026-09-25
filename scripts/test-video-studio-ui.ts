@@ -60,12 +60,51 @@ try {
     assert.equal(clock.status, 0, clock.stderr);
     const overlay = spawnSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=80x80,drawbox=x=40:y=0:w=40:h=80:color=yellow:t=fill', '-frames:v', '1', join(temporary, 'overlay.png')], { encoding: 'utf8' });
     assert.equal(overlay.status, 0, overlay.stderr);
-    browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome' });
+    for (const [name, frequency] of [['tone-video', 440], ['tone-audio', 880]] as const) {
+        const args = name === 'tone-video'
+            ? ['-f', 'lavfi', '-i', 'color=red:s=320x240:r=10:d=8', '-f', 'lavfi', '-i', `sine=frequency=${frequency}:duration=8`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac']
+            : ['-f', 'lavfi', '-i', `sine=frequency=${frequency}:duration=8`, '-c:a', 'aac'];
+        const made = spawnSync('ffmpeg', ['-v', 'error', ...args, join(temporary, `${name}.mp4`)], { encoding: 'utf8' });
+        assert.equal(made.status, 0, made.stderr);
+    }
+    browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome', args: ['--mute-audio'] });
     const page = await browser.newPage({ viewport: { width: 1600, height: 1100 } });
+    await page.addInitScript(() => {
+        const captured = (window as any).audioCapture = { analysers: [] as AnalyserNode[], sources: [] as any[], measure: () => 0 };
+        const sinks = new WeakMap<BaseAudioContext, AnalyserNode>();
+        const connect = AudioNode.prototype.connect;
+        AudioNode.prototype.connect = function (destination: any, ...args: any[]) {
+            if (destination === this.context.destination) {
+                let analyser = sinks.get(this.context);
+                if (!analyser) {
+                    analyser = this.context.createAnalyser(); analyser.fftSize = 4096;
+                    const silentSink = (this.context as AudioContext).createMediaStreamDestination();
+                    connect.call(analyser, silentSink);
+                    sinks.set(this.context, analyser); captured.analysers.push(analyser);
+                }
+                destination = analyser;
+            }
+            return (connect as any).call(this, destination, ...args);
+        } as typeof connect;
+        const createSource = AudioContext.prototype.createMediaElementSource;
+        AudioContext.prototype.createMediaElementSource = function (element) {
+            captured.sources.push(element);
+            return createSource.call(this, element);
+        };
+        captured.measure = () => {
+            let sum = 0, count = 0;
+            for (const analyser of captured.analysers) {
+                const samples = new Float32Array(analyser.fftSize);
+                analyser.getFloatTimeDomainData(samples);
+                for (const sample of samples) { sum += sample * sample; count++; }
+            }
+            return count ? Math.sqrt(sum / count) : 0;
+        };
+    });
     await page.route('https://video-studio-fixture.test/**', route => {
         const path = new URL(route.request().url()).pathname;
         if (path === '/overlay.png') return route.fulfill({ contentType: 'image/png', body: readFileSync(join(temporary, 'overlay.png')) });
-        if (path === '/source.mp4' || path === '/render.mp4' || path === '/clock.mp4') {
+        if (path === '/source.mp4' || path === '/render.mp4' || path === '/clock.mp4' || path === '/tone-video.mp4' || path === '/tone-audio.mp4') {
             const bytes = readFileSync(join(temporary, path.slice(1)));
             const range = route.request().headers()['range']?.match(/bytes=(\d+)-(\d*)/);
             if (range) {
@@ -452,6 +491,94 @@ try {
             return ctx.getImageData(80, 120, 1, 1).data[0]! > 220 && ctx.getImageData(240, 120, 1, 1).data[2]! > 220;
         });
         await page.getByTitle('Pause', { exact: true }).click();
+    });
+    const openAudio = async (mode = 'basic') => {
+        await page.evaluate(mode => (window as any).fixture.audio(mode), mode);
+        await page.getByRole('button', { name: 'Composition', exact: true }).click();
+        await readyComposition(0);
+    };
+    const rms = () => page.evaluate(() => (window as any).audioCapture.measure() as number);
+    const audioAt = async (time: number) => {
+        if (await page.getByTitle('Pause', { exact: true }).count()) await page.getByTitle('Pause', { exact: true }).click();
+        await seekComposition(time); await readyComposition(time);
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.waitForFunction(time => Number((document.querySelector('input[aria-label="Composition time"]') as HTMLInputElement)?.value) > time + 150, time);
+        const level = await rms();
+        await page.getByTitle('Pause', { exact: true }).click();
+        return level;
+    };
+    await check('composition audio requires opt-in and measured output goes silent on pause, mute and hide', async () => {
+        await openAudio();
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.waitForTimeout(250);
+        assert.equal(await rms(), 0, 'sound is opt-in');
+        await page.getByRole('button', { name: 'Enable sound', exact: true }).click();
+        await page.waitForFunction(() => (window as any).audioCapture.measure() > 0.015);
+        await page.getByTitle('Pause', { exact: true }).click();
+        await page.waitForTimeout(150);
+        assert.ok(await rms() < 0.0001, 'pause must silence the measured graph');
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.waitForFunction(() => (window as any).audioCapture.measure() > 0.015);
+        await page.getByRole('button', { name: 'Mute preview', exact: true }).click();
+        await page.waitForTimeout(150);
+        assert.ok(await rms() < 0.0001, 'mute must silence the measured graph');
+        await page.getByRole('button', { name: 'Enable sound', exact: true }).click();
+        await page.waitForFunction(() => (window as any).audioCapture.measure() > 0.015);
+        await page.evaluate(() => {
+            Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+            Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        await page.getByTitle('Play', { exact: true }).waitFor();
+        await page.waitForTimeout(150);
+        assert.ok(await rms() < 0.0001, 'hidden page must silence the measured graph');
+    });
+    await check('real audio output follows seeked volume and fade envelopes', async () => {
+        await openAudio('fade');
+        await page.getByRole('button', { name: 'Enable sound', exact: true }).click();
+        const early = await audioAt(100), middle = await audioAt(2400), late = await audioAt(4600);
+        assert.ok(middle > 0.006, `middle fade section must be audible, RMS ${middle}`);
+        assert.ok(early < middle * 0.45, `fade in must attenuate: ${early} vs ${middle}`);
+        assert.ok(late < middle * 0.45, `fade out must attenuate: ${late} vs ${middle}`);
+        assert.ok(middle < 0.035, `volume0.5 with normalized video+audio mix must attenuate full sine RMS, got ${middle}`);
+    });
+    await check('duplicate audio clips keep independent gain, source offsets and playback speeds', async () => {
+        await openAudio('duplicate');
+        await page.getByRole('button', { name: 'Enable sound', exact: true }).click();
+        const first = await audioAt(100), mixed = await audioAt(1500);
+        assert.ok(first > 0.001, `first clip must produce measured audio, got ${first}`);
+        assert.ok(mixed > first * 2, `second louder clip must increase measured mix: ${first} -> ${mixed}`);
+        const sources = await page.evaluate(() => (window as any).audioCapture.sources.filter((source: HTMLMediaElement) => source.src.endsWith('tone-audio.mp4')).map((source: HTMLMediaElement) => ({ time: source.currentTime, speed: source.playbackRate })));
+        assert.ok(sources.some((source: any) => source.speed === 1) && sources.some((source: any) => source.speed === 2), 'same asset needs distinct live speed1 and speed2 decoders');
+        const slow = sources.find((source: any) => source.speed === 1), fast = sources.find((source: any) => source.speed === 2);
+        assert.ok(fast.time > slow.time + 0.3, `different source offsets must remain independent: ${JSON.stringify(sources)}`);
+    });
+    await check('audible composition silences its actual graph while buffering and after media failure', async () => {
+        await openAudio('stall');
+        await page.evaluate(() => { (window as any).fixture.holdMedia = 'video-media-audio'; });
+        await page.getByRole('button', { name: 'Enable sound', exact: true }).click();
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.waitForFunction(() => (window as any).audioCapture.measure() > 0.01);
+        await page.waitForFunction(() => !!(window as any).fixture.pendingMedia['video-media-audio'] && document.querySelector('canvas[aria-label="Composition preview"]')?.getAttribute('data-state') === 'loading');
+        await page.waitForTimeout(150);
+        assert.ok(await rms() < 0.0001, 'buffering must silence already-playing audio');
+        await page.evaluate(() => {
+            (window as any).fixture.missingMedia = 'video-media-audio';
+            (window as any).fixture.pendingMedia['video-media-audio']();
+        });
+        await page.getByRole('alert').waitFor();
+        await page.getByTitle('Play', { exact: true }).waitFor();
+        await page.waitForTimeout(150);
+        assert.ok(await rms() < 0.0001, 'failed audio must leave the graph silent');
+    });
+    await check('unknown audio metadata fails visibly instead of guessing the mix', async () => {
+        await openAudio();
+        await page.evaluate(() => { (window as any).fixture.unknownAudio = true; });
+        await page.getByRole('button', { name: 'Enable sound', exact: true }).click();
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.getByRole('alert').waitFor();
+        await page.getByTitle('Play', { exact: true }).waitFor();
+        assert.ok(await rms() < 0.0001);
     });
     await check('missing media encountered during composition playback stops with an error', async () => {
         await page.evaluate(() => { (window as any).fixture.missingMedia = 'video-media-overlay'; });

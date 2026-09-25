@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { readFile } from 'node:fs/promises';
 import { commitVideoProjectContent } from '../../../../../tools/video-studio/lib/project-storage.mjs';
 import { isAbsolute, resolve } from 'node:path';
@@ -35,8 +37,39 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.outputs.READ_ASSET_TEXT,
   RPC_CHANNELS.outputs.READ_SIGNAL_BRIEFING_AUDIO,
   RPC_CHANNELS.outputs.WRITE_ASSET_TEXT,
+  RPC_CHANNELS.outputs.READ_ASSET_MEDIA_INFO,
   RPC_CHANNELS.outputs.READ_ASSET_DATA_URL,
 ] as const;
+
+const execFileAsync = promisify(execFile);
+
+let activeMediaProbes = 0;
+const pendingMediaProbes: Array<() => void> = [];
+async function acquireMediaProbe(): Promise<() => void> {
+  if (activeMediaProbes >= 4) await new Promise<void>((resolve) => pendingMediaProbes.push(resolve));
+  else activeMediaProbes++;
+  return () => {
+    const next = pendingMediaProbes.shift();
+    if (next) next();
+    else activeMediaProbes--;
+  };
+}
+
+async function validatePreviewSource(workspaceId: string, safePath: string, expectedSourcePath?: string): Promise<void> {
+  if (expectedSourcePath !== undefined) {
+    if (typeof expectedSourcePath !== 'string' || !expectedSourcePath.trim() || !isAbsolute(expectedSourcePath)) {
+      throw new Error('Preview source does not match this Output asset. Reimport or relink the media before previewing.');
+    }
+    // Resolve identity under the existing boundary; the expected path is never
+    // used as the read target and cannot grant access to another file.
+    let expectedPath: string;
+    try { expectedPath = await validateFilePath(expectedSourcePath, getWorkspaceAllowedDirs(workspaceId)); }
+    catch { throw new Error('Preview source does not match this Output asset. Reimport or relink the media before previewing.'); }
+    if (resolve(expectedPath) !== resolve(safePath)) {
+      throw new Error('Preview source does not match this Output asset. Reimport or relink the media before previewing.');
+    }
+  }
+}
 
 function resolveRootPath(workspaceId: string): string {
   const workspace = getWorkspaceByNameOrId(workspaceId);
@@ -356,23 +389,32 @@ export function registerOutputsHandlers(server: RpcServer, deps: HandlerDeps): v
   );
 
   server.handle(
+    RPC_CHANNELS.outputs.READ_ASSET_MEDIA_INFO,
+    async (_ctx, workspaceId: string, outputId: string, assetId: string, expectedSourcePath: string): Promise<{ hasAudio: boolean }> => {
+      assertLocalWorkspace(workspaceId, 'Inspect output media');
+      const safePath = await resolveSafeOutputAssetPath(workspaceId, outputId, assetId, serviceFor(server));
+      if (expectedSourcePath === undefined) throw new Error('Preview source is required. Reimport or relink the media before previewing.');
+      await validatePreviewSource(workspaceId, safePath, expectedSourcePath);
+      const releaseProbe = await acquireMediaProbe();
+      try {
+        const { stdout } = await execFileAsync('ffprobe', [
+          '-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=codec_type', '-of', 'json', safePath,
+        ], { encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024 });
+        const result = JSON.parse(stdout);
+        if (!Array.isArray(result.streams)) throw new Error('Invalid media information');
+        return { hasAudio: result.streams.some((stream: { codec_type?: string }) => stream.codec_type === 'audio') };
+      } catch {
+        throw new Error('Could not inspect preview audio. Check that FFmpeg is installed and the media is readable, then retry.');
+      } finally { releaseProbe(); }
+    },
+  );
+
+  server.handle(
     RPC_CHANNELS.outputs.READ_ASSET_DATA_URL,
     async (_ctx, workspaceId: string, outputId: string, assetId?: string, expectedSourcePath?: string): Promise<string> => {
       assertLocalWorkspace(workspaceId, 'Read output asset');
       const safePath = await resolveSafeOutputAssetPath(workspaceId, outputId, assetId, serviceFor(server));
-      if (expectedSourcePath !== undefined) {
-        if (typeof expectedSourcePath !== 'string' || !expectedSourcePath.trim() || !isAbsolute(expectedSourcePath)) {
-          throw new Error('Preview source does not match this Output asset. Reimport or relink the media before previewing.');
-        }
-        // Resolve identity under the existing boundary; the expected path is never
-        // used as the read target and cannot grant access to another file.
-        let expectedPath: string;
-        try { expectedPath = await validateFilePath(expectedSourcePath, getWorkspaceAllowedDirs(workspaceId)); }
-        catch { throw new Error('Preview source does not match this Output asset. Reimport or relink the media before previewing.'); }
-        if (resolve(expectedPath) !== resolve(safePath)) {
-          throw new Error('Preview source does not match this Output asset. Reimport or relink the media before previewing.');
-        }
-      }
+      await validatePreviewSource(workspaceId, safePath, expectedSourcePath);
       const buffer = await readFile(safePath);
       return `data:${mimeTypeForPath(safePath)};base64,${buffer.toString('base64')}`;
     },

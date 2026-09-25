@@ -299,6 +299,7 @@ const EXPECTED_CHANNELS: string[] = [
   "outputs:openFile",
   "outputs:promoteToFinal",
   "outputs:readAssetDataUrl",
+  "outputs:readAssetMediaInfo",
   "outputs:readAssetText",
   "outputs:readSignalBriefingAudio",
   "outputs:rebindSocialVariantSet",

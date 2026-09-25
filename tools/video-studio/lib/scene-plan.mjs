@@ -21,6 +21,29 @@ export function finiteNumber(value, fallback) {
     return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+export function clipVolume(clip) {
+    return clamp(finiteNumber(clip.volume, 1), 0, 4);
+}
+
+export function clipFadeSeconds(clip, key, clipDurationSeconds = seconds(clip.durationMs, 1000)) {
+    return clamp(finiteNumber(clip[key], 0) / 1000, 0, Math.max(0, clipDurationSeconds / 2));
+}
+
+/** amix normalize=1 counts delayed silence and zero-volume streams until EOF. */
+export function audioGainAtTime(plan, audio, timeMs, knownAudibleClipIds) {
+    const known = (entry) => !knownAudibleClipIds || knownAudibleClipIds.has(entry.clip.id);
+    if (!Number.isFinite(timeMs) || timeMs < audio.startMs || timeMs >= audio.endMs || !known(audio)) return 0;
+    const denominator = plan.audio.filter(entry => timeMs < entry.endMs && known(entry)).length;
+    if (!denominator) return 0;
+    const duration = Math.max(0, audio.endMs - audio.startMs) / 1000;
+    const elapsed = (timeMs - audio.startMs) / 1000;
+    const fadeIn = clipFadeSeconds(audio.clip, 'fadeInMs', duration);
+    const fadeOut = clipFadeSeconds(audio.clip, 'fadeOutMs', duration);
+    const envelope = Math.min(fadeIn > 0 ? clamp(elapsed / fadeIn, 0, 1) : 1,
+        fadeOut > 0 ? clamp((duration - elapsed) / fadeOut, 0, 1) : 1);
+    return clipVolume(audio.clip) * envelope / denominator;
+}
+
 export function clipTransform(clip) {
     const transform = clip.transform && typeof clip.transform === 'object' ? clip.transform : {};
     return {
@@ -240,13 +263,18 @@ export function buildScenePlan(project, width, height) {
     height ??= typeof project.settings.height === 'number' ? project.settings.height : 1920;
     const fps = typeof project.settings.fps === 'number' ? project.settings.fps : 30;
     const visibleTracks = project.timeline.tracks.filter((track) => track.hidden !== true);
-    const clips = visibleTracks.flatMap((track, trackIndex) => track.clips.map((clip) => ({ clip, trackIndex })))
+    const clips = visibleTracks.flatMap((track, trackIndex) => track.clips.map((clip) => ({ clip, trackIndex, trackId: track.id, muted: track.muted })))
         .filter(({ clip }) => clip.disabled !== true)
         .sort((a, b) => a.trackIndex - b.trackIndex || a.clip.startMs - b.clip.startMs);
     const activeDuration = clips.reduce((end, { clip }) => Math.max(end, clip.startMs + clip.durationMs), 0);
     const durationMs = activeDuration > 0 ? activeDuration : project.timeline.durationMs || 3000;
     const mediaById = new Map(project.media.map((media) => [media.id, media]));
-    const mediaClips = clips.map(({ clip }) => ({ clip, media: mediaById.get(clip.mediaId) })).filter(({ media }) => Boolean(media));
+    const mediaClips = clips.map(({ clip, trackId, muted }) => ({ clip, trackId, muted, media: mediaById.get(clip.mediaId) })).filter(({ media }) => Boolean(media));
+    const audio = mediaClips.filter(({ media, muted }) => !muted && (media.type === 'audio' || media.type === 'video'))
+        .map(({ clip, media, trackId }) => {
+            const startMs = Math.max(0, Math.round(clip.startMs ?? 0));
+            return { clip, media, trackId, startMs, endMs: startMs + Math.max(0, finiteNumber(clip.durationMs, 1000)) };
+        });
     const visuals = mediaClips.filter(({ media }) => media.type === 'video' || media.type === 'image');
     const textClips = visibleTracks.flatMap((track) => track.clips)
         .filter((clip) => clip.disabled !== true && clip.type !== 'caption' && (clip.type === 'text' || clip.text || !clip.mediaId));
@@ -275,7 +303,7 @@ export function buildScenePlan(project, width, height) {
             issues.push({ code: 'preview-unsupported-adjustments', clipId: clip.id, message: `Clip "${clip.label || clip.id}" has color or look adjustments. Render to review these accurately.` });
         }
     }
-    return { width, height, fps, durationMs, background: '#111111', visuals, titles, captions, issues };
+    return { width, height, fps, durationMs, background: '#111111', audio, visuals, titles, captions, issues };
 }
 
 /** Inclusive layer boundaries match FFmpeg's between(t,start,end) enable expression. */
@@ -283,6 +311,8 @@ export function sceneAtTime(plan, timeMs) {
     const active = (layer) => timeMs >= layer.startMs && timeMs <= layer.endMs;
     return {
         ...plan, timeMs,
+        audio: plan.audio.filter(entry => timeMs >= entry.startMs && timeMs < entry.endMs)
+            .map(entry => ({ ...entry, sourceTimeMs: Math.max(0, finiteNumber(entry.clip.sourceInMs, 0)) + Math.max(0, timeMs - entry.startMs) * clipSpeed(entry.clip) })),
         visuals: plan.visuals.filter(({ clip }) => active({ startMs: Math.max(0, clip.startMs), endMs: Math.max(0, clip.startMs + clip.durationMs) }))
             .map(({ clip, media }) => ({ clip, media,
                 sourceTimeMs: media.type === 'image' ? 0 : Math.max(0, finiteNumber(clip.sourceInMs, 0)) + Math.max(0, timeMs - clip.startMs) * clipSpeed(clip),

@@ -1,5 +1,5 @@
 import {
-    seconds, clamp, clipSpeed, clipTransform, clipOpacity, clipCrop,
+    seconds, clamp, clipSpeed, clipVolume, clipFadeSeconds, clipTransform, clipOpacity, clipCrop,
     visualSourceSize, fittedVisualSize, assertSourceCanCoverSpeed,
     validateRenderCapabilities, buildScenePlan, positionKeyframes,
 } from './scene-plan.mjs';
@@ -17,13 +17,7 @@ export function ffmpegNumber(value) {
     return value.toFixed(3).replace(/\.?0+$/, '');
 }
 
-function clipVolume(clip) {
-    return clamp(typeof clip.volume === 'number' && Number.isFinite(clip.volume) ? clip.volume : 1, 0, 4);
-}
-function clipFadeSeconds(clip, key, clipDurationSeconds) {
-    const value = typeof clip[key] === 'number' && Number.isFinite(clip[key]) ? clip[key] : 0;
-    return clamp(value / 1000, 0, Math.max(0, clipDurationSeconds / 2));
-}
+
 
 function ffmpegExprNumber(value) {
     const rounded = Math.round(value * 1000) / 1000;

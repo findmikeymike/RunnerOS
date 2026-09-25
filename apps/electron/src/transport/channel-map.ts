@@ -685,6 +685,7 @@ export const CHANNEL_MAP = {
   getSignalHandoff: invoke(RPC_CHANNELS.signals.GET_HANDOFF),
   clearSignalHandoff: invoke(RPC_CHANNELS.signals.CLEAR_HANDOFF),
   writeOutputAssetText: invoke(RPC_CHANNELS.outputs.WRITE_ASSET_TEXT),
+  readOutputAssetMediaInfo: invoke(RPC_CHANNELS.outputs.READ_ASSET_MEDIA_INFO),
   readOutputAssetDataUrl: invoke(RPC_CHANNELS.outputs.READ_ASSET_DATA_URL),
   onOutputsUpdated: listener(RPC_CHANNELS.outputs.UPDATED),
 
