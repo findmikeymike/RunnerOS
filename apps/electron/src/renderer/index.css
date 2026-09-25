@@ -909,6 +909,39 @@ html[data-font="inter"] {
     outline-offset: 1px;
   }
 
+  .artist-os-workspace-switcher.artist-os-space-dock {
+    width: 36px;
+    height: auto;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .artist-os-space-dock .artist-os-place-button {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 9px;
+    flex-shrink: 0;
+  }
+
+  .artist-os-space-dock .artist-os-place-button > svg { width: 17px; height: 17px; }
+  .artist-os-space-dock .artist-os-place-button[aria-current='page'] {
+    background: transparent;
+    color: #ededed;
+    box-shadow: inset 0 0 0 1px var(--place-accent);
+  }
+  .artist-os-space-dock [data-place='hq'] { --place-accent: #fb923c; }
+  .artist-os-space-dock [data-place='campaign'] { --place-accent: #20bf91; }
+  .artist-os-space-dock [data-place='lab'] { --place-accent: #38a4f5; }
+  .artist-os-workspace-switcher.artist-os-space-dock .artist-os-place-button > svg { color: inherit; }
+
   @media (prefers-reduced-motion: reduce) {
     .artist-os-workspace-switcher .artist-os-place-button { transition: none; }
   }

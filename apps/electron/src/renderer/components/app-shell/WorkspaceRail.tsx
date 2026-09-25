@@ -35,6 +35,7 @@ interface WorkspaceRailProps {
   workspaceUnreadMap?: Record<string, boolean>
   orientation?: 'horizontal' | 'vertical'
   compact?: boolean
+  footer?: boolean
 }
 
 export function WorkspaceRail({
@@ -46,6 +47,7 @@ export function WorkspaceRail({
   workspaceUnreadMap,
   orientation = 'vertical',
   compact = false,
+  footer = false,
 }: WorkspaceRailProps) {
   const { t } = useTranslation()
   const [showCreationScreen, setShowCreationScreen] = useState(false)
@@ -346,31 +348,45 @@ export function WorkspaceRail({
             data-testid="artist-place-switcher"
             className={cn(
               "artist-os-workspace-switcher flex h-[30px] shrink-0 items-center rounded-[9px] border border-white/[0.08] p-[3px]",
+              footer && "artist-os-space-dock",
               compact && "[&>button]:gap-1 [&>button]:px-1.5 [&>button]:text-[10.5px]",
             )}
           >
-            {hqWorkspace ? (
-              <button
-                type="button"
-                onClick={(event) => void handleWorkspaceSelect(hqWorkspace, event.metaKey || event.ctrlKey)}
-                title={compact ? 'HQ' : undefined}
-                aria-current={hqWorkspace.id === activeWorkspaceId ? 'page' : undefined}
-                className={cn(
-                  'artist-os-place-button flex h-[22px] items-center gap-1.5 rounded-[6px] px-2 text-[11px] font-medium transition-colors',
-                  hqWorkspace.id === activeWorkspaceId
-                    ? 'text-white'
-                    : 'text-white/60',
-                )}
-              >
-                <Home className="h-3.5 w-3.5" strokeWidth={1.8} />
-                <span className={compact ? 'sr-only' : undefined}>HQ</span>
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={(event) => {
+                if (labWorkspace) {
+                  void handleWorkspaceSelect(labWorkspace, event.metaKey || event.ctrlKey)
+                } else {
+                  void handleNewLab()
+                }
+              }}
+              disabled={isCreatingLab}
+              data-place="lab"
+              title={compact ? 'Creative Lab' : undefined}
+              aria-busy={isCreatingLab}
+              aria-label={isCreatingLab ? 'Creating Creative Lab' : undefined}
+              aria-current={labWorkspace?.id === activeWorkspaceId ? 'page' : undefined}
+              className={cn(
+                'relative artist-os-place-button flex h-[22px] items-center gap-1.5 rounded-[6px] px-2 text-[11px] font-medium transition-colors disabled:opacity-45',
+                labWorkspace?.id === activeWorkspaceId
+                  ? 'text-white'
+                  : 'text-white/60',
+              )}
+            >
+              <FlaskConical className="h-3.5 w-3.5 text-[#f97316]" strokeWidth={1.8} />
+              <span className={compact ? 'sr-only' : undefined}>{isCreatingLab && !compact ? 'Creating…' : 'Lab'}</span>
+              {labWorkspace && workspaceUnreadMap?.[labWorkspace.id] ? (
+                <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#fb923c]" />
+              ) : null}
+            </button>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
+                  data-place="campaign"
+                  title={activeCampaign?.name || 'Campaigns'}
                   aria-current={campaignWorkspaces.some((workspace) => workspace.id === activeWorkspaceId) ? 'page' : undefined}
                   className={cn(
                     'relative artist-os-place-button flex h-[22px] items-center gap-1.5 rounded-[6px] px-2 text-[11px] font-medium transition-colors',
@@ -379,15 +395,15 @@ export function WorkspaceRail({
                       : 'text-white/60',
                   )}
                 >
-                  {!compact && <Disc3 className="h-3.5 w-3.5" strokeWidth={1.8} />}
-                  <span className="max-w-40 truncate" title={activeCampaign?.name}>{activeCampaign?.name || 'Campaigns'}</span>
-                  <ChevronDown className="h-3 w-3 text-white/40" strokeWidth={1.8} />
+                  {(!compact || footer) && <Disc3 className="h-3.5 w-3.5" strokeWidth={1.8} />}
+                  <span className={footer ? "sr-only" : "max-w-40 truncate"} title={activeCampaign?.name}>{activeCampaign?.name || 'Campaigns'}</span>
+                  {!footer && <ChevronDown className="h-3 w-3 text-white/40" strokeWidth={1.8} />}
                   {campaignWorkspaces.some((workspace) => workspaceUnreadMap?.[workspace.id]) ? (
                     <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#fb923c]" />
                   ) : null}
                 </button>
               </DropdownMenuTrigger>
-              <StyledDropdownMenuContent side="bottom" align="start" sideOffset={8} minWidth="min-w-52">
+              <StyledDropdownMenuContent side={footer ? "top" : "bottom"} align="start" sideOffset={8} minWidth="min-w-52">
                 {campaignWorkspaces.map((workspace) => {
                   const active = workspace.id === activeWorkspaceId
                   const disconnected = isRemoteDisconnected(workspace.id)
@@ -415,33 +431,24 @@ export function WorkspaceRail({
               </StyledDropdownMenuContent>
             </DropdownMenu>
 
-            <button
-              type="button"
-              onClick={(event) => {
-                if (labWorkspace) {
-                  void handleWorkspaceSelect(labWorkspace, event.metaKey || event.ctrlKey)
-                } else {
-                  void handleNewLab()
-                }
-              }}
-              disabled={isCreatingLab}
-              title={compact ? 'Creative Lab' : undefined}
-              aria-busy={isCreatingLab}
-              aria-label={isCreatingLab ? 'Creating Creative Lab' : undefined}
-              aria-current={labWorkspace?.id === activeWorkspaceId ? 'page' : undefined}
-              className={cn(
-                'relative artist-os-place-button flex h-[22px] items-center gap-1.5 rounded-[6px] px-2 text-[11px] font-medium transition-colors disabled:opacity-45',
-                labWorkspace?.id === activeWorkspaceId
-                  ? 'text-white'
-                  : 'text-white/60',
-              )}
-            >
-              <FlaskConical className="h-3.5 w-3.5 text-[#f97316]" strokeWidth={1.8} />
-              <span className={compact ? 'sr-only' : undefined}>{isCreatingLab && !compact ? 'Creating…' : 'Lab'}</span>
-              {labWorkspace && workspaceUnreadMap?.[labWorkspace.id] ? (
-                <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#fb923c]" />
-              ) : null}
-            </button>
+            {hqWorkspace ? (
+              <button
+                type="button"
+                onClick={(event) => void handleWorkspaceSelect(hqWorkspace, event.metaKey || event.ctrlKey)}
+                data-place="hq"
+                title={compact ? 'HQ' : undefined}
+                aria-current={hqWorkspace.id === activeWorkspaceId ? 'page' : undefined}
+                className={cn(
+                  'artist-os-place-button flex h-[22px] items-center gap-1.5 rounded-[6px] px-2 text-[11px] font-medium transition-colors',
+                  hqWorkspace.id === activeWorkspaceId
+                    ? 'text-white'
+                    : 'text-white/60',
+                )}
+              >
+                <Home className="h-3.5 w-3.5" strokeWidth={1.8} />
+                <span className={compact ? 'sr-only' : undefined}>HQ</span>
+              </button>
+            ) : null}
           </div>
         </nav>
       ) : (

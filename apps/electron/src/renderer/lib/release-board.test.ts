@@ -9,6 +9,7 @@ import {
   findReleaseBoardWorkerSession,
   getReleaseBoardActionLabel,
   getBoardTotals,
+  getNextReleaseEssentials,
   getReleaseBoardItemAction,
   linkReleaseBoardItemSession,
   linkReleaseBoardItemToolReview,
@@ -451,3 +452,28 @@ function manifestWith(...kinds: ManifestFixtureKind[]): MissionAssetManifest {
     }),
   }
 }
+
+describe('next release essentials', () => {
+  test('prioritizes review and ongoing work, excludes handled and disabled items, without mutating the board', () => {
+    const board = buildDefaultReleaseBoard('next-up')
+    const items = board.categories[0]!.items
+    items[0]!.status = 'done'
+    items[1]!.status = 'skipped'
+    board.categories[1]!.items[0]!.status = 'in-progress'
+    board.categories[1]!.items[1]!.status = 'review'
+    const snapshot = JSON.stringify(board)
+    const next = getNextReleaseEssentials(board)
+    expect(next.map(({ item }) => item.id)).toEqual(['canvas', 'cover-art', 'release-identity'])
+    expect(JSON.stringify(board)).toBe(snapshot)
+  })
+
+  test('returns fewer than three when only one essential remains and none when complete', () => {
+    const board = buildDefaultReleaseBoard('next-up')
+    for (const category of board.categories) {
+      for (const item of category.items) item.status = 'done'
+    }
+    expect(getNextReleaseEssentials(board)).toEqual([])
+    board.categories[0]!.items[0]!.status = 'needed'
+    expect(getNextReleaseEssentials(board).map(({ item }) => item.id)).toEqual(['master'])
+  })
+})

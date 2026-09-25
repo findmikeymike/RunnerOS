@@ -603,7 +603,6 @@ function AppShellContent({
   const usesWorkspaceHeader = RENDERER_PRODUCT_VARIANT === 'artist-os'
   const usesWorkspaceRail = !usesWorkspaceHeader && !effectiveSidebarAndNavigatorHidden && !isAutoCompact
   const effectiveSidebarWidth = usesWorkspaceHeader ? 186 : usesWorkspaceRail ? 150 : sidebarWidth
-  const showsWorkspaceSidebar = usesWorkspaceHeader && !effectiveSidebarAndNavigatorHidden && isSidebarVisible
 
   // What's New overlay
   const [showWhatsNew, setShowWhatsNew] = React.useState(false)
@@ -3221,21 +3220,6 @@ function AppShellContent({
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
           onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
-          workspaceNavigation={usesWorkspaceHeader && !isAutoCompact ? (
-            <WorkspaceRail
-              workspaces={workspaces}
-              activeWorkspaceId={activeWorkspaceId}
-              onSelect={onSelectWorkspace}
-              onWorkspaceCreated={() => onRefreshWorkspaces?.()}
-              onWorkspaceRemoved={() => onRefreshWorkspaces?.()}
-              workspaceUnreadMap={workspaceUnreadMap}
-              orientation="horizontal"
-              compact
-            />
-          ) : undefined}
-          workspaceNavigationLeftInset={usesWorkspaceHeader && !isAutoCompact
-            ? (showsWorkspaceSidebar ? effectiveSidebarWidth + 12 : 86)
-            : undefined}
           showSidebarButton={!usesWorkspaceHeader}
           showProductMenu={!usesWorkspaceHeader}
           showHistoryButtons={!usesWorkspaceHeader}
@@ -3266,10 +3250,25 @@ function AppShellContent({
             handleToggleSidebar()
           }}
           aria-label={t("menu.toggleSidebar")}
-          className="titlebar-no-drag pointer-events-auto fixed bottom-3 left-2 z-[100] flex h-6 w-6 items-center justify-center rounded-md text-white/28 transition-colors hover:bg-white/[0.04] hover:text-white/65"
+          className="titlebar-no-drag pointer-events-auto fixed top-[54px] left-2 z-[100] flex h-6 w-6 items-center justify-center rounded-md text-white/28 transition-colors hover:bg-white/[0.04] hover:text-white/65"
         >
           <ChevronRight className="h-3.5 w-3.5" />
         </button>
+      )}
+      {usesWorkspaceHeader && !effectiveSidebarAndNavigatorHidden && !isAutoCompact && (
+        <div data-testid="sidebar-workspace-navigation" className="fixed bottom-5 left-3 z-[90]">
+          <WorkspaceRail
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            onSelect={onSelectWorkspace}
+            onWorkspaceCreated={() => onRefreshWorkspaces?.()}
+            onWorkspaceRemoved={() => onRefreshWorkspaces?.()}
+            workspaceUnreadMap={workspaceUnreadMap}
+            orientation="horizontal"
+            compact
+            footer
+          />
+        </div>
       )}
       {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
       <div
@@ -3320,7 +3319,7 @@ function AppShellContent({
                   handleToggleSidebar()
                 }}
                 aria-label={t("menu.toggleSidebar")}
-                className="titlebar-no-drag pointer-events-auto absolute bottom-3 right-2 z-[80] flex h-6 w-6 items-center justify-center rounded-md text-white/28 transition-colors hover:bg-white/[0.04] hover:text-white/65"
+                className="titlebar-no-drag pointer-events-auto absolute top-1 right-2 z-[80] flex h-6 w-6 items-center justify-center rounded-md text-white/28 transition-colors hover:bg-white/[0.04] hover:text-white/65"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </button>
@@ -3337,7 +3336,7 @@ function AppShellContent({
                   }}
                   className={cn(
                     "flex-1 w-full overflow-y-auto overflow-x-hidden min-h-0 mask-fade-bottom",
-                    usesWorkspaceHeader ? "px-3 pb-10 pt-10" : "pt-[18px] pb-4",
+                    usesWorkspaceHeader ? "px-3 pb-40 pt-10" : "pt-[18px] pb-4",
                   )}
                 >
                 <LeftSidebar

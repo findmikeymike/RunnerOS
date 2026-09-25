@@ -12,7 +12,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(notice).toContain('guard.current?.(true)')
   })
 
-  test('uses the thin ScriptOS-style sidebar and bottom-corner toggle', () => {
+  test('uses the thin ScriptOS-style sidebar and top-edge toggle', () => {
     const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
     const styles = readFileSync(join(import.meta.dir, '..', '..', '..', 'index.css'), 'utf8')
     const openToggle = shell.indexOf('data-testid="sidebar-toggle-open"')
@@ -21,9 +21,9 @@ describe('Artist OS persistent shell chrome', () => {
     expect(openToggle).toBeGreaterThan(-1)
     expect(openToggle).toBeLessThan(panelShell)
     expect(shell).toContain('data-testid="sidebar-toggle-close"')
-    expect(shell).toContain('pointer-events-auto absolute bottom-3 right-2 z-[80]')
-    expect(shell).toContain('pointer-events-auto fixed bottom-3 left-2 z-[100]')
-    expect(shell).toContain('usesWorkspaceHeader ? "px-3 pb-10 pt-10"')
+    expect(shell).toContain('pointer-events-auto absolute top-1 right-2 z-[80]')
+    expect(shell).toContain('pointer-events-auto fixed top-[54px] left-2 z-[100]')
+    expect(shell).toContain('usesWorkspaceHeader ? "px-3 pb-40 pt-10"')
     expect(shell).toContain('usesWorkspaceHeader && "artist-os-sidebar-glass"')
     expect(styles).toContain('.artist-os-sidebar-glass {')
     expect(styles).toContain('backdrop-filter: blur(28px) saturate(145%);')
@@ -47,17 +47,18 @@ describe('Artist OS persistent shell chrome', () => {
     expect(windowManager).toContain('managed.window.setWindowButtonVisibility(visible)')
   })
 
-  test('keeps the compact HQ, Campaigns, and Lab switcher in the header aligned after the sidebar', () => {
+  test('keeps the HQ, Campaigns, and Lab switcher in the bottom sidebar dock', () => {
     const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
     const rail = readFileSync(join(import.meta.dir, '..', 'WorkspaceRail.tsx'), 'utf8')
     const topBar = readFileSync(join(import.meta.dir, '..', 'TopBar.tsx'), 'utf8')
     const styles = readFileSync(join(import.meta.dir, '..', '..', '..', 'index.css'), 'utf8')
 
     expect(shell).toContain('usesWorkspaceHeader ? 186 : usesWorkspaceRail ? 150 : sidebarWidth')
-    expect(shell).not.toContain('data-testid="sidebar-workspace-navigation"')
-    expect(shell).toContain('workspaceNavigation={usesWorkspaceHeader && !isAutoCompact')
-    expect(shell).toContain('? (showsWorkspaceSidebar ? effectiveSidebarWidth + 12 : 86)')
-    expect(shell).toMatch(/workspaceNavigation=\{usesWorkspaceHeader[\s\S]*?orientation="horizontal"[\s\S]*?compact/)
+    expect(shell).toContain('data-testid="sidebar-workspace-navigation"')
+    expect(shell).toContain('fixed bottom-5 left-3 z-[90]')
+    expect(shell).not.toContain('workspaceNavigation={usesWorkspaceHeader')
+    expect(rail).toContain('side={footer ? "top" : "bottom"}')
+    expect(styles).toContain('.artist-os-workspace-switcher.artist-os-space-dock')
     expect(topBar).toContain('workspaceNavigationLeftInset - menuLeftPadding')
     expect(rail).toContain('data-testid="artist-place-switcher"')
     expect(rail).toContain("<span className={compact ? 'sr-only' : undefined}>HQ</span>")

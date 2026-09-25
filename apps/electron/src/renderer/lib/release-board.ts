@@ -1,3 +1,4 @@
+import { isReleaseBoardItemIncluded, type ReleaseBoard } from '@craft-agent/shared/artist-context'
 import type { SessionMeta } from '@/atoms/sessions'
 
 export {
@@ -47,4 +48,14 @@ export function findReleaseBoardWorkerSession(input: {
       return preview.includes(campaignNeedle) && preview.includes(itemNeedle)
     })
     .sort((left, right) => (right.createdAt ?? right.lastMessageAt ?? 0) - (left.createdAt ?? left.lastMessageAt ?? 0))[0]?.id ?? null
+}
+
+/** Surface reviews and existing work first, preserving board order within each status. */
+export function getNextReleaseEssentials(board: ReleaseBoard) {
+  const priority = { review: 0, 'in-progress': 1, needed: 2, done: 3, skipped: 4 }
+  return board.categories
+    .flatMap((category) => category.items.map((item) => ({ category, item })))
+    .filter(({ item }) => isReleaseBoardItemIncluded(item) && item.status !== 'done' && item.status !== 'skipped')
+    .sort((a, b) => priority[a.item.status] - priority[b.item.status])
+    .slice(0, 3)
 }

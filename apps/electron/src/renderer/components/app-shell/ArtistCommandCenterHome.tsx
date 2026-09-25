@@ -11,6 +11,7 @@ import {
   Disc3,
   Eye,
   Loader2,
+  ListTodo,
   Megaphone,
   Pencil,
   Play,
@@ -33,6 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import { useAgents } from '@/hooks/useAgents'
 import { useWorkflows } from '@/hooks/useWorkflows'
@@ -83,6 +85,7 @@ import {
   buildDefaultReleaseBoard,
   getReleaseBoardActionLabel,
   getBoardTotals,
+  getNextReleaseEssentials,
   getCategoryProgress,
   getReleaseBoardItemAction,
   findReleaseBoardWorkerSession,
@@ -112,6 +115,10 @@ interface ArtistCommandCenterHomeProps {
   view?: 'overview' | 'release-board'
 }
 
+const overviewSurfaceClassName = 'rounded-2xl border border-white/[0.06] bg-[#0A0A0A] shadow-minimal'
+
+const overviewHeadingClassName = 'text-[11px] font-medium uppercase tracking-[0.13em] text-white/88'
+
 function SectionTitle({
   icon: Icon,
   title,
@@ -127,7 +134,7 @@ function SectionTitle({
     <div className="mb-3 flex items-center justify-between border-b border-white/[0.04] pb-2.5">
       <div className="flex items-center gap-2">
         <Icon className={cn('h-3.5 w-3.5', iconClassName ?? 'text-orange-300')} />
-        <h3 className="text-[11px] font-medium uppercase tracking-[0.13em] text-white/88">{title}</h3>
+        <h3 className={overviewHeadingClassName}>{title}</h3>
       </div>
       {meta ? (
         <span className="text-[9px] font-medium uppercase tracking-widest text-white/46">
@@ -148,7 +155,8 @@ function CommandCard({
   return (
     <section
       className={cn(
-        'rounded-2xl border border-white/[0.04] bg-[#0A0A0A] p-4 shadow-minimal transition-colors hover:bg-white/[0.02]',
+        overviewSurfaceClassName,
+        'p-4',
         className,
       )}
     >
@@ -838,6 +846,17 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <NextReleaseEssentials
+                board={releaseBoard}
+                launchingItemKey={launchingReleaseItemKey}
+                onLaunchItem={launchReleaseItem}
+                onSetItemIncluded={setReleaseItemIncluded}
+                onSetItemStatus={setReleaseItemStatus}
+                onAddAsset={chooseAndImport}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <TeamCard
                 people={campaignTeam}
                 networkPeople={artistNetwork.people}
@@ -848,7 +867,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
               />
 
               <CommandCard>
-                <SectionTitle icon={Bot} title="Active Workers" meta="Quiet" iconClassName="text-orange-400" />
+                <SectionTitle icon={Bot} title="Active Workers" meta="Quiet" iconClassName="text-[#20BF91]" />
 
                 <div className="rounded-xl border border-white/[0.03] bg-white/[0.012] p-4">
                   <div className="flex items-start gap-3">
@@ -864,7 +883,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
               </CommandCard>
 
               <CommandCard>
-                <SectionTitle icon={ShieldCheck} title="Approvals" meta="None" iconClassName="text-red-400" />
+                <SectionTitle icon={ShieldCheck} title="Approvals" meta="None" iconClassName="text-[#20BF91]" />
                 <EmptyCardLine
                   title="No pending approvals"
                   detail={hasMission ? 'Approvals will appear when workflows create review points.' : 'Create a campaign before approval workflows matter.'}
@@ -1003,11 +1022,11 @@ function ReleaseReadinessSummary({
     .find(({ item }) => isReleaseBoardItemIncluded(item) && item.status === 'needed')
 
   return (
-    <CommandCard className="flex min-h-[112px] items-center gap-5 p-4 sm:p-5">
+    <CommandCard className="flex min-h-[112px] items-center gap-5 p-4">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <ClipboardCheck className="h-3.5 w-3.5 text-orange-200/62" />
-          <h2 className="text-sm font-medium text-white/82">Release readiness</h2>
+          <h2 className={overviewHeadingClassName}>Release readiness</h2>
           <span className="text-[10px] text-white/32">{totals.done}/{totals.total}</span>
         </div>
         <div className="mt-3 h-px overflow-hidden bg-white/[0.08]">
@@ -1026,6 +1045,85 @@ function ReleaseReadinessSummary({
         <ArrowRight className="h-3 w-3" />
       </button>
     </CommandCard>
+  )
+}
+
+function NextReleaseEssentials({
+  board,
+  ...actions
+}: { board: ReleaseBoard } & Omit<React.ComponentProps<typeof ReleaseBoardSection>, 'category'>) {
+  const nextItems = getNextReleaseEssentials(board)
+  const [selectedKey, setSelectedKey] = React.useState<string | null>(null)
+  const selectedCategory = board.categories.find((category) =>
+    category.items.some((item) => `${category.id}:${item.id}` === selectedKey),
+  )
+  const selectedItem = selectedCategory?.items.find((item) => `${selectedCategory.id}:${item.id}` === selectedKey)
+
+  return (
+    <section aria-label="Next essentials" className="min-w-0 py-4">
+      <div className="mb-3 flex items-start justify-between gap-4 px-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <ListTodo className="h-3.5 w-3.5 text-[#20BF91]" />
+            <h2 className={overviewHeadingClassName}>Next up</h2>
+          </div>
+          <p className="mt-2 text-[10px] text-white/38">{nextItems.length ? 'A few steps closer to release.' : 'Your essentials are handled. Make room for what comes next.'}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate(routes.view.campaign('release-board'))}
+          className="inline-flex shrink-0 items-center gap-2 rounded-md text-[10px] leading-4 text-white/55 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+        >
+          All essentials <ArrowRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="grid gap-2">
+        {nextItems.map(({ category, item }, index) => {
+          const status = item.status === 'review' ? 'Ready to review' : item.status === 'in-progress' ? 'In progress' : 'To do'
+          return (
+            <button
+              key={`${category.id}:${item.id}`}
+              type="button"
+              onClick={() => setSelectedKey(`${category.id}:${item.id}`)}
+              aria-label={`${item.status === 'review' ? 'Review' : item.status === 'in-progress' ? 'Continue' : 'Open'} ${item.label}`}
+              className={cn(overviewSurfaceClassName, 'group flex min-h-[84px] min-w-0 items-center gap-2 bg-gradient-to-b from-white/[0.012] to-transparent px-4 py-3 text-left transition-colors hover:border-emerald-400/25 hover:bg-[#101211] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70')}
+            >
+              <span aria-hidden="true" className="w-3.5 shrink-0 text-[11px] font-medium tabular-nums text-white/35">{String(index + 1).padStart(2, '0')}</span>
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-white/45">
+                  <span className="font-medium uppercase tracking-[0.1em]">{category.label}</span>
+                  <span aria-hidden="true" className="text-white/20">·</span>
+                  <span>{status}</span>
+                </span>
+                <span className="mt-1 block text-base font-medium leading-snug tracking-tight text-white/90">{item.label}</span>
+              </span>
+              <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 text-[#62DAB7] transition-colors group-hover:border-emerald-400/50 group-hover:bg-emerald-400/[0.06]">
+                <ArrowRight className="h-3.5 w-3.5" />
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      <Dialog open={Boolean(selectedItem)} onOpenChange={(open) => { if (!open) setSelectedKey(null) }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{selectedItem?.label}</DialogTitle>
+            <DialogDescription>{selectedCategory?.detail}</DialogDescription>
+          </DialogHeader>
+          {selectedCategory && selectedItem ? (
+            <ReleaseBoardSection
+              key={selectedKey}
+              category={{ ...selectedCategory, items: [selectedItem] }}
+              {...actions}
+              onLaunchItem={(category, item) => {
+                setSelectedKey(null)
+                actions.onLaunchItem(category, item)
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </section>
   )
 }
 
@@ -1468,8 +1566,8 @@ function TeamCard({
     <CommandCard>
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Users className="h-3.5 w-3.5 text-amber-300" />
-          <h3 className="text-[11px] font-medium uppercase tracking-[0.13em] text-white/88">Team</h3>
+          <Users className="h-3.5 w-3.5 text-[#20BF91]" />
+          <h3 className={overviewHeadingClassName}>Team</h3>
         </div>
         <button
           type="button"
@@ -1489,29 +1587,29 @@ function TeamCard({
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {people.slice(0, 8).map((person) => (
-            <span
-              key={person.id}
-              className="group inline-flex max-w-full items-center gap-1 rounded-full border border-orange-300/15 bg-orange-500/14 px-2 py-1 text-[11px] font-medium text-orange-100/86"
-              title={person.canHelpWith || person.role || person.email || 'Release helper'}
-            >
-              <span className="max-w-[150px] truncate">{person.name}</span>
-              <button
-                type="button"
-                onClick={() => onEditPerson(person)}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-orange-100/45 opacity-70 transition hover:bg-black/20 hover:text-orange-50 group-hover:opacity-100"
-                aria-label={`Edit ${person.name}`}
-              >
-                <Pencil className="h-2.5 w-2.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onRemovePerson(person)}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-orange-100/35 opacity-70 transition hover:bg-black/20 hover:text-red-200 group-hover:opacity-100"
-                aria-label={`Remove ${person.name} from campaign team`}
-              >
-                <X className="h-2.5 w-2.5" />
-              </button>
-            </span>
+            <ContextMenu key={person.id}>
+              <ContextMenuTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => onEditPerson(person)}
+                  className="inline-flex max-w-full items-center rounded-full border border-white/[0.08] bg-white/[0.035] px-3 py-1.5 text-[11px] font-medium text-white/80 transition-colors hover:border-white/15 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                  title={person.canHelpWith || person.role || person.email || 'Release helper'}
+                  aria-label={`Edit ${person.name}`}
+                >
+                  <span className="max-w-[150px] truncate">{person.name}</span>
+                </button>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem onSelect={() => onEditPerson(person)}>
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit person
+                </ContextMenuItem>
+                <ContextMenuItem variant="destructive" onSelect={() => onRemovePerson(person)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remove from campaign
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           ))}
           {people.length > 8 ? (
             <span className="inline-flex items-center rounded-full bg-white/[0.035] px-2 py-1 text-[11px] font-medium text-white/36">
