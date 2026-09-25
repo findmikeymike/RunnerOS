@@ -1,10 +1,11 @@
+import { sliceVideoClipMetadata, maximumClipDurationMs } from '../../../../tools/video-studio/lib/clip-editing.mjs';
 import { parseCubeLut, validateColorAdjustments, validateColorProjectBudget } from '../../../../tools/video-studio/lib/color-pipeline.mjs';
 import { assertSafeVideoExportPaths } from '../../../../tools/video-studio/lib/export-safety.mjs';
 import { commitVideoProjectContent } from '../../../../tools/video-studio/lib/project-storage.mjs';
 import { positiveNumber, ffmpegNumber, clamp, clipSpeed, finiteNumber, clipTransform, renderSimpleMp4 } from '../../../../tools/video-studio/lib/render-engine.mjs';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
@@ -402,7 +403,11 @@ function writeJsonAtomic(path: string, value: unknown): void {
 }
 
 function videoProjectSidecarDir(projectPath: string): string {
-  return join(dirname(projectPath), '.runner-video');
+  // Canonical file identity isolates sibling copies, even when their project IDs match.
+  const canonical = realpathSync(projectPath);
+  const projectId = readProject(canonical).id;
+  const namespace = createHash('sha256').update(`${canonical}\0${projectId}`).digest('hex');
+  return join(dirname(canonical), '.runner-video', 'projects', namespace);
 }
 
 function undoDir(projectPath: string): string {
@@ -539,6 +544,15 @@ function cleanupRevertedExportFiles(projectPath: string, current: VideoProject, 
   return { removedPaths, warnings };
 }
 
+// Agent summaries describe a look; its large sample table stays in the project.
+function summarizeAdjustments(adjustments: VideoClipAdjustments = {}) {
+  const { lut, ...controls } = adjustments;
+  return {
+    ...controls,
+    ...(lut ? { lut: compactObject({ name: lut.name, size: lut.size, intensity: lut.intensity ?? 1, domainMin: lut.domainMin, domainMax: lut.domainMax }) } : {}),
+  };
+}
+
 function summarizeClip(project: VideoProject, clip: VideoProject['timeline']['tracks'][number]['clips'][number], trackId: string): Record<string, unknown> {
   const media = clip.mediaId ? project.media.find((asset) => asset.id === clip.mediaId) : undefined;
   const startFrame = msToFrame(project, clip.startMs);
@@ -567,7 +581,7 @@ function summarizeClip(project: VideoProject, clip: VideoProject['timeline']['tr
     disabled: clip.disabled === true ? true : undefined,
     transform: clip.transform,
     crop: clip.crop,
-    adjustments: clip.adjustments,
+    adjustments: clip.adjustments ? summarizeAdjustments(clip.adjustments) : undefined,
     keyframeCount: Array.isArray(clip.keyframes) ? clip.keyframes.length : undefined,
     captionCueIds: clip.captionCueIds,
     text: typeof clip.text === 'object' && clip.text ? clip.text : undefined,
@@ -1390,7 +1404,7 @@ export async function handleVideoProjectDiff(ctx: SessionToolContext, args: Vide
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
   const snapshotPath = args.snapshotPath ? resolvePath(ctx, args.snapshotPath) : latestUndoSnapshot(projectPath);
   if (!snapshotPath || !existsSync(snapshotPath)) return errorResponse('No snapshot found. Pass snapshotPath or make an edit/snapshot first.');
-  if (!isPathInside(dirname(projectPath), snapshotPath)) return errorResponse(`snapshotPath must be inside the project folder: ${dirname(projectPath)}`);
+  if (!isPathInside(dirname(realpathSync(projectPath)), realpathSync(snapshotPath))) return errorResponse(`snapshotPath must be inside the project folder: ${dirname(projectPath)}`);
   const before = readProject(snapshotPath);
   const after = readProject(projectPath);
   const diff = diffProjects(before, after);
@@ -1410,9 +1424,16 @@ export async function handleVideoProjectUndo(ctx: SessionToolContext, args: Vide
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
   return withVideoProjectLock(projectPath, () => {
     const snapshotPath = latestUndoSnapshot(projectPath);
-    if (!snapshotPath) return errorResponse('No undo snapshot available.');
+    if (!snapshotPath) {
+      const legacyDir = join(dirname(realpathSync(projectPath)), '.runner-video', 'undo');
+      if (existsSync(legacyDir) && readdirSync(legacyDir).some(name => name.endsWith('.runner-video.json'))) {
+        return errorResponse('No undo snapshot for this project file. Legacy shared-folder history is preserved, but cannot be restored automatically because its original project file is unknown. Recover a verified snapshot as a separate project copy.');
+      }
+      return errorResponse('No undo snapshot available.');
+    }
     const current = readProject(projectPath);
     const restored = readProject(snapshotPath);
+    if (restored.id !== current.id) return errorResponse('Undo snapshot belongs to a different project. Nothing was changed; the snapshot has been preserved.');
     const diff = diffProjects(current, restored);
     addVersion(restored, `Undid latest video project edit`, ctx, 'video_project_undo');
     commitProject(projectPath, restored, readContents.get(current) ?? null);
@@ -1668,6 +1689,7 @@ export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoCl
         durationMs = clip.durationMs;
       } else if (args.action === 'trim') {
         if (typeof args.durationMs !== 'number' || !Number.isFinite(args.durationMs) || args.durationMs <= 0) return errorResponse('durationMs must be a positive number.');
+        const initialClip = { ...clip };
         let trimmedClip = clip;
         if (args.ripple) {
           const result = rippleTrimEnd(track, clip.id, args.durationMs);
@@ -1688,6 +1710,12 @@ export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoCl
           if (!Number.isFinite(args.sourceOutMs) || args.sourceOutMs < 0) return errorResponse('sourceOutMs must be a non-negative number.');
           trimmedClip.sourceOutMs = Math.round(args.sourceOutMs);
         }
+        const sourceMaximum = maximumClipDurationMs(trimmedClip, project.media.find(item => item.id === trimmedClip.mediaId));
+        if (trimmedClip.durationMs > sourceMaximum) return errorResponse(`Trim duration exceeds available source media (${Math.floor(sourceMaximum)} ms at this speed). No changes were saved.`);
+        const metadataOffset = args.sourceInMs === undefined ? 0 : ((trimmedClip.sourceInMs as number) - (typeof initialClip.sourceInMs === 'number' ? initialClip.sourceInMs : 0)) / clipSpeed(initialClip);
+        const sliced = sliceVideoClipMetadata(initialClip, metadataOffset, trimmedClip.durationMs);
+        trimmedClip.keyframes = sliced.keyframes;
+        trimmedClip.captionSource = sliced.captionSource;
       } else if (args.action === 'split') {
         if (typeof args.atMs !== 'number' || !Number.isFinite(args.atMs) || args.atMs < 0) return errorResponse('atMs must be a non-negative number.');
         const splitAt = Math.round(args.atMs);
@@ -1697,14 +1725,14 @@ export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoCl
         const sourceInMs = typeof clip.sourceInMs === 'number' ? clip.sourceInMs : 0;
         const sourceSplitMs = sourceInMs + firstDuration * clipSpeed(clip);
         const secondClip = {
-          ...clip,
+          ...sliceVideoClipMetadata(clip, firstDuration, secondDuration),
           id: randomUUID(),
           startMs: splitAt,
           durationMs: secondDuration,
           sourceInMs: sourceSplitMs,
           label: typeof clip.label === 'string' ? `${clip.label} split` : undefined,
         };
-        clip.durationMs = firstDuration;
+        Object.assign(clip, sliceVideoClipMetadata(clip, 0, firstDuration));
         if (clip.sourceOutMs !== undefined) clip.sourceOutMs = sourceSplitMs;
         const index = track.clips.findIndex((item) => item.id === clip.id);
         track.clips.splice(index + 1, 0, secondClip);
@@ -1844,15 +1872,10 @@ export async function handleVideoClipAdjust(ctx: SessionToolContext, args: Video
     catch (error) { return errorResponse(error instanceof Error ? error.message : 'Project exceeds the embedded LUT size budget.'); }
     const undoSnapshotPath = writeProjectWithUndo(projectPath, beforeProject, project, 'video_clip_adjust');
     const first = targets[0]!;
-    // Keep embedded cube samples on disk instead of repeating a large table for every target in tool output.
-    const report = (adjustments: VideoClipAdjustments = {}) => ({
-      ...adjustments,
-      ...(adjustments.lut ? { lut: { name: adjustments.lut.name, size: adjustments.lut.size, intensity: adjustments.lut.intensity ?? 1 } } : {}),
-    });
     return ok(`${args.reset ? 'Reset' : 'Applied'} adjustments for ${targets.length} clip${targets.length === 1 ? '' : 's'}.`, {
       ok: true, projectPath,
-      ...(targets.length === 1 ? { clipId: first.clip.id, trackId: first.track.id, adjustments: report(first.clip.adjustments) } : {}),
-      clips: targets.map(({ clip, track }) => ({ clipId: clip.id, trackId: track.id, adjustments: report(clip.adjustments) })),
+      ...(targets.length === 1 ? { clipId: first.clip.id, trackId: first.track.id, adjustments: summarizeAdjustments(first.clip.adjustments) } : {}),
+      clips: targets.map(({ clip, track }) => ({ clipId: clip.id, trackId: track.id, adjustments: summarizeAdjustments(clip.adjustments) })),
       versionId, undoSnapshotPath, changedClipIds: ids, warnings,
     });
   });

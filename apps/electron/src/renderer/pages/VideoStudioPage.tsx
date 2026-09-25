@@ -1,3 +1,4 @@
+import { boundedTrailingTrimDuration } from '../../../../../tools/video-studio/lib/clip-editing.mjs'
 import * as React from 'react'
 import './video-studio.css'
 import { parseCubeLut, validateColorProjectBudget } from '../../../../../tools/video-studio/lib/color-pipeline.mjs'
@@ -12,7 +13,7 @@ import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
 import { findVideoProjectAsset, formatDuration } from '@/components/outputs/video-project-output'
-import { createVideoAgentHandoff, videoAgentPromptKey, type VideoAgentHandoffResult, type VideoPreviewMode, previewMediaTime, previewTimelineTime, previewPlaybackRate, videoCompositionFingerprint, renderedPreviewFreshness, sourceInAfterLeadingTrim, clipPlaybackSpeed, previewClipSourceTime, timelineMsFromPreviewVideoTime, splitVideoClip, videoProjectFingerprint, isExternalVideoProjectChange, nextPreviewClip, requireVideoProjectWrite } from '@/lib/video-studio-editing'
+import { createVideoAgentHandoff, videoAgentPromptKey, type VideoAgentHandoffResult, type VideoPreviewMode, previewMediaTime, previewTimelineTime, previewPlaybackRate, videoCompositionFingerprint, renderedPreviewFreshness, sourceInAfterLeadingTrim, clipPlaybackSpeed, previewClipSourceTime, timelineMsFromPreviewVideoTime, splitVideoClip, sliceVideoClipMetadata, videoProjectFingerprint, isExternalVideoProjectChange, nextPreviewClip, requireVideoProjectWrite } from '@/lib/video-studio-editing'
 import { type VideoStudioDraft, readVideoDraft, writeVideoDraft, clearVideoDraft, videoDraftConflicts } from '@/lib/video-studio-drafts'
 import type { RunnerVideoProject, VideoAspectRatio, VideoClip } from '@craft-agent/shared/video'
 
@@ -43,6 +44,17 @@ const LOOK_PRESETS: Array<{ value: LookPreset; label: string; adjustments: NonNu
   { value: 'black-and-white', label: 'B&W', adjustments: { pipeline: 'rgb-v1', exposure: 0, contrast: 1.16, saturation: 0, preset: 'black-and-white' } },
 ]
 
+function sameEditableProject(left: string, right: string): boolean {
+  try {
+    const a = JSON.parse(left), b = JSON.parse(right)
+    return a.id === b.id && a.workspaceId === b.workspaceId && videoCompositionFingerprint(left) === videoCompositionFingerprint(right)
+  } catch { return false }
+}
+
+function withProjectMetadata(snapshot: VideoProject, confirmed: VideoProject): VideoProject {
+  return { ...snapshot, versions: confirmed.versions, updatedAt: confirmed.updatedAt, exports: confirmed.exports, agentEvents: confirmed.agentEvents }
+}
+
 const MIN_CLIP_DURATION_MS = 100
 
 type TimelineDragMode = 'move' | 'trim-start' | 'trim-end'
@@ -60,6 +72,7 @@ interface TimelineDragState {
   currentX: number
   currentY: number
   sourceTrackId: string
+  initialClip: VideoClip
   initialStartMs: number
   initialDurationMs: number
   initialSourceInMs: number
@@ -189,10 +202,11 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
     } catch { setDraftBackupFailed(true) }
   }, [outputId, workspaceId])
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (preserveFrom?: string) => {
+    const capturedCurrent = rawJsonRef.current
     const generation = ++loadGenerationRef.current
     const isCurrent = () => activeRef.current && loadGenerationRef.current === generation
-    setLoading(true)
+    if (!preserveFrom) setLoading(true)
     setError(null)
     try {
       const loaded = await getOutput(outputId)
@@ -203,23 +217,39 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
       const text = await window.electronAPI.readOutputAssetText(workspaceId, outputId, asset.id)
       if (!isCurrent()) return
       const parsed = JSON.parse(text) as VideoProject
+      if (preserveFrom && (!sameEditableProject(text, preserveFrom) || !sameEditableProject(rawJsonRef.current, capturedCurrent))) {
+        setExternalReloadPending(true)
+        toast.info('The project changed during this operation. Your current edit history is preserved; reload to review the external change.')
+        return false
+      }
+      const nextProject = preserveFrom ? withProjectMetadata(JSON.parse(capturedCurrent) as VideoProject, parsed) : parsed
+      const nextText = JSON.stringify(nextProject, null, 2)
       baseSavedTextRef.current = text
       savedFingerprintRef.current = videoProjectFingerprint(text)
-      try {
-        const draft = readVideoDraft(window.localStorage, workspaceId, outputId)
-        draftPendingRef.current = Boolean(draft)
-        setAvailableDraft(draft)
-      } catch { setDraftBackupFailed(true) }
-      rawJsonRef.current = JSON.stringify(parsed, null, 2)
-      hasLocalEditsRef.current = false
+      if (!preserveFrom) {
+        try {
+          const draft = readVideoDraft(window.localStorage, workspaceId, outputId)
+          draftPendingRef.current = Boolean(draft)
+          setAvailableDraft(draft)
+        } catch { setDraftBackupFailed(true) }
+      }
+      rawJsonRef.current = nextText
+      hasLocalEditsRef.current = videoProjectFingerprint(nextText) !== savedFingerprintRef.current
+      if (preserveFrom && hasLocalEditsRef.current) backUpDraft(nextText, nextProject)
       timelinePreviewCacheRef.current.clear()
       setManifest(loaded)
       setProjectAsset(asset)
-      setProject(parsed)
-      setRawJson(JSON.stringify(parsed, null, 2))
+      setProject(nextProject)
+      setRawJson(nextText)
       setRawJsonDirty(false)
-      setUndoStack([])
-      setRedoStack([])
+      if (preserveFrom) {
+        setUndoStack(items => items.map(snapshot => withProjectMetadata(snapshot, parsed)))
+        setRedoStack(items => items.map(snapshot => withProjectMetadata(snapshot, parsed)))
+      } else {
+        setUndoStack([])
+        setRedoStack([])
+        setSelectedClipId(null)
+      }
       setExternalReloadPending(false)
       const latestRender = findLatestVideoRenderAsset(loaded)
       if (latestRender) {
@@ -231,13 +261,17 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
         setRenderPreviewUrl(null)
         setRenderedFingerprint(null)
       }
-      setSelectedClipId(null)
+      return true
     } catch (err) {
-      if (isCurrent()) setError(err instanceof Error ? err.message : String(err))
+      if (isCurrent()) {
+        const message = err instanceof Error ? err.message : String(err)
+        if (preserveFrom) toast.error(message)
+        else setError(message)
+      }
     } finally {
       if (isCurrent()) setLoading(false)
     }
-  }, [getOutput, outputId, workspaceId])
+  }, [backUpDraft, getOutput, outputId, workspaceId])
 
   React.useEffect(() => {
     void load()
@@ -249,6 +283,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
     const cleanup = window.electronAPI.onOutputsUpdated?.((changedWorkspaceId) => {
       if (changedWorkspaceId !== workspaceId) return
       const check = ++checkGeneration
+      const duringOperation = operationBusyRef.current
       void (async () => {
         try {
           const output = await getOutput(outputId)
@@ -257,6 +292,18 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
           const text = await window.electronAPI.readOutputAssetText(workspaceId, outputId, asset.id)
           if (cancelled || !activeRef.current || check !== checkGeneration) return
           if (!isExternalVideoProjectChange(text, savedFingerprintRef.current, pendingFingerprintRef.current)) return
+          const baseline = baseSavedTextRef.current
+          const metadataOnly = baseline !== null && sameEditableProject(text, baseline)
+          // Operation completion refreshes its own metadata. Do not race it with
+          // an unsolicited load that can reset history or adopt an external edit.
+          if (duringOperation || operationBusyRef.current) {
+            if (!metadataOnly) setExternalReloadPending(true)
+            return
+          }
+          if (metadataOnly && !draftPendingRef.current && !rawJsonDirtyRef.current && !timelineDragRef.current) {
+            void load(baseline!)
+            return
+          }
           if (draftPendingRef.current || hasLocalEditsRef.current || timelineDragRef.current || pendingFingerprintRef.current) {
             setExternalReloadPending(true)
             toast.info('This video project changed outside the editor. Your unsaved edits are preserved.')
@@ -663,13 +710,14 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
         setTimelineDrag((current) => current ? { ...current, currentX: event.clientX, currentY: event.clientY, lastProposedStartMs: Math.max(0, nextStartMs) } : current)
       } else if (timelineDrag.mode === 'trim-start') {
         updateProject((current) => trimClipStartInProject(current, timelineDrag.clipId, {
+          initialClip: timelineDrag.initialClip,
           startMs: timelineDrag.initialStartMs + deltaMs,
           initialStartMs: timelineDrag.initialStartMs,
           initialDurationMs: timelineDrag.initialDurationMs,
           initialSourceInMs: timelineDrag.initialSourceInMs,
         }), { recordHistory: false })
       } else {
-        updateProject((current) => trimClipEndInProject(current, timelineDrag.clipId, timelineDrag.initialDurationMs + deltaMs, rippleEdits), { recordHistory: false })
+        updateProject((current) => trimClipEndInProject(current, timelineDrag.clipId, timelineDrag.initialDurationMs + deltaMs, rippleEdits, timelineDrag.initialClip), { recordHistory: false })
       }
     }
     const handlePointerUp = (event: PointerEvent) => {
@@ -1177,7 +1225,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
         setRawJsonDirty(false)
         // Saving commits a baseline, not a new editing session. Retain edit
         // history while carrying the confirmed save's audit metadata forward.
-        const withSavedMetadata = (snapshot: VideoProject): VideoProject => ({ ...snapshot, versions: parsed.versions, updatedAt: parsed.updatedAt })
+        const withSavedMetadata = (snapshot: VideoProject): VideoProject => withProjectMetadata(snapshot, parsed)
         setUndoStack(items => items.map(withSavedMetadata))
         setRedoStack(items => items.map(withSavedMetadata))
         hasLocalEditsRef.current = false
@@ -1235,12 +1283,13 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
       if (!result) throw new Error('Video Studio export bridge is unavailable.')
       if (!activeRef.current) return
       knownRenderRef.current = { assetId: result.assetId, fingerprint: videoCompositionFingerprint(JSON.stringify(saved)) }
-      setRenderedFingerprint(knownRenderRef.current.fingerprint)
-      setIsPreviewPlaying(false)
-      setPlayheadMs(0)
-      setPreviewMode('rendered')
-      toast.success('Video rendered and saved to Outputs. Ready to review.')
-      await load()
+      const refreshed = await load(JSON.stringify(saved))
+      if (refreshed) {
+        setIsPreviewPlaying(false)
+        setPlayheadMs(0)
+        setPreviewMode('rendered')
+        toast.success('Video rendered and saved to Outputs. Ready to review.')
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     } finally {
@@ -1260,7 +1309,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
       if (!result) throw new Error('Video Studio report bridge is unavailable.')
       if (result.ok) toast.success(command === 'inspect' ? 'Inspect report passed.' : 'Dry run passed.')
       else toast.error(command === 'inspect' ? 'Inspect found issues. Report saved.' : 'Dry run failed. Report saved.')
-      await load()
+      await load(JSON.stringify(saved))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     } finally {
@@ -1962,6 +2011,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                       currentX: event.clientX,
                       currentY: event.clientY,
                       sourceTrackId: track.id,
+                      initialClip: clip,
                       initialStartMs: clip.startMs ?? 0,
                       initialDurationMs: clip.durationMs ?? 1000,
                       initialSourceInMs: clip.sourceInMs ?? 0,
@@ -2144,7 +2194,7 @@ function clampClipMoveStart(clips: VideoClip[], clipId: string, proposedStartMs:
 function trimClipStartInProject(
   project: VideoProject,
   clipId: string,
-  options: { startMs: number; initialStartMs: number; initialDurationMs: number; initialSourceInMs: number },
+  options: { initialClip: VideoClip; startMs: number; initialStartMs: number; initialDurationMs: number; initialSourceInMs: number },
 ): VideoProject {
   const tracks = (project.timeline?.tracks ?? []).map((track) => {
     const ordered = sortClipsByStart(track.clips ?? [])
@@ -2167,7 +2217,7 @@ function trimClipStartInProject(
     return {
       ...track,
       clips: ordered.map((clip) => clip.id === clipId ? {
-        ...clip,
+        ...sliceVideoClipMetadata(options.initialClip, nextStartMs - options.initialStartMs, durationMs),
         startMs: nextStartMs,
         durationMs,
         sourceInMs: clampSourceIn(nextSourceInMs, sourceOutMs),
@@ -2184,7 +2234,7 @@ function trimClipStartInProject(
   }
 }
 
-function trimClipEndInProject(project: VideoProject, clipId: string, durationMs: number, ripple: boolean): VideoProject {
+function trimClipEndInProject(project: VideoProject, clipId: string, durationMs: number, ripple: boolean, initialClip: VideoClip): VideoProject {
   const tracks = (project.timeline?.tracks ?? []).map((track) => {
     const ordered = sortClipsByStart(track.clips ?? [])
     const clipIndex = ordered.findIndex((clip) => clip.id === clipId)
@@ -2192,18 +2242,18 @@ function trimClipEndInProject(project: VideoProject, clipId: string, durationMs:
     const clip = ordered[clipIndex]
     if (!clip) return track
     const nextClip = ordered[clipIndex + 1]
-    const maxDurationMs = !ripple && nextClip ? Math.max(MIN_CLIP_DURATION_MS, (nextClip.startMs ?? 0) - (clip.startMs ?? 0)) : Number.POSITIVE_INFINITY
-    const nextDurationMs = clampNumber(Math.round(durationMs), MIN_CLIP_DURATION_MS, maxDurationMs)
+    const media = project.media.find(item => item.id === clip.mediaId)
+    const nextDurationMs = boundedTrailingTrimDuration(clip, media, durationMs, nextClip?.startMs, ripple)
     if (ripple) {
       return {
         ...track,
-        clips: rippleTrimEndClips(ordered, clipIndex, nextDurationMs),
+        clips: rippleTrimEndClips(ordered, clipIndex, nextDurationMs).map(item => item.id === clipId ? { ...item, ...sliceVideoClipMetadata(initialClip, 0, nextDurationMs), startMs: item.startMs } : item),
       }
     }
     return {
       ...track,
       clips: ordered.map((item) => {
-        if (item.id === clipId) return { ...item, durationMs: nextDurationMs }
+        if (item.id === clipId) return { ...sliceVideoClipMetadata(initialClip, 0, nextDurationMs), startMs: item.startMs }
         return item
       }),
     }
@@ -2221,10 +2271,10 @@ function trimClipEndInProject(project: VideoProject, clipId: string, durationMs:
 function rippleTrimEndClips(ordered: VideoClip[], clipIndex: number, nextDurationMs: number): VideoClip[] {
   const targetClip = ordered[clipIndex]
   if (!targetClip) return ordered
-  const deltaMs = nextDurationMs - Math.max(MIN_CLIP_DURATION_MS, targetClip.durationMs ?? MIN_CLIP_DURATION_MS)
+  const deltaMs = nextDurationMs - targetClip.durationMs
   let cursor = 0
   return ordered.map((clip, index) => {
-    const clipDurationMs = Math.max(MIN_CLIP_DURATION_MS, clip.durationMs ?? MIN_CLIP_DURATION_MS)
+    const clipDurationMs = Math.max(1, clip.durationMs)
     if (index < clipIndex) {
       cursor = Math.max(cursor, (clip.startMs ?? 0) + clipDurationMs)
       return clip
@@ -2265,7 +2315,7 @@ function clampSourceIn(value: number, sourceOutMs: number | undefined): number {
 }
 
 function timelinePixels(ms: number, zoom = 1): number {
-  return Math.max(12, Math.min(640, (ms / 12) * zoom))
+  return Math.max(0, (ms / 12) * zoom)
 }
 
 function timelinePositionPixels(ms: number, zoom = 1): number {
@@ -2289,6 +2339,10 @@ function renderTimelineClips(
   for (const clip of sortClipsByStart(clips)) {
     const startMs = clip.startMs ?? 0
     const durationMs = clip.durationMs ?? 1000
+    const clipWidth = timelinePixels(durationMs, zoom)
+    const handleWidth = Math.min(6, Math.max(0, clipWidth - 2) / 4)
+    const label = clip.label ?? clip.type ?? 'clip'
+    const accessibleLabel = `${label} ${formatDuration(startMs)} - ${formatDuration(startMs + durationMs)}`
     const inactive = clip.disabled === true
     const trackMuted = track.muted === true
     const trackHidden = track.hidden === true
@@ -2296,6 +2350,9 @@ function renderTimelineClips(
     nodes.push(
       <button
         key={clip.id}
+        data-video-clip-id={clip.id}
+        aria-label={accessibleLabel}
+        title={`${label} · ${(startMs / 1000).toFixed(2)}–${((startMs + durationMs) / 1000).toFixed(2)}s${clipWidth < 40 ? ' · Zoom in for precise trimming' : ''}`}
         type="button"
         onClick={() => onSelectClip(clip)}
         onContextMenu={(event) => {
@@ -2303,7 +2360,7 @@ function renderTimelineClips(
           onOpenContextMenu(clip, event)
         }}
         onPointerDown={(event) => onStartDrag(event, clip, 'move')}
-        className={`group absolute top-1/2 h-10 min-w-[112px] -translate-y-1/2 cursor-grab rounded-md border px-3 text-left text-xs active:cursor-grabbing ${
+        className={`group absolute top-1/2 h-10 min-w-0 overflow-hidden -translate-y-1/2 cursor-grab rounded-md border text-left text-xs active:cursor-grabbing ${
           inactive || trackHidden
             ? 'border-white/[0.05] bg-white/[0.025] text-white/28 opacity-55'
             : selectedClipId === clip.id
@@ -2312,10 +2369,11 @@ function renderTimelineClips(
         }`}
         style={{
           left: `${timelinePositionPixels(startMs, zoom) + 12}px`,
-          width: `${Math.max(112, timelinePixels(durationMs, zoom))}px`,
+          width: `${clipWidth}px`,
+          paddingInline: `${Math.min(12, Math.max(0, clipWidth - 2) / 4)}px`,
         }}
       >
-        {(inactive || trackMuted || trackHidden || trackLocked) && (
+        {clipWidth >= 70 && (inactive || trackMuted || trackHidden || trackLocked) && (
           <span className="absolute right-2 top-1 rounded bg-black/45 px-1 text-[9px] uppercase tracking-wide text-white/40">
             {inactive ? 'Off' : trackHidden ? 'Hidden' : trackMuted ? 'Muted' : 'Locked'}
           </span>
@@ -2326,17 +2384,21 @@ function renderTimelineClips(
             event.stopPropagation()
             onStartDrag(event, clip, 'trim-start')
           }}
-          className="absolute inset-y-1 left-1 w-1.5 cursor-ew-resize rounded-full bg-white/18 opacity-0 transition-opacity group-hover:opacity-100"
+          data-trim-edge="start"
+          style={{ left: 0, width: handleWidth }}
+          className="absolute inset-y-1 cursor-ew-resize rounded-full bg-white/18 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
         />
-        <span className="block truncate font-medium">{clip.label ?? clip.type ?? 'clip'}</span>
-        <span className="block truncate text-white/42">{formatDuration(startMs)} - {formatDuration(startMs + durationMs)}</span>
+        {clipWidth >= 40 && <span className="pointer-events-none block truncate font-medium">{label}</span>}
+        {clipWidth >= 70 && <span className="pointer-events-none block truncate text-white/42">{formatDuration(startMs)} - {formatDuration(startMs + durationMs)}</span>}
         <span
           aria-hidden="true"
           onPointerDown={(event) => {
             event.stopPropagation()
             onStartDrag(event, clip, 'trim-end')
           }}
-          className="absolute inset-y-1 right-1 w-1.5 cursor-ew-resize rounded-full bg-white/18 opacity-0 transition-opacity group-hover:opacity-100"
+          data-trim-edge="end"
+          style={{ right: 0, width: handleWidth }}
+          className="absolute inset-y-1 cursor-ew-resize rounded-full bg-white/18 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
         />
       </button>,
     )

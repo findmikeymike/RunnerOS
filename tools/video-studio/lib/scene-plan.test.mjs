@@ -130,3 +130,14 @@ test('RGB color is previewable while nonvisual grades and legacy texture stay ex
  clip.type='text';delete clip.mediaId;
  expect(validateRenderCapabilities(p).issues.some(i=>i.code==='unsupported-color')).toBe(true);
 });
+
+test('render source coverage uses physical duration as well as source-out', async () => {
+  const { sourceAvailableMs, assertSourceCanCoverSpeed } = await import('./scene-plan.mjs');
+  const media = { type: 'video', durationMs: 1000 };
+  const clip = { id: 'bounded', durationMs: 800, sourceInMs: 200, sourceOutMs: 9999 };
+  expect(sourceAvailableMs(clip, media)).toBe(800);
+  expect(() => assertSourceCanCoverSpeed({ ...clip, durationMs: 833 }, media)).not.toThrow();
+  expect(() => assertSourceCanCoverSpeed({ ...clip, durationMs: 834 }, media)).toThrow();
+  expect(() => assertSourceCanCoverSpeed({ ...clip, sourceInMs: 1000, durationMs: 1 }, media)).toThrow();
+  expect(sourceAvailableMs({ ...clip, sourceOutMs: undefined }, { type: 'video' })).toBeUndefined();
+});

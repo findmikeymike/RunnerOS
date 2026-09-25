@@ -83,3 +83,55 @@ describe('inline cube validation and canonical color',()=>{
     } finally {rmSync(dir,{recursive:true,force:true});}
   });
 });
+
+describe('exported color preserves source alpha', () => {
+  const effects = [
+    {}, // No adjustments remains a direct composition path for legacy clips.
+    { exposure: 0.15 },
+    { vignette: 0.5 },
+    { exposure: 0.1, grain: 0.3, sharpen: 0.4, vignette: 0.5 },
+  ];
+  for (const pipeline of [undefined, 'rgb-v1']) for (const effect of effects) {
+    test(`${pipeline ?? 'legacy'} ${JSON.stringify(effect)} retains transparent pixels and partial alpha with opacity`, () => {
+      const dir = mkdtempSync(join(tmpdir(), 'color-alpha-'));
+      try {
+        const adjustments = { ...effect, ...(pipeline ? { pipeline } : {}) };
+        const frame = (alpha, opacity) => {
+          const path = join(dir, `source-${alpha}.png`), output = join(dir, `out-${alpha}-${opacity}.mp4`);
+          const pixels = Buffer.from(Array.from({ length: 64 * 64 * 4 }, (_, i) => [120, 70, 200, alpha][i % 4]));
+          ffmpeg(['-y', '-f', 'rawvideo', '-pixel_format', 'rgba', '-video_size', '64x64', '-i', 'pipe:0', '-frames:v', '1', path], pixels);
+          renderSimpleMp4({ title: 'Alpha', settings: { width: 64, height: 64, fps: 5 },
+            media: [{ id: 'm', type: 'image', path, width: 64, height: 64 }],
+            timeline: { durationMs: 400, tracks: [{ id: 'v', clips: [{ id: 'c', type: 'image', mediaId: 'm', startMs: 0, durationMs: 400, adjustments, opacity }] }] }, captions: [] }, output);
+          return ffmpeg(['-i', output, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']);
+        };
+        const opaque = frame(255, 1), transparent = frame(0, 0.5), partial = frame(128, 0.5);
+        // Average an interior region to avoid MP4 chroma/noise quantization;
+        // grading the opaque source independently supplies the RGB reference.
+        const average = (pixels, channel) => {
+          let sum = 0;
+          for (let y = 16; y < 48; y++) for (let x = 16; x < 48; x++) sum += pixels[(y * 64 + x) * 3 + channel];
+          return sum / 1024;
+        };
+        for (let channel = 0; channel < 3; channel++) {
+          expect(Math.abs(average(transparent, channel) - 17)).toBeLessThan(3);
+          const expected = average(opaque, channel) * (128 / 255 * 0.5) + 17 * (1 - 128 / 255 * 0.5);
+          expect(Math.abs(average(partial, channel) - expected)).toBeLessThan(5);
+        }
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
+  test('multiple graded layers have independent alpha graphs', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'color-alpha-layers-'));
+    try {
+      const path = join(dir, 'transparent.png'), output = join(dir, 'layers.mp4');
+      ffmpeg(['-f', 'rawvideo', '-pixel_format', 'rgba', '-video_size', '32x32', '-i', 'pipe:0', '-frames:v', '1', path],
+        Buffer.from(Array.from({ length: 32 * 32 * 4 }, (_, i) => [255, 0, 0, 0][i % 4])));
+      renderSimpleMp4({ title: 'Layers', settings: { width: 32, height: 32, fps: 5 },
+        media: [{ id: 'm', type: 'image', path, width: 32, height: 32 }],
+        timeline: { durationMs: 400, tracks: [undefined, 'rgb-v1'].map((pipeline, i) => ({ id: `v${i}`, clips: [{ id: `c${i}`, type: 'image', mediaId: 'm', startMs: 0, durationMs: 400, adjustments: { vignette: 0.5, ...(pipeline ? { pipeline } : {}) } }] })) }, captions: [] }, output);
+      const pixels = ffmpeg(['-i', output, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']);
+      for (let channel = 0; channel < 3; channel++) expect(Math.abs(pixels[(16 * 32 + 16) * 3 + channel] - 17)).toBeLessThan(3);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});

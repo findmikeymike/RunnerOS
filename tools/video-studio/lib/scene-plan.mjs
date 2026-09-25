@@ -1,3 +1,4 @@
+import { availableClipSourceMs } from './clip-editing.mjs';
 import { validateColorAdjustments } from './color-pipeline.mjs';
 // Browser-safe timeline semantics shared with the FFmpeg renderer. No platform imports.
 const MAX_DRAWTEXT_CAPTION_CUES = 200;
@@ -95,13 +96,7 @@ export function fittedVisualSize(source, canvasWidth, canvasHeight, scale) {
 }
 
 export function sourceAvailableMs(clip, media) {
-    const sourceInMs = typeof clip.sourceInMs === 'number' && Number.isFinite(clip.sourceInMs) ? clip.sourceInMs : 0;
-    const sourceOutMs = typeof clip.sourceOutMs === 'number' && Number.isFinite(clip.sourceOutMs)
-        ? clip.sourceOutMs
-        : typeof media.durationMs === 'number' && Number.isFinite(media.durationMs)
-            ? media.durationMs
-            : undefined;
-    return sourceOutMs !== undefined && sourceOutMs > sourceInMs ? sourceOutMs - sourceInMs : undefined;
+    return availableClipSourceMs(clip, media);
 }
 
 export function assertSourceCanCoverSpeed(clip, media) {
@@ -111,7 +106,7 @@ export function assertSourceCanCoverSpeed(clip, media) {
     if (availableMs === undefined)
         return;
     const requiredMs = clip.durationMs * clipSpeed(clip);
-    if (requiredMs > availableMs + 33) {
+    if (availableMs === 0 || requiredMs > availableMs + 33) {
         const label = typeof clip.label === 'string' ? clip.label : clip.id;
         throw new Error(`Clip "${label}" speed requires ${Math.ceil(requiredMs)} ms of source media, but only ${Math.floor(availableMs)} ms is available. Shorten durationMs or extend sourceOutMs.`);
     }
@@ -130,16 +125,17 @@ export function captionCuesForClip(clip, cueById) {
     const cues = cueIds.map((id) => cueById.get(id)).filter((cue) => Boolean(cue));
     if (cues.length === 0)
         return [];
-    if (cues.length === 1)
-        return [{ ...cues[0], startMs: clip.startMs, durationMs: clip.durationMs }];
+    const sourceDuration = clip.captionSource?.durationMs ?? clip.durationMs;
+    const windowStart = clip.captionSource?.offsetMs ?? 0;
+    const windowEnd = windowStart + clip.durationMs;
     const sourceStartMs = Math.min(...cues.map((cue) => cue.startMs));
-    return cues
-        .map((cue) => {
-        const offsetMs = Math.max(0, cue.startMs - sourceStartMs);
-        const durationMs = Math.min(cue.durationMs, Math.max(0, clip.durationMs - offsetMs));
-        return durationMs > 0 ? { ...cue, startMs: clip.startMs + offsetMs, durationMs } : null;
-    })
-        .filter((cue) => Boolean(cue));
+    return cues.map((cue) => {
+        const offsetMs = cues.length === 1 ? 0 : Math.max(0, cue.startMs - sourceStartMs);
+        const cueEnd = cues.length === 1 ? sourceDuration : Math.min(sourceDuration, offsetMs + cue.durationMs);
+        const start = Math.max(windowStart, offsetMs);
+        const end = Math.min(windowEnd, cueEnd);
+        return end > start ? { ...cue, startMs: clip.startMs + start - windowStart, durationMs: end - start } : null;
+    }).filter(Boolean);
 }
 
 export function captionCuesForRender(project, visibleTracks) {
@@ -176,6 +172,10 @@ export function validateRenderCapabilities(project) {
   for (const track of visibleTracks) {
     for (const clip of track.clips.filter((item) => item.disabled !== true)) {
       const label = `Clip "${clip.label || clip.id}"`;
+      if (clip.captionSource !== undefined) {
+        const source = clip.captionSource;
+        if (!source || typeof source !== 'object' || !Number.isFinite(source.offsetMs) || !Number.isFinite(source.durationMs) || source.durationMs <= 0) add('invalid-caption-source', `${label} has an invalid caption timing window.`, clip, track);
+      }
       const media = clip.mediaId ? mediaById.get(clip.mediaId) : undefined;
       try { validateColorAdjustments(clip.adjustments); } catch (error) { add('invalid-color', `${label}: ${error.message}`, clip, track); }
       const visual = media && ['video', 'image'].includes(media.type);
@@ -294,7 +294,7 @@ export function buildScenePlan(project, width, height) {
     const captions = captionCuesForRender(project, visibleTracks).map((cue) => ({
         text: cue.text,
         startMs: seconds(cue.startMs) * 1000,
-        endMs: (seconds(cue.startMs) + Math.max(0.2, seconds(cue.durationMs, 1000))) * 1000,
+        endMs: (seconds(cue.startMs) + seconds(cue.durationMs, 1000)) * 1000,
         fontSize: Math.max(24, Math.round(width / 30)),
         bottom: Math.max(48, Math.round(height * 0.09)),
         boxBorder: Math.max(10, Math.round(width / 90)),

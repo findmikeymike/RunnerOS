@@ -87,6 +87,12 @@ function validateClip(clip: VideoClip, path: string, errors: VideoValidationIssu
       if (clip.crop.width <= 0 || clip.crop.height <= 0) push(errors, `${path}.crop`, 'crop width/height must be positive.');
     }
   }
+  if (clip.captionSource !== undefined) {
+    const source = clip.captionSource;
+    if (!isRecord(source) || !Number.isFinite(source.offsetMs) || !Number.isFinite(source.durationMs) || source.durationMs <= 0) {
+      push(errors, `${path}.captionSource`, 'Caption source requires finite offsetMs and positive durationMs.');
+    }
+  }
   if (clip.keyframes !== undefined) {
     if (!Array.isArray(clip.keyframes)) {
       push(errors, `${path}.keyframes`, 'Clip keyframes must be an array.');

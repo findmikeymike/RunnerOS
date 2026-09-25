@@ -5,12 +5,15 @@ import { join } from 'node:path';
 import type { SessionToolContext } from '../context';
 import { commitVideoProjectContent } from '../../../../tools/video-studio/lib/project-storage.mjs';
 import { VideoClipAdjustSchema } from '../tool-defs';
-import { handleVideoClipAdjust, handleVideoProjectCreate, handleVideoProjectUndo } from './video-tools';
+import { handleVideoClipAdjust, handleVideoGetTimeline, handleVideoProjectCreate, handleVideoProjectUndo } from './video-tools';
 
 let root: string, projectPath: string, ctx: SessionToolContext;
 const cube = 'TITLE "Identity"\nLUT_3D_SIZE 2\n0 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n1 1 1\n';
 const read = () => JSON.parse(readFileSync(projectPath, 'utf8'));
-const snapshots = () => existsSync(join(root, '.runner-video', 'undo')) ? readdirSync(join(root, '.runner-video', 'undo')) : [];
+const snapshots = () => {
+  const sidecars = join(root, '.runner-video');
+  return existsSync(sidecars) ? readdirSync(sidecars, { recursive: true }).filter(path => String(path).includes('/undo/') && String(path).endsWith('.runner-video.json')) : [];
+};
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'video-color-batch-'));
   projectPath = join(root, 'video.runner-video.json');
@@ -139,5 +142,30 @@ describe('atomic agent color adjustment', () => {
     expect(VideoClipAdjustSchema.safeParse({ projectPath, clipIds: ['a', 'b'], lutCube: cube, lutIntensity: 0.3 }).success).toBe(true);
     expect(VideoClipAdjustSchema.safeParse({ projectPath, clipIds: Array(33).fill('a') }).success).toBe(false);
     expect(VideoClipAdjustSchema.safeParse({ projectPath, clipId: 'a', lutIntensity: 1.1 }).success).toBe(false);
+  });
+});
+
+
+describe('bounded agent timeline color summaries', () => {
+  test.each([1, 3])('summarizes %i large LUT clips without returning or changing sample tables', async (count) => {
+    const project = read();
+    const values = Array.from({ length: 33 ** 3 * 3 }, (_, i) => (i % 33) / 32);
+    project.timeline.tracks[0].clips = Array.from({ length: count }, (_, i) => ({
+      id: `graded-${i}`, type: 'image', mediaId: 'visual', startMs: i * 1000, durationMs: 1000,
+      adjustments: { pipeline: 'rgb-v1', exposure: 0.15, lut: { name: 'Large look', size: 33, intensity: 0.4, domainMin: [0, 0, 0], domainMax: [1, 1, 1], values } },
+    }));
+    project.timeline.durationMs = count * 1000;
+    const before = JSON.stringify(project, null, 2) + '\n';
+    writeFileSync(projectPath, before);
+    const result = await handleVideoGetTimeline(ctx, { projectPath });
+    expect(result.isError).toBe(false);
+    expect(JSON.stringify(result).length).toBeLessThan(20_000);
+    for (const clip of (result.structuredContent as any).timeline.tracks[0].clips) {
+      expect(clip.adjustments).toEqual({ pipeline: 'rgb-v1', exposure: 0.15, lut: { name: 'Large look', size: 33, intensity: 0.4, domainMin: [0, 0, 0], domainMax: [1, 1, 1] } });
+      expect(clip.adjustments.lut.values).toBeUndefined();
+    }
+    expect(readFileSync(projectPath, 'utf8')).toBe(before);
+    expect(read().timeline.tracks[0].clips[0].adjustments.lut.values).toHaveLength(107811);
+    expect(snapshots()).toHaveLength(0);
   });
 });
