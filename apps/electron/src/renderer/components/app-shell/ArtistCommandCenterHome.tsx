@@ -38,6 +38,7 @@ import { useAgents } from '@/hooks/useAgents'
 import { useWorkflows } from '@/hooks/useWorkflows'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { openAgentSessionComposer } from '@/lib/run-agent'
+import { promoteCampaignMasterToReleaseKit } from '@/lib/campaign-master-release-kit'
 import { WorkflowLaunchDialog } from '@/components/workflows/WorkflowLaunchDialog'
 import type { MissionAssetKindHint, MissionAssetManifest, TrackIntelligence, WorkflowDTO } from '../../../shared/types'
 import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
@@ -301,7 +302,27 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
           toast.warning(`No campaign vault files added.${skipped}`)
           return
         }
-        toast.success(`Added ${result.imported.length} campaign vault file${result.imported.length === 1 ? '' : 's'}.${skipped}`)
+        try {
+          const handoff = await promoteCampaignMasterToReleaseKit({
+            workspaceId,
+            kindHint,
+            imported: result.imported,
+            promote: (id, input) => window.electronAPI.promoteToReleaseKit(id, input),
+          })
+          if (handoff.status === 'promoted') {
+            toast.success(`Master saved to the campaign and Release Kit.${skipped}`)
+          } else if (handoff.status === 'requires-selection') {
+            toast.warning('Masters saved. Choose the final audio in Release Kit.', {
+              description: 'Use Add → Campaign Asset to select which master belongs in the release.',
+            })
+          } else {
+            toast.success(`Added ${result.imported.length} campaign vault file${result.imported.length === 1 ? '' : 's'}.${skipped}`)
+          }
+        } catch (error) {
+          toast.error('Master saved, but Release Kit could not be updated.', {
+            description: error instanceof Error ? error.message : String(error),
+          })
+        }
         const importedAudio = result.imported.filter((asset) => asset.kind === 'master' || asset.kind === 'demo')
         let firstReadyAudioId: string | null = null
         for (const audio of importedAudio) {
