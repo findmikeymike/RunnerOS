@@ -1,3 +1,4 @@
+import { sanitizeDeepResearchPublicUrl } from './public-url.ts';
 import {
   existsSync,
   mkdirSync,
@@ -65,17 +66,7 @@ function isIsoTimestamp(value: unknown): value is string {
 }
 
 function isSanitizedPublicUrl(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  try {
-    const parsed = new URL(value);
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:')
-      && !parsed.username
-      && !parsed.password
-      && !parsed.search
-      && !parsed.hash;
-  } catch {
-    return false;
-  }
+  return typeof value === 'string' && sanitizeDeepResearchPublicUrl(value) === value;
 }
 
 function isContainedPath(parent: string, child: string): boolean {

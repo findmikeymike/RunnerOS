@@ -11,6 +11,7 @@ import {
   readDeepResearchRun,
   writeDeepResearchRun,
 } from './storage.ts'
+import { sanitizeDeepResearchPublicUrl } from './public-url.ts'
 import type { DeepResearchRunSnapshot } from './types.ts'
 
 const roots: string[] = []
@@ -71,6 +72,32 @@ describe('deep research run storage', () => {
     const run = sampleRun()
     writeDeepResearchRun(root, run)
     expect(readDeepResearchRun(root, run.id)).toEqual(run)
+  })
+
+  test('URL sanitization strips credential and tracking variants without dropping resource selectors', () => {
+    const sensitive = ['ACCESS_TOKEN', 'accessToken', 'refresh-token', 'apiKey', 'API_KEY', 'auth', 'Authorization', 'clientSecret', 'X-Amz-Signature', 'sig', 'credential', 'password', 'key', 'sessionId', 'code', 'oauth_verifier', 'OAuthVerifier', 'session', 'utm_source', 'fbclid']
+    for (const key of sensitive) {
+      const url = `https://user:pass@example.com/watch?v=video-a&${key}=secret#private`
+      expect(sanitizeDeepResearchPublicUrl(url)).toBe('https://example.com/watch?v=video-a')
+    }
+    expect(sanitizeDeepResearchPublicUrl('https://example.com/watch?%61uth=secret&v=video-b')).toBe('https://example.com/watch?v=video-b')
+    expect(sanitizeDeepResearchPublicUrl('https://example.com/?page=2&id=42')).toBe('https://example.com/?id=42&page=2')
+    expect(sanitizeDeepResearchPublicUrl('file:///tmp/private')).toBeUndefined()
+  })
+
+  test('round-trips resource-identifying queries but rejects sensitive receipt URLs', () => {
+    const root = tempRoot()
+    const run = sampleRun()
+    run.steps[0]!.toolReceipts = [{
+      id: 'a'.repeat(32), toolUseId: 'tool-1', toolName: 'web_fetch', kind: 'page-read', status: 'succeeded', resultChars: 0,
+      requestUrl: 'https://www.youtube.com/watch?v=video-a', observedAt: run.createdAt,
+    }]
+    writeDeepResearchRun(root, run)
+    expect(readDeepResearchRun(root, run.id)?.steps[0]?.toolReceipts?.[0]?.requestUrl).toBe('https://www.youtube.com/watch?v=video-a')
+    for (const query of ['ACCESS_TOKEN=secret', 'apiKey=secret', 'X-Amz-Signature=secret', '%61uth=secret', 'clientSecret=secret', 'key=secret', 'code=oauth-secret', 'oauth_verifier=oauth-secret', 'session=secret', 'utm_source=tracking']) {
+      run.steps[0]!.toolReceipts![0]!.requestUrl = `https://example.com/?${query}`
+      expect(() => writeDeepResearchRun(root, run)).toThrow('Invalid deep research run snapshot')
+    }
   })
 
   test('hydrates compact message_agent child receipts by step session', () => {

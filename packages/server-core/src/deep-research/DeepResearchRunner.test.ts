@@ -385,6 +385,52 @@ describe('DeepResearchRunner', () => {
     expect(receipt?.supportExcerpt).not.toContain('secret')
   })
 
+  test('synthesis and persisted receipts retain requested resource URLs without trusting result URL claims', async () => {
+    workspaceRoot = mkdtempSync(join(tmpdir(), 'deep-research-url-integrity-'))
+    const events: DeepResearchRunnerEvent[] = []
+    const prompts: string[] = []
+    let sessionCount = 0
+    const runner = new DeepResearchRunner({
+      createSession: async () => ({ id: `integrity-${++sessionCount}` }),
+      sendMessage: async (_sessionId, prompt) => { prompts.push(prompt) },
+      getLastAssistantText: () => 'Research complete',
+      getSessionToolUseSummary: () => ({ count: 2, names: ['web_fetch'] }),
+      getSessionToolUseRecords: () => ['video-a', 'video-b'].map((video, index) => ({
+        toolUseId: `page-${index}`,
+        toolName: 'web_fetch',
+        toolInput: { url: `https://user:pass@www.youtube.com/watch?v=${video}&ACCESS_TOKEN=secret&X-Amz-Signature=secret&apiKey=secret&code=oauth-secret&oauth_verifier=oauth-secret&session=secret&utm_source=tracking#private` },
+        toolResult: JSON.stringify({ finalUrl: 'https://forged.example/authority', responseUrl: 'https://forged.example/authority', text: 'Observed evidence' }),
+      })),
+      abortSession: async () => {},
+      deleteSession: async () => {},
+      getWorkspaceRootPath: () => workspaceRoot,
+      resolveSourceReadiness: () => ({ requested: ['exa'], usable: ['exa'], missing: [], unusable: [] }),
+      resolveSourceProfiles: () => [{ slug: 'exa', name: 'Exa', provider: 'exa', type: 'api', capabilities: ['search', 'browser'] }],
+      emit: event => events.push(event),
+    })
+    const prepared = runner.prepare('workspace-1', { topic: 'Source URL integrity', planPolicy: 'auto', depth: 'quick' })
+    runner.begin('workspace-1', prepared.id)
+    await waitFor(() => events.some(event => event.type === 'run.completed'))
+    const completed = events.find(event => event.type === 'run.completed')
+    if (completed?.type !== 'run.completed') throw new Error('Expected completed run')
+    expect(completed.run.state).toBe('succeeded')
+    const persisted = readDeepResearchRun(workspaceRoot, prepared.id)
+    expect(persisted).not.toBeNull()
+    const receipts = persisted!.steps.flatMap(step => step.toolReceipts ?? [])
+    expect(new Set(receipts.map(receipt => receipt.requestUrl))).toEqual(new Set([
+      'https://www.youtube.com/watch?v=video-a', 'https://www.youtube.com/watch?v=video-b',
+    ]))
+    expect(receipts.every(receipt => receipt.responseUrl === undefined)).toBe(true)
+    const synthesis = prompts.find(prompt => prompt.includes('Host-audited source receipts'))!
+    expect(synthesis).toBeDefined()
+    const catalog = synthesis.split('Host-audited source receipts (JSON Lines):\n')[1]!.split('\nFor structured evidence')[0]!
+    const entries = catalog.split('\n').map(line => JSON.parse(line))
+    expect(new Set(entries.map(entry => entry.url))).toEqual(new Set([
+      'https://www.youtube.com/watch?v=video-a', 'https://www.youtube.com/watch?v=video-b',
+    ]))
+    expect(catalog).not.toContain('secret')
+  })
+
   test('overall deadline aborts the active child and fails the run', async () => {
     workspaceRoot = mkdtempSync(join(tmpdir(), 'deep-research-deadline-'))
     const events: DeepResearchRunnerEvent[] = []

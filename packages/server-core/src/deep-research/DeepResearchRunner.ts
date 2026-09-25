@@ -13,6 +13,7 @@ import {
 } from '@craft-agent/shared/workflows'
 import {
   attachDeepResearchAgentMessageReceipts,
+  sanitizeDeepResearchPublicUrl as sanitizePublicUrl,
   getDeepResearchRunFile,
   readDeepResearchRun,
   markActiveDeepResearchRunsInterrupted,
@@ -186,21 +187,6 @@ function cleanOptionalText(value: string | undefined, maxChars: number): string 
   return cleaned.slice(0, maxChars)
 }
 
-function sanitizePublicUrl(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  try {
-    const url = new URL(value)
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
-    url.username = ''
-    url.password = ''
-    url.search = ''
-    url.hash = ''
-    return url.toString()
-  } catch {
-    return undefined
-  }
-}
-
 function sanitizeAttemptUrl(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   try {
@@ -238,16 +224,6 @@ function findUrlInValue(value: unknown, depth = 0): string | undefined {
     if (nested) return nested
   }
   return undefined
-}
-
-function urlFromToolResult(result: string | undefined): string | undefined {
-  if (!result) return undefined
-  try {
-    const parsed = JSON.parse(result)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
-    const record = parsed as Record<string, unknown>
-    return sanitizePublicUrl(record.responseUrl ?? record.response_url ?? record.finalUrl ?? record.final_url)
-  } catch { return undefined }
 }
 
 function supportExcerpt(result: string | undefined): string | undefined {
@@ -987,7 +963,8 @@ export class DeepResearchRunner {
       sourceSlug: sourceSlugFromToolName(record.toolName),
       status: record.isError ? 'failed' : 'succeeded',
       requestUrl: findUrlInValue(record.toolInput),
-      responseUrl: urlFromToolResult(record.toolResult),
+      // Tool output is untrusted content, not host-attested redirect metadata.
+      // Keep the requested source URL even if that content claims a final URL.
       resultSha256: result ? createHash('sha256').update(result).digest('hex') : undefined,
       resultChars: result.length,
       supportExcerpt: !record.isError && kind !== 'search' ? supportExcerpt(result) : undefined,
