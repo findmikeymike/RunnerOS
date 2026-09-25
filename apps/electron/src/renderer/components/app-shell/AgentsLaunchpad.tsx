@@ -41,7 +41,7 @@ import { WorkPageTabs } from './WorkPageTabs'
 import { getModelsForProviderType } from '@config/llm-connections'
 import { getModelShortName, type ModelDefinition } from '@config/models'
 import { getAgentCapabilityDisplay } from '@/lib/agent-capability-display'
-import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistCampaignWorkspace } from '@/lib/artist-workspace'
+import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistCampaignWorkspace, isArtistHQWorkspace, isLabWorkspace } from '@/lib/artist-workspace'
 import { buildXEditorialCampaignLaunchContext, selectXEditorialCampaignContext } from '@/lib/x-editorial-launch'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 import type { AgentDefinitionDTO, ContextDocDTO, LlmConnectionWithStatus } from '../../../shared/types'
@@ -72,6 +72,11 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
   const skills = useAtomValue(skillsAtom)
   const sources = useAtomValue(sourcesAtom)
   const { workspaces, onCreateSession, onInputChange, onSelectWorkspace, onOpenCommand } = useAppShellContext()
+  const currentWorkspace = workspaces.find((workspace) => workspace.id === workspaceId)
+  const campaignTheme = !labOnly
+    && !isArtistHQWorkspace(currentWorkspace, workspaces)
+    && !isLabWorkspace(currentWorkspace, workspaces)
+    && isArtistCampaignWorkspace(currentWorkspace)
   const [libraryOpen, setLibraryOpen] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [selectedAgent, setSelectedAgent] = React.useState<AgentDefinitionDTO | null>(null)
@@ -299,7 +304,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                 <button
                   type="button"
                   onClick={() => setCreateOpen(true)}
-                  className="inline-flex h-9 items-center gap-2 rounded-full bg-gradient-to-r from-[#ff8a00] to-[#ef2b10] px-4 text-xs font-medium text-white shadow-middle transition-all hover:brightness-110"
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-white/20 bg-black/10 px-4 text-xs font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   New worker
@@ -419,6 +424,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                           isOrchestrator={agent.slug === ORCHESTRATOR_SLUG}
                           isFavorite={favoriteSlugs.includes(agent.slug)}
                           isLaunching={launchingSlug === agent.slug}
+                          campaignTheme={campaignTheme}
                           onStartChat={() => void handleStartChat(agent)}
                           onToggleFavorite={() => toggleFavorite(agent.slug)}
                           onConfigure={() => setSelectedAgent(agent)}
@@ -472,6 +478,7 @@ interface AgentCardProps {
   isOrchestrator: boolean
   isFavorite: boolean
   isLaunching: boolean
+  campaignTheme: boolean
   onStartChat: () => void
   onToggleFavorite: () => void
   onConfigure: () => void
@@ -484,6 +491,7 @@ function AgentCard({
   isOrchestrator,
   isFavorite,
   isLaunching,
+  campaignTheme,
   onStartChat,
   onToggleFavorite,
   onConfigure,
@@ -499,7 +507,10 @@ function AgentCard({
         className="relative flex min-h-[88px] w-full items-start gap-3 overflow-hidden rounded-[12px] bg-white/[0.055] px-3 py-3 pr-[78px] text-left shadow-minimal backdrop-blur-md transition-colors hover:bg-white/[0.075] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/55 disabled:cursor-wait"
         aria-label={`Start chat with ${name}`}
       >
-        <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-gradient-to-br from-[#fb923c] to-[#f97316] text-neutral-950">
+        <span className={cn(
+          'mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-gradient-to-br text-neutral-950',
+          campaignTheme ? 'from-[#20BF91] to-[#009C78]' : 'from-[#fb923c] to-[#f97316]',
+        )}>
           {isLaunching ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3 w-3" />}
         </span>
         <span className="min-w-0 flex-1">

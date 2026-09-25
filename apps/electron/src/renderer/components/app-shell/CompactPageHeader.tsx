@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
-import { isLabWorkspace } from '@/lib/artist-workspace'
+import { isArtistCampaignWorkspace, isArtistHQWorkspace, isLabWorkspace } from '@/lib/artist-workspace'
 
 export type CompactPageHeaderTone = 'orange' | 'blue' | 'emerald' | 'violet' | 'red'
 
@@ -13,6 +13,11 @@ export const LAB_HERO_BACKGROUND = [
 const GLOBAL_HERO_BACKGROUND = [
   'radial-gradient(70% 54% at 50% 118%, rgba(155, 0, 24, 0.72) 0%, rgba(190, 0, 24, 0.22) 42%, rgba(190, 0, 24, 0) 72%)',
   'linear-gradient(90deg, #D90B16 0%, #F22409 20%, #FF5A00 50%, #F22409 80%, #D90B16 100%)',
+].join(', ')
+
+const CAMPAIGN_HERO_BACKGROUND = [
+  'radial-gradient(70% 54% at 50% 118%, rgba(0, 82, 61, 0.72) 0%, rgba(0, 110, 80, 0.22) 42%, rgba(0, 110, 80, 0) 72%)',
+  'linear-gradient(90deg, #008A60 0%, #009C78 20%, #20BF91 50%, #009C78 80%, #008A60 100%)',
 ].join(', ')
 
 const toneClasses: Record<CompactPageHeaderTone, { surface: string; eyebrow: string }> = {
@@ -70,6 +75,10 @@ export function CompactPageHeader({
   const shell = useOptionalAppShellContext()
   const workspace = shell?.workspaces.find(item => item.id === shell.activeWorkspaceId)
   const labTheme = !!workspace && isLabWorkspace(workspace, shell?.workspaces ?? [])
+  const campaignTheme = !labTheme
+    && !isArtistHQWorkspace(workspace, shell?.workspaces ?? [])
+    && isArtistCampaignWorkspace(workspace)
+  const workspaceBackground = labTheme ? LAB_HERO_BACKGROUND : campaignTheme ? CAMPAIGN_HERO_BACKGROUND : GLOBAL_HERO_BACKGROUND
   const colors = toneClasses[tone]
 
   return (
@@ -78,7 +87,7 @@ export function CompactPageHeader({
         'relative overflow-hidden rounded-[22px]',
         hero ? 'min-h-[240px]' : compact ? 'min-h-[80px]' : 'min-h-[108px]',
         !borderless && 'border',
-        labTheme ? 'border-sky-100/[0.12]' : colors.surface,
+        labTheme ? 'border-sky-100/[0.12]' : campaignTheme ? 'border-emerald-100/[0.12]' : colors.surface,
         className,
       )}
     >
@@ -86,7 +95,7 @@ export function CompactPageHeader({
         className="absolute inset-0 bg-cover bg-center"
         style={backgroundImage
           ? { backgroundImage: `url(${JSON.stringify(backgroundImage)})` }
-          : { background: backgroundGradient ?? (labTheme ? LAB_HERO_BACKGROUND : GLOBAL_HERO_BACKGROUND) }}
+          : { background: backgroundGradient ?? workspaceBackground }}
       />
       {backgroundImage ? (
         <div

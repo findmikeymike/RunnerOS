@@ -9,6 +9,8 @@ source_of_truth: true
 
 High-leverage career capabilities worth considering after the current integrated beta is smoked and stabilized. This is intentionally not a broad feature wishlist.
 
+Companion: [V2 Possible Adds](../v2/possible-adds.md) collects additional research and interaction candidates without changing this plan's priorities.
+
 ## Product Principle
 
 Artist OS is already strong at songwriting, creative direction, content ideation and production, campaign planning, social publishing, paid ads, industry outreach, college radio, Spotify and YouTube intelligence, merch, Calendar, Community, and State of Play.
@@ -149,6 +151,10 @@ Optional for artists who actively perform; do not enable by default.
 - Combine Spotify city data, Community geography, Bandsintown event data, Artist Network, venue research, Calendar, and Outreach.
 - Build realistic city/venue shortlists, routing options, support-slot targets, break-even assumptions, and outreach packets.
 - Never book, announce, purchase travel, or accept terms without explicit approval.
+
+## Additional V2 Interaction Candidate
+
+- [Wake-word chat input](../v2/wake-word-chat-input.md) — opt-in local wake detection to activate existing chat dictation, with silence-based stopping and current-chat routing. Proposed sherpa-onnx prototype informed by Hermes; deferred outside V1, not implemented. See the note for integration and acceptance criteria.
 
 ## Explicitly Do Not Build Yet
 

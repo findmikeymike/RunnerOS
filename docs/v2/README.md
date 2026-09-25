@@ -21,5 +21,7 @@ the feature and delete the note.
 
 ## Notes
 
+- [V2 Possible Adds — companion shortlist](./possible-adds.md)
 - [Team chat: more than one person per agent](./team-chat-multi-sender.md)
 - [Intelligence, proactivity, and learning](./intelligence-proactivity-and-learning.md)
+- [Wake-word chat input](./wake-word-chat-input.md)
