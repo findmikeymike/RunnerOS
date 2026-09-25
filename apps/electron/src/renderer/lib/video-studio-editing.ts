@@ -70,3 +70,42 @@ export function videoCompositionFingerprint(text: string): string {
 export function renderedPreviewFreshness(currentText: string, renderedFingerprint: string | null): 'current' | 'edited' | 'unknown' {
   return renderedFingerprint === null ? 'unknown' : videoCompositionFingerprint(currentText) === renderedFingerprint ? 'current' : 'edited'
 }
+
+export interface VideoAgentHandoffResult {
+  ok: boolean
+  outputId: string
+  status: 'started' | 'draft' | 'pending'
+  sessionId: string
+  message: string
+  draftInput?: string
+}
+
+/** Claims the gate before any await, including project persistence. */
+export function createVideoAgentHandoff() {
+  let running = false
+  return async (actions: {
+    save: () => Promise<boolean>
+    launch: () => Promise<VideoAgentHandoffResult | undefined>
+    onBusy: (busy: boolean) => void
+  }): Promise<VideoAgentHandoffResult | null> => {
+    if (running) return null
+    running = true
+    actions.onBusy(true)
+    try {
+      if (!await actions.save()) return null
+      const result = await actions.launch()
+      if (!result) throw new Error('Video agent bridge is unavailable.')
+      if (!result.sessionId || !['started', 'draft', 'pending'].includes(result.status) || !result.ok) {
+        throw new Error(result.message || 'Video agent could not be started.')
+      }
+      return result
+    } finally {
+      running = false
+      actions.onBusy(false)
+    }
+  }
+}
+
+export function videoAgentPromptKey(workspaceId: string, outputId: string): string {
+  return `artist-os:video-agent-prompt:v1:${JSON.stringify([workspaceId, outputId])}`
+}

@@ -3,9 +3,12 @@ import { AlertTriangle, Bot, ChevronDown, ClipboardCheck, Code2, Copy, Crop, Dow
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator } from '@/components/ui/styled-dropdown'
+import { useAppShellContext } from '@/context/AppShellContext'
+import { useNavigation } from '@/contexts/NavigationContext'
+import { routes } from '../../shared/routes'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
 import { findVideoProjectAsset, formatDuration, summarizeVideoProject } from '@/components/outputs/video-project-output'
-import { type VideoPreviewMode, previewMediaTime, previewTimelineTime, previewPlaybackRate, videoCompositionFingerprint, renderedPreviewFreshness, sourceInAfterLeadingTrim, clipPlaybackSpeed, previewClipSourceTime, timelineMsFromPreviewVideoTime, splitVideoClip, videoProjectFingerprint, isExternalVideoProjectChange, nextPreviewClip, requireVideoProjectWrite } from '@/lib/video-studio-editing'
+import { createVideoAgentHandoff, videoAgentPromptKey, type VideoAgentHandoffResult, type VideoPreviewMode, previewMediaTime, previewTimelineTime, previewPlaybackRate, videoCompositionFingerprint, renderedPreviewFreshness, sourceInAfterLeadingTrim, clipPlaybackSpeed, previewClipSourceTime, timelineMsFromPreviewVideoTime, splitVideoClip, videoProjectFingerprint, isExternalVideoProjectChange, nextPreviewClip, requireVideoProjectWrite } from '@/lib/video-studio-editing'
 import { type VideoStudioDraft, readVideoDraft, writeVideoDraft, clearVideoDraft, videoDraftConflicts } from '@/lib/video-studio-drafts'
 import type { RunnerVideoProject, VideoAspectRatio, VideoClip } from '@craft-agent/shared/video'
 
@@ -72,7 +75,7 @@ type VideoStudioElectronAPI = typeof window.electronAPI & {
   inspectVideoStudio?: (workspaceId: string, outputId: string) => Promise<{ ok: boolean; assetId: string; status: number }>
   dryRunVideoStudio?: (workspaceId: string, outputId: string) => Promise<{ ok: boolean; assetId: string; status: number }>
   exportVideoStudio?: (workspaceId: string, outputId: string, preset?: string) => Promise<{ assetId: string }>
-  runVideoStudioAgent?: (workspaceId: string, outputId: string, prompt: string) => Promise<{ ok: boolean; status: string; message?: string }>
+  runVideoStudioAgent?: (workspaceId: string, outputId: string, prompt: string) => Promise<VideoAgentHandoffResult>
 }
 
 export default function VideoStudioPage(props: Props) {
@@ -81,6 +84,9 @@ export default function VideoStudioPage(props: Props) {
 
 function VideoStudioEditor({ workspaceId, outputId }: Props) {
   const { getOutput } = useOutputs(workspaceId)
+  const { navigate } = useNavigation()
+  const { onInputChange } = useAppShellContext()
+  const agentHandoffRef = React.useRef(createVideoAgentHandoff())
   const [manifest, setManifest] = React.useState<OutputManifestDTO | null>(null)
   const [projectAsset, setProjectAsset] = React.useState<OutputAssetDTO | null>(null)
   const [project, setProject] = React.useState<VideoProject | null>(null)
@@ -110,7 +116,9 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   const [rawJsonDirty, setRawJsonDirty] = React.useState(false)
   const [showDeveloperDetails, setShowDeveloperDetails] = React.useState(false)
   const [agentPanelOpen, setAgentPanelOpen] = React.useState(false)
-  const [agentPrompt, setAgentPrompt] = React.useState('')
+  const [agentPrompt, setAgentPrompt] = React.useState(() => {
+    try { return window.localStorage.getItem(videoAgentPromptKey(workspaceId, outputId)) ?? '' } catch { return '' }
+  })
   const [agentRunning, setAgentRunning] = React.useState(false)
   const [mediaFilter, setMediaFilter] = React.useState<MediaFilter>('all')
   const [error, setError] = React.useState<string | null>(null)
@@ -1139,24 +1147,32 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
 
   const runVideoAgent = async () => {
     const prompt = agentPrompt.trim()
-    if (!prompt) return
-    const saved = await persistProject('Saved before video agent')
-    if (!saved) return
-    setAgentRunning(true)
+    if (!prompt || operationBusyRef.current || draftPendingRef.current) return
     try {
-      const result = await (window.electronAPI as VideoStudioElectronAPI).runVideoStudioAgent?.(workspaceId, outputId, prompt)
-      if (!result) throw new Error('Video agent bridge is unavailable.')
-      if (result.status === 'not-implemented') {
-        toast.info(result.message ?? 'Video agent handoff is not wired yet.')
-      } else {
-        toast.success(result.message ?? 'Video agent command sent.')
+      // Persist retry text before navigating away to a newly created session.
+      window.localStorage.setItem(videoAgentPromptKey(workspaceId, outputId), agentPrompt)
+      const result = await agentHandoffRef.current({
+        onBusy: (busy) => {
+          operationBusyRef.current = busy
+          if (activeRef.current) setAgentRunning(busy)
+        },
+        save: async () => Boolean(await persistProject('Saved before video agent')) && activeRef.current,
+        launch: () => (window.electronAPI as VideoStudioElectronAPI).runVideoStudioAgent?.(workspaceId, outputId, prompt) ?? Promise.resolve(undefined),
+      })
+      if (!result || !activeRef.current) return
+      if (result.status === 'started') {
+        try { window.localStorage.removeItem(videoAgentPromptKey(workspaceId, outputId)) } catch { /* retaining retry text is safe */ }
         setAgentPrompt('')
-        await load()
+        toast.success(result.message || 'Video agent started. Opening its session.')
+      } else if (result.status === 'draft') {
+        if (result.draftInput) onInputChange(result.sessionId, result.draftInput)
+        toast.warning(result.message || 'Video agent session saved as a draft. Open it to retry; your prompt is preserved.')
+      } else {
+        toast.warning(result.message || 'Video agent handoff is still pending. Check the session before retrying.')
       }
+      navigate(routes.view.allSessions(result.sessionId))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
-    } finally {
-      setAgentRunning(false)
     }
   }
 
@@ -1435,6 +1451,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                 <div className="mt-3 flex shrink-0 gap-2">
                   <textarea
                     value={agentPrompt}
+                    disabled={isBusy}
                     onChange={(event) => setAgentPrompt(event.target.value)}
                     placeholder="Make this a 9:16 punchy short..."
                     className="h-24 min-w-0 flex-1 resize-none rounded-md border border-white/[0.08] bg-black/40 p-2 text-xs text-white/78 outline-none placeholder:text-white/30 focus:border-[#18c7d4]/60"

@@ -1,3 +1,5 @@
+import { loadActiveAgentsForWorkspace } from '../../sessions/agent-registration';
+import { launchVideoStudioAgent } from './video-studio-agent';
 import { runVideoStudioProcess } from './video-studio-process';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -10,7 +12,7 @@ import { readVideoProject, readVideoProjectWithContent, writeVideoProject, type 
 import { writeOutputManifest, type OutputAsset, type OutputManifest } from '@craft-agent/shared/outputs';
 import type { RpcServer } from '@craft-agent/server-core/transport';
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport';
-import { sanitizeFilename } from '@craft-agent/server-core/handlers';
+import { sanitizeFilename, getWorkspaceAllowedDirs, validateFilePath } from '@craft-agent/server-core/handlers';
 import type { HandlerDeps } from '../handler-deps';
 import { OutputService, pushOutputsUpdated } from '../../outputs/OutputService';
 
@@ -771,13 +773,21 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
     async (_ctx, workspaceId: string, outputId: string, prompt: string) => {
       assertLocalWorkspace(workspaceId, 'Run Video Studio agent');
       await assertVideoStudioPermission(workspaceId, 'agent.chat');
-      if (!prompt?.trim()) throw new Error('Agent prompt is required.');
-      return {
-        ok: true,
-        outputId,
-        status: 'not-implemented' as const,
-        message: 'Video Studio agent command endpoint is registered; session handoff is the next implementation phase.',
-      };
+      await assertVideoStudioPermission(workspaceId, 'files.write');
+      if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('Agent prompt is required.');
+      const service = serviceFor(server);
+      const output = service.get(workspaceId, outputId);
+      if (!output) throw new Error(`Output not found: ${outputId}`);
+      const projectAsset = videoProjectAsset(output);
+      const projectPath = service.resolveAssetPath(workspaceId, outputId, projectAsset.path);
+      const safeProjectPath = await validateFilePath(projectPath, getWorkspaceAllowedDirs(workspaceId));
+      readVideoProject(safeProjectPath);
+      const workspace = getWorkspaceByNameOrId(workspaceId)!;
+      if (!loadActiveAgentsForWorkspace(workspace).some(agent => agent.slug === 'video-editor-agent')) {
+        throw new Error('Activate Video Editor Agent in this workspace before using Ask Agent.');
+      }
+      return withVideoProjectLock(safeProjectPath, () => launchVideoStudioAgent(_deps.sessionManager,
+        { workspaceId, outputId, projectPath: safeProjectPath, prompt }));
     },
   );
 }

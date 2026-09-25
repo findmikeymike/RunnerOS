@@ -168,8 +168,10 @@ export interface VideoStudioReportResult {
 export interface VideoStudioAgentRunResult {
   ok: boolean
   outputId: string
-  status: 'not-implemented'
+  sessionId: string
+  status: 'started' | 'draft' | 'pending'
   message: string
+  draftInput?: string
 }
 
 // Source types for session source selection

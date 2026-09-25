@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { VideoClip } from '@craft-agent/shared/video'
-import { previewMediaTime, previewTimelineTime, previewPlaybackRate, videoCompositionFingerprint, renderedPreviewFreshness, sourceInAfterLeadingTrim, clipPlaybackSpeed, previewClipSourceTime, timelineMsFromPreviewVideoTime, splitVideoClip, videoProjectFingerprint, isExternalVideoProjectChange, nextPreviewClip, requireVideoProjectWrite } from './video-studio-editing'
+import { createVideoAgentHandoff, videoAgentPromptKey, previewMediaTime, previewTimelineTime, previewPlaybackRate, videoCompositionFingerprint, renderedPreviewFreshness, sourceInAfterLeadingTrim, clipPlaybackSpeed, previewClipSourceTime, timelineMsFromPreviewVideoTime, splitVideoClip, videoProjectFingerprint, isExternalVideoProjectChange, nextPreviewClip, requireVideoProjectWrite } from './video-studio-editing'
 
 const clip = (speed = 1): VideoClip => ({ id: 'a', type: 'video', startMs: 1000, durationMs: 4000, sourceInMs: 500, sourceOutMs: 10500, speed })
 
@@ -75,5 +75,52 @@ describe('Video Studio rendered result review', () => {
     expect(renderedPreviewFreshness(JSON.stringify({ ...project, settings: { width: 1080 } }), rendered)).toBe('edited')
     expect(renderedPreviewFreshness('{unfinished', rendered)).toBe('edited')
     expect(renderedPreviewFreshness(JSON.stringify(project), null)).toBe('unknown')
+  })
+})
+
+
+describe('video agent handoff sequencing', () => {
+  const result = { ok: true, status: 'started' as const, outputId: 'out', sessionId: 'session', message: 'Message saved' }
+  test('busy is claimed before save and double clicks cannot create a second session', async () => {
+    const launch = createVideoAgentHandoff()
+    let release!: (saved: boolean) => void
+    const pendingSave = new Promise<boolean>(resolve => { release = resolve })
+    const calls: string[] = []
+    const actions = {
+      onBusy: (busy: boolean) => calls.push(`busy:${busy}`),
+      save: () => { calls.push('save'); return pendingSave },
+      launch: async () => { calls.push('launch'); return result },
+    }
+    const first = launch(actions)
+    expect(calls).toEqual(['busy:true', 'save'])
+    expect(await launch(actions)).toBeNull()
+    release(true)
+    expect(await first).toEqual(result)
+    expect(calls).toEqual(['busy:true', 'save', 'launch', 'busy:false'])
+  })
+  test('save failure releases gate and does not launch or clear caller prompt', async () => {
+    const launch = createVideoAgentHandoff()
+    let sends = 0
+    const busy: boolean[] = []
+    await expect(launch({ onBusy: value => busy.push(value), save: async () => { throw new Error('disk full') }, launch: async () => { sends++; return result } })).rejects.toThrow('disk full')
+    expect(sends).toBe(0)
+    expect(busy).toEqual([true, false])
+    expect(await launch({ onBusy: () => {}, save: async () => true, launch: async () => result })).toEqual(result)
+  })
+  test('declined save and absent bridge do not pretend an agent started', async () => {
+    const launch = createVideoAgentHandoff()
+    expect(await launch({ onBusy: () => {}, save: async () => false, launch: async () => { throw new Error('must not run') } })).toBeNull()
+    await expect(launch({ onBusy: () => {}, save: async () => true, launch: async () => undefined })).rejects.toThrow('unavailable')
+  })
+  test('draft handoff preserves exact composer input and pending never invents an accepted send', async () => {
+    const launch = createVideoAgentHandoff()
+    const draft = { ...result, status: 'draft' as const, draftInput: 'Complete video-edit context\nRetry this edit' }
+    expect(await launch({ onBusy: () => {}, save: async () => true, launch: async () => draft })).toEqual(draft)
+    const pending = { ...result, status: 'pending' as const }
+    expect((await launch({ onBusy: () => {}, save: async () => true, launch: async () => pending }))?.status).toBe('pending')
+  })
+  test('retry prompts remain scoped to workspace and output', () => {
+    expect(videoAgentPromptKey('a:b', 'c')).not.toBe(videoAgentPromptKey('a', 'b:c'))
+    expect(videoAgentPromptKey('workspace', 'one')).not.toBe(videoAgentPromptKey('workspace', 'two'))
   })
 })
