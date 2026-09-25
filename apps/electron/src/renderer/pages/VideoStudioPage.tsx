@@ -306,7 +306,10 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   }, [project])
 
   const togglePreviewPlayback = React.useCallback(() => {
-    if (previewMode === 'composition') return
+    if (previewMode === 'composition') {
+      setIsPreviewPlaying((playing) => !playing)
+      return
+    }
     const video = previewVideoRef.current
     if (isPreviewPlaying) {
       setIsPreviewPlaying(false)
@@ -370,7 +373,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   )
   const previewUrl = previewMode === 'composition' ? null : previewMode === 'rendered' ? renderPreviewUrl : timelinePreviewUrl
   const renderFreshness = renderedPreviewFreshness(rawJson, renderedFingerprint)
-  const previewStatus = previewMode === 'composition' ? 'scrub to preview · silent' : previewMode === 'source' ? 'source clip · render to review all edits'
+  const previewStatus = previewMode === 'composition' ? 'composition playback · silent' : previewMode === 'source' ? 'source clip · render to review all edits'
     : renderFreshness === 'edited' ? 'edited since render · render again'
     : renderFreshness === 'current' ? 'rendered result' : 'saved render · freshness unverified'
 
@@ -384,6 +387,8 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
     // The server must verify the imported asset still is the file export will read.
     return window.electronAPI.readOutputAssetDataUrl(workspaceId, outputId, asset.id, sourcePath)
   }, [manifest, outputId, workspaceId, compositionSources])
+
+  const stopCompositionPlayback = React.useCallback(() => setIsPreviewPlaying(false), [])
 
   const changePreviewMode = (mode: VideoPreviewMode | 'composition') => {
     previewVideoRef.current?.pause()
@@ -399,6 +404,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
   React.useEffect(() => {
     let cancelled = false
     async function loadTimelinePreviewClip() {
+      if (previewMode !== 'source') return
       if (!manifest || !timelinePreviewClip?.clip.mediaId) {
         setTimelinePreviewUrl(null)
         return
@@ -429,7 +435,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
     return () => {
       cancelled = true
     }
-  }, [manifest, outputId, timelinePreviewClip?.clip.mediaId, timelinePreviewClip?.media.path, workspaceId])
+  }, [manifest, outputId, previewMode, timelinePreviewClip?.clip.mediaId, timelinePreviewClip?.media.path, workspaceId])
 
   React.useEffect(() => {
     const video = previewVideoRef.current
@@ -1404,7 +1410,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
             <div className="flex min-h-0 flex-1 items-center justify-center bg-[#0a0a0a] p-4">
               <div className="flex aspect-video w-full max-w-[min(100%,980px)] items-center justify-center overflow-hidden rounded-sm border border-white/[0.06] bg-black">
                 {previewMode === 'composition' && project ? (
-                  <CompositionPreview project={project} timeMs={playheadMs} loadMedia={loadCompositionMedia} />
+                  <CompositionPreview project={project} timeMs={playheadMs} loadMedia={loadCompositionMedia} playing={isPreviewPlaying} onTimeChange={setPlayheadMs} onPlaybackStop={stopCompositionPlayback} />
                 ) : previewUrl && previewMode !== 'composition' ? (
                   <div className="relative h-full w-full">
                     <video
@@ -1738,7 +1744,7 @@ function VideoStudioEditor({ workspaceId, outputId }: Props) {
                 type="button"
                 title={isPreviewPlaying ? 'Pause' : 'Play'}
                 onClick={togglePreviewPlayback}
-                disabled={!previewUrl}
+                disabled={previewMode === 'composition' ? !project || (isBusy && !isPreviewPlaying) : !previewUrl}
                 className="flex h-7 min-w-16 items-center justify-center gap-1.5 rounded-md bg-white/[0.06] px-2 text-[12px] text-white/68 hover:bg-white/[0.1] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
               >
                 {isPreviewPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}

@@ -277,6 +277,194 @@ try {
         assert.equal(await canvas.getAttribute('data-time-ms'), null, 'old successful frame timestamp must be cleared');
         assert.equal((await canvasPixel(96, 55))[3], 0, 'old composited pixels must be cleared');
     });
+    await check('silent composition playback advances through layers, titles, captions and gaps then stops at end', async () => {
+        await openComposition(); await readyComposition(0);
+        await page.evaluate(() => {
+            const fixture = (window as any).fixture;
+            fixture.playbackFrames = {};
+            fixture.playbackRequestBaseline = fixture.mediaRequests.length;
+            document.querySelector('button[title="Play"]')!.addEventListener('click', () => { fixture.playbackStartedAt = performance.now(); }, { once: true });
+            const sample = () => {
+                const canvas = document.querySelector('canvas[aria-label="Composition preview"]') as HTMLCanvasElement | null;
+                if (!canvas) return;
+                const time = Number(canvas.dataset.timeMs);
+                if (canvas.dataset.state === 'ready') {
+                    const bucket = time >= 50 && time < 450 ? 'layer' : time >= 600 && time < 850 ? 'title' : time >= 1100 && time < 1300 ? 'caption' : time >= 1750 && time < 1950 ? 'gap' : time >= 2250 ? 'tail' : null;
+                    if (bucket && !fixture.playbackFrames[bucket]) {
+                        const ctx = canvas.getContext('2d')!;
+                        const white = (top: number, bottom: number) => {
+                            const data = ctx.getImageData(0, top, canvas.width, bottom - top).data;
+                            let count = 0;
+                            for (let i = 0; i < data.length; i += 4) if (data[i]! > 190 && data[i + 1]! > 190 && data[i + 2]! > 190) count++;
+                            return count;
+                        };
+                        fixture.playbackFrames[bucket] = { time, pixel: [...ctx.getImageData(160, 120, 1, 1).data], layerPixel: [...ctx.getImageData(Math.min(319, Math.round(80 + time * 0.16)), 55, 1, 1).data], title: white(85, 145), caption: white(145, 210) };
+                    }
+                }
+                if (time >= 2400) fixture.playbackElapsed = performance.now() - fixture.playbackStartedAt;
+                else fixture.playbackSampleFrame = requestAnimationFrame(sample);
+            };
+            fixture.playbackSampleFrame = requestAnimationFrame(sample);
+        });
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.waitForFunction(() => Number((document.querySelector('input[aria-label="Composition time"]') as HTMLInputElement)?.value) >= 2400);
+        await page.getByTitle('Play', { exact: true }).waitFor();
+        await readyComposition(2400);
+        const observations = await page.evaluate(() => {
+            cancelAnimationFrame((window as any).fixture.playbackSampleFrame);
+            const fixture = (window as any).fixture;
+            return { frames: fixture.playbackFrames, requests: fixture.mediaRequests.slice(fixture.playbackRequestBaseline), elapsed: fixture.playbackElapsed };
+        });
+        assert.deepEqual(Object.keys(observations.frames).sort(), ['caption', 'gap', 'layer', 'tail', 'title']);
+        assert.ok(observations.elapsed >= 2300 && observations.elapsed <= 2900, `2400ms timeline must track wall time after media is ready, took ${observations.elapsed}ms`);
+        assert.ok(observations.frames.layer.layerPixel[2] > 100 && observations.frames.layer.layerPixel[2] < 155, 'moving half-opacity image must remain composited during playback');
+        assert.ok(observations.frames.title.title > 100);
+        assert.ok(observations.frames.caption.caption > 100);
+        assert.equal(observations.frames.gap.title + observations.frames.gap.caption, 0);
+        assert.ok(observations.frames.gap.pixel.slice(0, 3).every((value: number) => value < 25));
+        for (const asset of ['video-media-clock', 'video-media-overlay']) {
+            assert.equal(observations.requests.filter((request: any) => request.asset === asset && request.expectedSourcePath).length, 0, 'playback must retain media instead of loading it on each frame');
+        }
+    });
+    await check('composition pause is stable and seeking during playback reanchors the clock', async () => {
+        await openComposition(); await readyComposition(0);
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.waitForFunction(() => Number((document.querySelector('input[aria-label="Composition time"]') as HTMLInputElement)?.value) > 300);
+        await page.getByTitle('Pause', { exact: true }).click();
+        await page.waitForTimeout(80); // Allow the already requested frame to settle.
+        const paused = await page.getByLabel('Composition time', { exact: true }).inputValue();
+        await page.waitForTimeout(200);
+        assert.equal(await page.getByLabel('Composition time', { exact: true }).inputValue(), paused);
+        await page.getByTitle('Play', { exact: true }).click();
+        await seekComposition(1750);
+        await page.waitForFunction(() => {
+            const canvas = document.querySelector('canvas[aria-label="Composition preview"]');
+            const time = Number(canvas?.getAttribute('data-time-ms'));
+            return canvas?.getAttribute('data-state') === 'ready' && time > 1800 && time < 2150;
+        });
+        assert.ok((await canvasPixel(160, 120)).slice(0, 3).every(value => value < 25));
+        await page.getByTitle('Pause', { exact: true }).click();
+        const reanchored = Number(await page.getByLabel('Composition time', { exact: true }).inputValue());
+        assert.ok(reanchored > 1750 && reanchored < 2300, `seek must continue from requested time, got ${reanchored}`);
+    });
+    await check('switching from playing composition disposes its old clock', async () => {
+        await openComposition(); await readyComposition(0);
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.waitForFunction(() => Number((document.querySelector('input[aria-label="Composition time"]') as HTMLInputElement)?.value) > 300);
+        await page.evaluate(() => { (window as any).fixture.retiredCanvas = document.querySelector('canvas[aria-label="Composition preview"]'); });
+        await page.getByRole('button', { name: 'Source', exact: true }).click();
+        await page.getByTitle('Play', { exact: true }).waitFor();
+        assert.equal(await page.getByLabel('Composition preview', { exact: true }).count(), 0);
+        const stopped = await page.evaluate(() => (window as any).fixture.retiredCanvas.dataset.timeMs);
+        await page.waitForTimeout(250);
+        assert.equal(await page.evaluate(() => (window as any).fixture.retiredCanvas.dataset.timeMs), stopped);
+        assert.equal(await page.getByTitle('Pause', { exact: true }).count(), 0);
+    });
+    await check('hiding composition pauses playback and showing it does not resume the old clock', async () => {
+        await openComposition(); await readyComposition(0);
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.waitForFunction(() => Number((document.querySelector('input[aria-label="Composition time"]') as HTMLInputElement)?.value) > 300);
+        await page.evaluate(() => {
+            Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+            Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        await page.getByTitle('Play', { exact: true }).waitFor();
+        await page.waitForTimeout(80);
+        const stopped = await page.getByLabel('Composition time', { exact: true }).inputValue();
+        await page.waitForTimeout(250);
+        assert.equal(await page.getByLabel('Composition time', { exact: true }).inputValue(), stopped);
+        await page.evaluate(() => {
+            delete (document as any).visibilityState;
+            delete (document as any).hidden;
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        await page.waitForTimeout(250);
+        assert.equal(await page.getByLabel('Composition time', { exact: true }).inputValue(), stopped);
+        assert.equal(await page.getByTitle('Pause', { exact: true }).count(), 0);
+        // Repeat while a future image is still loading: visibility restoration must redraw paused.
+        await page.evaluate(() => { (window as any).fixture.holdMedia = 'video-media-overlay'; });
+        await openComposition();
+        await seekComposition(1800); await readyComposition(1800);
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.waitForFunction(() => {
+            const canvas = document.querySelector('canvas[aria-label="Composition preview"]');
+            return canvas?.getAttribute('data-state') === 'loading' && !!(window as any).fixture.pendingMedia['video-media-overlay'];
+        });
+        await page.evaluate(() => {
+            Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+            Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        await page.getByTitle('Play', { exact: true }).waitFor();
+        await page.evaluate(() => {
+            delete (document as any).visibilityState;
+            delete (document as any).hidden;
+            (window as any).fixture.holdMedia = null;
+            (window as any).fixture.pendingMedia['video-media-overlay']();
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        await page.waitForFunction(() => document.querySelector('canvas[aria-label="Composition preview"]')?.getAttribute('data-state') === 'ready');
+        const restored = await page.getByLabel('Composition time', { exact: true }).inputValue();
+        await page.waitForTimeout(200);
+        assert.equal(await page.getByLabel('Composition time', { exact: true }).inputValue(), restored);
+        assert.equal(await page.getByTitle('Pause', { exact: true }).count(), 0);
+    });
+    await check('slow native play buffers without turning a delayed start into a fatal error', async () => {
+        await openComposition(); await readyComposition(0);
+        await page.evaluate(() => {
+            const originalPlay = HTMLMediaElement.prototype.play;
+            let delayed = false;
+            HTMLMediaElement.prototype.play = function () {
+                if (delayed) return originalPlay.call(this);
+                delayed = true;
+                (window as any).fixture.delayedNativePlay = true;
+                const native = originalPlay.call(this);
+                return Promise.all([native, new Promise(resolve => setTimeout(resolve, 350))]).then(() => {});
+            };
+        });
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.waitForFunction(() => (window as any).fixture.delayedNativePlay === true);
+        await page.waitForFunction(() => {
+            const canvas = document.querySelector('canvas[aria-label="Composition preview"]');
+            return canvas?.getAttribute('data-state') === 'ready' && Number(canvas.getAttribute('data-time-ms')) > 500;
+        });
+        assert.equal(await page.getByRole('alert').count(), 0);
+        await page.getByTitle('Pause', { exact: true }).click();
+    });
+    await check('overlapping clips of one source keep separate retimed video decoders', async () => {
+        await page.evaluate(() => (window as any).fixture.composition(true));
+        await page.getByRole('button', { name: 'Composition', exact: true }).click();
+        await seekComposition(500); await readyComposition(500);
+        const left = await canvasPixel(80, 120), right = await canvasPixel(240, 120);
+        assert.ok(left[0] > 220 && left[1] < 30 && left[2] < 30, `left clip must be red, got ${left}`);
+        assert.ok(right[2] > 220 && right[0] < 30, `right clip must be blue at different source time, got ${right}`);
+        await seekComposition(1100); await readyComposition(1100);
+        assert.ok((await canvasPixel(80, 120))[1] > 220, 'left clip advances into green source segment');
+        assert.ok((await canvasPixel(240, 120))[2] > 220, 'slower right clip remains blue');
+        await seekComposition(0); await readyComposition(0);
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.waitForFunction(() => {
+            const canvas = document.querySelector('canvas[aria-label="Composition preview"]') as HTMLCanvasElement;
+            const time = Number(canvas?.dataset.timeMs);
+            if (canvas?.dataset.state !== 'ready' || time < 300 || time > 900) return false;
+            const ctx = canvas.getContext('2d')!;
+            return ctx.getImageData(80, 120, 1, 1).data[0]! > 220 && ctx.getImageData(240, 120, 1, 1).data[2]! > 220;
+        });
+        await page.getByTitle('Pause', { exact: true }).click();
+    });
+    await check('missing media encountered during composition playback stops with an error', async () => {
+        await page.evaluate(() => { (window as any).fixture.missingMedia = 'video-media-overlay'; });
+        await openComposition();
+        await seekComposition(1800); await readyComposition(1800);
+        await page.getByTitle('Play', { exact: true }).click();
+        await page.getByRole('alert').filter({ hasText: /Media unavailable|media unavailable/ }).waitFor();
+        await page.getByTitle('Play', { exact: true }).waitFor();
+        assert.equal(await page.getByLabel('Composition preview', { exact: true }).getAttribute('data-state'), 'error');
+        const stopped = await page.getByLabel('Composition time', { exact: true }).inputValue();
+        await page.waitForTimeout(200);
+        assert.equal(await page.getByLabel('Composition time', { exact: true }).inputValue(), stopped);
+    });
 }
 finally {
     try {

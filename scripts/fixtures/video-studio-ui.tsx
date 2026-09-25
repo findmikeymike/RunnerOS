@@ -69,7 +69,7 @@ w.electronAPI = {
 const root = createRoot(document.getElementById('root')!)
 state.mount = () => flushSync(() => root.render(<VideoStudioPage workspaceId="fixture-workspace" outputId="fixture-output" />))
 state.unmount = () => flushSync(() => root.render(null))
-state.composition = () => {
+state.composition = (overlappingVideo = false) => {
   state.unmount()
   const project = {
     ...initialProject, id: 'synthetic-composition', title: 'Composition fixture',
@@ -90,6 +90,13 @@ state.composition = () => {
       { id: 'tail', type: 'image', label: 'Tail', clips: [{ id: 'tail-clip', type: 'image', mediaId: 'overlay', startMs: 2200, durationMs: 200 }] },
     ] },
     captions: [{ id: 'captions', label: 'Captions', cues: [{ id: 'remapped', startMs: 0, durationMs: 300, text: 'CAPTION HERE' }] }],
+  }
+  if (overlappingVideo) {
+    project.timeline = { durationMs: 1500, markers: [], tracks: [
+      { id: 'left', type: 'video', label: 'Left source', clips: [{ id: 'left-clip', type: 'video', mediaId: 'clock', startMs: 0, durationMs: 1500, sourceInMs: 0, sourceOutMs: 1500, speed: 1, transform: { scale: 0.5, x: -80 } }] },
+      { id: 'right', type: 'video', label: 'Right source', clips: [{ id: 'right-clip', type: 'video', mediaId: 'clock', startMs: 0, durationMs: 1500, sourceInMs: 2000, sourceOutMs: 2750, speed: 0.5, transform: { scale: 0.5, x: 80 } }] },
+    ] } as any
+    project.captions = []
   }
   diskText = JSON.stringify(project, null, 2) + '\n'
   assets = [assets[0],

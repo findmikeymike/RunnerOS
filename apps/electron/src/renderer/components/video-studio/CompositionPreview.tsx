@@ -1,10 +1,13 @@
 import * as React from 'react'
 import type { RunnerVideoProject } from '@craft-agent/shared/video'
-import { buildScenePlan, sceneAtTime, visualGeometry } from '../../../../../../tools/video-studio/lib/scene-plan.mjs'
+import { buildScenePlan, sceneAtTime, visualGeometry, clipSpeed } from '../../../../../../tools/video-studio/lib/scene-plan.mjs'
 
 interface Props {
   project: RunnerVideoProject
   timeMs: number
+  playing: boolean
+  onTimeChange: (timeMs: number) => void
+  onPlaybackStop: () => void
   loadMedia: (mediaId: string) => Promise<string>
 }
 
@@ -58,13 +61,18 @@ function drawText(context: CanvasRenderingContext2D, text: string, fontSize: num
   lines.forEach((line, index) => context.fillText(line, width / 2, y + index * lineHeight))
 }
 
-/** Paused, silent composition frames. Export remains the final font/color reference. */
-export function CompositionPreview({ project, timeMs, loadMedia }: Props) {
+/** Silent visual playback. Rendered view remains the audio and final typography reference. */
+export function CompositionPreview({ project, timeMs, playing, onTimeChange, onPlaybackStop, loadMedia }: Props) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
   const [state, setState] = React.useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = React.useState('')
   const [retry, setRetry] = React.useState(0)
-  const urls = React.useMemo(() => new Map<string, Promise<string>>(), [loadMedia])
+  const callbacks = React.useRef({ onTimeChange, onPlaybackStop })
+  callbacks.current = { onTimeChange, onPlaybackStop }
+  const initialized = React.useRef(false)
+  const command = React.useRef<(time: number, play: boolean) => void>(() => {})
+  const currentProps = React.useRef({ timeMs, playing })
+  currentProps.current = { timeMs, playing }
   const plan = React.useMemo(() => {
     try { return { scene: buildScenePlan(project), error: '' } }
     catch (cause) { return { scene: null, error: cause instanceof Error ? cause.message : 'Invalid composition' } }
@@ -73,109 +81,265 @@ export function CompositionPreview({ project, timeMs, loadMedia }: Props) {
   React.useLayoutEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const controller = new AbortController()
-    const disposers: Array<() => void> = []
-    let expired = false
-    let active = true
-    const timer = window.setTimeout(() => { expired = true; controller.abort() }, FRAME_TIMEOUT_MS)
-    const { signal } = controller
-    setState('loading')
-    setError('')
-    canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
-    delete canvas.dataset.timeMs
+    type Decoder = { element: HTMLVideoElement | HTMLImageElement; width: number; height: number; dispose: () => void }
+    const decoders = new Map<string, Promise<Decoder>>()
+    const decoderCancels = new Map<string, () => void>()
+    const disposers = new Set<() => void>()
+    const pendingPlay = new Set<HTMLVideoElement>()
+    const lifecycle = new AbortController()
+    let frameController: AbortController | null = null
+    let frameId = 0
+    let generation = 0
+    let position = currentProps.current.timeMs
+    let running = currentProps.current.playing
+    if (initialized.current && running) { running = false; callbacks.current.onPlaybackStop() }
+    initialized.current = true
+    if (running && position >= (plan.scene?.durationMs ?? Infinity)) position = 0
+    let lastReported: number | null = null
+    let lastClock = performance.now()
+    let drawing = false
+    let pending = false
+    let stopped = false
+    const urls = new Map<string, Promise<string>>()
+    const buffer = document.createElement('canvas')
 
-    async function render() {
+    const pauseDecoders = (force = true) => {
+      for (const decoder of decoders.values()) void decoder.then(({ element }) => {
+        if (element instanceof HTMLVideoElement && (force || !pendingPlay.has(element))) element.pause()
+      }, () => {})
+    }
+    const clearFrame = () => {
+      canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+      delete canvas.dataset.timeMs
+      setState('loading')
+      setError('')
+    }
+    const stop = () => {
+      running = false
+      pauseDecoders()
+      if (!stopped) { stopped = true; callbacks.current.onPlaybackStop() }
+    }
+    async function decoderFor(layer: ReturnType<typeof sceneAtTime>['visuals'][number], signal: AbortSignal): Promise<Decoder> {
+      let decoder = decoders.get(layer.clip.id)
+      if (!decoder) {
+        const decodeController = new AbortController()
+        const abortDecode = () => decodeController.abort()
+        lifecycle.signal.addEventListener('abort', abortDecode, { once: true })
+        let disposeElement = () => {}
+        const cancelDecoder = () => {
+          decodeController.abort()
+          lifecycle.signal.removeEventListener('abort', abortDecode)
+          disposeElement()
+          disposers.delete(disposeElement)
+        }
+        decoderCancels.set(layer.clip.id, cancelDecoder)
+        decoder = (async () => {
+          let source = urls.get(layer.media.id)
+          if (!source) {
+            source = loadMedia(layer.media.id)
+            if (urls.size >= MAX_ACTIVE_LAYERS) urls.delete(urls.keys().next().value!)
+            urls.set(layer.media.id, source)
+          }
+          const url = await interruptible(source, decodeController.signal)
+          if (decodeController.signal.aborted) throw cancelled()
+          if (layer.media.type === 'image') {
+            const image = new Image()
+            const dispose = () => { image.src = '' }
+            disposeElement = dispose
+            disposers.add(dispose)
+            const loaded = waitForMedia(image, 'load', () => image.complete && image.naturalWidth > 0, decodeController.signal)
+            image.src = url
+            await loaded
+            return { element: image, width: image.naturalWidth, height: image.naturalHeight, dispose }
+          }
+          const video = document.createElement('video')
+          video.muted = true
+          video.preload = 'auto'
+          video.playsInline = true
+          const dispose = () => { video.pause(); video.removeAttribute('src'); video.load() }
+          disposeElement = dispose
+          disposers.add(dispose)
+          const metadata = waitForMedia(video, 'loadedmetadata', () => video.readyState >= 1, decodeController.signal)
+          video.src = url
+          await metadata
+          return { element: video, width: video.videoWidth, height: video.videoHeight, dispose }
+        })()
+        decoders.set(layer.clip.id, decoder)
+      }
+      return interruptible(decoder, signal)
+    }
+    async function draw(nextTime: number, forceSeek: boolean) {
       const scene = plan.scene
       if (!scene) throw new Error(plan.error)
       if (scene.issues.length) throw new Error(scene.issues.map(issue => issue.message).join(' '))
       if (!Number.isFinite(scene.width) || !Number.isFinite(scene.height) || scene.width <= 0 || scene.height <= 0) throw new Error('Invalid preview dimensions')
-      const frame = sceneAtTime(scene, timeMs)
+      const frame = sceneAtTime(scene, nextTime)
       if (frame.visuals.length > MAX_ACTIVE_LAYERS) throw new Error('More than 32 active layers. Render to review this frame.')
-      // Bound the browser bitmap while keeping all coordinates in export space.
-      const scale = Math.min(1, 1920 / Math.max(scene.width, scene.height))
-      const buffer = document.createElement('canvas')
-      buffer.width = Math.max(1, Math.round(scene.width * scale))
-      buffer.height = Math.max(1, Math.round(scene.height * scale))
-      const context = buffer.getContext('2d')
-      if (!context) throw new Error('Canvas preview is unavailable')
-      context.scale(scale, scale)
-      context.fillStyle = scene.background
-      context.fillRect(0, 0, scene.width, scene.height)
-      const sources = await Promise.all(frame.visuals.map(async layer => {
-        let source = urls.get(layer.media.id)
-        if (!source) {
-          source = loadMedia(layer.media.id)
-          if (urls.size >= MAX_ACTIVE_LAYERS) urls.delete(urls.keys().next().value!)
-          urls.set(layer.media.id, source)
-          source.catch(() => { if (urls.get(layer.media.id) === source) urls.delete(layer.media.id) })
-        }
-        const url = await interruptible(source, signal)
-        if (signal.aborted) throw cancelled()
-        if (layer.media.type === 'image') {
-          const image = new Image()
-          disposers.push(() => { image.src = '' })
-          const loaded = waitForMedia(image, 'load', () => image.complete && image.naturalWidth > 0, signal)
-          image.src = url
-          await loaded
-          return { layer, element: image, width: image.naturalWidth, height: image.naturalHeight }
-        }
-        const video = document.createElement('video')
-        video.muted = true
-        video.preload = 'auto'
-        video.playsInline = true
-        disposers.push(() => { video.pause(); video.removeAttribute('src'); video.load() })
-        const metadata = waitForMedia(video, 'loadedmetadata', () => video.readyState >= 1, signal)
-        video.src = url
-        await metadata
-        if (layer.sourceTimeMs / 1000 > video.duration + 0.033) throw new Error(`Source too short: ${layer.media.id}`)
-        const target = Math.max(0, Math.min(layer.sourceTimeMs / 1000, Math.max(0, video.duration - 0.001)))
-        if (Math.abs(video.currentTime - target) > 0.0001) {
-          const seek = waitForMedia(video, 'seeked', () => !video.seeking && Math.abs(video.currentTime - target) < 0.01, signal)
-          video.currentTime = target
-          await seek
-        }
-        await waitForMedia(video, 'loadeddata', () => video.readyState >= 2, signal)
-        return { layer, element: video, width: video.videoWidth, height: video.videoHeight }
-      }))
-      if (signal.aborted) throw cancelled()
-      for (const { layer, element, width, height } of sources) {
-        const geometry = visualGeometry(layer.clip, { ...layer.media, width, height }, scene.width, scene.height, timeMs)
-        const crop = geometry.crop ?? { x: 0, y: 0, width, height }
-        context.save()
-        context.globalAlpha = geometry.opacity
-        context.translate(geometry.x, geometry.y)
-        context.rotate(geometry.rotateDeg * Math.PI / 180)
-        context.drawImage(element, crop.x, crop.y, crop.width, crop.height, -geometry.width / 2, -geometry.height / 2, geometry.width, geometry.height)
-        context.restore()
+      const activeIds = new Set(frame.visuals.map(layer => layer.clip.id))
+      // Keep only active decoders: a long timeline must not retain every decoded source.
+      for (const [id, decoder] of decoders) if (!activeIds.has(id)) {
+        decoders.delete(id)
+        decoderCancels.get(id)?.()
+        decoderCancels.delete(id)
+        void decoder.then(value => { value.dispose(); disposers.delete(value.dispose) }, () => {})
       }
-      for (const title of frame.titles) drawText(context, title.text, title.fontSize, scene.width, scene.height, title)
-      for (const caption of frame.captions) drawText(context, caption.text, caption.fontSize, scene.width, scene.height, caption)
-      if (signal.aborted || !active) return
-      canvas!.width = buffer.width
-      canvas!.height = buffer.height
-      canvas!.getContext('2d')?.drawImage(buffer, 0, 0)
-      canvas!.dataset.timeMs = String(timeMs)
-      setState('ready')
+      const controller = new AbortController()
+      frameController = controller
+      let expired = false
+      const timer = window.setTimeout(() => { expired = true; controller.abort() }, FRAME_TIMEOUT_MS)
+      const { signal } = controller
+      try {
+        const sources = await Promise.all(frame.visuals.map(async layer => {
+          const decoder = await decoderFor(layer, signal)
+          const video = decoder.element
+          if (video instanceof HTMLVideoElement) {
+            if (layer.sourceTimeMs / 1000 > video.duration + 0.033) throw new Error(`Source too short: ${layer.media.id}`)
+            const target = Math.max(0, Math.min(layer.sourceTimeMs / 1000, Math.max(0, video.duration - 0.001)))
+            if (forceSeek || Math.abs(video.currentTime - target) > 0.1 || video.readyState < 2) {
+              video.pause()
+              if (Math.abs(video.currentTime - target) > 0.0001 || video.seeking) {
+                const seek = waitForMedia(video, 'seeked', () => !video.seeking && Math.abs(video.currentTime - target) < 0.01, signal)
+                video.currentTime = target
+                await seek
+              }
+              await waitForMedia(video, 'loadeddata', () => video.readyState >= 2, signal)
+            }
+            video.playbackRate = clipSpeed(layer.clip)
+          }
+          return { layer, ...decoder }
+        }))
+        if (signal.aborted || lifecycle.signal.aborted) throw cancelled()
+        const scale = Math.min(1, 1920 / Math.max(scene.width, scene.height))
+        buffer.width = Math.max(1, Math.round(scene.width * scale))
+        buffer.height = Math.max(1, Math.round(scene.height * scale))
+        const context = buffer.getContext('2d')
+        if (!context) throw new Error('Canvas preview is unavailable')
+        context.scale(scale, scale)
+        context.fillStyle = scene.background
+        context.fillRect(0, 0, scene.width, scene.height)
+        for (const { layer, element, width, height } of sources) {
+          const geometry = visualGeometry(layer.clip, { ...layer.media, width, height }, scene.width, scene.height, nextTime)
+          const crop = geometry.crop ?? { x: 0, y: 0, width, height }
+          context.save()
+          context.globalAlpha = geometry.opacity
+          context.translate(geometry.x, geometry.y)
+          context.rotate(geometry.rotateDeg * Math.PI / 180)
+          context.drawImage(element, crop.x, crop.y, crop.width, crop.height, -geometry.width / 2, -geometry.height / 2, geometry.width, geometry.height)
+          context.restore()
+        }
+        for (const title of frame.titles) drawText(context, title.text, title.fontSize, scene.width, scene.height, title)
+        for (const caption of frame.captions) drawText(context, caption.text, caption.fontSize, scene.width, scene.height, caption)
+        for (const { element } of sources) if (element instanceof HTMLVideoElement) {
+          if (running && !element.ended && element.paused) {
+            pendingPlay.add(element)
+            try { await interruptible(element.play(), signal) }
+            finally { pendingPlay.delete(element) }
+          } else if (!running) element.pause()
+        }
+        if (signal.aborted || lifecycle.signal.aborted) throw cancelled()
+        canvas!.width = buffer.width
+        canvas!.height = buffer.height
+        canvas!.getContext('2d')?.drawImage(buffer, 0, 0)
+        canvas!.dataset.timeMs = String(nextTime)
+        setState('ready')
+      } catch (cause) {
+        if (expired) throw new Error('Preview timed out. Try again or render to review.')
+        throw cause
+      } finally { window.clearTimeout(timer); if (frameController === controller) frameController = null }
     }
-    void render().catch(cause => {
-      if (!active) return
-      if (signal.aborted && !expired) return
-      setError(expired ? 'Preview timed out. Try again or render to review.' : cause instanceof Error ? cause.message : 'Unable to preview this frame')
-      setState('error')
-    }).finally(() => {
-      window.clearTimeout(timer)
-      controller.abort()
+    async function tick(forceSeek = false) {
+      if (lifecycle.signal.aborted) return
+      if (drawing) { pending = true; return }
+      drawing = true
+      const ticket = generation
+      const now = performance.now()
+      const next = Math.min(plan.scene?.durationMs ?? position, Math.max(0, position + (running && !forceSeek ? now - lastClock : 0)))
+      // A visible loading state is delayed for ordinary decoded frames, immediate for user seeks.
+      let stalled = false
+      const loadingTimer = window.setTimeout(() => { if (ticket === generation) { stalled = true; clearFrame(); pauseDecoders(false) } }, 100)
+      try {
+        await draw(next, forceSeek)
+        if (ticket !== generation || lifecycle.signal.aborted) return
+        position = next
+        lastClock = stalled ? performance.now() : now // Preserve normal draw time; exclude actual buffering.
+        if (running) {
+          lastReported = position
+          callbacks.current.onTimeChange(position)
+          if (position >= (plan.scene?.durationMs ?? 0)) stop()
+        }
+      } catch (cause) {
+        if (ticket !== generation || lifecycle.signal.aborted) return
+        clearFrame()
+        setError(cause instanceof Error ? cause.message : 'Unable to preview this frame')
+        setState('error')
+        stop()
+      } finally {
+        window.clearTimeout(loadingTimer)
+        drawing = false
+        if (!lifecycle.signal.aborted && (pending || running)) {
+          const seek = pending
+          pending = false
+          frameId = requestAnimationFrame(() => { void tick(seek) })
+        }
+      }
+    }
+    command.current = (next, play) => {
+      const echoed = next === lastReported
+      const seek = !echoed && next !== position
+      const changed = play !== running
+      if (!seek && !changed) return
+      if (seek) position = next
+      if (play && !running && position >= (plan.scene?.durationMs ?? Infinity)) position = 0
+      running = play
+      if (play) stopped = false
+      generation += 1
+      frameController?.abort()
+      cancelAnimationFrame(frameId)
+      lastClock = performance.now()
+      pauseDecoders()
+      clearFrame()
+      void tick(true)
+    }
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        // A hidden-tab abort can interrupt a cleared loading frame. Restore the
+        // paused frame when visible again without restarting the transport.
+        lastClock = performance.now()
+        void tick(true)
+        return
+      }
+      if (!running) return
+      generation += 1
+      frameController?.abort()
+      cancelAnimationFrame(frameId)
+      pending = false
+      stop()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    clearFrame()
+    void tick(true)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      lifecycle.abort()
+      frameController?.abort()
+      cancelAnimationFrame(frameId)
+      command.current = () => {}
       disposers.forEach(dispose => dispose())
-    })
-    return () => { active = false; controller.abort(); window.clearTimeout(timer); disposers.forEach(dispose => dispose()) }
-  }, [plan, timeMs, loadMedia, urls, retry])
+      decoderCancels.forEach(cancel => cancel())
+      decoderCancels.clear()
+      decoders.clear()
+      urls.clear()
+    }
+  }, [plan, loadMedia, retry])
+
+  React.useLayoutEffect(() => { command.current(timeMs, playing) }, [timeMs, playing])
 
   return (
     <div className="relative flex h-full w-full flex-col items-center justify-center">
       <canvas ref={canvasRef} aria-label="Composition preview" data-state={state} className="h-full w-full object-contain" />
       {state === 'loading' && <div role="status" className="absolute rounded bg-black/75 px-3 py-2 text-xs text-white/70">Preparing frame…</div>}
-      {state === 'error' && <div role="alert" className="absolute max-w-[90%] rounded bg-black/90 p-3 text-center text-xs text-white/80">{error}<button type="button" onClick={() => { urls.clear(); setRetry(value => value + 1) }} className="ml-2 underline">Retry preview</button></div>}
-      {state === 'ready' && <div className="absolute bottom-1 rounded bg-black/75 px-2 py-1 text-[10px] text-white/60">Silent scrub preview · render for final fonts and color</div>}
+      {state === 'error' && <div role="alert" className="absolute max-w-[90%] rounded bg-black/90 p-3 text-center text-xs text-white/80">{error}<button type="button" onClick={() => setRetry(value => value + 1)} className="ml-2 underline">Retry preview</button></div>}
+      {state === 'ready' && <div className="absolute bottom-1 rounded bg-black/75 px-2 py-1 text-[10px] text-white/60">Silent visual preview · render for audio, final fonts and color</div>}
     </div>
   )
 }
