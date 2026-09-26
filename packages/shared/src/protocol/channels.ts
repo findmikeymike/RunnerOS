@@ -579,6 +579,7 @@ export const RPC_CHANNELS = {
   },
   artistVault: {
     GET: 'artistVault:get',
+    READ_ASSET_DATA_URL: 'artistVault:readAssetDataUrl',
     PLAN_IMPORT: 'artistVault:planImport',
     CHOOSE_FILES: 'artistVault:chooseFiles',
     IMPORT: 'artistVault:import',

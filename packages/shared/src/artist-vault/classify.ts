@@ -188,7 +188,7 @@ export function defaultVaultPolicy(kind: VaultAssetKind): {
   usableByAgents: boolean;
 } {
   if (kind === 'contract' || kind === 'split-sheet' || kind === 'rights-record' || kind === 'invoice') {
-    return { status: 'review', rightsStatus: 'private', usableByAgents: false };
+    return { status: 'review', rightsStatus: 'private', usableByAgents: true };
   }
   if (kind === 'master-final' || kind === 'final-video' || kind === 'cover-art' || kind === 'artist-photo' || kind === 'face-reference' || kind === 'logo-mark' || kind === 'ad-asset' || kind === 'one-sheet' || kind === 'epk') {
     return { status: 'final', rightsStatus: 'safe-to-use', usableByAgents: true };

@@ -13,6 +13,7 @@ import {
   linkArtistVaultFolderAsync,
   loadArtistVaultManifest,
   planArtistVaultImports,
+  readArtistVaultAssetDataUrl,
   scanArtistVault,
   serializeArtistVaultContext,
   saveArtistVaultTrackDraft,
@@ -43,7 +44,7 @@ describe('artist vault', () => {
     expect(record?.kind).toBe('rights-record');
     expect(record?.category).toBe('business');
     expect(record?.rightsStatus).toBe('private');
-    expect(record?.usableByAgents).toBe(false);
+    expect(record?.usableByAgents).toBe(true);
     expect(serializeArtistVaultContext(scan.manifest)).not.toContain('bmi-works.csv');
   });
 
@@ -63,7 +64,7 @@ describe('artist vault', () => {
     expect(record?.kind).toBe('contract');
     expect(record?.category).toBe('business');
     expect(record?.rightsStatus).toBe('private');
-    expect(record?.usableByAgents).toBe(false);
+    expect(record?.usableByAgents).toBe(true);
     expect(serializeArtistVaultContext(scan.manifest)).not.toContain('distribution-deal-review.md');
   });
 
@@ -96,7 +97,7 @@ describe('artist vault', () => {
       expect(asset.kind).toBe('contract');
       expect(asset.relativePath).toContain('vault/business/contracts/');
       expect(asset.rightsStatus).toBe('private');
-      expect(asset.usableByAgents).toBe(false);
+      expect(asset.usableByAgents).toBe(true);
     }
   });
 
@@ -125,6 +126,49 @@ describe('artist vault', () => {
       'vault/music/masters-finals/source-master.wav',
       'vault/music/masters-finals/source-master-2.wav',
     ]);
+  });
+
+  test('persists the artist-facing name and context supplied during import', () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, '2297636-uhd_3840_2160_30fps.mp4');
+    writeFileSync(source, 'fake video');
+
+    const result = importArtistVaultAssets(workspace, 'workspace-1', [source], {
+      kindHint: 'raw-footage',
+      details: [{
+        sourcePath: source,
+        label: 'Basement performance — wide shot',
+        notes: 'Full-song take. Best chorus starts around 1:12.',
+      }],
+    });
+
+    expect(result.imported[0]?.label).toBe('Basement performance — wide shot');
+    expect(result.imported[0]?.notes).toBe('Full-song take. Best chorus starts around 1:12.');
+  });
+
+  test('reads a registered Vault media asset as a playable data URL', async () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'performance.mp4');
+    writeFileSync(source, 'fake video bytes');
+    const asset = importArtistVaultAssets(workspace, 'workspace-1', [source], { kindHint: 'raw-footage' }).imported[0]!;
+
+    const dataUrl = await readArtistVaultAssetDataUrl(workspace, 'workspace-1', asset.id);
+
+    expect(dataUrl).toBe(`data:video/mp4;base64,${Buffer.from('fake video bytes').toString('base64')}`);
+    await expect(readArtistVaultAssetDataUrl(workspace, 'workspace-1', 'missing')).rejects.toThrow('Vault asset not found');
+  });
+
+  test('keeps internal-only assets callable by agents but out of automatic context', () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'producer-agreement.pdf');
+    writeFileSync(source, 'private agreement');
+
+    const asset = importArtistVaultAssets(workspace, 'workspace-1', [source]).imported[0]!;
+    const body = serializeArtistVaultContext(loadArtistVaultManifest(workspace, 'workspace-1'));
+
+    expect(asset.rightsStatus).toBe('private');
+    expect(asset.usableByAgents).toBe(true);
+    expect(body).not.toContain('producer-agreement.pdf');
   });
 
   test('plans ad assets into campaign ads as final usable assets', () => {
@@ -199,7 +243,7 @@ describe('artist vault', () => {
 
     expect(asset?.kind).toBe('split-sheet');
     expect(asset?.rightsStatus).toBe('private');
-    expect(asset?.usableByAgents).toBe(false);
+    expect(asset?.usableByAgents).toBe(true);
     expect(privateAsset?.rightsStatus).toBe('private');
     expect(privateAsset?.usableByAgents).toBe(false);
     expect(asset?.relativePath).toBe('vault/business/splits/song-splitsheet.pdf');
@@ -240,7 +284,7 @@ describe('artist vault', () => {
     const loaded = loadArtistVaultManifest(workspace, 'workspace-1');
 
     expect(first.added.map((asset) => asset.kind).sort()).toEqual(['contract', 'face-reference', 'master-final']);
-    expect(first.added.find((asset) => asset.kind === 'contract')?.usableByAgents).toBe(false);
+    expect(first.added.find((asset) => asset.kind === 'contract')?.usableByAgents).toBe(true);
     expect(first.added.find((asset) => asset.kind === 'contract')?.rightsStatus).toBe('private');
     expect(first.added.find((asset) => asset.kind === 'face-reference')?.usableByAgents).toBe(true);
     expect(first.added.find((asset) => asset.kind === 'master-final')?.usableByAgents).toBe(true);
@@ -262,7 +306,7 @@ describe('artist vault', () => {
     expect(result.linked.every((asset) => asset.source === 'linked-folder')).toBe(true);
     expect(result.linked.every((asset) => asset.relativePath === undefined)).toBe(true);
     expect(result.linked.find((asset) => asset.kind === 'cover-art')?.usableByAgents).toBe(true);
-    expect(result.linked.find((asset) => asset.kind === 'contract')?.usableByAgents).toBe(false);
+    expect(result.linked.find((asset) => asset.kind === 'contract')?.usableByAgents).toBe(true);
     expect(result.manifest.storageMode).toBe('linked');
     expect(body).toContain(join(linkedFolder, 'approved-cover.png'));
     expect(body).not.toContain(join(linkedFolder, 'producer-contract.pdf'));
@@ -291,11 +335,20 @@ describe('artist vault', () => {
     writeFileSync(source, 'image');
     writeFileSync(join(linkedFolder, 'session-contract.pdf'), 'private');
 
-    const imported = await importArtistVaultAssetsAsync(workspace, 'workspace-1', [source], { kindHint: 'cover-art' });
+    const imported = await importArtistVaultAssetsAsync(workspace, 'workspace-1', [source], {
+      kindHint: 'cover-art',
+      details: [{
+        sourcePath: source,
+        label: 'Single cover — final crop',
+        notes: 'Approved square artwork for release delivery.',
+      }],
+    });
     const linked = await linkArtistVaultFolderAsync(workspace, 'workspace-1', linkedFolder);
     const body = serializeArtistVaultContext(linked.manifest);
 
     expect(imported.imported[0]?.relativePath).toBe('vault/visuals/cover-art/single-cover.png');
+    expect(imported.imported[0]?.label).toBe('Single cover — final crop');
+    expect(imported.imported[0]?.notes).toBe('Approved square artwork for release delivery.');
     expect(linked.linked[0]?.kind).toBe('contract');
     expect(body).not.toContain(join(linkedFolder, 'session-contract.pdf'));
   });

@@ -5254,7 +5254,7 @@ Manager judgment:
               replaceBuiltInAgentPromptText(
                 'x-editorial',
                 '- From a Campaign, pin that release as context for the run, but remain the same artist-wide X worker and use the same slate history.',
-                '- From a Campaign, pin that release as context for the run, but remain the same artist-wide X worker and use the same slate history.\n- When a Campaign is pinned, pass its exact `campaignWorkspaceId` to `list_release_kit`, `get_release_kit_item`, `list_campaign_outputs`, and `get_campaign_output`. These are read-only context tools; never guess an asset or output.\n- Use `list_artist_vault` for reusable artist-approved career assets and references. Private or agent-disabled material is unavailable by design.',
+                '- From a Campaign, pin that release as context for the run, but remain the same artist-wide X worker and use the same slate history.\n- When a Campaign is pinned, pass its exact `campaignWorkspaceId` to `list_release_kit`, `get_release_kit_item`, `list_campaign_outputs`, and `get_campaign_output`. These are read-only context tools; never guess an asset or output.\n- Use `list_artist_vault` for reusable career assets and references. Internal-only assets may be inspected for private Artist OS work, but never sent, posted, pitched, published, or promoted.',
               ).updated,
             ].some(Boolean)
             if (xEditorialMetadataUpdated || xEditorialPromptUpdated) {
@@ -9743,13 +9743,17 @@ user a clickable link to where the thing now lives.`
               hq.rootPath,
               loadArtistVaultManifest(hq.rootPath, hq.id),
             )
-            const assets = manifest.assets.filter((asset) => (
-              asset.usableByAgents
-                && asset.rightsStatus !== 'private'
-                && asset.rightsStatus !== 'needs-clearance'
-                && asset.status !== 'missing'
-                && asset.status !== 'archived'
-            )).map(vaultAssetForAgentList)
+            const assets = manifest.assets
+              .filter((asset) => (
+                asset.usableByAgents
+                  && asset.status !== 'missing'
+                  && asset.status !== 'archived'
+              ))
+              .map((asset) => {
+                const listed = vaultAssetForAgentList(asset)
+                if (asset.rightsStatus === 'safe-to-use') return listed
+                return { ...listed, relativePath: undefined, absolutePath: undefined }
+              })
             return { ok: true, data: { vaultWorkspaceId: hq.id, workspaceRootPath: hq.rootPath, assets } }
           } catch (error) {
             return { ok: false, error: error instanceof Error ? error.message : String(error) }
@@ -9823,7 +9827,7 @@ user a clickable link to where the thing now lives.`
               loadArtistVaultManifest(hq.rootPath, hq.id),
             ).assets.find((candidate) => candidate.id === input.assetId)
             if (!asset) throw new Error(`HQ Vault asset not found: ${input.assetId}`)
-            if (!asset.usableByAgents || asset.rightsStatus === 'private' || asset.rightsStatus === 'needs-clearance') throw new Error('This HQ Vault asset is not approved for agent use.')
+            if (!asset.usableByAgents || asset.status === 'missing' || asset.status === 'archived') throw new Error('This HQ Vault asset is not available for agent use.')
             return { ok: true, data: { vaultWorkspaceId: hq.id, workspaceRootPath: hq.rootPath, asset: vaultAssetForAgentDetail(asset) } }
           } catch (error) {
             return { ok: false, error: error instanceof Error ? error.message : String(error) }

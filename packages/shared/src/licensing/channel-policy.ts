@@ -100,6 +100,7 @@ const ALWAYS_REACHABLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.missionAssets.SCAN,
   RPC_CHANNELS.missionAssets.OPEN_FOLDER,
   RPC_CHANNELS.artistVault.GET,
+  RPC_CHANNELS.artistVault.READ_ASSET_DATA_URL,
   RPC_CHANNELS.artistVault.PLAN_IMPORT,
   RPC_CHANNELS.artistVault.SCAN,
   RPC_CHANNELS.artistVault.OPEN_FOLDER,

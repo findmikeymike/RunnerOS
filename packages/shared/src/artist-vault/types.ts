@@ -236,8 +236,15 @@ export interface VaultAssetImportCandidate {
   defaultUsableByAgents: boolean;
 }
 
+export interface VaultAssetImportDetail {
+  sourcePath: string;
+  label?: string;
+  notes?: string;
+}
+
 export interface VaultAssetImportOptions {
   kindHint?: VaultKindHint;
+  details?: VaultAssetImportDetail[];
 }
 
 export interface VaultAssetUpdatePatch {

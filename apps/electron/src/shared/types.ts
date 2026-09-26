@@ -1302,6 +1302,7 @@ export interface ElectronAPI {
 
   // Artist Vault (global artist library mirrored into workspace context)
   getArtistVaultManifest(workspaceId: string): Promise<VaultManifest>
+  readArtistVaultAssetDataUrl(workspaceId: string, assetId: string): Promise<string>
   planArtistVaultImports(workspaceId: string, filePaths: string[], options?: VaultAssetImportOptions): Promise<{
     candidates: VaultAssetImportCandidate[]
     skipped: Array<{ path: string; reason: string }>
