@@ -11,6 +11,14 @@ import type {
   CampaignScheduledJob,
 } from '../campaign-calendar/index.ts'
 
+/** Submission may have reached the platform, but no matching receipt is proven. */
+export class ScheduledSocialExecutionUncertainError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'ScheduledSocialExecutionUncertainError'
+  }
+}
+
 export const SCHEDULED_WORK_CONTEXT_SLUG = 'scheduled-work'
 
 export type ScheduledWorkScope = 'hq' | 'campaign'

@@ -1,12 +1,11 @@
 import { getOutputDir, readOutputManifest, listOutputs } from '../../../shared/src/outputs/storage';
 import { writeRun, getRunFile, listRuns } from '../../../shared/src/workflows/run-storage';
 import { afterEach, expect, spyOn, test } from 'bun:test';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as config from '@craft-agent/shared/config';
 import * as workflows from '@craft-agent/shared/workflows';
-import * as workspaces from '@craft-agent/shared/workspaces';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { DurableWorkflowHost } from './durable-workflow-host';
 import { createDurableWorkflowStart, type DurableStartBundle } from './durable-workflow-start';
@@ -24,6 +23,9 @@ const protection: DurableSafeStorage = { isEncryptionAvailable: () => true, encr
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'durable-normal-start-')); cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const workspace = { id: 'w', slug: 'w', name: 'w', rootPath: root, createdAt: 1 };
+  // Use real solo authorization: restoring a spy on an upstream mocked barrel
+  // can erase the shared team-permission implementation for later test files.
+  writeFileSync(join(root, 'config.json'), JSON.stringify({ id: workspace.id, name: workspace.name, createdAt: 1, updatedAt: 1, storage: { mode: 'solo', portabilityVersion: 1 } }));
   const workflow = { slug: 'read', source: 'global' as const, path: '/fixture/read', body: '', metadata: { execution: 'durable-local-read' as const, name: 'Read', description: '', trigger: { type: 'manual' as const }, outputs: { mode: 'none' as const }, steps: [{ id: 'read', agent: 'reader', input: 'Read notes' }] } };
   const bundle = { connectionSlug: 'route', model: 'fixture', systemPrompt: 'Read only' };
   let release!: () => void, entered!: () => void, finished!: () => void, modelCalls = 0, legacyCalls = 0;
@@ -50,7 +52,7 @@ function fixture() {
 test('normal START returns committed durable identity before completion and GET/LIST expose that identity', async () => {
   const f = fixture(), runner = f.createRunner(); let currentHost = f.host;
   const spies = [spyOn(config, 'getWorkspaceByNameOrId').mockReturnValue(f.workspace), spyOn(workflows, 'loadGlobalWorkflow').mockReturnValue(f.workflow),
-    spyOn(workflows, 'readActivatedWorkflows').mockReturnValue({ active: ['read'] } as ReturnType<typeof workflows.readActivatedWorkflows>), spyOn(workspaces, 'assertTeamPermission').mockReturnValue({ allowed: true, action: 'agent.chat', role: 'owner', machineId: 'fixture' })];
+    spyOn(workflows, 'readActivatedWorkflows').mockReturnValue({ active: ['read'] } as ReturnType<typeof workflows.readActivatedWorkflows>)];
   cleanup.push(() => spies.forEach(spy => spy.mockRestore()));
   const handlers = new Map<string, HandlerFn>();
   registerWorkflowRunsHandlers({ handle: (channel: string, handler: HandlerFn) => handlers.set(channel, handler), push() {} } as unknown as RpcServer,
@@ -269,7 +271,7 @@ test.each(['', null])('RPC Start preserves explicit empty optional input (%s) in
     steps: [{ id: 'read', agent: 'reader', input: 'Brief: {{trigger.brief}}' }],
   } };
   const spies = [spyOn(config, 'getWorkspaceByNameOrId').mockReturnValue(f.workspace), spyOn(workflows, 'loadGlobalWorkflow').mockReturnValue(workflow),
-    spyOn(workflows, 'readActivatedWorkflows').mockReturnValue({ active: ['read'] } as ReturnType<typeof workflows.readActivatedWorkflows>), spyOn(workspaces, 'assertTeamPermission').mockReturnValue({ allowed: true, action: 'agent.chat', role: 'owner', machineId: 'fixture' })];
+    spyOn(workflows, 'readActivatedWorkflows').mockReturnValue({ active: ['read'] } as ReturnType<typeof workflows.readActivatedWorkflows>)];
   cleanup.push(() => spies.forEach(spy => spy.mockRestore()));
   const handlers = new Map<string, HandlerFn>(), runner = f.createRunner();
   registerWorkflowRunsHandlers({ handle: (channel: string, handler: HandlerFn) => handlers.set(channel, handler), push() {} } as unknown as RpcServer,

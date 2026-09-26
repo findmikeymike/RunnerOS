@@ -8,7 +8,7 @@ import type {
   ScheduledSocialApproval,
   ScheduledWorkOrder,
 } from '@craft-agent/shared/scheduled-work'
-import { isXEditorialSocialAuthorizationDefinition } from '@craft-agent/shared/scheduled-work'
+import { ScheduledSocialExecutionUncertainError, isXEditorialSocialAuthorizationDefinition } from '@craft-agent/shared/scheduled-work'
 
 export type NativeSocialPlatform = 'x' | 'instagram' | 'tiktok' | 'youtube'
 
@@ -40,6 +40,8 @@ export interface ScheduledSocialBrowserExecutorDeps {
   now?(): Date
   sleep?(ms: number): Promise<void>
   successTimeoutMs?: number
+  /** Separate pre-submit budget for clearing old success evidence; defaults to 5 seconds. */
+  cleanBaselineTimeoutMs?: number
   successPollMs?: number
 }
 
@@ -195,13 +197,21 @@ export async function executeScheduledSocialBrowser(
     contract.submitText,
   )
   await waitForCleanSuccessBaseline(manager, instanceId, platform, deps)
-  await manager.clickElement(instanceId, submitTarget, { waitFor: 'none' })
-
-  const proof = await waitForSuccessProof(manager, instanceId, platform, contract, deps)
-  return {
-    receiptId: platformReceiptId(platform, proof.externalUrl),
-    externalUrl: proof.externalUrl,
-    summary: `Published to ${platform}/${input.preview.profileId}; positive platform evidence was verified.`,
+  // Once the click is attempted, even a rejected click promise may mean the
+  // platform received it. Never report a safely repeatable failure past here.
+  try {
+    await manager.clickElement(instanceId, submitTarget, { waitFor: 'none' })
+    const proof = await waitForSuccessProof(manager, instanceId, platform, contract, deps)
+    return {
+      receiptId: platformReceiptId(platform, proof.externalUrl),
+      externalUrl: proof.externalUrl,
+      summary: `Published to ${platform}/${input.preview.profileId}; positive platform evidence was verified.`,
+    }
+  } catch (cause) {
+    throw new ScheduledSocialExecutionUncertainError(
+      `${platform}/${input.preview.profileId}: submission was attempted, but publication could not be confirmed. The post may already be live. ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    )
   }
 }
 
@@ -253,7 +263,7 @@ async function waitForCleanSuccessBaseline(
   platform: NativeSocialPlatform,
   deps: ScheduledSocialBrowserExecutorDeps,
 ): Promise<void> {
-  const timeoutMs = Math.min(Math.max(0, deps.successTimeoutMs ?? 30_000), 5_000)
+  const timeoutMs = Math.max(0, deps.cleanBaselineTimeoutMs ?? 5_000)
   const pollMs = Math.max(1, deps.successPollMs ?? 500)
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
   const started = Date.now()
