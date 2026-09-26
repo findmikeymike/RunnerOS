@@ -510,6 +510,7 @@ export const CHANNEL_MAP = {
   refreshHqState: invoke(RPC_CHANNELS.hqState.REFRESH),
   onWorkspaceSyncChanged: listener(RPC_CHANNELS.workspaceSync.CHANGED),
   getScheduledWork: invoke(RPC_CHANNELS.scheduledWork.GET),
+  getScheduledWorkRuntimeStatus: invoke(RPC_CHANNELS.scheduledWork.GET_RUNTIME_STATUS),
   mutateScheduledWork: invoke(RPC_CHANNELS.scheduledWork.MUTATE),
   scheduleCampaignWork: invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN),
   authorizeReleaseKitSocial: invoke(RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL),

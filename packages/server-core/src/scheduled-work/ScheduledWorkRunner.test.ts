@@ -2278,3 +2278,253 @@ describe('ScheduledWorkRunner', () => {
     expect(parsedCalendar.calendar.items[0]?.scheduledWorkId).toBe(readWork(root).items[0]?.id)
   })
 })
+
+/** Simulate an RPC edit winning the workspace lock after scan read its order. */
+function editBeforeScanWrite(root: string, edit: (order: ScheduledWorkOrder) => ScheduledWorkOrder) {
+  const lock = createLock()
+  let acquisitions = 0
+  return <T>(path: string, fn: () => Promise<T> | T): Promise<T> => lock(path, async () => {
+    // The first acquisition performs legacy migration; the second applies the
+    // scan's claim/transition. This fixture contains no X Editorial migration.
+    if (++acquisitions === 2) writeWork(root, [edit(readWork(root).items[0]!)])
+    return fn()
+  })
+}
+
+function approvedSocialOrder(overrides: Partial<ScheduledWorkOrder> = {}): ScheduledWorkOrder {
+  return buildOrder({
+    type: 'social-publish', status: 'needs-approval',
+    execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Approved post.' },
+    socialAction: { actionId: 'act', actionDigest: 'sha256:act', platform: 'x', profileId: 'artist-main', preparedAt: '2026-07-10T14:00:00Z', payloadDigest: 'digest-1', dryRun: {} },
+    socialApproval: { id: 'approval', approvedAt: '2026-07-10T14:00:00Z', expiresAt: '2026-07-10T14:30:00Z', actionId: 'act', actionDigest: 'sha256:act', payloadDigest: 'digest-1', platform: 'x', profileId: 'artist-main', approvedBy: { type: 'user', clientId: 'fixture' } },
+    ...overrides,
+  })
+}
+
+for (const kind of ['agent-task', 'workflow-run', 'social-publish'] as const) {
+  for (const edit of ['cancel', 'reschedule'] as const) {
+    test(`${kind} does not dispatch after a concurrent ${edit} wins its claim`, async () => {
+      const root = makeRoot()
+      const order = kind === 'social-publish' ? approvedSocialOrder() : buildOrder(kind === 'workflow-run' ? {
+        type: 'workflow-run', execution: { type: 'workflow-run', workflowSlug: 'fixture', workflowDigest: 'fixture-v1', triggerInputs: {} },
+      } : {})
+      writeWork(root, [order])
+      let calls = 0
+      const runner = new ScheduledWorkRunner({
+        canRunBackgroundWork: () => true,
+        withLock: editBeforeScanWrite(root, current => edit === 'cancel'
+          ? { ...current, status: 'canceled' }
+          : { ...current, startAt: '2026-07-11T14:00:00Z' }),
+        executeAgentTask: async () => { calls++; return { sessionId: 'unexpected' } },
+        startWorkflow: async () => { calls++; return { runId: 'unexpected' } },
+        executeSocial: async () => { calls++; return { receiptId: 'unexpected', summary: 'Unexpected' } },
+        readWorkflowRun: () => null, listOutputManifests: () => [],
+      })
+      const result = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00Z'))
+      expect(calls).toBe(0)
+      expect(result.started).toBe(0)
+      expect(readWork(root).items[0]!.runs).toEqual([])
+      if (edit === 'cancel') expect(readWork(root).items[0]!.status).toBe('canceled')
+      else expect(readWork(root).items[0]!.startAt).toBe('2026-07-11T14:00:00.000Z')
+    })
+  }
+}
+
+for (const status of ['scheduled', 'running'] as const) {
+  test(`a ${status} review does not overwrite concurrent cancellation`, async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({ type: 'review', status, execution: { type: 'review', reviewerType: 'user' } })])
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: editBeforeScanWrite(root, order => ({ ...order, status: 'canceled' })),
+      executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null, listOutputManifests: () => [],
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00Z'))
+    expect(readWork(root).items[0]!.status).toBe('canceled')
+  })
+}
+
+for (const scenario of ['scheduled', 'expired', 'mismatch', 'team-blocked', 'restart'] as const) {
+  test(`social ${scenario} transition does not overwrite concurrent cancellation`, async () => {
+    const root = makeRoot()
+    const order = approvedSocialOrder()
+    if (scenario === 'scheduled') order.status = 'scheduled'
+    if (scenario === 'restart') order.status = 'running'
+    if (scenario === 'expired') order.socialApproval!.expiresAt = '2026-07-10T13:00:00Z'
+    if (scenario === 'mismatch') order.socialApproval!.payloadDigest = 'changed'
+    writeWork(root, [order])
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, canExecuteSocialAutomatically: () => scenario !== 'team-blocked',
+      withLock: editBeforeScanWrite(root, current => ({ ...current, status: 'canceled' })),
+      executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
+      executeSocial: async () => { throw new Error('Must not execute') },
+      readWorkflowRun: () => null, listOutputManifests: () => [],
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00Z'))
+    expect(readWork(root).items[0]!.status).toBe('canceled')
+    expect(readWork(root).items[0]!.attention).toBeUndefined()
+  })
+}
+
+test('old agent completion cannot finish a replacement running attempt', async () => {
+  const root = makeRoot()
+  writeWork(root, [buildOrder()])
+  const complete = deferred<void>()
+  let started = false
+  const runner = new ScheduledWorkRunner({
+    canRunBackgroundWork: () => true, withLock: createLock(),
+    executeAgentTask: async ({ onStarted }) => { await onStarted('old-session'); started = true; await complete.promise; return { sessionId: 'old-session' } },
+    startWorkflow: async () => ({ runId: 'unused' }), readWorkflowRun: () => null, listOutputManifests: () => [],
+  })
+  await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00Z'))
+  await waitFor(() => started)
+  const current = readWork(root).items[0]!
+  const replacement = { ...current, runs: [...current.runs, { id: 'replacement', jobId: current.id, status: 'running' as const, startedAt: '2026-07-10T14:02:00Z', sessionId: 'new-session' }] }
+  writeWork(root, [replacement])
+  complete.resolve()
+  await new Promise(resolve => setTimeout(resolve, 20))
+  const saved = readWork(root).items[0]!
+  expect(saved.status).toBe('running')
+  expect(saved.runs.at(-1)?.sessionId).toBe('new-session')
+  expect(saved.result).toBeUndefined()
+})
+
+test('a delayed session-start callback cannot attach to a replacement attempt', async () => {
+  const root = makeRoot()
+  writeWork(root, [buildOrder()])
+  const start = deferred<void>()
+  const aborted: string[] = []
+  let called = false
+  const runner = new ScheduledWorkRunner({
+    canRunBackgroundWork: () => true, withLock: createLock(),
+    executeAgentTask: async ({ onStarted }) => { called = true; await start.promise; await onStarted('old-session'); return { sessionId: 'old-session' } },
+    abortAgentSession: async id => { aborted.push(id) },
+    startWorkflow: async () => ({ runId: 'unused' }), readWorkflowRun: () => null, listOutputManifests: () => [],
+  })
+  await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00Z'))
+  await waitFor(() => called)
+  const current = readWork(root).items[0]!
+  writeWork(root, [{ ...current, runs: [...current.runs, { id: 'replacement', jobId: current.id, status: 'running', startedAt: '2026-07-10T14:02:00Z' }] }])
+  start.resolve()
+  await waitFor(() => aborted.length > 0)
+  expect(aborted).toEqual(['old-session'])
+  expect(readWork(root).items[0]!.runs.at(-1)?.sessionId).toBeUndefined()
+  expect(readWork(root).items[0]!.status).toBe('running')
+})
+
+for (const outcome of ['success', 'failure'] as const) {
+  test(`late social ${outcome} does not settle a replacement attempt`, async () => {
+    const root = makeRoot()
+    writeWork(root, [approvedSocialOrder()])
+    const finish = deferred<void>()
+    let invoked = false
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null, listOutputManifests: () => [],
+      executeSocial: async () => {
+        invoked = true
+        await finish.promise
+        if (outcome === 'failure') throw new Error('Old attempt failed')
+        return { receiptId: 'old-receipt', summary: 'Old attempt succeeded' }
+      },
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00Z'))
+    await waitFor(() => invoked)
+    const current = readWork(root).items[0]!
+    writeWork(root, [{ ...current, runs: [...current.runs, { id: 'replacement', jobId: current.id, status: 'running', startedAt: '2026-07-10T14:02:00Z' }] }])
+    finish.resolve()
+    await new Promise(resolve => setTimeout(resolve, 20))
+    const saved = readWork(root).items[0]!
+    expect(saved.status).toBe('running')
+    expect(saved.result).toBeUndefined()
+    expect(saved.attention).toBeUndefined()
+    expect(saved.runs.at(-1)?.externalReceipt).toBeUndefined()
+  })
+}
+
+for (const change of ['cancel', 'replace', 'none'] as const) {
+  test(`workflow launch after ${change} aborts only an obsolete run`, async () => {
+  const root = makeRoot()
+  writeWork(root, [buildOrder({ execution: { type: 'workflow-run', workflowSlug: 'fixture', workflowDigest: 'v1', triggerInputs: {} } })])
+  const finish = deferred<void>()
+  let invoked = false
+  const aborted: string[] = []
+  const runner = new ScheduledWorkRunner({
+    canRunBackgroundWork: () => true, withLock: createLock(),
+    executeAgentTask: async () => ({ sessionId: 'unused' }),
+    startWorkflow: async () => { invoked = true; await finish.promise; return { runId: 'old-workflow' } },
+    abortWorkflowRun: async (ws, runId) => { expect(ws).toBe(workspaceId); aborted.push(runId) },
+    readWorkflowRun: () => null, listOutputManifests: () => [],
+  })
+  const scan = runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00Z'))
+  await waitFor(() => invoked)
+  const current = readWork(root).items[0]!
+  if (change === 'replace') writeWork(root, [{ ...current, runs: [...current.runs, { id: 'replacement', jobId: current.id, status: 'running', startedAt: '2026-07-10T14:02:00Z' }] }])
+  if (change === 'cancel') writeWork(root, [{ ...current, status: 'canceled' }])
+  finish.resolve()
+  const result = await scan
+  const saved = readWork(root).items[0]!
+  expect(saved.status).toBe(change === 'cancel' ? 'canceled' : 'running')
+  expect(aborted).toEqual(change === 'none' ? [] : ['old-workflow'])
+  expect(result.started).toBe(change === 'none' ? 1 : 0)
+  expect(saved.runs.at(-1)?.workflowRunId).toBe(change === 'none' ? 'old-workflow' : undefined)
+  expect(saved.attention).toBeUndefined()
+})
+
+}
+
+test('social preview cannot attach to edited copy while its dry-run is in flight', async () => {
+  const root = makeRoot()
+  const order = approvedSocialOrder({ socialAction: undefined, socialApproval: undefined })
+  writeWork(root, [order])
+  const finish = deferred<void>()
+  let invoked = false
+  const runner = new ScheduledWorkRunner({
+    canRunBackgroundWork: () => true, withLock: createLock(),
+    executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
+    readWorkflowRun: () => null, listOutputManifests: () => [],
+    prepareSocial: async () => { invoked = true; await finish.promise; return approvedSocialOrder().socialAction! },
+  })
+  const scan = runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00Z'))
+  await waitFor(() => invoked)
+  const current = readWork(root).items[0]!
+  if (current.execution.type !== 'social-publish') throw new Error('Fixture is not social')
+  writeWork(root, [{ ...current, execution: { ...current.execution, caption: 'New copy' } }])
+  finish.resolve()
+  await scan
+  const saved = readWork(root).items[0]!
+  expect(saved.socialAction).toBeUndefined()
+  expect(saved.status).toBe('needs-approval')
+})
+
+for (const state of ['succeeded', 'failed'] as const) {
+  test(`stale workflow ${state} poll does not count replacement work as completed or failed`, async () => {
+    const root = makeRoot()
+    const order = buildOrder({
+      status: 'running', execution: { type: 'workflow-run', workflowSlug: 'fixture', workflowDigest: 'v1', triggerInputs: {} },
+      runs: [{ id: 'old-attempt', jobId: 'order-1', status: 'running', startedAt: '2026-07-10T14:00:00Z', workflowRunId: 'old-workflow' }],
+    })
+    writeWork(root, [order])
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: editBeforeScanWrite(root, current => ({ ...current, runs: [...current.runs, {
+        id: 'replacement', jobId: current.id, status: 'running', startedAt: '2026-07-10T14:02:00Z', workflowRunId: 'new-workflow',
+      }] })),
+      executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => ({
+        id: 'old-workflow', workflowSlug: 'fixture', workspaceId, state,
+        trigger: { type: 'manual', inputs: {}, firedAt: '2026-07-10T14:00:00Z' },
+        workflowSnapshot: { metadata: { name: 'Fixture', steps: [] }, body: '# Fixture' } as unknown as WorkflowRunSnapshot['workflowSnapshot'],
+        steps: [], outputIds: [], createdAt: '2026-07-10T14:00:00Z', updatedAt: '2026-07-10T14:01:00Z',
+      }),
+      listOutputManifests: () => [],
+    })
+    const result = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00Z'))
+    expect(result.completed).toBe(0)
+    expect(result.failed).toBe(0)
+    expect(readWork(root).items[0]!.status).toBe('running')
+    expect(readWork(root).items[0]!.runs.at(-1)?.workflowRunId).toBe('new-workflow')
+  })
+}

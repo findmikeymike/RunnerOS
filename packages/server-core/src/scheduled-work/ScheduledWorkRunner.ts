@@ -79,6 +79,7 @@ export interface ScheduledWorkRunnerDeps {
     triggerInputs: Record<string, unknown>
     untrustedTriggerInputs?: string[]
   }): Promise<{ runId: string }>
+  abortWorkflowRun?(workspaceId: string, runId: string): Promise<void>
   readWorkflowRun(workspaceRootPath: string, runId: string): WorkflowRunSnapshot | null | undefined
   listOutputManifests(workspaceRootPath: string): OutputManifest[]
   postProcessAgentTask?(input: {
@@ -316,13 +317,13 @@ export class ScheduledWorkRunner {
         if (!current || current.deletedAt || current.legacyRef) continue
         const currentContinuationIssue = this.continuationFenceIssue(workspaceRootPath, current)
         if (current.continuation?.role === 'round' && currentContinuationIssue) {
-          const persisted = await this.stopContinuation(workspaceId, workspaceRootPath, current.id, currentContinuationIssue)
+          const persisted = await this.stopContinuation(workspaceId, workspaceRootPath, current, currentContinuationIssue)
           if (persisted.updated) result.blocked += 1
           continue
         }
         if (current.status === 'needs-approval' && current.execution.type === 'social-publish') {
           if (current.authorizationPolicy === 'durable-v1' && !durableAuthorizationMatches(current, now)) {
-            const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => ({
+            const persisted = await this.updateScannedOrder(workspaceId, workspaceRootPath, current.id, current, (order, nowIso) => ({
               ...order,
               status: 'needs-attention',
               socialApproval: undefined,
@@ -337,7 +338,7 @@ export class ScheduledWorkRunner {
             try {
               if (!this.canContinue(workspaceRootPath, capturedFence)) continue
               const preview = await this.deps.prepareSocial({ workspaceId, workspaceRootPath, order: current })
-              const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => order.status === 'needs-approval' && order.execution.type === 'social-publish'
+              const persisted = await this.updateScannedOrder(workspaceId, workspaceRootPath, current.id, current, (order, nowIso) => order.status === 'needs-approval' && order.execution.type === 'social-publish'
                 ? {
                     ...order,
                     socialAction: preview,
@@ -350,7 +351,7 @@ export class ScheduledWorkRunner {
                 : null)
               if (persisted.updated) result.blocked += 1
             } catch (error) {
-              const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => order.status === 'needs-approval'
+              const persisted = await this.updateScannedOrder(workspaceId, workspaceRootPath, current.id, current, (order, nowIso) => order.status === 'needs-approval'
                 ? { ...order, status: 'needs-attention', attention: this.buildAttention('execution-failed', `Social dry-run failed: ${errorMessage(error)}`), updatedAt: nowIso }
                 : null)
               if (persisted.updated) result.failed += 1
@@ -358,7 +359,7 @@ export class ScheduledWorkRunner {
             continue
           }
           if (current.socialApproval && Date.parse(current.socialApproval.expiresAt) <= now.getTime()) {
-            const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => ({
+            const persisted = await this.updateScannedOrder(workspaceId, workspaceRootPath, current.id, current, (order, nowIso) => ({
               ...order,
               status: 'needs-attention',
               socialApproval: undefined,
@@ -370,14 +371,14 @@ export class ScheduledWorkRunner {
           }
           if (!current.socialApproval || Date.parse(current.startAt) > now.getTime()) continue
           if (!socialApprovalMatches(current)) {
-            const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => ({ ...order, status: 'needs-attention', attention: this.buildAttention('approval-invalidated', 'Social action changed after approval. Prepare and approve it again.'), updatedAt: nowIso }))
+            const persisted = await this.updateScannedOrder(workspaceId, workspaceRootPath, current.id, current, (order, nowIso) => ({ ...order, status: 'needs-attention', attention: this.buildAttention('approval-invalidated', 'Social action changed after approval. Prepare and approve it again.'), updatedAt: nowIso }))
             if (persisted.updated) result.failed += 1
             continue
           }
           const profileKey = `${current.execution.platform.trim().toLocaleLowerCase('en-US')}/${current.execution.profileId.trim().toLocaleLowerCase('en-US')}`
           if (this.activeSocialProfiles.has(profileKey) || !this.deps.executeSocial) continue
           if (this.deps.canExecuteSocialAutomatically && !this.deps.canExecuteSocialAutomatically(workspaceRootPath)) {
-            const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => ({
+            const persisted = await this.updateScannedOrder(workspaceId, workspaceRootPath, current.id, current, (order, nowIso) => ({
               ...order,
               status: 'needs-attention',
               attention: this.buildAttention('idempotency-unavailable', 'Automatic browser publishing is disabled in Shared Folder Team Mode because the destination cannot enforce an idempotency key. Publish manually or use an idempotent provider adapter.'),
@@ -389,12 +390,12 @@ export class ScheduledWorkRunner {
           this.activeSocialProfiles.add(profileKey)
           let claimed: PersistResult
           try {
-            claimed = await this.claimSocialRunning(workspaceId, workspaceRootPath, current.id)
+            claimed = await this.claimSocialRunning(workspaceId, workspaceRootPath, current)
           } catch (error) {
             this.activeSocialProfiles.delete(profileKey)
             throw error
           }
-          if (!claimed.order || claimed.order.execution.type !== 'social-publish' || !claimed.order.socialAction || !claimed.order.socialApproval) {
+          if (!claimed.updated || !claimed.order || claimed.order.execution.type !== 'social-publish' || !claimed.order.socialAction || !claimed.order.socialApproval) {
             this.activeSocialProfiles.delete(profileKey)
             continue
           }
@@ -406,10 +407,11 @@ export class ScheduledWorkRunner {
         }
         if (current.status === 'scheduled') {
           if (isPastStartGrace(current, now)) {
-            const persisted = await this.updateOrder(
+            const persisted = await this.updateScannedOrder(
               workspaceId,
               workspaceRootPath,
               orderId,
+              current,
               (order, nowIso) => order.status === 'scheduled'
                 ? {
                     ...order,
@@ -426,10 +428,11 @@ export class ScheduledWorkRunner {
             continue
           }
           if (current.execution.type === 'review') {
-            const persisted = await this.updateOrder(
+            const persisted = await this.updateScannedOrder(
               workspaceId,
               workspaceRootPath,
               orderId,
+              current,
               (order, nowIso) => ({ ...order, status: 'awaiting-review', attention: undefined, updatedAt: nowIso }),
             )
             if (persisted.updated) {
@@ -440,10 +443,11 @@ export class ScheduledWorkRunner {
           }
 
           if (current.execution.type === 'social-publish') {
-            const persisted = await this.updateOrder(
+            const persisted = await this.updateScannedOrder(
               workspaceId,
               workspaceRootPath,
               orderId,
+              current,
               (order, nowIso) => ({ ...order, status: 'needs-approval', attention: undefined, updatedAt: nowIso }),
             )
             if (persisted.updated) result.blocked += 1
@@ -471,11 +475,11 @@ export class ScheduledWorkRunner {
 
           let claimed: PersistResult
           try {
-            claimed = await this.claimRunning(workspaceId, workspaceRootPath, orderId)
+            claimed = await this.claimRunning(workspaceId, workspaceRootPath, current)
           } finally {
             if (backgroundAdmissionKey) this.releaseBackgroundAdmission(backgroundAdmissionKey)
           }
-          if (!claimed.order) continue
+          if (!claimed.updated || !claimed.order) continue
           if (claimed.order.execution.type === 'workflow-run') {
             const started = await this.startWorkflow(workspaceId, workspaceRootPath, claimed.order, capturedFence)
             if (started === 'started') result.started += 1
@@ -509,10 +513,11 @@ export class ScheduledWorkRunner {
         }
 
         if (current.execution.type === 'review') {
-          const persisted = await this.updateOrder(
+          const persisted = await this.updateScannedOrder(
             workspaceId,
             workspaceRootPath,
             current.id,
+            current,
             (order, nowIso) => ({ ...order, status: 'awaiting-review', attention: undefined, updatedAt: nowIso }),
           )
           if (persisted.updated) {
@@ -522,10 +527,11 @@ export class ScheduledWorkRunner {
           continue
         }
 
-        const persisted = await this.updateOrder(
+        const persisted = await this.updateScannedOrder(
           workspaceId,
           workspaceRootPath,
           current.id,
+          current,
           (order, nowIso) => ({
             ...order,
             status: 'needs-attention',
@@ -566,7 +572,7 @@ export class ScheduledWorkRunner {
       if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before scheduled agent execution.')
       const continuationIssue = this.continuationFenceIssue(workspaceRootPath, order)
       if (continuationIssue) {
-        await this.stopContinuation(workspaceId, workspaceRootPath, order.id, continuationIssue)
+        await this.stopContinuation(workspaceId, workspaceRootPath, order, continuationIssue)
         return 'failed'
       }
       const executePromise = this.deps.executeAgentTask({
@@ -594,7 +600,11 @@ export class ScheduledWorkRunner {
             }
             throw new Error(`Scheduled agent task ${order.id} started after its execution deadline.`)
           }
-          await this.persistRunningSessionId(workspaceId, workspaceRootPath, order.id, cleaned)
+          const persisted = await this.persistRunningSessionId(workspaceId, workspaceRootPath, order, cleaned)
+          if (!persisted.updated) {
+            await this.deps.abortAgentSession?.(cleaned)
+            throw new Error(`Scheduled agent task ${order.id} changed before its session started.`)
+          }
         },
       })
       const timeoutMs = this.deps.agentTaskTimeoutMs && this.deps.agentTaskTimeoutMs > 0
@@ -623,7 +633,8 @@ export class ScheduledWorkRunner {
         const returnedSessionId = clean(started && typeof started === 'object' && 'sessionId' in started ? started.sessionId : undefined)
         if (returnedSessionId) {
           sessionId = returnedSessionId
-          await this.persistRunningSessionId(workspaceId, workspaceRootPath, order.id, returnedSessionId)
+          const persisted = await this.persistRunningSessionId(workspaceId, workspaceRootPath, order, returnedSessionId)
+          if (!persisted.updated) return 'failed'
         }
       }
       if (!sessionId) {
@@ -633,7 +644,7 @@ export class ScheduledWorkRunner {
         await this.stopContinuation(
           workspaceId,
           workspaceRootPath,
-          order.id,
+          order,
           this.buildAttention('continuation-disarmed', 'Continuation stopped because session persistence could not be proven. Review the completed session before resuming.'),
         )
         return 'failed'
@@ -643,7 +654,7 @@ export class ScheduledWorkRunner {
         await this.finishWithAttention(
           workspaceId,
           workspaceRootPath,
-          order.id,
+          order,
           this.buildAttention('provider-unavailable', formatModelExhaustion(exhaustedAttempts)),
           exhaustedAttempts,
         )
@@ -656,30 +667,32 @@ export class ScheduledWorkRunner {
       )
       if (!outputs.satisfied) {
         if (order.continuation?.role === 'round') {
-          await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, [], undefined)
+          await this.settleContinuationRound(workspaceId, workspaceRootPath, order, sessionId, [], undefined)
           return 'done'
         }
         await this.finishWithAttention(
           workspaceId,
           workspaceRootPath,
-          order.id,
+          order,
           this.buildAttention('required-output-missing', outputs.message ?? 'Required output was not produced.'),
         )
         return 'failed'
       }
+      const latest = this.getCurrentOrder(workspaceRootPath, workspaceId, order.id)
+      if (!latest || !sameWorkAttempt(latest, order)) return 'failed'
       const processed = await this.postProcessAgentTask(workspaceId, workspaceRootPath, order, sessionId, outputs.matched)
       if (order.continuation?.role === 'round') {
-        await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
+        await this.settleContinuationRound(workspaceId, workspaceRootPath, order, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
       } else {
-        await this.finishAgentDone(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
+        await this.finishAgentDone(workspaceId, workspaceRootPath, order, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
       }
       return 'done'
     } catch (error) {
       const attention = this.buildAttention('execution-failed', errorMessage(error))
       if (order.continuation?.role === 'round') {
-        await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention)
+        await this.stopContinuation(workspaceId, workspaceRootPath, order, attention)
       } else {
-        await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention)
+        await this.finishWithAttention(workspaceId, workspaceRootPath, order, attention)
       }
       return 'failed'
     }
@@ -694,8 +707,8 @@ export class ScheduledWorkRunner {
     if (!sessionId || !this.deps.readAgentSession) {
       const attention = this.buildAttention('execution-failed', runningAgentMessage(order))
       const persisted = order.continuation?.role === 'round'
-        ? await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention)
-        : await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention)
+        ? await this.stopContinuation(workspaceId, workspaceRootPath, order, attention)
+        : await this.finishWithAttention(workspaceId, workspaceRootPath, order, attention)
       return persisted.updated ? 'failed' : 'running'
     }
     const state = await this.deps.readAgentSession(sessionId)
@@ -708,15 +721,15 @@ export class ScheduledWorkRunner {
             : `Scheduled agent session ${sessionId} stopped before producing a final response.`,
         )
       const persisted = order.continuation?.role === 'round'
-        ? await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention)
-        : await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention)
+        ? await this.stopContinuation(workspaceId, workspaceRootPath, order, attention)
+        : await this.finishWithAttention(workspaceId, workspaceRootPath, order, attention)
       return persisted.updated ? 'failed' : 'running'
     }
     if (order.continuation && !(await this.deps.awaitAgentCompletionBarrier?.(sessionId))) {
       const persisted = await this.stopContinuation(
         workspaceId,
         workspaceRootPath,
-        order.id,
+        order,
         this.buildAttention('continuation-disarmed', 'Continuation stopped because session persistence could not be proven after restart. Review the session before resuming.'),
       )
       return persisted.updated ? 'failed' : 'running'
@@ -727,7 +740,7 @@ export class ScheduledWorkRunner {
       const persisted = await this.finishWithAttention(
         workspaceId,
         workspaceRootPath,
-        order.id,
+        order,
         this.buildAttention('provider-unavailable', formatModelExhaustion(exhaustedAttempts)),
         exhaustedAttempts,
       )
@@ -740,13 +753,13 @@ export class ScheduledWorkRunner {
     )
     if (!outputs.satisfied) {
       if (order.continuation?.role === 'round') {
-        const persisted = await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, [], undefined)
+        const persisted = await this.settleContinuationRound(workspaceId, workspaceRootPath, order, sessionId, [], undefined)
         return persisted.updated ? 'done' : 'running'
       }
       const persisted = await this.finishWithAttention(
         workspaceId,
         workspaceRootPath,
-        order.id,
+        order,
         this.buildAttention('required-output-missing', outputs.message ?? 'Required output was not produced.'),
       )
       return persisted.updated ? 'failed' : 'running'
@@ -757,16 +770,16 @@ export class ScheduledWorkRunner {
     } catch (error) {
       const attention = this.buildAttention('execution-failed', errorMessage(error))
       const persisted = order.continuation?.role === 'round'
-        ? await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention)
-        : await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention)
+        ? await this.stopContinuation(workspaceId, workspaceRootPath, order, attention)
+        : await this.finishWithAttention(workspaceId, workspaceRootPath, order, attention)
       return persisted.updated ? 'failed' : 'running'
     }
     const persisted = order.continuation?.role === 'round'
-      ? await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
+      ? await this.settleContinuationRound(workspaceId, workspaceRootPath, order, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
       : await this.finishAgentDone(
           workspaceId,
           workspaceRootPath,
-          order.id,
+          order,
           sessionId,
           outputs.matched.map((output) => output.id),
           processed.sharedIntelContextSlugs,
@@ -797,7 +810,7 @@ export class ScheduledWorkRunner {
         approvalId: order.socialApproval.id,
         summary: result.summary,
       }
-      await this.updateOrder(workspaceId, workspaceRootPath, order.id, (current, completedAt) => current.status === 'running'
+      await this.updateOrder(workspaceId, workspaceRootPath, order.id, (current, completedAt) => sameWorkAttempt(current, order) && current.status === 'running'
         ? {
             ...current,
             status: 'done',
@@ -808,7 +821,7 @@ export class ScheduledWorkRunner {
           }
         : null)
     } catch (error) {
-      await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, this.buildAttention('execution-failed', errorMessage(error)))
+      await this.finishWithAttention(workspaceId, workspaceRootPath, order, this.buildAttention('execution-failed', errorMessage(error)))
     }
   }
 
@@ -832,13 +845,17 @@ export class ScheduledWorkRunner {
       })
       const cleanedRunId = clean(runId)
       if (!cleanedRunId) throw new Error(`Workflow job ${order.id} did not return a run id.`)
-      await this.persistRunningWorkflowRunId(workspaceId, workspaceRootPath, order.id, cleanedRunId)
+      const persisted = await this.persistRunningWorkflowRunId(workspaceId, workspaceRootPath, order, cleanedRunId)
+      if (!persisted.updated) {
+        await this.deps.abortWorkflowRun?.(workspaceId, cleanedRunId)
+        return 'failed'
+      }
       return 'started'
     } catch (error) {
       await this.finishWithAttention(
         workspaceId,
         workspaceRootPath,
-        order.id,
+        order,
         this.buildAttention('execution-failed', errorMessage(error)),
       )
       return 'failed'
@@ -852,52 +869,52 @@ export class ScheduledWorkRunner {
   ): Promise<'running' | 'done' | 'failed'> {
     const runId = currentWorkflowRunId(order)
     if (!runId) {
-      await this.finishWithAttention(
+      const persisted = await this.finishWithAttention(
         workspaceId,
         workspaceRootPath,
-        order.id,
+        order,
         this.buildAttention('execution-failed', `Workflow run for ${order.title} is missing its run id.`),
       )
-      return 'failed'
+      return persisted.updated ? 'failed' : 'running'
     }
     const run = this.deps.readWorkflowRun(workspaceRootPath, runId)
     if (!run) {
-      await this.finishWithAttention(
+      const persisted = await this.finishWithAttention(
         workspaceId,
         workspaceRootPath,
-        order.id,
+        order,
         this.buildAttention('execution-failed', `Workflow run ${runId} could not be found.`),
       )
-      return 'failed'
+      return persisted.updated ? 'failed' : 'running'
     }
     if (ACTIVE_WORKFLOW_STATES.has(run.state)) return 'running'
     if (run.state === 'succeeded') {
       if (run.outputError) {
-        await this.finishWithAttention(
+        const persisted = await this.finishWithAttention(
           workspaceId,
           workspaceRootPath,
-          order.id,
+          order,
           this.buildAttention('execution-failed', run.outputError),
         )
-        return 'failed'
+        return persisted.updated ? 'failed' : 'running'
       }
       const outputIds = uniqueOutputIds(run)
-      await this.finishWorkflowDone(
+      const persisted = await this.finishWorkflowDone(
         workspaceId,
         workspaceRootPath,
-        order.id,
+        order,
         run.id,
         outputIds,
       )
-      return 'done'
+      return persisted.updated ? 'done' : 'running'
     }
-    await this.finishWithAttention(
+    const persisted = await this.finishWithAttention(
       workspaceId,
       workspaceRootPath,
-      order.id,
+      order,
       this.buildAttention('execution-failed', summarizeWorkflowFailure(run)),
     )
-    return 'failed'
+    return persisted.updated ? 'failed' : 'running'
   }
 
   private matchExpectedOutputs(
@@ -925,9 +942,10 @@ export class ScheduledWorkRunner {
   private async claimRunning(
     workspaceId: string,
     workspaceRootPath: string,
-    orderId: string,
+    expected: ScheduledWorkOrder,
   ): Promise<PersistResult> {
-    return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
+    return this.updateOrder(workspaceId, workspaceRootPath, expected.id, (order, nowIso) => {
+      if (!sameWorkSnapshot(order, expected)) return null
       if (order.status !== 'scheduled' || order.deletedAt || order.legacyRef) return null
       return {
         ...order,
@@ -939,8 +957,9 @@ export class ScheduledWorkRunner {
     })
   }
 
-  private async claimSocialRunning(workspaceId: string, workspaceRootPath: string, orderId: string): Promise<PersistResult> {
-    return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
+  private async claimSocialRunning(workspaceId: string, workspaceRootPath: string, expected: ScheduledWorkOrder): Promise<PersistResult> {
+    return this.updateOrder(workspaceId, workspaceRootPath, expected.id, (order, nowIso) => {
+      if (!sameWorkSnapshot(order, expected)) return null
       if (order.status !== 'needs-approval' || order.execution.type !== 'social-publish' || !order.socialAction || !order.socialApproval) return null
       return { ...order, status: 'running', attention: undefined, updatedAt: nowIso, runs: [...order.runs, createCampaignJobRun({ jobId: order.id, status: 'running', startedAt: nowIso })] }
     })
@@ -949,10 +968,12 @@ export class ScheduledWorkRunner {
   private async persistRunningSessionId(
     workspaceId: string,
     workspaceRootPath: string,
-    orderId: string,
+    expected: ScheduledWorkOrder,
     sessionId: string,
   ): Promise<PersistResult> {
+    const orderId = expected.id
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
+      if (!sameWorkAttempt(order, expected)) return null
       if (order.status !== 'running') return null
       return {
         ...order,
@@ -968,10 +989,12 @@ export class ScheduledWorkRunner {
   private async persistRunningWorkflowRunId(
     workspaceId: string,
     workspaceRootPath: string,
-    orderId: string,
+    expected: ScheduledWorkOrder,
     workflowRunId: string,
   ): Promise<PersistResult> {
+    const orderId = expected.id
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
+      if (!sameWorkAttempt(order, expected)) return null
       if (order.status !== 'running') return null
       return {
         ...order,
@@ -988,13 +1011,15 @@ export class ScheduledWorkRunner {
   private async finishAgentDone(
     workspaceId: string,
     workspaceRootPath: string,
-    orderId: string,
+    expected: ScheduledWorkOrder,
     sessionId: string,
     outputIds: string[],
     sharedIntelContextSlugs?: string[],
   ): Promise<PersistResult> {
     const modelAttempts = this.deps.getSessionModelAttempts?.(sessionId) ?? []
+    const orderId = expected.id
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
+      if (!sameWorkAttempt(order, expected)) return null
       if (order.status !== 'running' || order.execution.type !== 'agent-task') return null
       return {
         ...order,
@@ -1023,6 +1048,8 @@ export class ScheduledWorkRunner {
     outputs: OutputManifest[],
   ): Promise<{ sharedIntelContextSlugs?: string[] }> {
     if (order.execution.type !== 'agent-task' || !order.execution.postProcess) return {}
+    const current = this.getCurrentOrder(workspaceRootPath, workspaceId, order.id)
+    if (!current || !sameWorkAttempt(current, order)) return {}
     if (!this.deps.postProcessAgentTask) {
       throw new Error(`Scheduled work postprocessor is unavailable: ${order.execution.postProcess}`)
     }
@@ -1032,11 +1059,13 @@ export class ScheduledWorkRunner {
   private async finishWorkflowDone(
     workspaceId: string,
     workspaceRootPath: string,
-    orderId: string,
+    expected: ScheduledWorkOrder,
     workflowRunId: string,
     outputIds: string[],
   ): Promise<PersistResult> {
+    const orderId = expected.id
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
+      if (!sameWorkAttempt(order, expected)) return null
       if (order.status !== 'running' || order.execution.type !== 'workflow-run') return null
       return {
         ...order,
@@ -1059,11 +1088,13 @@ export class ScheduledWorkRunner {
   private async finishWithAttention(
     workspaceId: string,
     workspaceRootPath: string,
-    orderId: string,
+    expected: ScheduledWorkOrder,
     attention: ScheduledWorkAttention,
     modelAttempts?: ModelAttempt[],
   ): Promise<PersistResult> {
+    const orderId = expected.id
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
+      if (!sameWorkAttempt(order, expected)) return null
       if (order.deletedAt || order.status !== 'running') return null
       const summary = attention.message
       return {
@@ -1114,13 +1145,15 @@ export class ScheduledWorkRunner {
   private async stopContinuation(
     workspaceId: string,
     workspaceRootPath: string,
-    orderId: string,
+    expected: ScheduledWorkOrder,
     attention: ScheduledWorkAttention,
   ): Promise<PersistResult> {
+    const orderId = expected.id
     return this.deps.withLock(workspaceRootPath, async () => {
       const parsed = this.readWork(workspaceRootPath, workspaceId)
       if (!parsed.ok) throw new Error(parsed.error)
       const child = parsed.work.items.find((candidate) => candidate.id === orderId && !candidate.deletedAt)
+      if (child && !sameWorkAttempt(child, expected)) return { updated: false, work: parsed.work, order: child }
       const continuation = child?.continuation
       if (!child || child.status === 'canceled' || continuation?.role !== 'round') return { updated: false, work: parsed.work, order: child }
       const coordinator = parsed.work.items.find((candidate) => candidate.id === continuation.coordinatorOrderId && !candidate.deletedAt)
@@ -1153,15 +1186,17 @@ export class ScheduledWorkRunner {
   private async settleContinuationRound(
     workspaceId: string,
     workspaceRootPath: string,
-    orderId: string,
+    expected: ScheduledWorkOrder,
     sessionId: string,
     outputIds: string[],
     sharedIntelContextSlugs?: string[],
   ): Promise<PersistResult> {
+    const orderId = expected.id
     return this.deps.withLock(workspaceRootPath, async () => {
       const parsed = this.readWork(workspaceRootPath, workspaceId)
       if (!parsed.ok) throw new Error(parsed.error)
       const child = parsed.work.items.find((candidate) => candidate.id === orderId && !candidate.deletedAt)
+      if (child && !sameWorkAttempt(child, expected)) return { updated: false, work: parsed.work, order: child }
       const continuation = child?.continuation
       if (!child || child.status !== 'running' || child.execution.type !== 'agent-task' || continuation?.role !== 'round') {
         return { updated: false, work: parsed.work, order: child }
@@ -1273,6 +1308,17 @@ export class ScheduledWorkRunner {
     this.writeWork(workspaceRootPath, work)
     this.deps.emitContextChanged?.(workspaceId, loadAllContextDocs(workspaceRootPath))
     return { updated: true, work, order }
+  }
+
+  private async updateScannedOrder(
+    workspaceId: string,
+    workspaceRootPath: string,
+    orderId: string,
+    expected: ScheduledWorkOrder,
+    mutate: (order: ScheduledWorkOrder, nowIso: string) => ScheduledWorkOrder | null,
+  ): Promise<PersistResult> {
+    return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) =>
+      sameWorkSnapshot(order, expected) ? mutate(order, nowIso) : null)
   }
 
   private async updateOrder(
@@ -1821,13 +1867,34 @@ function isPastStartGrace(order: ScheduledWorkOrder, now: Date): boolean {
   return !Number.isNaN(startAt) && now.getTime() - startAt > START_GRACE_MS
 }
 
+/** Scan decisions must not overwrite a newer cancellation, schedule, or approval. */
+function sameWorkSnapshot(current: ScheduledWorkOrder, expected: ScheduledWorkOrder): boolean {
+  return JSON.stringify(current) === JSON.stringify(expected)
+}
+
+/** Session-id persistence updates the revision; the run id is the stable attempt fence. */
+function sameWorkAttempt(current: ScheduledWorkOrder, expected: ScheduledWorkOrder): boolean {
+  return current.status === expected.status
+    && current.execution.type === expected.execution.type
+    && current.runs.at(-1)?.id === expected.runs.at(-1)?.id
+    && current.startAt === expected.startAt
+    && JSON.stringify(current.execution) === JSON.stringify(expected.execution)
+    && JSON.stringify(current.executionKey) === JSON.stringify(expected.executionKey)
+    && JSON.stringify(current.inputRefs) === JSON.stringify(expected.inputRefs)
+    && JSON.stringify(current.socialAction) === JSON.stringify(expected.socialAction)
+    && JSON.stringify(current.socialApproval) === JSON.stringify(expected.socialApproval)
+    && current.authorizationPolicy === expected.authorizationPolicy
+    && JSON.stringify(current.authorization) === JSON.stringify(expected.authorization)
+    && JSON.stringify(current.continuation) === JSON.stringify(expected.continuation)
+}
+
 function currentSessionId(order: ScheduledWorkOrder): string | undefined {
-  const fromRuns = [...order.runs].reverse().find((run) => run.sessionId)?.sessionId
+  const fromRuns = order.runs.at(-1)?.sessionId
   return clean(fromRuns)
 }
 
 function currentWorkflowRunId(order: ScheduledWorkOrder): string | undefined {
-  const fromRuns = [...order.runs].reverse().find((run) => run.workflowRunId)?.workflowRunId
+  const fromRuns = order.runs.at(-1)?.workflowRunId
   return clean(fromRuns)
 }
 

@@ -1342,3 +1342,12 @@ function cleanIso(value: unknown): string | undefined {
   if (!cleaned || Number.isNaN(Date.parse(cleaned))) return undefined
   return new Date(cleaned).toISOString()
 }
+
+/** Read-only host availability; never an order lifecycle or approval state. */
+export interface ScheduledWorkRuntimeStatus {
+  workspaceId: string
+  checkedAt: string
+  state: 'ready' | 'scheduler-stopped' | 'license-required' | 'other-runner' | 'runner-unavailable' | 'background-disabled' | 'remote-host' | 'unavailable'
+  /** Last delivered scheduler event, not proof that a particular order ran. */
+  lastTickAt?: string
+}

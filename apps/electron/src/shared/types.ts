@@ -1276,6 +1276,7 @@ export interface ElectronAPI {
   setHqRecommendationUsefulness(workspaceId: string, input: HqRecommendationUsefulnessInput): Promise<HqRecommendationOutcome>
   refreshHqState(workspaceId: string): Promise<{ generatedAt: string }>
   onWorkspaceSyncChanged(callback: (change: import('@craft-agent/shared/workspaces').WorkspaceSyncChange) => void): () => void
+  getScheduledWorkRuntimeStatus(workspaceId: string): Promise<import('@craft-agent/shared/scheduled-work').ScheduledWorkRuntimeStatus>
   getScheduledWork(workspaceId: string): Promise<ScheduledWorkParseResult>
   mutateScheduledWork(workspaceId: string, mutation: ScheduledWorkMutation): Promise<ScheduledWorkMutationResult>
   scheduleCampaignWork(workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult>

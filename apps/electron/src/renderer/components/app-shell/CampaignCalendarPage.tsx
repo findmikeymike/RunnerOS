@@ -1,3 +1,4 @@
+import { scheduledWorkTiming } from '@/features/active-work/scheduled-work-timing'
 import * as React from 'react'
 import { Bot, CheckCircle2, ExternalLink, FileText, Pencil, ReceiptText, RotateCcw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -945,6 +946,7 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
   onOpenSocialSettings: (subpage: ConnectionSettingsSubpage) => void
 }) {
   const latestRun = work.runs.at(-1)
+  const timing = scheduledWorkTiming(work)
   const agentResult = work.result?.type === 'agent-task' ? work.result : undefined
   const workflowResult = work.result?.type === 'workflow-run' ? work.result : undefined
   const outputIds = work.result && 'outputIds' in work.result ? work.result.outputIds : []
@@ -1005,6 +1007,12 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
       <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium uppercase tracking-[0.12em] text-white/38">
         <span>{work.type.replace(/-/g, ' ')}</span>
         {latestRun ? <span>Last run {latestRun.status}</span> : null}
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/38">
+        <span>Planned start {formatCompactDateTime(timing.plannedStartAt)}</span>
+        {timing.actualStartAt ? <span>Actual start {formatCompactDateTime(timing.actualStartAt)}</span> : null}
+        {timing.lastAttemptStartAt ? <span>Last attempt started {formatCompactDateTime(timing.lastAttemptStartAt)}</span> : null}
+        {timing.timingLabel ? <span>{timing.timingLabel}</span> : null}
       </div>
       {work.attention ? (
         <div className="mt-2 rounded-[6px] border border-orange-300/25 bg-orange-400/[0.09] px-2.5 py-2 text-[11px] leading-4 text-orange-50/85">

@@ -1,3 +1,4 @@
+import { scheduledWorkTiming } from './scheduled-work-timing'
 import type { ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import { nextDailyWindowRuns } from '@craft-agent/shared/automations/daily-window'
 import type { AutomationListItem, ExecutionEntry } from '@/components/automations/types'
@@ -30,6 +31,7 @@ export interface ActiveWorkflowRunLike {
 
 export interface BuildActiveWorkItemsInput {
   workspaceId: string
+  now?: number
   sessions: ActiveSessionLike[]
   workflowRuns: ActiveWorkflowRunLike[]
   scheduledWork: ScheduledWorkOrder[]
@@ -234,6 +236,7 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
     const order = orderByWorkflowRun.get(run.id)
     if (order) representedOrders.add(order.id)
     items.push({
+      ...(order ? scheduledWorkTiming(order, { workflowRunId: run.id }, input.now) : {}),
       id: `workflow-run:${run.id}`,
       source: 'workflow-run',
       sourceId: run.id,
@@ -257,6 +260,7 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
     const order = orderBySession.get(session.id)
     if (order) representedOrders.add(order.id)
     items.push({
+      ...(order ? scheduledWorkTiming(order, { sessionId: session.id }, input.now) : {}),
       id: `session:${session.id}`,
       source: 'session',
       sourceId: session.id,
@@ -293,6 +297,7 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
           ? { kind: 'session' as const, id: links.sessionId }
           : { kind: 'scheduled-work' as const, id: order.id }
     items.push({
+      ...scheduledWorkTiming(order, undefined, input.now),
       id: `scheduled-work:${order.id}`,
       source: 'scheduled-work',
       sourceId: order.id,

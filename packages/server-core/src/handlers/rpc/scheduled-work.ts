@@ -111,6 +111,7 @@ export interface ScheduledWorkMigrationResult {
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.scheduledWork.GET,
+  RPC_CHANNELS.scheduledWork.GET_RUNTIME_STATUS,
   RPC_CHANNELS.scheduledWork.MUTATE,
   RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN,
   RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL,
@@ -214,6 +215,10 @@ function sameScheduledWorkContent(left: ScheduledWorkDocument, right: ScheduledW
 }
 
 export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDeps): void {
+  server.handle(RPC_CHANNELS.scheduledWork.GET_RUNTIME_STATUS, async (_ctx, workspaceId: string) => {
+    return deps.sessionManager.getScheduledWorkRuntimeStatus(workspaceId)
+  })
+
   server.handle(
     RPC_CHANNELS.scheduledWork.GET,
     async (_ctx, workspaceId: string): Promise<ScheduledWorkParseResult> => {

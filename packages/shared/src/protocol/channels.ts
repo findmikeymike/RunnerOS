@@ -529,6 +529,8 @@ export const RPC_CHANNELS = {
   scheduledWork: {
     /** Read the parsed scheduled-work document for a workspace. */
     GET: 'scheduledWork:get',
+    /** Read host availability without mutating orders or starting execution. */
+    GET_RUNTIME_STATUS: 'scheduledWork:getRuntimeStatus',
     /** Atomically apply one scheduled-work mutation server-side. */
     MUTATE: 'scheduledWork:mutate',
     /** Atomically create campaign work and its linked calendar shell. */

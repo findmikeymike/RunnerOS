@@ -187,3 +187,18 @@ anything, particularly `sharp` and `electron`.
 Before you hand off, the suite should be green and your work should be on
 `main`. A red suite means CI can no longer tell anyone about a new break, which
 is the entire reason it exists.
+
+
+## Scheduled Work lifecycle follow-up (isolated branch)
+
+`codex/scheduled-work-lifecycle` adds successful-claim checks, guarded scan transitions,
+and attempt-aware async completion. Canceled/rescheduled work cannot be started by a
+lost claim, and old callbacks cannot settle replacement attempts. No new timeout or
+approval states were added. Active Work shows passive late-start and host-availability
+information; a read-only status RPC reports actual scheduler presence, licensing and
+runner ownership without mutating orders. See `docs/audits/scheduled-work-lifecycle-2026-09-10.md`.
+
+This work was based on `bd3dd7684`; concurrent canonical-main durable workflow recovery
+edits were deliberately left untouched. Those changes overlap runner persistence and
+settlement methods and must be combined before landing, preserving both attempt fences
+and durable occurrence recovery. This branch does not implement cross-process leases.
