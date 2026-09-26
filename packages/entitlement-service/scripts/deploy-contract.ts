@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readEntitlementServiceConfig, type EntitlementServiceConfigV1 } from '../src/config.ts';
 import { loadEntitlementSigningMaterial } from '../src/keys.ts';
+import { ARTIST_OS_LICENSE_SERVICE_ORIGIN } from '../../shared/src/licensing/contract.ts';
 
 export type DeploymentEnvironment = 'test' | 'production';
 
@@ -52,6 +53,9 @@ export async function readDeploymentAuthority(
   const readinessUrl = new URL(env[`ARTIST_OS_ENTITLEMENT_READY_URL_${environment.toUpperCase()}`]!);
   if (readinessUrl.protocol !== 'https:' || readinessUrl.pathname !== '/readyz' || readinessUrl.search || readinessUrl.hash) {
     throw new Error('Readiness URL must be an exact HTTPS /readyz endpoint');
+  }
+  if (environment === 'production' && readinessUrl.href !== `${ARTIST_OS_LICENSE_SERVICE_ORIGIN}/readyz`) {
+    throw new Error('Production readiness URL must match the packaged activation service');
   }
   const workerSecrets = Object.fromEntries(
     WORKER_SECRET_NAMES.map((name) => [name, env[name]!.trim()]),

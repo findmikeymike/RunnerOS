@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, powerMonitor, shell } from 'electron';
 import { DesktopEntitlementAuthority, HttpDesktopEntitlementServiceClient } from '@craft-agent/server-core/licensing';
-import { isArtistOSPaidChannel, validateArtistOSActivateInput, type ArtistOSActivateInputV1, type ArtistOSLicenseLinkKind } from '@craft-agent/shared/licensing';
+import { ARTIST_OS_LICENSE_SERVICE_ORIGIN, isArtistOSPaidChannel, validateArtistOSActivateInput, type ArtistOSActivateInputV1, type ArtistOSLicenseLinkKind } from '@craft-agent/shared/licensing';
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity';
 import { ElectronInstallationIdentityStore, ElectronProtectedLicenseStore } from './protected-store';
 import { ARTIST_OS_DESKTOP_ENTITLEMENT_KEYRING } from './public-keyring';
@@ -18,11 +18,11 @@ export const LICENSE_IPC = {
 } as const;
 
 const LICENSE_LINKS: Record<ArtistOSLicenseLinkKind, string> = {
-  buy: developmentOverride('ARTIST_OS_BUY_URL', 'https://artistos.app/buy'),
+  buy: developmentOverride('ARTIST_OS_BUY_URL', 'https://itsthemagic.io/products/artist-os'),
   recover: developmentOverride('ARTIST_OS_LICENSE_RECOVERY_URL', 'https://app.lemonsqueezy.com/my-orders'),
   manage: developmentOverride('ARTIST_OS_LICENSE_MANAGE_URL', 'https://app.lemonsqueezy.com/my-orders'),
-  support: developmentOverride('ARTIST_OS_SUPPORT_URL', 'https://artistos.app/support'),
-  privacy: developmentOverride('ARTIST_OS_PRIVACY_URL', 'https://artistos.app/privacy'),
+  support: developmentOverride('ARTIST_OS_SUPPORT_URL', 'https://itsthemagic.io/contact'),
+  privacy: developmentOverride('ARTIST_OS_PRIVACY_URL', 'https://itsthemagic.io/privacy'),
 };
 
 function developmentOverride(name: string, productionUrl: string): string {
@@ -39,7 +39,7 @@ export async function initializeDesktopLicensing(): Promise<DesktopEntitlementAu
   }
   if (authority) return authority;
   const configured = process.env.ARTIST_OS_LICENSE_SERVICE_URL;
-  const serviceUrl = !app.isPackaged && configured ? configured : 'https://license.artistos.app';
+  const serviceUrl = !app.isPackaged && configured ? configured : ARTIST_OS_LICENSE_SERVICE_ORIGIN;
   const instance = new DesktopEntitlementAuthority({
     packaged: app.isPackaged,
     appVersion: app.getVersion(),

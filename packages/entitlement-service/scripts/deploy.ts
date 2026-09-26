@@ -69,7 +69,7 @@ async function requireReady(
   const expectedFingerprint = await entitlementVerificationKeyringFingerprint(authority.serviceConfig.verificationKeysJson);
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+      const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(5_000) });
       const body = await response.json() as Record<string, unknown>;
       if (response.ok && body.ok === true && body.status === 'ready'
         && body.environment === authority.environment

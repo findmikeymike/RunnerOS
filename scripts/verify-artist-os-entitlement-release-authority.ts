@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { entitlementVerificationKeyringFingerprint } from '../packages/entitlement-service/src/keys.ts';
+import { ARTIST_OS_LICENSE_SERVICE_ORIGIN } from '../packages/shared/src/licensing/contract.ts';
 
 const readyUrl = process.env.ARTIST_OS_ENTITLEMENT_READY_URL_PRODUCTION;
 const currentKeyId = process.env.ARTIST_OS_ENTITLEMENT_KEY_ID_CURRENT;
@@ -7,10 +8,10 @@ const verificationKeysJson = process.env.ARTIST_OS_ENTITLEMENT_VERIFICATION_KEYS
 if (!readyUrl || !currentKeyId || !verificationKeysJson) fail('Missing production Artist OS entitlement release authority.');
 
 const url = new URL(readyUrl);
-if (url.protocol !== 'https:' || url.pathname !== '/readyz' || url.search || url.hash) {
-  fail('Production Artist OS entitlement readiness URL must be exact HTTPS /readyz.');
+if (url.href !== `${ARTIST_OS_LICENSE_SERVICE_ORIGIN}/readyz`) {
+  fail('Production Artist OS entitlement readiness URL must match the packaged activation service /readyz.');
 }
-const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(10_000) });
 const body = await response.json() as Record<string, unknown>;
 const fingerprint = await entitlementVerificationKeyringFingerprint(verificationKeysJson);
 if (!response.ok || body.ok !== true || body.status !== 'ready' || body.environment !== 'production'

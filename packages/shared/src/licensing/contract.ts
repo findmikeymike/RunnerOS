@@ -7,7 +7,9 @@ export const ARTIST_OS_BASIC_PLAN = 'perpetual-basic-v1' as const;
 export const ARTIST_OS_PREMIUM_PLAN = 'perpetual-premium-v1' as const;
 export const ARTIST_OS_EDITION = ARTIST_OS_PREMIUM_EDITION;
 export const ARTIST_OS_PLAN = ARTIST_OS_PREMIUM_PLAN;
+// Signed legacy identity, not a network destination. Preserve existing entitlements.
 export const ARTIST_OS_ISSUER = 'https://license.artistos.app' as const;
+export const ARTIST_OS_LICENSE_SERVICE_ORIGIN = 'https://license.itsthemagic.io' as const;
 export const ARTIST_OS_SEAT_LIMIT = 3 as const;
 export const ARTIST_OS_ENTITLEMENT_TYP = 'ARTIST_OS-ENTITLEMENT' as const;
 export const ARTIST_OS_ENTITLEMENT_MAX_BYTES = 16 * 1024;

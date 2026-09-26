@@ -49,7 +49,7 @@ The public paid-release checklist below remains open. Do not equate local tests,
 - [ ] Approve and publish the refund policy, privacy policy, purchase terms, support route, recovery route, and update policy.
 - [ ] Confirm the live Lemon Squeezy product, Premium variant, price, three-seat limit, license duration, checkout copy, tax/business settings, and customer emails.
 - [ ] Confirm the production buy, support, privacy, updates, and recovery URLs in the app.
-- [ ] Confirm ownership of `artistos.app` and configure `license.artistos.app`.
+- [ ] Configure activation at `license.itsthemagic.io` under the owned Magic domain. `artistos.app` is not owned; `artistos.cloud` belongs to the separate web app and is excluded from desktop setup.
 - [ ] Store production Cloudflare, Lemon Squeezy, and entitlement-signing secrets only in protected deployment secret stores.
 - [ ] Deploy the production entitlement service and verify `/readyz`, activation, validation, deactivation, webhook signatures, replay protection, refund revocation, and logs without exposing customer secrets.
 - [ ] Run `bun run artist-os:license:verify-production` against the exact production authority used by the release build.

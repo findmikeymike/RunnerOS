@@ -20,7 +20,7 @@
     "production": {
       "name": "artistos-entitlement-production",
       "workers_dev": false,
-      "routes": [{ "pattern": "license.artistos.app", "custom_domain": true }],
+      "routes": [{ "pattern": "license.itsthemagic.io", "custom_domain": true }],
       "observability": { "enabled": true, "head_sampling_rate": 0.1 },
       "vars": {
         "ARTIST_OS_LICENSE_ENVIRONMENT": "production"

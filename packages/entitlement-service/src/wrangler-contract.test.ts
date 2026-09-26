@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildGeneratedWranglerConfig, readDeploymentAuthority, WORKER_SECRET_NAMES } from '../scripts/deploy-contract.ts';
 import { entitlementVerificationKeyringFingerprint } from './keys.ts';
+import { ARTIST_OS_LICENSE_SERVICE_ORIGIN } from '../../shared/src/licensing/contract.ts';
 
 const packageRoot = join(import.meta.dir, '..');
 const wranglerConfig = JSON.parse(readFileSync(join(packageRoot, 'wrangler.jsonc'), 'utf8')) as Record<string, any>;
@@ -33,10 +34,19 @@ describe('LIC6 deployment contract', () => {
     expect(generated.d1_databases[0].database_id).toBe(authority.databaseId);
     expect(generated.name).toBe('artistos-entitlement-production');
     expect(generated.vars.ARTIST_OS_LICENSE_ENVIRONMENT).toBe('production');
+    expect(generated.routes).toEqual([{ pattern: new URL(ARTIST_OS_LICENSE_SERVICE_ORIGIN).hostname, custom_domain: true }]);
     expect(generated.env).toBeUndefined();
     expect(generated.main).toBe(join(packageRoot, 'src', 'worker.ts'));
     expect(packageJson.scripts['deploy:production']).toBe('bun scripts/deploy.ts production');
     expect(packageJson.scripts['deploy:check:production']).toBe('bun scripts/deploy.ts production --check');
+  });
+
+  test('production rejects readiness on an unrelated or legacy host', async () => {
+    const env = await validEnvironment();
+    for (const url of ['https://license.artistos.app/readyz', 'https://example.com/readyz', 'https://user@license.itsthemagic.io/readyz']) {
+      await expect(readDeploymentAuthority('production', { ...env, ARTIST_OS_ENTITLEMENT_READY_URL_PRODUCTION: url }))
+        .rejects.toThrow('must match the packaged activation service');
+    }
   });
 
   test('github workflow exposes an auditable dry-run and deploy lane for test and production', () => {
@@ -108,7 +118,7 @@ async function validEnvironment(): Promise<Record<string, string>> {
     CLOUDFLARE_ACCOUNT_ID: 'account-id',
     CLOUDFLARE_API_TOKEN: 'cloudflare-token',
     ARTIST_OS_ENTITLEMENT_D1_DATABASE_ID_PRODUCTION: '12345678-1234-1234-1234-123456789abc',
-    ARTIST_OS_ENTITLEMENT_READY_URL_PRODUCTION: 'https://license.artistos.app/readyz',
+    ARTIST_OS_ENTITLEMENT_READY_URL_PRODUCTION: `${ARTIST_OS_LICENSE_SERVICE_ORIGIN}/readyz`,
     LEMON_STORE_ID: '1', LEMON_PRODUCT_ID: '2', LEMON_VARIANT_ID_BASIC_V1: 'disabled', LEMON_VARIANT_ID_PREMIUM_V1: '4',
     LEMON_API_KEY: 'lemon-api-key', LEMON_WEBHOOK_SECRET: 'lemon-webhook-secret',
     ARTIST_OS_ENTITLEMENT_KEY_ID_CURRENT: 'key-1',
