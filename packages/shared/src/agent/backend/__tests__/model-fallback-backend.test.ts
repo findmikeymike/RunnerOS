@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { AgentEvent } from '@craft-agent/core/types';
-import type { AgentBackend, AgentContextUpdate } from '../types.ts';
+import type { AgentBackend, AgentContextUpdate, PendingSteer } from '../types.ts';
 import { createModelFallbackBackend } from '../model-fallback-backend.ts';
 import { modelCooldownRegistry } from '../../model-fallback.ts';
 
@@ -31,6 +31,9 @@ function fakeBackend(events: AgentEvent[] | (() => AgentEvent[])): FakeBackend {
     forceAbort: () => {},
     interruptForHandoff: () => {},
     redirect: () => false,
+    supportsSteerRecovery: false,
+    takePendingSteers: () => [],
+    onSteerDelivered: null,
     isProcessing: () => false,
     getModel: () => 'model',
     setModel: () => {},
@@ -722,3 +725,84 @@ describe('model fallback backend', () => {
     expect(attempts).toEqual(['query:primary:failed', 'query:fallback:succeeded']);
   });
 });
+
+
+function recoverableBackend(events: AgentEvent[]) {
+  const backend = fakeBackend(events)
+  let pending: PendingSteer[] = []
+  Object.assign(backend, {
+    supportsSteerRecovery: true,
+    redirect: (message: string, messageId?: string) => { pending.push({ message, messageId }); return true },
+    takePendingSteers: () => { const entries = pending; pending = []; return entries },
+  })
+  return backend
+}
+
+async function advanceToText(iterator: AsyncGenerator<AgentEvent>, text: string) {
+  for (let count = 0; count < 20; count++) {
+    const next = await iterator.next()
+    if (next.done) throw new Error(`Stream ended before ${text}`)
+    if (next.value.type === 'text_delta' && next.value.text === text) return
+  }
+  throw new Error(`Did not reach ${text}`)
+}
+
+describe('fallback steering ownership', () => {
+  beforeEach(() => modelCooldownRegistry.clearAll())
+
+  test('retains original identities from primary and released temporary fallback in arrival order', async () => {
+    const primary = recoverableBackend([{ type: 'text_delta', text: 'primary active' }, { type: 'error', message: '503 service unavailable' }])
+    const fallback = recoverableBackend([{ type: 'text_delta', text: 'fallback active' }, { type: 'text_complete', text: 'done' }, { type: 'complete' }])
+    const backend = createModelFallbackBackend({ primary, primaryConnectionSlug: 'steer-primary', primaryModel: 'a',
+      resolveCandidates: async () => [{ connectionSlug: 'steer-fallback', model: 'b', chainIndex: 1, create: () => fallback }] })
+    const iterator = backend.chat('work')
+    await advanceToText(iterator, 'primary active')
+    expect(backend.redirect('First correction', 'first-id')).toBe(true)
+    await advanceToText(iterator, 'fallback active')
+    expect(backend.supportsSteerRecovery).toBe(true)
+    expect(backend.redirect('Second correction', 'second-id')).toBe(true)
+    while (!(await iterator.next()).done) {}
+    expect(fallback.destroyCalls).toBe(1)
+    expect(backend.takePendingSteers()).toEqual([
+      { message: 'First correction', messageId: 'first-id' },
+      { message: 'Second correction', messageId: 'second-id' },
+    ])
+    expect(backend.takePendingSteers()).toEqual([])
+  })
+
+  test('forwards delivery callbacks to temporary fallback and does not recover injected messages', async () => {
+    const primary = fakeBackend([{ type: 'error', message: '503 service unavailable' }])
+    const fallback = recoverableBackend([])
+    fallback.chat = async function* () {
+      yield { type: 'text_delta', text: 'fallback active' }
+      const delivered = fallback.takePendingSteers()
+      fallback.onSteerDelivered?.(delivered.flatMap(entry => entry.messageId ? [entry.messageId] : []))
+      yield { type: 'text_complete', text: 'done' }
+      yield { type: 'complete' }
+    }
+    const backend = createModelFallbackBackend({ primary, primaryConnectionSlug: 'ack-primary', primaryModel: 'a',
+      resolveCandidates: async () => [{ connectionSlug: 'ack-fallback', model: 'b', chainIndex: 1, create: () => fallback }] })
+    const acknowledged: string[][] = []
+    backend.onSteerDelivered = ids => acknowledged.push(ids)
+    const iterator = backend.chat('work')
+    await advanceToText(iterator, 'fallback active')
+    expect(backend.redirect('Correct title', 'original-id')).toBe(true)
+    while (!(await iterator.next()).done) {}
+    expect(acknowledged).toEqual([['original-id']])
+    expect(backend.takePendingSteers()).toEqual([])
+  })
+
+  test('Stop can recover temporary backend updates before abort and release without duplicate recovery', async () => {
+    const primary = fakeBackend([{ type: 'error', message: '503 service unavailable' }])
+    const fallback = recoverableBackend([{ type: 'text_delta', text: 'fallback active' }, { type: 'text_complete', text: 'done' }])
+    const backend = createModelFallbackBackend({ primary, primaryConnectionSlug: 'stop-primary', primaryModel: 'a',
+      resolveCandidates: async () => [{ connectionSlug: 'stop-fallback', model: 'b', chainIndex: 1, create: () => fallback }] })
+    const iterator = backend.chat('work')
+    await advanceToText(iterator, 'fallback active')
+    backend.redirect('Keep this correction', 'stop-id')
+    expect(backend.takePendingSteers()).toEqual([{ message: 'Keep this correction', messageId: 'stop-id' }])
+    backend.forceAbort('user_stop' as never)
+    while (!(await iterator.next()).done) {}
+    expect(backend.takePendingSteers()).toEqual([])
+  })
+})

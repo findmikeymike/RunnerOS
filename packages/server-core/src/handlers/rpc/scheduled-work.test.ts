@@ -121,7 +121,8 @@ mock.module('@craft-agent/shared/agent-definitions', () => ({
   readActivatedAgents: (rootPath: string, ...rest: Tail<Parameters<typeof realReadActivatedAgents>>) => rootPath === workspaceRoot
     ? { version: 1, active: activeAgentSlugs }
     : realReadActivatedAgents(rootPath, ...rest),
-  loadGlobalAgent: (slug: string, ...rest: Tail<Parameters<typeof realLoadGlobalAgent>>) => slug === 'content-genius'
+  // Explicit fixture libraries belong to their callers, not this RPC stub.
+  loadGlobalAgent: (slug: string, ...rest: Tail<Parameters<typeof realLoadGlobalAgent>>) => slug === 'content-genius' && !rest[0]?.globalAgentsDir
     ? { slug, metadata: { name: 'Content Genius', description: 'Writes campaign content.' }, systemPrompt: 'Write.', path: '/tmp/content-genius', source: 'global' }
     : realLoadGlobalAgent(slug, ...rest),
 }))

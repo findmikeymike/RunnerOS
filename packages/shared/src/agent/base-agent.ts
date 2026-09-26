@@ -37,6 +37,7 @@ import type { ApiServerConfig } from '../mcp/mcp-pool.ts';
 
 import type {
   AgentBackend,
+  PendingSteer,
   ChatOptions,
   PermissionCallback,
   PlanCallback,
@@ -1350,7 +1351,12 @@ ${formattedMessages}
    * Redirect the agent mid-stream. Default: abort and let session layer re-send.
    * Override in backends that support native steering (e.g., Pi's steer()).
    */
-  redirect(_message: string): boolean {
+  readonly supportsSteerRecovery: boolean = false;
+  onSteerDelivered: ((messageIds: string[]) => void) | null = null;
+
+  takePendingSteers(): PendingSteer[] { return []; }
+
+  redirect(_message: string, _messageId?: string): boolean {
     this.forceAbort(AbortReason.Redirect);
     return false;
   }

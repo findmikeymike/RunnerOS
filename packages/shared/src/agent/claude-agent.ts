@@ -10,7 +10,7 @@ type ContentBlockParam =
 import { z } from 'zod';
 import { getSystemPrompt } from '../prompts/system.ts';
 import { BaseAgent, type MiniAgentConfig, MINI_AGENT_TOOLS, MINI_AGENT_MCP_KEYS } from './base-agent.ts';
-import type { BackendConfig, PostInitResult, PermissionRequestType, SdkMcpServerConfig } from './backend/types.ts';
+import type { PendingSteer, BackendConfig, PostInitResult, PermissionRequestType, SdkMcpServerConfig } from './backend/types.ts';
 // Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { mapClaudeSdkAssistantError, type ClaudeSdkApiError } from './claude-sdk-error-mapper.ts';
@@ -489,7 +489,8 @@ export class ClaudeAgent extends BaseAgent {
   // Captured stderr from SDK subprocess (for error diagnostics when process exits with code 1)
   private lastStderrOutput: string[] = [];
   /** Pending steer message — injected via additionalContext on next PreToolUse */
-  private pendingSteerMessage: string | null = null;
+  private pendingSteers: PendingSteer[] = [];
+  override readonly supportsSteerRecovery: boolean = true;
   private readonly keepBackgroundTasksAlive = resolveKeepBackgroundTasksAlive();
   private persistentInput: PushableInputStream<SDKUserMessage> | null = null;
   private persistentIterator: AsyncIterator<SDKMessage> | null = null;
@@ -915,8 +916,12 @@ export class ClaudeAgent extends BaseAgent {
     // Extract options (ChatOptions interface from AgentBackend)
     const _isRetry = options?.isRetry ?? false;
 
-    // Clear any leftover steer from a previous turn (safety net — should already be null)
-    this.pendingSteerMessage = null;
+    // A previous interrupted generator may not have reached finally. Return its
+    // accepted updates before starting a new turn rather than silently erasing them.
+    const leftovers = this.takePendingSteers();
+    if (leftovers.length) {
+      yield { type: 'steer_undelivered', message: leftovers.map(entry => entry.message).join('\n\n'), entries: leftovers };
+    }
 
     try {
       const sessionId = this.config.session?.id || `temp-${Date.now()}`;
@@ -2224,11 +2229,10 @@ This is a branched conversation. All prior messages in this conversation are par
 
       // If a steer message was never delivered (no PreToolUse fired), notify the session
       // layer so it can re-queue the message for the next turn.
-      const undeliveredSteer = this.pendingSteerMessage;
-      if (undeliveredSteer) {
-        this.pendingSteerMessage = null;
+      const entries = this.takePendingSteers();
+      if (entries.length) {
         this.debug(`Steer message was not delivered (no tool call fired) — emitting steer_undelivered`);
-        yield { type: 'steer_undelivered' as const, message: undeliveredSteer };
+        yield { type: 'steer_undelivered' as const, message: entries.map(entry => entry.message).join('\n\n'), entries };
       }
     }
   }
@@ -2575,24 +2579,33 @@ This is a branched conversation. All prior messages in this conversation are par
    * If no tool call fires before the turn ends, yields steer_undelivered so the
    * session layer can re-queue the message.
    */
-  override redirect(message: string): boolean {
+  override redirect(message: string, messageId?: string): boolean {
     if (!this.currentQuery || !this.currentQueryAbortController) {
       // Not actively streaming — fall back to abort + queue
       this.forceAbort(AbortReason.Redirect);
       return false;
     }
     this.debug(`Steering mid-stream: "${message.slice(0, 100)}"`);
-    this.pendingSteerMessage = this.pendingSteerMessage
-      ? `${this.pendingSteerMessage}\n\n${message}`
-      : message;
+    this.pendingSteers.push({ message, ...(messageId ? { messageId } : {}) });
     return true;
+  }
+
+  override takePendingSteers(): PendingSteer[] {
+    const entries = this.pendingSteers;
+    this.pendingSteers = [];
+    return entries;
   }
 
   private consumePendingSteerMessage(checkType: PreToolUseCheckResult['type']): string | null {
     if (checkType !== 'allow' && checkType !== 'modify') return null;
-    const message = this.pendingSteerMessage;
-    this.pendingSteerMessage = null;
-    return message;
+    const entries = this.takePendingSteers();
+    if (!entries.length) return null;
+    const ids = entries.flatMap(entry => entry.messageId ? [entry.messageId] : []);
+    if (ids.length && this.onSteerDelivered) {
+      try { this.onSteerDelivered(ids); }
+      catch (error) { this.debug(`Steer delivery notification failed: ${error instanceof Error ? error.message : String(error)}`); }
+    }
+    return entries.map(entry => entry.message).join('\n\n');
   }
 
   /**
@@ -2604,7 +2617,7 @@ This is a branched conversation. All prior messages in this conversation are par
    */
   override interruptForHandoff(reason: AbortReason): void {
     this.lastAbortReason = reason;
-    this.pendingSteerMessage = null; // Clear any undelivered steer
+    // Pending updates remain recoverable until the host drains them or finally runs.
 
     if (!this.currentQuery) {
       return;
@@ -2624,7 +2637,7 @@ This is a branched conversation. All prior messages in this conversation are par
    */
   forceAbort(reason: AbortReason = AbortReason.UserStop): void {
     this.lastAbortReason = reason;
-    this.pendingSteerMessage = null; // Clear any undelivered steer
+    // Pending updates remain recoverable until the host drains them or finally runs.
     if (this.currentQueryAbortController) {
       this.currentQueryAbortController.abort(reason);
       this.currentQueryAbortController = null;

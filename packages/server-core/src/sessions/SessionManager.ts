@@ -1,3 +1,4 @@
+import { mergeQueuedMessages, recoverQueuedMessage, type QueuedSessionMessage } from './steering-queue'
 import { createDurableWorkflowStart } from '../workflows/durable-workflow-start'
 import { assertDurableWorkflowAgentMetadata, resolveDurableWorkflowBundle } from '../workflows/durable-workflow-bundle'
 import type { DurableWorkflowHost } from '../workflows/durable-workflow-host'
@@ -1611,14 +1612,10 @@ interface ManagedSession {
   messageCount?: number
   // Message queue for handling new messages while processing
   // When a message arrives during processing, we interrupt and queue
-  messageQueue: Array<{
-    message: string
-    attachments?: FileAttachment[]
-    storedAttachments?: StoredAttachment[]
-    options?: SendMessageOptions
-    messageId?: string  // Pre-generated ID for matching with UI
-    optimisticMessageId?: string  // Frontend's ID for reliable event matching
-  }>
+  messageQueue: QueuedSessionMessage[]
+  pendingSteers?: Map<string, QueuedSessionMessage>
+  queuedDispatch?: QueuedSessionMessage
+  steeringHandoff?: 'auth' | 'plan'
   // Map of shellId -> command for killing background shells
   backgroundShellCommands: Map<string, string>
   // Map of taskId -> output info for background task results
@@ -6568,9 +6565,7 @@ user a clickable link to where the thing now lives.`
             .filter((output) => output.origin.sessionId === sessionId)
         },
         abortSession: async (sessionId) => {
-          const managed = this.sessions.get(sessionId)
-          if (!managed) return
-          managed.agent?.forceAbort(AbortReason.UserStop)
+          await this.cancelProcessing(sessionId, true)
         },
         deleteSession: (sessionId) => this.deleteSession(sessionId),
         getWorkspaceRootPath: (wsId) => {
@@ -6615,9 +6610,7 @@ user a clickable link to where the thing now lives.`
           return { count: names.length, names: Array.from(new Set(names)).sort() }
         },
         abortSession: async (sessionId) => {
-          const managed = this.sessions.get(sessionId)
-          if (!managed) return
-          managed.agent?.forceAbort(AbortReason.UserStop)
+          await this.cancelProcessing(sessionId, true)
         },
         deleteSession: (sessionId) => this.deleteSession(sessionId),
         getWorkspaceRootPath: (wsId) => {
@@ -7506,20 +7499,8 @@ user a clickable link to where the thing now lives.`
       )
       if (orphanedQueued.length > 0) {
         sessionLog.info(`Recovering ${orphanedQueued.length} queued message(s) for session ${managed.id}`)
-        for (const msg of orphanedQueued) {
-          managed.messageQueue.push({
-            message: msg.content,
-            messageId: msg.id,
-            attachments: undefined,  // Attachments already stored on disk
-            storedAttachments: msg.attachments,
-            options: {
-              inputOrigin: msg.inputOrigin ?? 'system',
-              badges: msg.badges,
-              displayIntent: msg.displayIntent,
-              hidden: msg.hidden,
-            },
-          })
-        }
+        managed.messageQueue = mergeQueuedMessages(managed.messages, managed.messageQueue, orphanedQueued.map(recoverQueuedMessage))
+        managed.steeringHandoff = orphanedQueued.find(message => message.queuedHandoff)?.queuedHandoff
         // Process queue when session becomes active (will be triggered by first message or interaction)
         // Use setImmediate to avoid blocking the load and allow session state to settle
         if (!managed.isProcessing && managed.messageQueue.length > 0) {
@@ -8367,6 +8348,21 @@ user a clickable link to where the thing now lives.`
       // Post-construction: debug callback, auth callback, postInit()
       // ============================================================
 
+      managed.agent.onSteerDelivered = (messageIds) => {
+        for (const messageId of messageIds) {
+          const entry = managed.pendingSteers?.get(messageId)
+          if (!entry) continue
+          managed.pendingSteers!.delete(messageId)
+          const message = managed.messages.find(m => m.id === messageId)
+          if (!message) continue
+          message.isQueued = false
+          message.queuedOptions = undefined
+          message.queuedHandoff = undefined
+          this.sendEvent({ type: 'user_message', sessionId: managed.id, message, status: 'processing', optimisticMessageId: entry.optimisticMessageId }, managed.workspace.id)
+        }
+        this.persistSession(managed)
+      }
+
       managed.agent.onDebug = (msg: string) => {
         const marker = '__PERMISSION_BLOCK__'
         if (msg.includes(marker)) {
@@ -8914,6 +8910,7 @@ user a clickable link to where the thing now lives.`
           // The user needs to review and respond before continuing
           if (managed.isProcessing && managed.agent) {
             sessionLog.info(`Interrupting for plan submission in session ${managed.id}`)
+            this.recoverPendingSteers(managed, 'plan')
             managed.agent.interruptForHandoff(AbortReason.PlanSubmitted)
             if (managed.chatGoal?.status === 'active') {
               this.chatGoalDriver.invalidate(managed.id)
@@ -8989,6 +8986,7 @@ user a clickable link to where the thing now lives.`
         // Interrupt execution (like SubmitPlan)
         if (managed.isProcessing && managed.agent) {
           sessionLog.info(`Interrupting for auth request in session ${managed.id}`)
+          this.recoverPendingSteers(managed, 'auth')
           managed.agent.interruptForHandoff(AbortReason.AuthRequest)
           if (managed.chatGoal?.status === 'active') {
             this.chatGoalDriver.invalidate(managed.id)
@@ -10305,9 +10303,7 @@ user a clickable link to where the thing now lives.`
               },
             ),
             abortSession: async (sessionId) => {
-              const target = this.sessions.get(sessionId)
-              if (!target) return
-              target.agent?.forceAbort(AbortReason.UserStop)
+              await this.cancelProcessing(sessionId, true)
             },
             getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
             getSessionToolUseSummary: (sessionId) => getCompletedToolUseSummary(this.sessions.get(sessionId)),
@@ -12651,7 +12647,7 @@ user a clickable link to where the thing now lives.`
 
     // If processing is in progress, force-abort via Query.close() and wait for cleanup
     if (managed.isProcessing && managed.agent) {
-      managed.agent.forceAbort(AbortReason.UserStop)
+      await this.cancelProcessing(sessionId, true)
       // Brief wait for the query to finish tearing down before we delete session files.
       // Prevents file corruption from overlapping writes during rapid delete operations.
       await new Promise(resolve => setTimeout(resolve, 100))
@@ -12951,6 +12947,7 @@ user a clickable link to where the thing now lives.`
     let pendingSignalReference: SignalEntryReference | null = null
     let signalAdmissionMessageId: string | undefined
     let signalAdmissionAccepted = false
+    let unpersistedQueuedUpdateId: string | undefined
     const previousLastMessageRole = managed.lastMessageRole
     const sourceRetry = options?.sourceRetryToken ? managed.pendingSourceRetry : undefined
     if (options?.sourceRetryToken && (!sourceRetry || sourceRetry.token !== options.sourceRetryToken
@@ -13126,76 +13123,75 @@ user a clickable link to where the thing now lives.`
 
       pendingSignalReference = await this.validateSignalHandoffBeforeSend(managed, options)
 
-      // If currently processing, redirect mid-stream. Each backend decides its strategy:
-      // - Pi: steers (injects message, events continue through existing stream)
-      // - Claude: aborts internally, session layer queues for re-send
-      if (managed.isProcessing) {
-        managed.pendingSourceRetry = undefined
-        releaseAdmissionLockOnce()
+      // Persist the update before giving it to a provider or acknowledging acceptance.
+      if (managed.isProcessing || (managed.messageQueue.length > 0 && !existingMessageId && !this.hasQueuedHandoff(managed) && !_isAuthRetry && !sourceRetry)) {
+        if (existingMessageId && managed.queuedDispatch?.messageId === existingMessageId) managed.queuedDispatch = undefined
+        const generation = managed.processingGeneration
         const agent = managed.agent
-        const steered = agent?.redirect(message) ?? false
-
-        sessionLog.info('mid-stream send', {
-          sessionId,
-          steered,
-          queueLengthBefore: managed.messageQueue.length,
-          backend: agent ? agent.constructor.name : 'none',
-        })
-
-        // Create user message for UI
-        const userMessage: Message = {
-          id: generateMessageId(),
-          role: 'user',
-          content: message,
-          timestamp: this.monotonic(),
-          inputOrigin: options?.inputOrigin ?? 'system',
-          attachments: storedAttachments,
-          badges: options?.badges,
-          displayIntent: options?.displayIntent,
-          ...(options?.hidden ? { hidden: true } : {}),
+        const userMessage: Message = existingMessageId
+          ? managed.messages.find(m => m.id === existingMessageId)!
+          : {
+              id: generateMessageId(), role: 'user', content: message,
+              timestamp: this.monotonic(), inputOrigin: options?.inputOrigin ?? 'system',
+              attachments: storedAttachments, badges: options?.badges,
+              displayIntent: options?.displayIntent, ...(options?.hidden ? { hidden: true } : {}),
+            }
+        if (!userMessage) throw new Error(`Existing message ${existingMessageId} not found`)
+        userMessage.isQueued = true
+        userMessage.queuedHandoff = managed.steeringHandoff
+        userMessage.queuedOptions = {
+          skillSlugs: options?.skillSlugs, legacySkillReferences: options?.legacySkillReferences,
+          optimisticMessageId: options?.optimisticMessageId,
         }
-        if (pendingSignalReference) signalAdmissionMessageId = userMessage.id
-        managed.messages.push(userMessage)
-        if (steered) {
-          managed.activeHumanMessageId = userMessage.inputOrigin === 'human' && !userMessage.hidden
-            ? userMessage.id
-            : undefined
+        if (!existingMessageId) {
+          managed.messages.push(userMessage)
+          unpersistedQueuedUpdateId = userMessage.id
         }
-
-        // Emit to UI — 'accepted' if steered (processing now), 'queued' if aborted (will re-send)
-        this.sendEvent({
-          type: 'user_message',
-          sessionId,
-          message: userMessage,
-          status: steered ? 'accepted' : 'queued',
-          optimisticMessageId: options?.optimisticMessageId
-        }, managed.workspace.id)
-
-        if (!steered) {
-          // Backend aborted — queue message for re-send after processing stops.
-          // forceAbort(Redirect) was already called by redirect().
-          managed.messageQueue.push({ message, attachments, storedAttachments, options, messageId: userMessage.id, optimisticMessageId: options?.optimisticMessageId })
-          managed.wasInterrupted = true
-        }
-
+        const queued: QueuedSessionMessage = { message, attachments, storedAttachments, options, messageId: userMessage.id, optimisticMessageId: options?.optimisticMessageId }
+        managed.messageQueue = mergeQueuedMessages(managed.messages, managed.messageQueue, [queued])
         this.persistSession(managed)
-        // Force a synchronous flush so the user message is genuinely on disk
-        // before we tell the renderer "accepted" — `persistSession` only
-        // enqueues with a 500ms debounce. (#616 reliability fix.)
         await this.flushSession(managed.id)
+        unpersistedQueuedUpdateId = undefined
         if (pendingSignalReference) {
+          signalAdmissionMessageId = userMessage.id
           acceptSignalHandoff(getSessionStoragePath(managed.workspace.rootPath, managed.id), pendingSignalReference, userMessage.id)
           signalAdmissionAccepted = true
         }
-        if (admittedGoalState) {
-          if (admittedGoalEvent) {
-            this.sendEvent({ type: 'goal_event', sessionId, message: admittedGoalEvent }, managed.workspace.id)
+        let steered = false
+        // Rich inputs require a normal turn. Never strip attachments or skill choices to steer text.
+        if (managed.isProcessing && !managed.stopRequested && managed.processingGeneration === generation
+          && agent === managed.agent && !attachments?.length && !storedAttachments?.length && !options?.skillSlugs?.length && !options?.legacySkillReferences?.length) {
+          if (agent?.supportsSteerRecovery) (managed.pendingSteers ??= new Map()).set(userMessage.id, queued)
+          steered = agent?.redirect(message, userMessage.id) ?? false
+          if (steered) {
+            managed.messageQueue = managed.messageQueue.filter(entry => entry.messageId !== userMessage.id)
+            if (!agent?.supportsSteerRecovery) {
+              userMessage.isQueued = false
+              userMessage.queuedOptions = undefined
+            }
+            managed.activeHumanMessageId = userMessage.inputOrigin === 'human' && !userMessage.hidden ? userMessage.id : undefined
+          } else {
+            managed.pendingSteers?.delete(userMessage.id)
           }
+        }
+        this.persistSession(managed)
+        this.sendEvent({ type: 'user_message', sessionId, message: userMessage,
+          status: steered ? 'accepted' : 'queued', optimisticMessageId: options?.optimisticMessageId }, managed.workspace.id)
+        if (admittedGoalState) {
+          if (admittedGoalEvent) this.sendEvent({ type: 'goal_event', sessionId, message: admittedGoalEvent }, managed.workspace.id)
           this.sendEvent({ type: 'goal_state_changed', sessionId, chatGoal: admittedGoalState }, managed.workspace.id)
           goalAdmissionRollback = undefined
         }
         onAck?.(userMessage.id)
+        releaseAdmissionLockOnce()
+        if (!managed.isProcessing && managed.processingGeneration === generation) this.processNextQueuedMessage(sessionId)
         return
+      }
+
+      // A deliberate new send resumes the existing auth/plan handoff. Replays do not.
+      if (!existingMessageId) {
+        managed.steeringHandoff = undefined
+        for (const pending of managed.messages) pending.queuedHandoff = undefined
       }
 
       // Add user message with stored attachments for persistence
@@ -13291,6 +13287,17 @@ user a clickable link to where the thing now lives.`
         }
       }
 
+      if (existingMessageId) {
+        managed.messageQueue = managed.messageQueue.filter(entry => entry.messageId !== existingMessageId)
+        if (managed.queuedDispatch?.messageId === existingMessageId) managed.queuedDispatch = undefined
+        userMessage.isQueued = false
+        userMessage.queuedOptions = undefined
+        userMessage.queuedHandoff = undefined
+        this.persistSession(managed)
+        await this.flushSession(managed.id)
+        this.sendEvent({ type: 'user_message', sessionId, message: userMessage, status: 'processing', optimisticMessageId: options?.optimisticMessageId }, managed.workspace.id)
+      }
+
       // Evaluate auto-label rules against the user message (common path for both
       // fresh and queued messages). Scans regex patterns configured on labels,
       // then merges any new matches into the session's label array.
@@ -13349,6 +13356,13 @@ user a clickable link to where the thing now lives.`
       }
       releaseAdmissionLockOnce()
     } catch (err) {
+      if (unpersistedQueuedUpdateId) {
+        managed.messages = managed.messages.filter(message => message.id !== unpersistedQueuedUpdateId)
+        managed.messageQueue = managed.messageQueue.filter(entry => entry.messageId !== unpersistedQueuedUpdateId)
+        sessionPersistenceQueue.cancel(managed.id)
+        this.persistSession(managed)
+        try { await this.flushSession(managed.id) } catch { /* No provider dispatch or acceptance occurred. */ }
+      }
       if (openingMessageId && !openingMessageAccepted) {
         sessionPersistenceQueue.cancel(managed.id)
         managed.messages = managed.messages.filter(entry => entry.id !== openingMessageId)
@@ -13678,6 +13692,7 @@ user a clickable link to where the thing now lives.`
         // Handle complete event - SDK always sends this (even after interrupt)
         // This is the central place where processing ends
         if (event.type === 'complete') {
+          this.recoverPendingSteers(managed)
           // Skip normal completion handling if auth retry is in progress
           // The retry will handle its own completion
           if (managed.authRetryInProgress) {
@@ -13831,6 +13846,7 @@ user a clickable link to where the thing now lives.`
       // Normal completion returns early after calling onProcessingStopped
       // Errors are handled in catch block
       if (managed.isProcessing && managed.processingGeneration === myGeneration) {
+        this.recoverPendingSteers(managed)
         sessionLog.info('Finally block cleanup - unexpected exit')
         sendSpan.mark('chat.unexpected_exit')
         sendSpan.end()
@@ -13839,19 +13855,54 @@ user a clickable link to where the thing now lives.`
     }
   }
 
+  private recoverPendingSteers(managed: ManagedSession, handoff?: 'auth' | 'plan'): void {
+    if (handoff) managed.steeringHandoff = handoff
+    handoff ??= managed.steeringHandoff
+    const pending = managed.agent?.takePendingSteers?.() ?? []
+    this.requeueUndeliveredSteers(managed, pending.map(entry => entry.messageId).filter((id): id is string => Boolean(id)), handoff)
+    if (handoff) {
+      for (const message of managed.messages) if (message.isQueued) message.queuedHandoff = handoff
+      this.persistSession(managed)
+    }
+  }
+
+  private requeueUndeliveredSteers(managed: ManagedSession, messageIds: string[], handoff?: 'auth' | 'plan'): void {
+    const recovered: QueuedSessionMessage[] = []
+    for (const messageId of messageIds) {
+      const pending = managed.pendingSteers?.get(messageId)
+      if (!pending) continue // Already delivered, restored on Stop, or an obsolete backend event.
+      managed.pendingSteers!.delete(messageId)
+      const message = managed.messages.find(m => m.id === messageId)
+      if (!message) continue
+      message.isQueued = true
+      if (handoff) message.queuedHandoff = handoff
+      recovered.push(pending)
+      this.sendEvent({ type: 'user_message', sessionId: managed.id, message, status: 'queued', optimisticMessageId: pending.optimisticMessageId }, managed.workspace.id)
+    }
+    managed.messageQueue = mergeQueuedMessages(managed.messages, managed.messageQueue, recovered)
+    this.persistSession(managed)
+  }
+
   async cancelProcessing(sessionId: string, silent = false): Promise<void> {
+    const release = await this.acquireSendMessageAdmissionLock(sessionId)
+    try {
+      await this.cancelProcessingAdmitted(sessionId, silent)
+    } finally { release() }
+  }
+
+  private async cancelProcessingAdmitted(sessionId: string, silent: boolean): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.pendingSourceRetry = undefined
       managed.authRetryToken = undefined
       managed.authRetryInProgress = false
     }
-    if (!managed?.isProcessing) {
-      return // Not processing, nothing to cancel
-    }
+    if (!managed || (!managed.isProcessing && managed.messageQueue.length === 0 && !managed.pendingSteers?.size)) return
 
+    const wasProcessing = managed.isProcessing
     sessionLog.info('Cancelling processing for session:', sessionId, silent ? '(silent)' : '')
 
+    this.recoverPendingSteers(managed)
     // Collect queued message text for input restoration before clearing
     const queuedTexts = managed.messageQueue.map(q => q.message)
 
@@ -13863,6 +13914,8 @@ user a clickable link to where the thing now lives.`
 
     // Clear queue - user explicitly stopped, don't process queued messages
     managed.messageQueue = []
+    managed.queuedDispatch = undefined
+    managed.pendingSteers?.clear()
 
     // Remove queued user messages from the persisted messages array
     if (queuedMessageIds.size > 0) {
@@ -13871,10 +13924,10 @@ user a clickable link to where the thing now lives.`
 
     // Signal intent to stop - let the event loop drain remaining events before clearing isProcessing
     // This prevents losing in-flight messages after soft interrupt
-    managed.stopRequested = true
+    managed.stopRequested = wasProcessing
     // Track interruption so the next user message gets a context note
     // telling the LLM the previous response was cut short
-    managed.wasInterrupted = true
+    if (wasProcessing) managed.wasInterrupted = true
 
     // Force-abort via Query.close() - sends soft interrupt to the backend
     if (managed.agent) {
@@ -13887,7 +13940,7 @@ user a clickable link to where the thing now lives.`
       const interruptedMessage: Message = {
         id: generateMessageId(),
         role: 'info',
-        content: 'Response interrupted',
+        content: wasProcessing ? 'Response interrupted' : 'Pending updates restored',
         timestamp: this.monotonic(),
       }
       managed.messages.push(interruptedMessage)
@@ -13907,6 +13960,9 @@ user a clickable link to where the thing now lives.`
         ...(queuedTexts.length > 0 ? { queuedMessages: queuedTexts } : {}),
       }, managed.workspace.id)
     }
+
+    this.persistSession(managed)
+    await this.flushSession(managed.id)
 
     // Safety timeout: if event loop doesn't complete within 5 seconds, force cleanup
     // This handles cases where the generator gets stuck
@@ -13960,6 +14016,7 @@ user a clickable link to where the thing now lives.`
 
         // 2. Destroy the agent — the new agent's postInit() will refresh auth
         sessionLog.info(`[auth-retry] Destroying agent for session ${sessionId}`)
+        this.recoverPendingSteers(managed)
         managed.agent?.dispose()
         managed.agent = null
 
@@ -14055,6 +14112,7 @@ user a clickable link to where the thing now lives.`
     }
     const settledGeneration = managed.processingGeneration
     managed.lastSettledProcessingGeneration = settledGeneration
+    if (reason === 'interrupted') managed.wasInterrupted = true
 
     sessionLog.info(`Processing stopped for session ${sessionId}: ${reason}`)
 
@@ -14118,7 +14176,7 @@ user a clickable link to where the thing now lives.`
     }
 
     // 5. Check queue and process or complete
-    if (managed.messageQueue.length > 0) {
+    if (managed.messageQueue.length > 0 && !this.hasQueuedHandoff(managed)) {
       // Has queued messages - process next
       managed.pendingChatGoalUpdate = undefined
       this.chatGoalDriver.invalidate(sessionId)
@@ -14141,7 +14199,7 @@ user a clickable link to where the thing now lives.`
       let reservation: ChatGoalReservation | undefined
       await this.withSessionAdmissionLock(sessionId, async () => {
         // A human message may have won the admission lock after processing stopped.
-        if (managed.processingGeneration !== settledGeneration || managed.isProcessing || managed.messageQueue.length > 0) return
+        if (managed.processingGeneration !== settledGeneration || managed.isProcessing || (managed.messageQueue.length > 0 && !this.hasQueuedHandoff(managed))) return
         reservation = await this.settleChatGoalAtIdle(
           managed,
           reason,
@@ -14172,8 +14230,7 @@ user a clickable link to where the thing now lives.`
     // 6. Always persist
     this.persistSession(managed)
     const sourceRetry = managed.pendingSourceRetry
-    if (sourceRetry && !managed.isProcessing && sourceRetry.generation === managed.processingGeneration
-      && managed.messageQueue.length === 0) {
+    if (sourceRetry && !managed.isProcessing && sourceRetry.generation === managed.processingGeneration) {
       this.sendEvent({
         type: 'source_activated', sessionId, sourceSlug: sourceRetry.sourceSlug,
         originalMessage: sourceRetry.message, retryToken: sourceRetry.token,
@@ -14185,37 +14242,22 @@ user a clickable link to where the thing now lives.`
    * Process the next message in the queue.
    * Called by onProcessingStopped when queue has messages.
    */
+  private hasQueuedHandoff(managed: ManagedSession): boolean {
+    return Boolean(managed.pendingAuthRequest || managed.authRetryInProgress || managed.steeringHandoff || managed.pendingSourceRetry)
+  }
+
   private processNextQueuedMessage(sessionId: string): void {
     const managed = this.sessions.get(sessionId)
     if (!managed || managed.messageQueue.length === 0) return
 
-    const next = managed.messageQueue.shift()!
-    sessionLog.info('replay queued', {
-      sessionId,
-      messageId: next.messageId,
-      queueLengthAfterShift: managed.messageQueue.length,
-    })
-
-    // Update UI: queued → processing
-    if (next.messageId) {
-      const existingMessage = managed.messages.find(m => m.id === next.messageId)
-      if (existingMessage) {
-        // Clear isQueued flag and persist - prevents re-queueing if crash during processing
-        existingMessage.isQueued = false
-        this.persistSession(managed)
-
-        this.sendEvent({
-          type: 'user_message',
-          sessionId,
-          message: existingMessage,
-          status: 'processing',
-          optimisticMessageId: next.optimisticMessageId
-        }, managed.workspace.id)
-      }
-    }
-
+    if (managed.isProcessing || this.hasQueuedHandoff(managed) || managed.queuedDispatch) return
+    const queued = managed.messageQueue[0]!
+    if (managed.messages.find(message => message.id === queued.messageId)?.queuedHandoff) return
+    const next = queued
+    managed.queuedDispatch = next
     // Process message (use setImmediate to allow current stack to clear)
     setImmediate(() => {
+      if (managed.queuedDispatch !== next || (next.messageId && !managed.messages.some(message => message.id === next.messageId && message.isQueued))) return
       this.sendMessage(
         sessionId,
         next.message,
@@ -14224,11 +14266,14 @@ user a clickable link to where the thing now lives.`
         next.options,
         next.messageId
       ).catch(err => {
+        if (next.messageId && !managed.messages.some(message => message.id === next.messageId)) return
         sessionLog.error('replay failed', {
           sessionId,
           messageId: next.messageId,
           error: err instanceof Error ? err.message : String(err),
         })
+        if (managed.queuedDispatch === next) managed.queuedDispatch = undefined
+        managed.messageQueue = managed.messageQueue.filter(entry => entry !== next)
         // Report queued message failures via runtime hooks
         sessionRuntimeHooks.captureException(err, { errorSource: 'chat-queue', sessionId })
         // Surface a typed error so the UI can show a clear, actionable banner
@@ -14245,7 +14290,18 @@ user a clickable link to where the thing now lives.`
             originalError: err instanceof Error ? err.message : String(err),
           },
         }, managed.workspace.id)
-        // Call onProcessingStopped to handle cleanup and check for more queued messages
+        if (next.messageId) {
+          const message = managed.messages.find(m => m.id === next.messageId)
+          if (message) {
+            message.isQueued = true
+            message.queuedOptions = {
+              skillSlugs: next.options?.skillSlugs,
+              legacySkillReferences: next.options?.legacySkillReferences,
+              optimisticMessageId: next.optimisticMessageId ?? next.options?.optimisticMessageId,
+            }
+            this.persistSession(managed)
+          }
+        }
         this.onProcessingStopped(sessionId, 'error')
       })
     })
@@ -15707,11 +15763,7 @@ user a clickable link to where the thing now lives.`
         break
 
       case 'steer_undelivered':
-        // Steer message was not delivered (no PreToolUse fired before turn ended).
-        // Re-queue it so it's sent as a normal message on the next turn.
-        sessionLog.info(`Steer message undelivered, re-queuing for session ${sessionId}`)
-        managed.messageQueue.push({ message: event.message })
-        managed.wasInterrupted = true
+        this.requeueUndeliveredSteers(managed, (event.entries ?? []).map(entry => entry.messageId).filter((id): id is string => Boolean(id)))
         break
 
       // Note: working_directory_changed is user-initiated only (via updateWorkingDirectory),

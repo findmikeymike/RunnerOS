@@ -187,3 +187,14 @@ anything, particularly `sharp` and `electron`.
 Before you hand off, the suite should be green and your work should be on
 `main`. A red suite means CI can no longer tell anyone about a new break, which
 is the entire reason it exists.
+
+
+## Steering reliability follow-up (isolated branch)
+
+`codex/steering-reliability` preserves pending update IDs, order, replay metadata,
+and disk recovery through Claude completion, handoffs, Stop, and model fallback.
+Pi rejects failed transport writes. Renderer queue indicators follow delivery
+receipts instead of clearing every pending update when any response completes.
+Existing auth/plan/source boundaries remain; no new approval gate is added.
+See [audit and verification](docs/audits/steering-reliability-2026-09-10.md).
+This is uncommitted branch work, not a claim about the running app.

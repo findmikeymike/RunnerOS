@@ -4,33 +4,37 @@ import { AbortReason } from '../backend/types.ts'
 
 function streamingAgent() {
   const agent = Object.create(ClaudeAgent.prototype) as any
-  agent.currentQuery = {}
+  agent.currentQuery = { interrupt: mock(async () => {}) }
   agent.currentQueryAbortController = { abort: mock(() => {}) }
-  agent.pendingSteerMessage = null
+  agent.pendingSteers = []
   agent.debug = mock(() => {})
+  agent.teardownPersistentQuery = mock(() => {})
+  agent.onSteerDelivered = mock(() => {})
   return agent
 }
 
 describe('ClaudeAgent mid-stream steering', () => {
-  it('retains successive updates in arrival order until an injecting hook consumes them', () => {
+  it('retains original ids and arrival order and acknowledges only injected updates', () => {
     const agent = streamingAgent()
-    expect(agent.redirect('Use the acoustic version.')).toBe(true)
-    expect(agent.redirect('Also keep the original title.')).toBe(true)
-    expect(agent.pendingSteerMessage).toBe('Use the acoustic version.\n\nAlso keep the original title.')
+    expect(agent.redirect('Use the acoustic version.', 'first')).toBe(true)
+    expect(agent.redirect('Also keep the original title.', 'second')).toBe(true)
+    expect(agent.onSteerDelivered).not.toHaveBeenCalled()
     expect(agent.consumePendingSteerMessage('allow')).toBe('Use the acoustic version.\n\nAlso keep the original title.')
-    expect(agent.pendingSteerMessage).toBeNull()
+    expect(agent.onSteerDelivered).toHaveBeenCalledWith(['first', 'second'])
+    expect(agent.takePendingSteers()).toEqual([])
     expect(agent.consumePendingSteerMessage('allow')).toBeNull()
+    expect(agent.onSteerDelivered).toHaveBeenCalledTimes(1)
   })
 
   for (const outcome of ['block', 'source_activation_needed', 'prompt', 'call_llm_intercept', 'spawn_session_intercept']) {
-    it(`preserves updates across ${outcome} for a later injecting hook or end-of-turn recovery`, () => {
+    it(`preserves updates across ${outcome} until injection`, () => {
       const agent = streamingAgent()
-      agent.redirect('Change the artwork direction.')
+      agent.redirect('Change the artwork direction.', 'first')
       expect(agent.consumePendingSteerMessage(outcome)).toBeNull()
-      expect(agent.pendingSteerMessage).toBe('Change the artwork direction.')
-      agent.redirect('Keep the release date.')
+      expect(agent.onSteerDelivered).not.toHaveBeenCalled()
+      agent.redirect('Keep the release date.', 'second')
       expect(agent.consumePendingSteerMessage('modify')).toBe('Change the artwork direction.\n\nKeep the release date.')
-      expect(agent.pendingSteerMessage).toBeNull()
+      expect(agent.onSteerDelivered).toHaveBeenCalledWith(['first', 'second'])
     })
   }
 
@@ -38,20 +42,37 @@ describe('ClaudeAgent mid-stream steering', () => {
     const agent = streamingAgent()
     agent.currentQuery = null
     agent.forceAbort = mock(() => {})
-    expect(agent.redirect('Next update')).toBe(false)
+    expect(agent.redirect('Next update', 'next')).toBe(false)
     expect(agent.forceAbort).toHaveBeenCalledWith(AbortReason.Redirect)
-    expect(agent.pendingSteerMessage).toBeNull()
+    expect(agent.takePendingSteers()).toEqual([])
   })
 
-  it('discards accumulated updates when the user explicitly stops', () => {
+  for (const reason of [AbortReason.UserStop, AbortReason.SourceActivated, AbortReason.Redirect]) {
+    it(`does not erase accepted updates on ${reason}`, () => {
+      const agent = streamingAgent()
+      agent.redirect('First update', 'first')
+      agent.redirect('Second update', 'second')
+      agent.forceAbort(reason)
+      expect(agent.takePendingSteers()).toEqual([{ message: 'First update', messageId: 'first' }, { message: 'Second update', messageId: 'second' }])
+      expect(agent.takePendingSteers()).toEqual([])
+      expect(agent.onSteerDelivered).not.toHaveBeenCalled()
+    })
+  }
+
+  it('lets the host transfer Stop updates once before abort without later replay', () => {
     const agent = streamingAgent()
-    const controller = agent.currentQueryAbortController
-    agent.teardownPersistentQuery = mock(() => {})
-    agent.redirect('First update')
-    agent.redirect('Second update')
+    agent.redirect('Keep my correction', 'original-id')
+    expect(agent.takePendingSteers()).toEqual([{ message: 'Keep my correction', messageId: 'original-id' }])
     agent.forceAbort(AbortReason.UserStop)
-    expect(controller.abort).toHaveBeenCalledWith(AbortReason.UserStop)
-    expect(agent.pendingSteerMessage).toBeNull()
-    expect(agent.currentQuery).toBeNull()
+    expect(agent.takePendingSteers()).toEqual([])
+  })
+
+  it('does not suppress injection when the delivery callback throws', () => {
+    const agent = streamingAgent()
+    agent.onSteerDelivered = () => { throw new Error('host failed') }
+    agent.redirect('Still deliver this.', 'id')
+    expect(agent.consumePendingSteerMessage('allow')).toBe('Still deliver this.')
+    expect(agent.takePendingSteers()).toEqual([])
+    expect(agent.debug).toHaveBeenCalledWith('Steer delivery notification failed: host failed')
   })
 })
